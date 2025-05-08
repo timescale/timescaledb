@@ -367,7 +367,7 @@ do_return:
 	/* return the id of the main entry for this dimension range */
 	fd.id = ccol_stats_id;
 	retval = chunk_column_stats_enable_datum(fcinfo, fd.id, enabled);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_DATUM(retval);
 }
@@ -492,7 +492,7 @@ ts_chunk_column_stats_disable(PG_FUNCTION_ARGS)
 
 do_return:
 	retval = chunk_column_stats_disable_datum(fcinfo, ht->fd.id, &colname, delete_count > 0);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_DATUM(retval);
 }
@@ -763,7 +763,7 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 		/* Get the attribute number in the HT for this column, and map to the chunk */
 		attno = get_attnum(ht->main_table_relid, col_name);
 		attno = ts_map_attno(ht->main_table_relid, chunk->table_id, attno);
-		col_type = get_atttype(ht->main_table_relid, attno);
+		col_type = get_atttype(chunk->table_id, attno);
 
 		/* calculate the min/max range for this column on this chunk */
 		if (ts_chunk_get_minmax(chunk->table_id, col_type, attno, "column range", minmax))

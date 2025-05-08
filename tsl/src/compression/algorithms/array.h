@@ -65,6 +65,11 @@ extern void array_compressed_send(CompressedDataHeader *header, StringInfo buffe
 extern Datum tsl_array_compressor_append(PG_FUNCTION_ARGS);
 extern Datum tsl_array_compressor_finish(PG_FUNCTION_ARGS);
 
+/* Pass through to the specialized functions below for BOOL and TEXT */
+ArrowArray *tsl_array_decompress_all(Datum compressed_array, Oid element_type,
+									 MemoryContext dest_mctx);
+ArrowArray *tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type,
+										  MemoryContext dest_mctx);
 ArrowArray *tsl_text_array_decompress_all(Datum compressed_array, Oid element_type,
 										  MemoryContext dest_mctx);
 
@@ -79,5 +84,5 @@ ArrowArray *text_array_decompress_all_serialized_no_header(StringInfo si, bool h
 		.compressed_data_recv = array_compressed_recv,                                             \
 		.compressor_for_type = array_compressor_for_type,                                          \
 		.compressed_data_storage = TOAST_STORAGE_EXTENDED,                                         \
-		.decompress_all = tsl_text_array_decompress_all,                                           \
+		.decompress_all = tsl_array_decompress_all,                                                \
 	}

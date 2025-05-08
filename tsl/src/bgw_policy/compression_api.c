@@ -149,7 +149,7 @@ policy_compression_check(PG_FUNCTION_ARGS)
 	}
 
 	policy_compression_read_and_validate_config(PG_GETARG_JSONB_P(0), &policy_data);
-	ts_cache_release(policy_data.hcache);
+	ts_cache_release(&policy_data.hcache);
 
 	PG_RETURN_VOID();
 }
@@ -199,10 +199,10 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 
 		if (!if_not_exists)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
-					 errmsg("compression policy already exists for hypertable or continuous "
+					 errmsg("columnstore policy already exists for hypertable or continuous "
 							"aggregate \"%s\"",
 							get_rel_name(user_rel_oid)),
 					 errhint("Set option \"if_not_exists\" to true to avoid error.")));
@@ -233,17 +233,17 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		if (is_equal)
 		{
 			/* If all arguments are the same, do nothing */
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(NOTICE,
-					(errmsg("compression policy already exists for hypertable \"%s\", skipping",
+					(errmsg("columnstore policy already exists for hypertable \"%s\", skipping",
 							get_rel_name(user_rel_oid))));
 			PG_RETURN_INT32(-1);
 		}
 		else
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(WARNING,
-					(errmsg("compression policy already exists for hypertable \"%s\"",
+					(errmsg("columnstore policy already exists for hypertable \"%s\"",
 							get_rel_name(user_rel_oid)),
 					 errdetail("A policy already exists with different arguments."),
 					 errhint("Remove the existing policy before adding a new one.")));
@@ -286,7 +286,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	}
 
 	/* insert a new job into jobs table */
-	namestrcpy(&application_name, "Compression Policy");
+	namestrcpy(&application_name, "Columnstore Policy");
 	namestrcpy(&proc_name, POLICY_COMPRESSION_PROC_NAME);
 	namestrcpy(&proc_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&check_name, POLICY_COMPRESSION_CHECK_NAME);
@@ -338,21 +338,6 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 							POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 							format_type_be(compress_after_type))));
 	}
-	/*
-	 * If this is a compression policy for a cagg, verify that
-	 * compress_after > refresh_start of cagg policy. We do not want
-	 * to compress regions that can be refreshed by the cagg policy.
-	 */
-	if (is_cagg && !policy_refresh_cagg_refresh_start_lt(hypertable->fd.id,
-														 compress_after_type,
-														 compress_after_datum))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compress_after value for compression policy should be greater than the "
-						"start of the refresh window of continuous aggregate policy for %s",
-						get_rel_name(user_rel_oid))));
-	}
 
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
@@ -374,7 +359,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										initial_start,
 										timezone);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	PG_RETURN_INT32(job_id);
 }
 
@@ -481,19 +466,19 @@ policy_compression_remove_internal(Oid user_rel_oid, bool if_exists)
 														   FUNCTIONS_SCHEMA_NAME,
 														   ht->fd.id);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (jobs == NIL)
 	{
 		if (!if_exists)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_OBJECT),
-					 errmsg("compression policy not found for hypertable \"%s\"",
+					 errmsg("columnstore policy not found for hypertable \"%s\"",
 							get_rel_name(user_rel_oid))));
 		else
 		{
 			ereport(NOTICE,
-					(errmsg("compression policy not found for hypertable \"%s\", skipping",
+					(errmsg("columnstore policy not found for hypertable \"%s\", skipping",
 							get_rel_name(user_rel_oid))));
 			PG_RETURN_BOOL(false);
 		}
@@ -541,9 +526,9 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("compression not enabled on hypertable \"%s\"",
+					 errmsg("columnstore not enabled on hypertable \"%s\"",
 							get_rel_name(user_htoid)),
-					 errhint("Enable compression before adding a compression policy.")));
+					 errhint("Enable columnstore before adding a columnstore policy.")));
 		}
 		status = ts_continuous_agg_hypertable_status(ht->fd.id);
 		if ((status == HypertableIsMaterialization || status == HypertableIsMaterializationAndRaw))
@@ -566,7 +551,7 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 
 		if (cagg == NULL)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			const char *relname = get_rel_name(user_htoid);
 			if (relname)
 				ereport(ERROR,
@@ -588,7 +573,7 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("continuous aggregate policy does not exist for \"%s\"",
 							get_rel_name(user_htoid)),
-					 errmsg("setup a refresh policy for \"%s\" before setting up a compression "
+					 errmsg("setup a refresh policy for \"%s\" before setting up a columnstore "
 							"policy",
 							get_rel_name(user_htoid))));
 		}
@@ -596,9 +581,9 @@ validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid, bool *is_cagg
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("compression not enabled on continuous aggregate \"%s\"",
+					 errmsg("columnstore not enabled on continuous aggregate \"%s\"",
 							get_rel_name(user_htoid)),
-					 errhint("Enable compression before adding a compression policy.")));
+					 errhint("Enable columnstore before adding a columnstore policy.")));
 		}
 	}
 	Assert(ht != NULL);

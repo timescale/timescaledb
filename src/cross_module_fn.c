@@ -68,6 +68,7 @@ CROSSMODULE_WRAPPER(compressed_data_recv);
 CROSSMODULE_WRAPPER(compressed_data_in);
 CROSSMODULE_WRAPPER(compressed_data_out);
 CROSSMODULE_WRAPPER(compressed_data_info);
+CROSSMODULE_WRAPPER(compressed_data_has_nulls);
 CROSSMODULE_WRAPPER(deltadelta_compressor_append);
 CROSSMODULE_WRAPPER(deltadelta_compressor_finish);
 CROSSMODULE_WRAPPER(gorilla_compressor_append);
@@ -76,11 +77,12 @@ CROSSMODULE_WRAPPER(dictionary_compressor_append);
 CROSSMODULE_WRAPPER(dictionary_compressor_finish);
 CROSSMODULE_WRAPPER(array_compressor_append);
 CROSSMODULE_WRAPPER(array_compressor_finish);
+CROSSMODULE_WRAPPER(bool_compressor_append);
+CROSSMODULE_WRAPPER(bool_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
-CROSSMODULE_WRAPPER(hypercore_handler);
-CROSSMODULE_WRAPPER(hypercore_proxy_handler);
+CROSSMODULE_WRAPPER(bloom1_contains);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
@@ -94,12 +96,14 @@ CROSSMODULE_WRAPPER(cagg_try_repair);
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
 
-CROSSMODULE_WRAPPER(chunk_create_empty_table);
-
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
+CROSSMODULE_WRAPPER(merge_chunks);
+CROSSMODULE_WRAPPER(split_chunk);
 
 /* hypercore */
+CROSSMODULE_WRAPPER(hypercore_handler);
+CROSSMODULE_WRAPPER(hypercore_proxy_handler);
 CROSSMODULE_WRAPPER(is_compressed_tid);
 
 /*
@@ -133,8 +137,13 @@ error_hypercore_proxy_index_options(Datum reloptions, bool validate)
  * parsing index options instead.
  */
 static Datum
-error_pg_community_hypercore_proxy_handler(PG_FUNCTION_ARGS)
+process_hypercore_proxy_handler(PG_FUNCTION_ARGS)
 {
+	ts_license_enable_module_loading();
+
+	if (ts_cm_functions->hypercore_proxy_handler != process_hypercore_proxy_handler)
+		return ts_cm_functions->hypercore_proxy_handler(fcinfo);
+
 	IndexAmRoutine *amroutine = makeNode(IndexAmRoutine);
 
 	amroutine->amstrategies = 0;
@@ -165,8 +174,7 @@ tsl_postprocess_plan_stub(PlannedStmt *stmt)
 }
 
 static bool
-process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
-							   WithClauseResult *with_clause_options)
+process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -246,6 +254,24 @@ process_cagg_try_repair(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
+/*
+ * Ensure that the TSL library is loaded before trying to use the handler.
+ *
+ * As for the functions above, the TSL library might not be loaded when this
+ * function is called, so we try to load this function, but fall back on the
+ * Apache error message if not possible.
+ */
+static Datum
+process_hypercore_handler(PG_FUNCTION_ARGS)
+{
+	ts_license_enable_module_loading();
+	if (ts_cm_functions->hypercore_handler != process_hypercore_handler)
+		return ts_cm_functions->hypercore_handler(fcinfo);
+
+	error_no_default_fn_pg_community(fcinfo);
+	pg_unreachable();
+}
+
 static DDLResult
 process_cagg_viewstmt_default(Node *stmt, const char *query_string, void *pstmt,
 							  WithClauseResult *with_clause_options)
@@ -307,7 +333,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,
-	.set_rel_pathlist = NULL,
 	.ddl_command_start = NULL,
 	.ddl_command_end = NULL,
 	.process_altertable_cmd = NULL,
@@ -395,18 +420,26 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
-	.hypercore_handler = error_no_default_fn_pg_community,
-	.hypercore_proxy_handler = error_pg_community_hypercore_proxy_handler,
-	.is_compressed_tid = error_no_default_fn_pg_community,
+	.bool_compressor_append = error_no_default_fn_pg_community,
+	.bool_compressor_finish = error_no_default_fn_pg_community,
+	.bloom1_contains = error_no_default_fn_pg_community,
+
+	.compression_enable = NULL,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
-	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
+
+	.hypercore_handler = process_hypercore_handler,
+	.hypercore_proxy_handler = process_hypercore_proxy_handler,
+	.is_compressed_tid = error_no_default_fn_pg_community,
+
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
+	.merge_chunks = error_no_default_fn_pg_community,
+	.split_chunk = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

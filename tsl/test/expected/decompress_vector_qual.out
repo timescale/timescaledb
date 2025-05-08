@@ -24,7 +24,7 @@ select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
 alter table vectorqual drop column metric1;
 insert into vectorqual(ts, device, metric2) values ('2021-01-01 00:00:00', 2, 22);
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
  count 
 -------
      2
@@ -33,8 +33,8 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
 alter table vectorqual add column metric3 int4 default 777;
 insert into vectorqual(ts, device, metric2, metric3) values ('2022-01-01 00:00:00', 3, 32, 33);
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
  count 
 -------
      3
@@ -43,9 +43,9 @@ NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
 alter table vectorqual add column metric4 int8;
 insert into vectorqual(ts, device, metric2, metric3, metric4) values ('2023-01-01 00:00:00', 4, 42, 43, 44);
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
  count 
 -------
      4
@@ -146,7 +146,7 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table arithmetic set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "arithmetic" is set to ""
 NOTICE:  default order by for hypertable "arithmetic" is set to "ts DESC"
 insert into arithmetic values (100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
@@ -174,10 +174,10 @@ select * from arithmetic where
 alter table vectorqual add column tag name;
 insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_7_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_7_chunk" is already converted to columnstore
  count 
 -------
      5
@@ -606,7 +606,7 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
 (1 row)
 
 alter table singlebatch set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "singlebatch" is set to ""
 NOTICE:  default order by for hypertable "singlebatch" is set to "ts DESC"
 insert into singlebatch select '2022-02-02 02:02:02', metric2, device, metric3, metric4, tag from vectorqual;
@@ -1166,7 +1166,7 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table date_table set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "date_table" is set to ""
 NOTICE:  default order by for hypertable "date_table" is set to "ts DESC"
 insert into date_table values ('2021-01-01'), ('2021-01-02'),
@@ -1272,7 +1272,7 @@ select count(compress_chunk(x, true)) from show_chunks('text_table') x;
 (1 row)
 
 select compress_chunk(x) from show_chunks('text_table') x;
-NOTICE:  chunk "_hyper_9_17_chunk" is already compressed
+NOTICE:  chunk "_hyper_9_17_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_17_chunk
@@ -1585,3 +1585,2070 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'sam
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
+-- Test the nonstandard Postgres NaN comparison that doesn't match the IEEE floats.
+create table nans(t int, cfloat4 float4, cfloat8 float8);
+select create_hypertable('nans', 't', chunk_time_interval => 1024 * 1024 * 1024);
+NOTICE:  adding not-null constraint to column "t"
+ create_hypertable  
+--------------------
+ (11,public,nans,t)
+(1 row)
+
+alter table nans set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "nans" is set to ""
+NOTICE:  default order by for hypertable "nans" is set to "t DESC"
+insert into nans select pow(2, n), x, x
+    from unnest(array[null, 0, 1, 'nan', '-inf', '+inf']::float8[])
+        with ordinality as x(x, n)
+;
+select count(compress_chunk(x)) from show_chunks('nans') x;
+ count 
+-------
+     1
+(1 row)
+
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.debug_require_vector_qual to 'require';
+select format('select sum(t) from nans where %s %s %s::%s;',
+    variable, op, value, type)
+from
+    unnest(array['cfloat4', 'cfloat8']) variable,
+    unnest(array['=', '!=', '<', '<=', '>', '>=']) op,
+    unnest(array['null', '0', '1', '''nan''', '''-inf''', '''+inf''']) value,
+    unnest(array['float4', 'float8', 'numeric']) type
+\gexec
+select sum(t) from nans where cfloat4 = null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 = null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 = null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 = null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 = null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 = null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 != null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 != null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 != null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 != null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 != null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 != null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 <= null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 <= null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 <= null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 <= null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 <= null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 <= null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 >= null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 >= null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 >= null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 >= null::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 >= null::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 >= null::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 = 0::float4;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat4 = 0::float8;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat4 = 0::numeric;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat8 = 0::float4;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat8 = 0::float8;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat8 = 0::numeric;
+ sum 
+-----
+   4
+(1 row)
+
+select sum(t) from nans where cfloat4 != 0::float4;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat4 != 0::float8;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat4 != 0::numeric;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat8 != 0::float4;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat8 != 0::float8;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat8 != 0::numeric;
+ sum 
+-----
+ 120
+(1 row)
+
+select sum(t) from nans where cfloat4 < 0::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 < 0::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 < 0::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 < 0::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 < 0::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 < 0::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 0::float4;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 0::float8;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 0::numeric;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 0::float4;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 0::float8;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 0::numeric;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 > 0::float4;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 > 0::float8;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 > 0::numeric;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 > 0::float4;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 > 0::float8;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 > 0::numeric;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 0::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 0::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 0::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 0::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 0::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 0::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 = 1::float4;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat4 = 1::float8;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat4 = 1::numeric;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat8 = 1::float4;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat8 = 1::float8;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat8 = 1::numeric;
+ sum 
+-----
+   8
+(1 row)
+
+select sum(t) from nans where cfloat4 != 1::float4;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat4 != 1::float8;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat4 != 1::numeric;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat8 != 1::float4;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat8 != 1::float8;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat8 != 1::numeric;
+ sum 
+-----
+ 116
+(1 row)
+
+select sum(t) from nans where cfloat4 < 1::float4;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 < 1::float8;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 < 1::numeric;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 < 1::float4;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 < 1::float8;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat8 < 1::numeric;
+ sum 
+-----
+  36
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 1::float4;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 1::float8;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 1::numeric;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 1::float4;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 1::float8;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 1::numeric;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 > 1::float4;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 > 1::float8;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 > 1::numeric;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 > 1::float4;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 > 1::float8;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 > 1::numeric;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 1::float4;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 1::float8;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 1::numeric;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 1::float4;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 1::float8;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 1::numeric;
+ sum 
+-----
+  88
+(1 row)
+
+select sum(t) from nans where cfloat4 = 'nan'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 = 'nan'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 = 'nan'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 = 'nan'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 = 'nan'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 = 'nan'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 != 'nan'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 != 'nan'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 != 'nan'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 != 'nan'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 != 'nan'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 != 'nan'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 < 'nan'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 < 'nan'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 < 'nan'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 < 'nan'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 < 'nan'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 < 'nan'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 'nan'::float4;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 'nan'::float8;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 <= 'nan'::numeric;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 'nan'::float4;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 'nan'::float8;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 <= 'nan'::numeric;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 > 'nan'::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > 'nan'::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 > 'nan'::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > 'nan'::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > 'nan'::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 > 'nan'::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 'nan'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 'nan'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 >= 'nan'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 'nan'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 'nan'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 >= 'nan'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 = '-inf'::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 = '-inf'::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 = '-inf'::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 = '-inf'::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 = '-inf'::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 = '-inf'::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 != '-inf'::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 != '-inf'::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 != '-inf'::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 != '-inf'::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 != '-inf'::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 != '-inf'::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 < '-inf'::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < '-inf'::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 < '-inf'::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < '-inf'::float4;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < '-inf'::float8;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat8 < '-inf'::numeric;
+ sum 
+-----
+    
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '-inf'::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '-inf'::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '-inf'::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '-inf'::float4;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '-inf'::float8;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '-inf'::numeric;
+ sum 
+-----
+  32
+(1 row)
+
+select sum(t) from nans where cfloat4 > '-inf'::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 > '-inf'::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 > '-inf'::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 > '-inf'::float4;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 > '-inf'::float8;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat8 > '-inf'::numeric;
+ sum 
+-----
+  92
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '-inf'::float4;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '-inf'::float8;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '-inf'::numeric;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '-inf'::float4;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '-inf'::float8;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '-inf'::numeric;
+ sum 
+-----
+ 124
+(1 row)
+
+select sum(t) from nans where cfloat4 = '+inf'::float4;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat4 = '+inf'::float8;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat4 = '+inf'::numeric;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat8 = '+inf'::float4;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat8 = '+inf'::float8;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat8 = '+inf'::numeric;
+ sum 
+-----
+  64
+(1 row)
+
+select sum(t) from nans where cfloat4 != '+inf'::float4;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat4 != '+inf'::float8;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat4 != '+inf'::numeric;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat8 != '+inf'::float4;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat8 != '+inf'::float8;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat8 != '+inf'::numeric;
+ sum 
+-----
+  60
+(1 row)
+
+select sum(t) from nans where cfloat4 < '+inf'::float4;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 < '+inf'::float8;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 < '+inf'::numeric;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 < '+inf'::float4;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 < '+inf'::float8;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat8 < '+inf'::numeric;
+ sum 
+-----
+  44
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '+inf'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '+inf'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 <= '+inf'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '+inf'::float4;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '+inf'::float8;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat8 <= '+inf'::numeric;
+ sum 
+-----
+ 108
+(1 row)
+
+select sum(t) from nans where cfloat4 > '+inf'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 > '+inf'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 > '+inf'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 > '+inf'::float4;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 > '+inf'::float8;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat8 > '+inf'::numeric;
+ sum 
+-----
+  16
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '+inf'::float4;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '+inf'::float8;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat4 >= '+inf'::numeric;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '+inf'::float4;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '+inf'::float8;
+ sum 
+-----
+  80
+(1 row)
+
+select sum(t) from nans where cfloat8 >= '+inf'::numeric;
+ sum 
+-----
+  80
+(1 row)
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
+-- Test predicates on boolean columns can be vectorized
+-- with the bool compression enabled.
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.enable_bool_compression = on;
+create table bool_table(ts int, b bool);
+select create_hypertable('bool_table', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+    create_hypertable     
+--------------------------
+ (13,public,bool_table,t)
+(1 row)
+
+alter table bool_table set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "bool_table" is set to ""
+NOTICE:  default order by for hypertable "bool_table" is set to "ts DESC"
+insert into bool_table values (100, true), (101, false), (102, null);
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+ count 
+-------
+     1
+(1 row)
+
+set timescaledb.debug_require_vector_qual to 'require';
+-- BooleanTest expressions
+select * from bool_table where b is true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not true order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+ 102 | 
+(2 rows)
+
+select * from bool_table where b is not false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 102 | 
+(2 rows)
+
+select * from bool_table where b is unknown order by 1;
+ ts  | b 
+-----+---
+ 102 | 
+(1 row)
+
+select * from bool_table where b is not unknown order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+-- Combinations of nulls and bool exprs
+select * from bool_table where b = true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b = false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b = false order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true or b is null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 102 | 
+(2 rows)
+
+select * from bool_table where b = true or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true and b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+ 102 | 
+(2 rows)
+
+select * from bool_table where b = false or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = false and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = false and b is not null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is null order by 1;
+ ts  | b 
+-----+---
+ 102 | 
+(1 row)
+
+select * from bool_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+ 102 | 
+(3 rows)
+
+select * from bool_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+delete from bool_table where b is null;
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+ count 
+-------
+     1
+(1 row)
+
+select * from bool_table where b is true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not true order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is unknown order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not unknown order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b = false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b = false order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true or b is null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true and b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = false and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = false and b is not null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.enable_bool_compression;
+-- Check that the bool compression changes didn't mess up the
+-- array compression support for the bools.
+delete from bool_table;
+set timescaledb.enable_bool_compression = off;
+insert into bool_table values (100, true), (101, false), (102, null);
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+ count 
+-------
+     1
+(1 row)
+
+select * from bool_table where b is true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not true order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+ 102 | 
+(2 rows)
+
+select * from bool_table where b is not false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 102 | 
+(2 rows)
+
+select * from bool_table where b is unknown order by 1;
+ ts  | b 
+-----+---
+ 102 | 
+(1 row)
+
+select * from bool_table where b is not unknown order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b = false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b = false order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true or b is null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 102 | 
+(2 rows)
+
+select * from bool_table where b = true or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true and b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+ 102 | 
+(2 rows)
+
+select * from bool_table where b = false or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = false and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = false and b is not null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is null order by 1;
+ ts  | b 
+-----+---
+ 102 | 
+(1 row)
+
+select * from bool_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+ 102 | 
+(3 rows)
+
+select * from bool_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+delete from bool_table where b is null;
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+ count 
+-------
+     1
+(1 row)
+
+select * from bool_table where b is true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not true order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is unknown order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not unknown order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b = false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b = false order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true or b is null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true and b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = false and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = false and b is not null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+-- At this point the bool data is generated as 'bool compression disabed'
+-- meaning, it is compressed with array compression. I try to confuse the
+-- executor by creating a vectorized plan and still hoping to get the right
+-- results.
+set timescaledb.debug_require_vector_qual to 'require';
+set timescaledb.enable_bool_compression = on;
+select * from bool_table where b is true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not true order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is not false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b is unknown order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not unknown order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b = false order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b = false order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true or b is null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = true or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = true and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = true and b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+(1 row)
+
+select * from bool_table where b = false order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b = false or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b = false and b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b = false and b is not null order by 1;
+ ts  | b 
+-----+---
+ 101 | f
+(1 row)
+
+select * from bool_table where b is null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+select * from bool_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | t
+ 101 | f
+(2 rows)
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bool_compression;

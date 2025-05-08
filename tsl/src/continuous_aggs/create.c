@@ -75,6 +75,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
+#include "with_clause/create_materialized_view_with_clause.h"
 
 static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 									  const char *user_view, const char *partial_schema,
@@ -112,7 +113,7 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 static int32 mattablecolumninfo_create_materialization_table(
 	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
 	CAggTimebucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
-	char *table_access_method, ObjectAddress *mataddress);
+	char *table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress);
 static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
 														  Query *userview_query, bool finalized);
 
@@ -337,7 +338,7 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create continuous aggregate trigger")));
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /*
@@ -419,6 +420,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 												RangeVar *mat_rel, CAggTimebucketInfo *bucket_info,
 												bool create_addl_index, char *const tablespacename,
 												char *const table_access_method,
+												int64 matpartcol_interval,
 												ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
@@ -426,7 +428,6 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	char *matpartcolname = matcolinfo->matpartcolname;
 	CreateStmt *create;
 	Datum toast_options;
-	int64 matpartcol_interval;
 	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
 	int32 mat_htid;
 	Oid mat_relid;
@@ -459,13 +460,6 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	NewRelationCreateToastTable(mat_relid, toast_options);
 	RESTORE_USER(uid, saved_uid, sec_ctx);
 
-	/* Convert the materialization table to a hypertable. */
-	matpartcol_interval = bucket_info->htpartcol_interval_len;
-
-	/* Apply the factor just for non-Hierachical CAggs */
-	if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
-		matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
-
 	cagg_create_hypertable(hypertable_id, mat_relid, matpartcolname, matpartcol_interval);
 
 	/* Retrieve the hypertable id from the cache. */
@@ -484,7 +478,7 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	 */
 	orig_ht = ts_hypertable_cache_get_entry(hcache, bucket_info->htoid, CACHE_FLAG_NONE);
 	continuous_agg_invalidate_mat_ht(orig_ht, mat_ht, TS_TIME_NOBEGIN, TS_TIME_NOEND);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return mat_htid;
 }
 
@@ -675,8 +669,23 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
 	int32 materialize_hypertable_id;
 	bool materialized_only =
-		DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
-	bool finalized = DatumGetBool(with_clause_options[ContinuousViewOptionFinalized].parsed);
+		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
+	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
+
+	int64 matpartcol_interval = 0;
+	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
+	{
+		matpartcol_interval = interval_to_usec(DatumGetIntervalP(
+			with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].parsed));
+	}
+	else
+	{
+		matpartcol_interval = bucket_info->htpartcol_interval_len;
+
+		/* Apply the factor just for non-Hierachical CAggs */
+		if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
+			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
+	}
 
 	finalqinfo.finalized = finalized;
 
@@ -706,7 +715,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	makeMaterializedTableName(relnamebuf, "_materialized_hypertable_%d", materialize_hypertable_id);
 	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	is_create_mattbl_index =
-		DatumGetBool(with_clause_options[ContinuousViewOptionCreateGroupIndex].parsed);
+		DatumGetBool(with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].parsed);
 	mattablecolumninfo_create_materialization_table(&mattblinfo,
 													materialize_hypertable_id,
 													mat_rel,
@@ -714,6 +723,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 													is_create_mattbl_index,
 													create_stmt->into->tableSpaceName,
 													create_stmt->into->accessMethod,
+													matpartcol_interval,
 													&mataddress);
 	/*
 	 * Step 2: Create view with select finalize from materialization table.
@@ -834,7 +844,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
 	CAggTimebucketInfo timebucket_exprinfo;
 	Oid nspid;
-	bool finalized = with_clause_options[ContinuousViewOptionFinalized].parsed;
+	bool finalized = with_clause_options[CreateMaterializedViewFlagFinalized].parsed;
 	ViewStmt viewstmt = {
 		.type = T_ViewStmt,
 		.view = stmt->into->rel,
@@ -872,7 +882,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		}
 	}
 
-	if (!with_clause_options[ContinuousViewOptionCompress].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagCompress].is_default)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -940,7 +950,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refresh_window.start = cagg_get_time_min(cagg);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-		continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_CREATION, true, true);
+		CaggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
+		continuous_agg_refresh_internal(cagg, &refresh_window, context, true, true, false);
 	}
 
 	return DDL_DONE;

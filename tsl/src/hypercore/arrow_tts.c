@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <access/attnum.h>
+#include <access/htup_details.h>
 #include <access/tupdesc.h>
 #include <catalog/pg_attribute.h>
 #include <executor/execdebug.h>
@@ -92,6 +93,7 @@ tts_arrow_init(TupleTableSlot *slot)
 	aslot->tuple_index = InvalidTupleIndex;
 	aslot->total_row_count = 0;
 	aslot->referenced_attrs = NULL;
+	aslot->arrow_qual_result = NULL;
 
 	/*
 	 * Set up child slots, one for the non-compressed relation and one for the
@@ -119,6 +121,14 @@ tts_arrow_init(TupleTableSlot *slot)
 
 	Assert(TTS_EMPTY(slot));
 	Assert(TTS_EMPTY(aslot->noncompressed_slot));
+
+	/* Memory context reset every new segment. Used to store, e.g., vectorized
+	 * filters */
+	aslot->per_segment_mcxt = GenerationContextCreate(slot->tts_mcxt,
+													  "Per-segment memory context",
+													  0,
+													  64 * 1024,
+													  64 * 1024);
 }
 
 /*
@@ -261,6 +271,8 @@ tts_arrow_clear(TupleTableSlot *slot)
 	/* Clear arrow slot fields */
 	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 	aslot->arrow_cache_entry = NULL;
+	aslot->arrow_qual_result = NULL;
+	MemoryContextReset(aslot->per_segment_mcxt);
 }
 
 static inline void
@@ -332,6 +344,7 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 	aslot->arrow_cache_entry = NULL;
 	/* Clear valid attributes */
 	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	MemoryContextReset(aslot->per_segment_mcxt);
 }
 
 /*
@@ -719,12 +732,37 @@ tts_arrow_copy_heap_tuple(TupleTableSlot *slot)
 	tuple = ExecCopySlotHeapTuple(aslot->noncompressed_slot);
 	ItemPointerCopy(&slot->tts_tid, &tuple->t_self);
 
-	/* Clean up if the non-compressed slot was "borrowed" */
 	if (aslot->child_slot == aslot->compressed_slot)
+	{
+		BufferHeapTupleTableSlot *hslot = (BufferHeapTupleTableSlot *) aslot->compressed_slot;
+		Assert(TTS_IS_BUFFERTUPLE(aslot->compressed_slot));
+
+		/* Copy visibility information from the compressed relation tuple */
+		memcpy(&tuple->t_data->t_choice,
+			   &hslot->base.tuple->t_data->t_choice,
+			   sizeof(tuple->t_data->t_choice));
+
+		/* Clean up the "borrowed" non-compressed slot */
 		ExecClearTuple(aslot->noncompressed_slot);
+	}
 
 	return tuple;
 }
+
+#if PG17_GE
+static bool
+tts_arrow_is_current_xact_tuple(TupleTableSlot *slot)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	Assert(!TTS_EMPTY(slot));
+	if (NULL == aslot->child_slot)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("don't have transaction information in this context")));
+
+	return aslot->child_slot->tts_ops->is_current_xact_tuple(aslot->child_slot);
+}
+#endif
 
 /*
  * Produce a Minimal tuple copy from the slot Datum values.
@@ -817,15 +855,20 @@ arrow_slot_set_index_attrs(TupleTableSlot *slot, Bitmapset *attrs)
 	MemoryContextSwitchTo(oldmcxt);
 }
 
-const TupleTableSlotOps TTSOpsArrowTuple = { .base_slot_size = sizeof(ArrowTupleTableSlot),
-											 .init = tts_arrow_init,
-											 .release = tts_arrow_release,
-											 .clear = tts_arrow_clear,
-											 .getsomeattrs = tts_arrow_getsomeattrs,
-											 .getsysattr = tts_arrow_getsysattr,
-											 .materialize = tts_arrow_materialize,
-											 .copyslot = tts_arrow_copyslot,
-											 .get_heap_tuple = NULL,
-											 .get_minimal_tuple = NULL,
-											 .copy_heap_tuple = tts_arrow_copy_heap_tuple,
-											 .copy_minimal_tuple = tts_arrow_copy_minimal_tuple };
+const TupleTableSlotOps TTSOpsArrowTuple = {
+	.base_slot_size = sizeof(ArrowTupleTableSlot),
+	.init = tts_arrow_init,
+	.release = tts_arrow_release,
+	.clear = tts_arrow_clear,
+	.getsomeattrs = tts_arrow_getsomeattrs,
+	.getsysattr = tts_arrow_getsysattr,
+	.materialize = tts_arrow_materialize,
+	.copyslot = tts_arrow_copyslot,
+	.get_heap_tuple = NULL,
+	.get_minimal_tuple = NULL,
+	.copy_heap_tuple = tts_arrow_copy_heap_tuple,
+	.copy_minimal_tuple = tts_arrow_copy_minimal_tuple,
+#if PG17_GE
+	.is_current_xact_tuple = tts_arrow_is_current_xact_tuple,
+#endif
+};

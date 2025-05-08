@@ -107,8 +107,40 @@ INSERT INTO test2
 SELECT t, i, gen_rand_minstd()
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t
 CROSS JOIN generate_series(1, 5, 1) i;
+-- Setting compression with time DESC to confirm we are don't have to recompress due to DESC order
+-- This is made possible by removal of sequence numbers
+\set VERBOSITY default
+ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time" DESC', timescaledb.compress_chunk_time_interval='10 hours');
+\set VERBOSITY terse
+-- Verify we are not generating unordered chunks
+BEGIN;
+  SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
+ count 
+-------
+    24
+(1 row)
+
+  SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
+    FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
+    JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test2' LIMIT 1 \gset
+  -- We want to sure we are not fully recompressing them which will make
+  -- the chunk contain multiple batches per segment group
+  SELECT count(*)
+  FROM :CHUNK
+  WHERE i = 1;
+ count 
+-------
+    10
+(1 row)
+
+ROLLBACK;
 -- Compression is set to merge those 24 chunks into 3 chunks, two 10 hour chunks and a single 4 hour chunk.
+\set VERBOSITY default
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='10 hours');
+WARNING:  compress_chunk_time_interval configured and primary dimension not first column in compress_orderby
+HINT:  consider setting "Time" as first compress_orderby column
+\set VERBOSITY terse
 -- Verify we are fully recompressing unordered chunks
 BEGIN;
   SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
@@ -202,9 +234,11 @@ INSERT INTO test3 SELECT t, 1, gen_rand_minstd(), gen_rand_minstd() FROM generat
 INSERT INTO test3 SELECT t, 2, gen_rand_minstd(), gen_rand_minstd() FROM generate_series('2018-03-02 13:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minute') t;
 INSERT INTO test3 SELECT t, 3, gen_rand_minstd(), gen_rand_minstd() FROM generate_series('2018-03-02 2:00'::TIMESTAMPTZ, '2018-03-02 2:01', '1 minute') t;
 -- Compression is set to merge those 25 chunks into 12 2 hour chunks and a single 1 hour chunks on a different space dimensions.
+\set VERBOSITY default
 ALTER TABLE test3 set (timescaledb.compress, timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='2 hours');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test3" is set to ""
+WARNING:  compress_chunk_time_interval configured and primary dimension not first column in compress_orderby
+HINT:  consider setting "Time" as first compress_orderby column
+\set VERBOSITY terse
 SELECT
   $$
   SELECT * FROM test3 WHERE i = 1 ORDER BY "Time"
@@ -264,10 +298,12 @@ NOTICE:  adding not-null constraint to column "Time"
 (1 row)
 
 -- Setting compress_chunk_time_interval to non-multiple of chunk_time_interval should emit a warning.
+\set VERBOSITY default
 ALTER TABLE test4 set (timescaledb.compress, timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='90 minutes');
 WARNING:  compress chunk interval is not a multiple of chunk interval, you should use a factor of chunk interval to merge as much as possible
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test4" is set to ""
+WARNING:  compress_chunk_time_interval configured and primary dimension not first column in compress_orderby
+HINT:  consider setting "Time" as first compress_orderby column
+\set VERBOSITY terse
 DROP TABLE test4;
 CREATE TABLE test5 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test5', 'Time', chunk_time_interval=> INTERVAL '1 hour');
@@ -288,10 +324,10 @@ SELECT
 SELECT compress_chunk(i) FROM show_chunks('test5') i LIMIT 4;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_9_187_chunk
- _timescaledb_internal._hyper_9_187_chunk
- _timescaledb_internal._hyper_9_187_chunk
- _timescaledb_internal._hyper_9_187_chunk
+ _timescaledb_internal._hyper_9_190_chunk
+ _timescaledb_internal._hyper_9_190_chunk
+ _timescaledb_internal._hyper_9_190_chunk
+ _timescaledb_internal._hyper_9_190_chunk
 (4 rows)
 
 SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
@@ -306,14 +342,14 @@ LIMIT 1 \gset
 DROP INDEX :INDEXNAME;
 -- Merging works without indexes on compressed chunks
 SELECT compress_chunk(i, true) FROM show_chunks('test5') i LIMIT 5;
-NOTICE:  chunk "_hyper_9_187_chunk" is already compressed
+NOTICE:  chunk "_hyper_9_190_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_9_187_chunk
- _timescaledb_internal._hyper_9_187_chunk
- _timescaledb_internal._hyper_9_187_chunk
- _timescaledb_internal._hyper_9_187_chunk
- _timescaledb_internal._hyper_9_187_chunk
+ _timescaledb_internal._hyper_9_190_chunk
+ _timescaledb_internal._hyper_9_190_chunk
+ _timescaledb_internal._hyper_9_190_chunk
+ _timescaledb_internal._hyper_9_190_chunk
+ _timescaledb_internal._hyper_9_190_chunk
 (5 rows)
 
 SELECT 'test5' AS "HYPERTABLE_NAME" \gset
@@ -322,7 +358,7 @@ SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
-psql:include/compression_test_merge.sql:12: NOTICE:  chunk "_hyper_9_187_chunk" is already compressed
+psql:include/compression_test_merge.sql:12: NOTICE:  chunk "_hyper_9_190_chunk" is already converted to columnstore
  count_compressed 
 ------------------
                17
@@ -362,30 +398,30 @@ ALTER TABLE test6 set (timescaledb.compress, timescaledb.compress_segmentby='i',
 SELECT compress_chunk(i) FROM show_chunks('test6') i;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_11_212_chunk
- _timescaledb_internal._hyper_11_212_chunk
- _timescaledb_internal._hyper_11_214_chunk
- _timescaledb_internal._hyper_11_214_chunk
- _timescaledb_internal._hyper_11_216_chunk
- _timescaledb_internal._hyper_11_216_chunk
- _timescaledb_internal._hyper_11_218_chunk
- _timescaledb_internal._hyper_11_218_chunk
- _timescaledb_internal._hyper_11_220_chunk
- _timescaledb_internal._hyper_11_220_chunk
- _timescaledb_internal._hyper_11_222_chunk
- _timescaledb_internal._hyper_11_222_chunk
- _timescaledb_internal._hyper_11_224_chunk
- _timescaledb_internal._hyper_11_224_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_228_chunk
- _timescaledb_internal._hyper_11_228_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_232_chunk
- _timescaledb_internal._hyper_11_232_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_234_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_219_chunk
+ _timescaledb_internal._hyper_11_219_chunk
+ _timescaledb_internal._hyper_11_221_chunk
+ _timescaledb_internal._hyper_11_221_chunk
+ _timescaledb_internal._hyper_11_223_chunk
+ _timescaledb_internal._hyper_11_223_chunk
+ _timescaledb_internal._hyper_11_225_chunk
+ _timescaledb_internal._hyper_11_225_chunk
+ _timescaledb_internal._hyper_11_227_chunk
+ _timescaledb_internal._hyper_11_227_chunk
+ _timescaledb_internal._hyper_11_229_chunk
+ _timescaledb_internal._hyper_11_229_chunk
+ _timescaledb_internal._hyper_11_231_chunk
+ _timescaledb_internal._hyper_11_231_chunk
+ _timescaledb_internal._hyper_11_233_chunk
+ _timescaledb_internal._hyper_11_233_chunk
+ _timescaledb_internal._hyper_11_235_chunk
+ _timescaledb_internal._hyper_11_235_chunk
+ _timescaledb_internal._hyper_11_237_chunk
+ _timescaledb_internal._hyper_11_237_chunk
 (24 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
@@ -402,56 +438,56 @@ CROSS JOIN generate_series(1, 5, 1) i;
 -- Altering compress chunk time interval will cause us to create 6 chunks from the additional 24 chunks.
 ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval='4 hours');
 SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
-NOTICE:  chunk "_hyper_11_212_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_214_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_216_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_218_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_220_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_222_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_224_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_226_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_228_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_230_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_232_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_234_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_215_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_217_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_219_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_221_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_223_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_225_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_227_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_229_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_231_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_233_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_235_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_237_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_11_212_chunk
- _timescaledb_internal._hyper_11_214_chunk
- _timescaledb_internal._hyper_11_216_chunk
- _timescaledb_internal._hyper_11_218_chunk
- _timescaledb_internal._hyper_11_220_chunk
- _timescaledb_internal._hyper_11_222_chunk
- _timescaledb_internal._hyper_11_224_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_228_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_232_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_250_chunk
- _timescaledb_internal._hyper_11_250_chunk
- _timescaledb_internal._hyper_11_250_chunk
- _timescaledb_internal._hyper_11_250_chunk
- _timescaledb_internal._hyper_11_254_chunk
- _timescaledb_internal._hyper_11_254_chunk
- _timescaledb_internal._hyper_11_254_chunk
- _timescaledb_internal._hyper_11_254_chunk
- _timescaledb_internal._hyper_11_258_chunk
- _timescaledb_internal._hyper_11_258_chunk
- _timescaledb_internal._hyper_11_258_chunk
- _timescaledb_internal._hyper_11_258_chunk
- _timescaledb_internal._hyper_11_262_chunk
- _timescaledb_internal._hyper_11_262_chunk
- _timescaledb_internal._hyper_11_262_chunk
- _timescaledb_internal._hyper_11_262_chunk
- _timescaledb_internal._hyper_11_266_chunk
- _timescaledb_internal._hyper_11_266_chunk
- _timescaledb_internal._hyper_11_266_chunk
- _timescaledb_internal._hyper_11_266_chunk
- _timescaledb_internal._hyper_11_270_chunk
- _timescaledb_internal._hyper_11_270_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_219_chunk
+ _timescaledb_internal._hyper_11_221_chunk
+ _timescaledb_internal._hyper_11_223_chunk
+ _timescaledb_internal._hyper_11_225_chunk
+ _timescaledb_internal._hyper_11_227_chunk
+ _timescaledb_internal._hyper_11_229_chunk
+ _timescaledb_internal._hyper_11_231_chunk
+ _timescaledb_internal._hyper_11_233_chunk
+ _timescaledb_internal._hyper_11_235_chunk
+ _timescaledb_internal._hyper_11_237_chunk
+ _timescaledb_internal._hyper_11_237_chunk
+ _timescaledb_internal._hyper_11_237_chunk
+ _timescaledb_internal._hyper_11_253_chunk
+ _timescaledb_internal._hyper_11_253_chunk
+ _timescaledb_internal._hyper_11_253_chunk
+ _timescaledb_internal._hyper_11_253_chunk
+ _timescaledb_internal._hyper_11_257_chunk
+ _timescaledb_internal._hyper_11_257_chunk
+ _timescaledb_internal._hyper_11_257_chunk
+ _timescaledb_internal._hyper_11_257_chunk
+ _timescaledb_internal._hyper_11_261_chunk
+ _timescaledb_internal._hyper_11_261_chunk
+ _timescaledb_internal._hyper_11_261_chunk
+ _timescaledb_internal._hyper_11_261_chunk
+ _timescaledb_internal._hyper_11_265_chunk
+ _timescaledb_internal._hyper_11_265_chunk
+ _timescaledb_internal._hyper_11_265_chunk
+ _timescaledb_internal._hyper_11_265_chunk
+ _timescaledb_internal._hyper_11_269_chunk
+ _timescaledb_internal._hyper_11_269_chunk
+ _timescaledb_internal._hyper_11_269_chunk
+ _timescaledb_internal._hyper_11_269_chunk
+ _timescaledb_internal._hyper_11_273_chunk
+ _timescaledb_internal._hyper_11_273_chunk
 (36 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
@@ -470,47 +506,47 @@ CROSS JOIN generate_series(1, 5, 1) i;
 ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval='30 minutes');
 WARNING:  compress chunk interval is not a multiple of chunk interval, you should use a factor of chunk interval to merge as much as possible
 SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
-NOTICE:  chunk "_hyper_11_212_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_214_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_216_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_218_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_220_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_222_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_224_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_226_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_228_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_230_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_232_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_234_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_250_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_254_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_258_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_262_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_266_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_270_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_215_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_217_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_219_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_221_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_223_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_225_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_227_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_229_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_231_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_233_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_235_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_237_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_253_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_257_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_261_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_265_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_269_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_273_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_11_212_chunk
- _timescaledb_internal._hyper_11_214_chunk
- _timescaledb_internal._hyper_11_216_chunk
- _timescaledb_internal._hyper_11_218_chunk
- _timescaledb_internal._hyper_11_220_chunk
- _timescaledb_internal._hyper_11_222_chunk
- _timescaledb_internal._hyper_11_224_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_228_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_232_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_250_chunk
- _timescaledb_internal._hyper_11_254_chunk
- _timescaledb_internal._hyper_11_258_chunk
- _timescaledb_internal._hyper_11_262_chunk
- _timescaledb_internal._hyper_11_266_chunk
- _timescaledb_internal._hyper_11_270_chunk
- _timescaledb_internal._hyper_11_278_chunk
- _timescaledb_internal._hyper_11_279_chunk
- _timescaledb_internal._hyper_11_280_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_219_chunk
+ _timescaledb_internal._hyper_11_221_chunk
+ _timescaledb_internal._hyper_11_223_chunk
+ _timescaledb_internal._hyper_11_225_chunk
+ _timescaledb_internal._hyper_11_227_chunk
+ _timescaledb_internal._hyper_11_229_chunk
+ _timescaledb_internal._hyper_11_231_chunk
+ _timescaledb_internal._hyper_11_233_chunk
+ _timescaledb_internal._hyper_11_235_chunk
+ _timescaledb_internal._hyper_11_237_chunk
+ _timescaledb_internal._hyper_11_253_chunk
+ _timescaledb_internal._hyper_11_257_chunk
+ _timescaledb_internal._hyper_11_261_chunk
+ _timescaledb_internal._hyper_11_265_chunk
+ _timescaledb_internal._hyper_11_269_chunk
+ _timescaledb_internal._hyper_11_273_chunk
+ _timescaledb_internal._hyper_11_281_chunk
+ _timescaledb_internal._hyper_11_282_chunk
+ _timescaledb_internal._hyper_11_283_chunk
 (21 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
@@ -528,53 +564,53 @@ CROSS JOIN generate_series(1, 5, 1) i;
 -- Setting compressed chunk to anything less than chunk interval should disable merging chunks.
 ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval=0);
 SELECT compress_chunk(i, true) FROM show_chunks('test6') i;
-NOTICE:  chunk "_hyper_11_212_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_214_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_216_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_218_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_220_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_222_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_224_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_226_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_228_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_230_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_232_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_234_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_250_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_254_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_258_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_262_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_266_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_270_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_278_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_279_chunk" is already compressed
-NOTICE:  chunk "_hyper_11_280_chunk" is already compressed
+NOTICE:  chunk "_hyper_11_215_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_217_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_219_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_221_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_223_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_225_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_227_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_229_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_231_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_233_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_235_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_237_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_253_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_257_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_261_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_265_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_269_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_273_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_281_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_282_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_11_283_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_11_212_chunk
- _timescaledb_internal._hyper_11_214_chunk
- _timescaledb_internal._hyper_11_216_chunk
- _timescaledb_internal._hyper_11_218_chunk
- _timescaledb_internal._hyper_11_220_chunk
- _timescaledb_internal._hyper_11_222_chunk
- _timescaledb_internal._hyper_11_224_chunk
- _timescaledb_internal._hyper_11_226_chunk
- _timescaledb_internal._hyper_11_228_chunk
- _timescaledb_internal._hyper_11_230_chunk
- _timescaledb_internal._hyper_11_232_chunk
- _timescaledb_internal._hyper_11_234_chunk
- _timescaledb_internal._hyper_11_250_chunk
- _timescaledb_internal._hyper_11_254_chunk
- _timescaledb_internal._hyper_11_258_chunk
- _timescaledb_internal._hyper_11_262_chunk
- _timescaledb_internal._hyper_11_266_chunk
- _timescaledb_internal._hyper_11_270_chunk
- _timescaledb_internal._hyper_11_278_chunk
- _timescaledb_internal._hyper_11_279_chunk
- _timescaledb_internal._hyper_11_280_chunk
- _timescaledb_internal._hyper_11_284_chunk
- _timescaledb_internal._hyper_11_285_chunk
- _timescaledb_internal._hyper_11_286_chunk
+ _timescaledb_internal._hyper_11_215_chunk
+ _timescaledb_internal._hyper_11_217_chunk
+ _timescaledb_internal._hyper_11_219_chunk
+ _timescaledb_internal._hyper_11_221_chunk
+ _timescaledb_internal._hyper_11_223_chunk
+ _timescaledb_internal._hyper_11_225_chunk
+ _timescaledb_internal._hyper_11_227_chunk
+ _timescaledb_internal._hyper_11_229_chunk
+ _timescaledb_internal._hyper_11_231_chunk
+ _timescaledb_internal._hyper_11_233_chunk
+ _timescaledb_internal._hyper_11_235_chunk
+ _timescaledb_internal._hyper_11_237_chunk
+ _timescaledb_internal._hyper_11_253_chunk
+ _timescaledb_internal._hyper_11_257_chunk
+ _timescaledb_internal._hyper_11_261_chunk
+ _timescaledb_internal._hyper_11_265_chunk
+ _timescaledb_internal._hyper_11_269_chunk
+ _timescaledb_internal._hyper_11_273_chunk
+ _timescaledb_internal._hyper_11_281_chunk
+ _timescaledb_internal._hyper_11_282_chunk
+ _timescaledb_internal._hyper_11_283_chunk
+ _timescaledb_internal._hyper_11_287_chunk
+ _timescaledb_internal._hyper_11_288_chunk
+ _timescaledb_internal._hyper_11_289_chunk
 (24 rows)
 
 SELECT count(*) as number_of_chunks FROM show_chunks('test6');
@@ -604,6 +640,7 @@ FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-03 0:59', '1 minut
 CROSS JOIN generate_series(1, 5, 1) i;
 -- Compression is set to merge those 24 chunks into 12 2 hour chunks with ordering by j column before time column, causing recompression to occur during merge.
 ALTER TABLE test7 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='j, "Time" desc', timescaledb.compress_chunk_time_interval='2 hours');
+WARNING:  compress_chunk_time_interval configured and primary dimension not first column in compress_orderby
 SELECT
   $$
   SELECT * FROM test7 ORDER BY i, "Time"
@@ -651,10 +688,10 @@ INSERT INTO test8 (time, series_id, value) SELECT t, s, 1 FROM generate_series(N
 SELECT compress_chunk(c, true) FROM show_chunks('test8') c LIMIT 4;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_15_338_chunk
- _timescaledb_internal._hyper_15_338_chunk
- _timescaledb_internal._hyper_15_338_chunk
- _timescaledb_internal._hyper_15_338_chunk
+ _timescaledb_internal._hyper_15_341_chunk
+ _timescaledb_internal._hyper_15_341_chunk
+ _timescaledb_internal._hyper_15_341_chunk
+ _timescaledb_internal._hyper_15_341_chunk
 (4 rows)
 
 SET enable_indexscan TO OFF;
@@ -683,7 +720,7 @@ INSERT INTO test9 (time, series_id, value) SELECT '2020-01-01 00:00:00'::TIMESTA
 SELECT compress_chunk(show_chunks('test9'), true);
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_17_344_chunk
+ _timescaledb_internal._hyper_17_347_chunk
 (1 row)
 
 INSERT INTO test9 (time, series_id, value) SELECT '2020-01-01 01:00:00'::TIMESTAMPTZ, 1, 1;
@@ -696,11 +733,11 @@ SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chun
 (2 rows)
 
 SELECT compress_chunk(show_chunks('test9'), true);
-NOTICE:  chunk "_hyper_17_344_chunk" is already compressed
+NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_17_344_chunk
- _timescaledb_internal._hyper_17_344_chunk
+ _timescaledb_internal._hyper_17_347_chunk
+ _timescaledb_internal._hyper_17_347_chunk
 (2 rows)
 
 -- should be 1 chunk because of rollup
@@ -722,11 +759,11 @@ SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chun
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = '');
 BEGIN;
   SELECT compress_chunk(show_chunks('test9'), true);
-NOTICE:  chunk "_hyper_17_344_chunk" is already compressed
+NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_17_344_chunk
  _timescaledb_internal._hyper_17_347_chunk
+ _timescaledb_internal._hyper_17_350_chunk
 (2 rows)
 
   -- should not be rolled up
@@ -741,11 +778,11 @@ ROLLBACK;
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time DESC');
 BEGIN;
   SELECT compress_chunk(show_chunks('test9'), true);
-NOTICE:  chunk "_hyper_17_344_chunk" is already compressed
+NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_17_344_chunk
  _timescaledb_internal._hyper_17_347_chunk
+ _timescaledb_internal._hyper_17_350_chunk
 (2 rows)
 
   -- should not be rolled up
@@ -760,11 +797,11 @@ ROLLBACK;
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time NULLS FIRST');
 BEGIN;
   SELECT compress_chunk(show_chunks('test9'), true);
-NOTICE:  chunk "_hyper_17_344_chunk" is already compressed
+NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_17_344_chunk
  _timescaledb_internal._hyper_17_347_chunk
+ _timescaledb_internal._hyper_17_350_chunk
 (2 rows)
 
   -- should not be rolled up
@@ -780,11 +817,11 @@ ROLLBACK;
 ALTER TABLE test9 SET (timescaledb.compress_segmentby = 'series_id', timescaledb.compress_orderby = 'time');
 BEGIN;
   SELECT compress_chunk(show_chunks('test9'), true);
-NOTICE:  chunk "_hyper_17_344_chunk" is already compressed
+NOTICE:  chunk "_hyper_17_347_chunk" is already converted to columnstore
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_17_344_chunk
- _timescaledb_internal._hyper_17_344_chunk
+ _timescaledb_internal._hyper_17_347_chunk
+ _timescaledb_internal._hyper_17_347_chunk
 (2 rows)
 
   -- should be rolled up
@@ -819,9 +856,9 @@ SET timescaledb.enable_rowlevel_compression_locking to on;
 SELECT compress_chunk(show_chunks('test10'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_19_351_chunk
- _timescaledb_internal._hyper_19_351_chunk
- _timescaledb_internal._hyper_19_353_chunk
+ _timescaledb_internal._hyper_19_354_chunk
+ _timescaledb_internal._hyper_19_354_chunk
+ _timescaledb_internal._hyper_19_356_chunk
 (3 rows)
 
 RESET timescaledb.enable_rowlevel_compression_locking;

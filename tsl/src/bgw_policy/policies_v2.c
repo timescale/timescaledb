@@ -96,11 +96,11 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	BgwJob *orig_ht_reten_job = NULL;
 
 	char *err_gap_refresh = "there are gaps in refresh policy";
-	char *err_refresh_compress_overlap = "refresh and compression policies overlap";
+	char *err_refresh_compress_overlap = "refresh and columnstore policies overlap";
 	char *err_refresh_reten_overlap = "refresh and retention policies overlap";
 	char *err_refresh_reten_ht_overlap = "refresh policy of continuous aggregate and retention "
 										 "policy of underlying hypertable overlap";
-	char *err_compress_reten_overlap = "compression and retention policies overlap";
+	char *err_compress_reten_overlap = "columnstore and retention policies overlap";
 
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,
 													 FUNCTIONS_SCHEMA_NAME,
@@ -206,6 +206,11 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	/* Create policies as required, delete the old ones if coming from alter */
 	if (all_policies.refresh && all_policies.refresh->create_policy)
 	{
+		NullableDatum include_tiered_data = { .isnull = true };
+		NullableDatum nbuckets_per_refresh = { .isnull = true };
+		NullableDatum max_batches_per_execution = { .isnull = true };
+		NullableDatum refresh_newest_first = { .isnull = true };
+
 		if (all_policies.is_alter_policy)
 			policy_refresh_cagg_remove_internal(all_policies.rel_oid, if_exists);
 		refresh_job_id = policy_refresh_cagg_add_internal(all_policies.rel_oid,
@@ -217,7 +222,11 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 														  false,
 														  false,
 														  DT_NOBEGIN,
-														  NULL);
+														  NULL,
+														  include_tiered_data,
+														  nbuckets_per_refresh,
+														  max_batches_per_execution,
+														  refresh_newest_first);
 	}
 	if (all_policies.compress && all_policies.compress->create_policy)
 	{

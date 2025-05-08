@@ -12,13 +12,14 @@
 
 #include <postgres.h>
 
+#include <access/attnum.h>
 #include <executor/tuptable.h>
 #include <nodes/pg_list.h>
 
 #include "grouping_policy.h"
 
-#include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
+#include "nodes/vector_agg/vector_slot.h"
 
 typedef struct
 {
@@ -113,13 +114,15 @@ gp_batch_reset(GroupingPolicy *obj)
 }
 
 static void
-compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batch_state,
+compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slot,
 						 VectorAggDef *agg_def, void *agg_state, MemoryContext agg_extra_mctx)
 {
-	ArrowArray *arg_arrow = NULL;
+	const ArrowArray *arg_arrow = NULL;
 	const uint64 *arg_validity_bitmap = NULL;
 	Datum arg_datum = 0;
 	bool arg_isnull = true;
+	uint16 total_batch_rows = 0;
+	const uint64 *vector_qual_result = vector_slot_get_qual_result(vector_slot, &total_batch_rows);
 
 	/*
 	 * We have functions with one argument, and one function with no arguments
@@ -127,9 +130,14 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batc
 	 */
 	if (agg_def->input_offset >= 0)
 	{
-		CompressedColumnValues *values = &batch_state->compressed_columns[agg_def->input_offset];
+		const AttrNumber attnum = AttrOffsetGetAttrNumber(agg_def->input_offset);
+		const CompressedColumnValues *values =
+			vector_slot_get_compressed_column_values(vector_slot, attnum);
+
 		Assert(values->decompression_type != DT_Invalid);
-		Assert(values->decompression_type != DT_Iterator);
+		Ensure(values->decompression_type != DT_Iterator,
+			   "expected arrow array but got iterator for attnum %d",
+			   attnum);
 
 		if (values->arrow != NULL)
 		{
@@ -147,10 +155,11 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batc
 	/*
 	 * Compute the unified validity bitmap.
 	 */
-	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const size_t num_words = (total_batch_rows + 63) / 64;
 	const uint64 *filter = arrow_combine_validity(num_words,
 												  policy->tmp_filter,
-												  batch_state->vector_qual_result,
+												  vector_qual_result,
+												  agg_def->filter_result,
 												  arg_validity_bitmap);
 
 	/*
@@ -166,28 +175,31 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressBatchState *batc
 		/*
 		 * Scalar argument, or count(*). Have to also count the valid rows in
 		 * the batch.
-		 */
-		const int n = arrow_num_valid(filter, batch_state->total_batch_rows);
-
-		/*
+		 *
 		 * The batches that are fully filtered out by vectorized quals should
-		 * have been skipped by the caller.
+		 * have been skipped by the caller, but we also have to check for the
+		 * case when no rows match the aggregate FILTER clause.
 		 */
-		Assert(n > 0);
-		agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		const int n = arrow_num_valid(filter, total_batch_rows);
+		if (n > 0)
+		{
+			agg_def->func.agg_scalar(agg_state, arg_datum, arg_isnull, n, agg_extra_mctx);
+		}
 	}
 }
 
 static void
-gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
+gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
+	uint16 total_batch_rows = 0;
+	vector_slot_get_qual_result(vector_slot, &total_batch_rows);
 
 	/*
 	 * Allocate the temporary filter array for computing the combined results of
-	 * batch filter and column validity.
+	 * batch filter, aggregate filter and column validity.
 	 */
-	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const size_t num_words = (total_batch_rows + 63) / 64;
 	if (num_words > policy->num_tmp_filter_words)
 	{
 		const size_t new_words = (num_words * 2) + 1;
@@ -208,7 +220,7 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	{
 		VectorAggDef *agg_def = &policy->agg_defs[i];
 		void *agg_state = policy->agg_states[i];
-		compute_single_aggregate(policy, batch_state, agg_def, agg_state, policy->agg_extra_mctx);
+		compute_single_aggregate(policy, vector_slot, agg_def, agg_state, policy->agg_extra_mctx);
 	}
 
 	/*
@@ -218,10 +230,12 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 	for (int i = 0; i < ngrp; i++)
 	{
 		GroupingColumn *col = &policy->grouping_columns[i];
+		const AttrNumber attnum = AttrOffsetGetAttrNumber(col->input_offset);
 		Assert(col->input_offset >= 0);
 		Assert(col->output_offset >= 0);
 
-		CompressedColumnValues *values = &batch_state->compressed_columns[col->input_offset];
+		const CompressedColumnValues *values =
+			vector_slot_get_compressed_column_values(vector_slot, attnum);
 		Assert(values->decompression_type == DT_Scalar);
 
 		/*

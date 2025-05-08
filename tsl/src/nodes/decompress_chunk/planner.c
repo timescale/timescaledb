@@ -44,6 +44,14 @@ static CustomScanMethods decompress_chunk_plan_methods = {
 	.CreateCustomScanState = decompress_chunk_state_create,
 };
 
+/* Check if the provided plan is a DecompressChunkPlan */
+bool
+ts_is_decompress_chunk_plan(Plan *plan)
+{
+	return IsA(plan, CustomScan) &&
+		   castNode(CustomScan, plan)->methods == &decompress_chunk_plan_methods;
+}
+
 void
 _decompress_chunk_init(void)
 {
@@ -148,12 +156,6 @@ typedef struct
 
 } DecompressionMapContext;
 
-typedef struct VectorQualInfoDecompressChunk
-{
-	VectorQualInfo vqinfo;
-	const UncompressedColumnInfo *colinfo;
-} VectorQualInfoDecompressChunk;
-
 static bool *
 build_vector_attrs_array(const UncompressedColumnInfo *colinfo, const CompressionInfo *info)
 {
@@ -255,10 +257,10 @@ follow_uncompressed_output_tlist(const DecompressionMapContext *context)
  * attnos.
  */
 static void
-build_decompression_map(DecompressionMapContext *context, List *compressed_scan_tlist)
+build_decompression_map(DecompressionMapContext *context, List *compressed_output_tlist)
 {
 	DecompressChunkPath *path = context->decompress_path;
-	CompressionInfo *info = path->info;
+	const CompressionInfo *info = path->info;
 	/*
 	 * Track which normal and metadata columns we were able to find in the
 	 * targetlist.
@@ -278,7 +280,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	}
 #endif
 	/*
-	 * FIXME this way to determine which columns are used is actually wrong, see
+	 * TODO this way to determine which columns are used is actually wrong, see
 	 * https://github.com/timescale/timescaledb/issues/4195#issuecomment-1104238863
 	 * Left as is for now, because changing it uncovers a whole new story with
 	 * ctid.
@@ -311,7 +313,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 */
 	context->have_bulk_decompression_columns = false;
 	context->decompression_map = NIL;
-	foreach (lc, compressed_scan_tlist)
+	foreach (lc, compressed_output_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		if (!IsA(target->expr, Var))
@@ -486,7 +488,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 * into several lists so that it can be passed through the custom path
 	 * settings.
 	 */
-	foreach (lc, compressed_scan_tlist)
+	foreach (lc, compressed_output_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		Var *var = castNode(Var, target->expr);
@@ -528,7 +530,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
  * uncompressed one. Based on replace_nestloop_params
  */
 static Node *
-replace_compressed_vars(Node *node, CompressionInfo *info)
+replace_compressed_vars(Node *node, const CompressionInfo *info)
 {
 	if (node == NULL)
 		return NULL;
@@ -659,6 +661,8 @@ is_not_runtime_constant_walker(Node *node, void *context)
  * Note that we do the same evaluation when doing run time chunk exclusion, but
  * there is no good way to pass the evaluated clauses to the underlying nodes
  * like this DecompressChunk node.
+ *
+ * Similar checks are performed for sparse index pushdown.
  */
 static bool
 is_not_runtime_constant(Node *node)
@@ -685,9 +689,23 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		{
 			/*
 			 * NOT should be removed by Postgres for all operators we can
-			 * vectorize (see prepqual.c), so we don't support it.
+			 * vectorize (see prepqual.c) except when the where clause is
+			 * something like 'COL = false' for bool columns. In this case, we
+			 * have to check if it was transformed to BoolExpr(NOT_EXPR, Var) so
+			 * we can vectorize it, provided that the column supports bulk
+			 * decompression.
 			 */
-			return NULL;
+			if (list_length(boolexpr->args) == 1 && IsA(linitial(boolexpr->args), Var))
+			{
+				if (!vqinfo->vector_attrs[castNode(Var, linitial(boolexpr->args))->varattno])
+				{
+					return NULL;
+				}
+			}
+			else
+			{
+				return NULL;
+			}
 		}
 
 		bool need_copy = false;
@@ -722,7 +740,8 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 
 	/*
 	 * Among the simple predicates, we vectorize some "Var op Const" binary
-	 * predicates, scalar array operations with these predicates, and null test.
+	 * predicates, scalar array operations with these predicates, boolean variables
+	 * and null test.
 	 */
 	NullTest *nulltest = NULL;
 	OpExpr *opexpr = NULL;
@@ -730,6 +749,7 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	Node *arg1 = NULL;
 	Node *arg2 = NULL;
 	Oid opno = InvalidOid;
+	Var *var = NULL;
 	if (IsA(qual, OpExpr))
 	{
 		opexpr = castNode(OpExpr, qual);
@@ -753,6 +773,33 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	{
 		nulltest = castNode(NullTest, qual);
 		arg1 = (Node *) nulltest->arg;
+	}
+	else if (IsA(qual, BooleanTest))
+	{
+		BooleanTest *booltest = castNode(BooleanTest, qual);
+		if (IsA(booltest->arg, Var))
+		{
+			var = castNode(Var, booltest->arg);
+			if (!vqinfo->vector_attrs[var->varattno])
+			{
+				return NULL;
+			}
+			return (Node *) booltest;
+		}
+		else
+		{
+			return NULL;
+		}
+	}
+	else if (IsA(qual, Var) && (castNode(Var, qual))->vartype == BOOLOID)
+	{
+		/* We can vectorize boolean variables if bulk decompression is possible. */
+		var = castNode(Var, qual);
+		if (!vqinfo->vector_attrs[var->varattno])
+		{
+			return NULL;
+		}
+		return (Node *) var;
 	}
 	else
 	{
@@ -791,7 +838,7 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		return NULL;
 	}
 
-	Var *var = castNode(Var, arg1);
+	var = castNode(Var, arg1);
 	if ((Index) var->varno != vqinfo->rti)
 	{
 		/*
@@ -890,6 +937,7 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 					  List **vectorized, List **nonvectorized)
 {
 	VectorQualInfo vqi = {
+		.maxattno = path->info->chunk_rel->max_attr,
 		.vector_attrs = build_vector_attrs_array(context->uncompressed_attno_info, path->info),
 		.rti = path->info->chunk_rel->relid,
 	};
@@ -959,6 +1007,30 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 	plan->plan.plan_width = lefttree->plan_width;
 	plan->plan.parallel_aware = false;
 	plan->plan.parallel_safe = lefttree->parallel_safe;
+}
+
+/*
+ * Find a variable of the given relation somewhere in the expression tree.
+ * Currently we use this to find the Var argument of time_bucket, when we prepare
+ * the batch sorted merge parameters after using the monotonous sorting transform
+ * optimization.
+ */
+static Var *
+find_var_subexpression(void *expr, Index varno)
+{
+	List *varlist = pull_var_clause((Node *) expr, 0);
+	if (list_length(varlist) == 1)
+	{
+		Var *var = (Var *) linitial(varlist);
+		if ((Index) var->varno == (Index) varno)
+		{
+			return var;
+		}
+
+		return NULL;
+	}
+
+	return NULL;
 }
 
 Plan *
@@ -1136,18 +1208,22 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 					continue;
 				}
 
-				Ensure(IsA(em->em_expr, Var),
+				/*
+				 * The equivalence member expression might be a monotonous
+				 * expression of the decompressed relation Var, so recurse to
+				 * find it.
+				 */
+				Var *var = find_var_subexpression(em->em_expr, em_relid);
+				Ensure(var != NULL,
 					   "non-Var pathkey not expected for compressed batch sorted merge");
 
-				/*
-				 * We found a Var equivalence member that belongs to the
-				 * decompressed relation. We have to convert its varattno which
-				 * is the varattno of the uncompressed chunk tuple, to the
-				 * decompressed scan tuple varattno.
-				 */
-				Var *var = castNode(Var, em->em_expr);
 				Assert((Index) var->varno == (Index) em_relid);
 
+				/*
+				 * Convert its varattno which is the varattno of the
+				 * uncompressed chunk tuple, to the decompressed scan tuple
+				 * varattno.
+				 */
 				const int decompressed_scan_attno =
 					context.uncompressed_attno_info[var->varattno].custom_scan_attno;
 				Assert(decompressed_scan_attno > 0);
@@ -1300,17 +1376,23 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 #ifdef TS_DEBUG
 	if (ts_guc_debug_require_vector_qual == DRO_Forbid && list_length(vectorized_quals) > 0)
 	{
-		elog(ERROR, "debug: encountered vector quals when they are disabled");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("debug: encountered vector quals when they are disabled")));
 	}
 	else if (ts_guc_debug_require_vector_qual == DRO_Require)
 	{
 		if (list_length(decompress_plan->scan.plan.qual) > 0)
 		{
-			elog(ERROR, "debug: encountered non-vector quals when they are disabled");
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("debug: encountered non-vector quals when they are disabled")));
 		}
 		if (list_length(vectorized_quals) == 0)
 		{
-			elog(ERROR, "debug: did not encounter vector quals when they are required");
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("debug: did not encounter vector quals when they are required")));
 		}
 	}
 #endif

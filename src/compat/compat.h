@@ -11,6 +11,7 @@
 #include <commands/defrem.h>
 #include <commands/explain.h>
 #include <commands/trigger.h>
+#include <commands/vacuum.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
@@ -24,37 +25,29 @@
 
 #include "export.h"
 
-#define PG_MAJOR_MIN 14
+#define PG_MAJOR_MIN 15
 
 /*
- * Prevent building against upstream versions that had ABI breaking change (14.14, 15.9, 16.5, 17.1)
+ * Prevent building against upstream versions that had ABI breaking change (15.9, 16.5, 17.1)
  * that was reverted in the following release.
  */
 
-#define is_supported_pg_version_14(version)                                                        \
-	((version >= 140000) && (version < 150000) && (version != 140014))
-#define is_supported_pg_version_15(version)                                                        \
-	((version >= 150000) && (version < 160000) && (version != 150009))
-#define is_supported_pg_version_16(version)                                                        \
-	((version >= 160000) && (version < 170000) && (version != 160005))
-#define is_supported_pg_version_17(version)                                                        \
-	((version >= 170000) && (version < 180000) && (version != 170001))
+#define is_supported_pg_version_15(version) ((version >= 150010) && (version < 160000))
+#define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
+#define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
 
 /*
  * PG16 support is a WIP and not complete yet.
  * To compile with PG16, use -DEXPERIMENTAL=ON with cmake.
  */
 #define is_supported_pg_version(version)                                                           \
-	(is_supported_pg_version_14(version) || is_supported_pg_version_15(version) ||                 \
-	 is_supported_pg_version_16(version) || is_supported_pg_version_17(version))
+	(is_supported_pg_version_15(version) || is_supported_pg_version_16(version) ||                 \
+	 is_supported_pg_version_17(version))
 
-#define PG14 is_supported_pg_version_14(PG_VERSION_NUM)
 #define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 #define PG16 is_supported_pg_version_16(PG_VERSION_NUM)
 #define PG17 is_supported_pg_version_17(PG_VERSION_NUM)
 
-#define PG14_LT (PG_VERSION_NUM < 140000)
-#define PG14_GE (PG_VERSION_NUM >= 140000)
 #define PG15_LT (PG_VERSION_NUM < 150000)
 #define PG15_GE (PG_VERSION_NUM >= 150000)
 #define PG16_LT (PG_VERSION_NUM < 160000)
@@ -66,8 +59,7 @@
 #error "Unsupported PostgreSQL version"
 #endif
 
-#if ((PG_VERSION_NUM >= 140014 && PG_VERSION_NUM < 150000) ||                                      \
-	 (PG_VERSION_NUM >= 150009 && PG_VERSION_NUM < 160000) ||                                      \
+#if ((PG_VERSION_NUM >= 150009 && PG_VERSION_NUM < 160000) ||                                      \
 	 (PG_VERSION_NUM >= 160005 && PG_VERSION_NUM < 170000) || (PG_VERSION_NUM >= 170001))
 /*
  * The above versions introduced a fix for potentially losing updates to
@@ -253,29 +245,6 @@
 
 #define ts_tuptableslot_set_table_oid(slot, table_oid) (slot)->tts_tableOid = table_oid
 
-/*
- * The number of arguments of pg_md5_hash() has changed in PG 15.
- *
- * https://github.com/postgres/postgres/commit/b69aba74
- */
-
-#if PG15_LT
-
-#include <common/md5.h>
-static inline bool
-pg_md5_hash_compat(const void *buff, size_t len, char *hexsum, const char **errstr)
-{
-	*errstr = NULL;
-	return pg_md5_hash(buff, len, hexsum);
-}
-
-#else
-
-#include <common/md5.h>
-#define pg_md5_hash_compat(buff, len, hexsum, errstr) pg_md5_hash(buff, len, hexsum, errstr)
-
-#endif
-
 static inline ClusterParams *
 get_cluster_options(const ClusterStmt *stmt)
 {
@@ -333,326 +302,86 @@ get_reindex_options(ReindexStmt *stmt)
 #define lfifth(l) lfirst(list_nth_cell(l, 4))
 #define lfifth_int(l) lfirst_int(list_nth_cell(l, 4))
 
-/* find_em_expr_for_rel was in postgres_fdw in PG12 but got
- * moved out of contrib and into core in PG13. PG15 removed
- * the function again from postgres core code so for PG15+
- * we fall back to our own implementation.
- */
-#if PG15_GE
-#define find_em_expr_for_rel ts_find_em_expr_for_rel
-#endif
-
-/*
- * PG15 added additional `force_flush` argument to shm_mq_send().
- *
- * Our _compat() version currently uses force_flush = true on PG15 to preserve
- * the same behaviour on all supported PostgreSQL versions.
- *
- * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=46846433
- */
-#if PG15_GE
-#define shm_mq_send_compat(shm_mq_handle, nbytes, data, nowait)                                    \
-	shm_mq_send(shm_mq_handle, nbytes, data, nowait, true)
-#else
-#define shm_mq_send_compat(shm_mq_handle, nbytes, data, nowait)                                    \
-	shm_mq_send(shm_mq_handle, nbytes, data, nowait)
-#endif
-
-/*
- * The macro FirstBootstrapObjectId was renamed in PG15.
- *
- * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=a49d0812
- */
-#if PG15_GE
-#define FirstBootstrapObjectIdCompat FirstUnpinnedObjectId
-#else
-#define FirstBootstrapObjectIdCompat FirstBootstrapObjectId
-#endif
-
-/*
- * The number of arguments of make_new_heap() has changed in PG15. Note that
- * on PostgreSQL <= 14 our _compat() version ignores the NewAccessMethod
- * argument and uses the default access method.
- *
- * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=b0483263
- */
-#if PG15_GE
-#define make_new_heap_compat(tableOid, tableSpace, NewAccessMethod, relpersistence, ExclusiveLock) \
-	make_new_heap(tableOid, tableSpace, NewAccessMethod, relpersistence, ExclusiveLock)
-#else
-#define make_new_heap_compat(tableOid, tableSpace, _ignored, relpersistence, ExclusiveLock)        \
-	make_new_heap(tableOid, tableSpace, relpersistence, ExclusiveLock)
-#endif
-
-/*
- * PostgreSQL 15 removed "utils/int8.h" header and change the "scanint8"
- * function to "pg_strtoint64" in "utils/builtins.h".
- *
- * https://github.com/postgres/postgres/commit/cfc7191dfea330dd7a71e940d59de78129bb6175
- */
-#if PG15_LT
-#include <utils/int8.h>
-static inline int64
-pg_strtoint64(const char *str)
-{
-	int64 result;
-	scanint8(str, false, &result);
-
-	return result;
-}
-#else
-#include <utils/builtins.h>
-#endif
-
-/*
- * PG 15 removes "recheck" argument from check_index_is_clusterable
- *
- * https://github.com/postgres/postgres/commit/b940918d
- */
-#if PG15_GE
-#define check_index_is_clusterable_compat(rel, indexOid, lock)                                     \
-	check_index_is_clusterable(rel, indexOid, lock)
-#else
-#define check_index_is_clusterable_compat(rel, indexOid, lock)                                     \
-	check_index_is_clusterable(rel, indexOid, true, lock)
-#endif
-
+#if PG16_LT
 /*
  * PG15 consolidate VACUUM xid cutoff logic.
  *
  * https://github.com/postgres/postgres/commit/efa4a946
+ *
+ * PG16 introduced VacuumCutoffs so define here for previous PG versions.
  */
-#if PG15_LT
-#define vacuum_set_xid_limits_compat(rel,                                                          \
-									 freeze_min_age,                                               \
-									 freeze_table_age,                                             \
-									 multixact_freeze_min_age,                                     \
-									 multixact_freeze_table_age,                                   \
-									 oldestXmin,                                                   \
-									 freezeLimit,                                                  \
-									 multiXactCutoff)                                              \
-	vacuum_set_xid_limits(rel,                                                                     \
-						  freeze_min_age,                                                          \
-						  freeze_table_age,                                                        \
-						  multixact_freeze_min_age,                                                \
-						  multixact_freeze_table_age,                                              \
-						  oldestXmin,                                                              \
-						  freezeLimit,                                                             \
-						  NULL,                                                                    \
-						  multiXactCutoff,                                                         \
-						  NULL)
-#elif PG16_LT
-#define vacuum_set_xid_limits_compat(rel,                                                          \
-									 freeze_min_age,                                               \
-									 freeze_table_age,                                             \
-									 multixact_freeze_min_age,                                     \
-									 multixact_freeze_table_age,                                   \
-									 oldestXmin,                                                   \
-									 freezeLimit,                                                  \
-									 multiXactCutoff)                                              \
-	do                                                                                             \
-	{                                                                                              \
-		MultiXactId oldestMxact;                                                                   \
-		vacuum_set_xid_limits(rel,                                                                 \
-							  freeze_min_age,                                                      \
-							  freeze_table_age,                                                    \
-							  multixact_freeze_min_age,                                            \
-							  multixact_freeze_table_age,                                          \
-							  oldestXmin,                                                          \
-							  &oldestMxact,                                                        \
-							  freezeLimit,                                                         \
-							  multiXactCutoff);                                                    \
-	} while (0)
-#else
-#define vacuum_set_xid_limits_compat(rel,                                                          \
-									 freezeMinAge,                                                 \
-									 freezeTableAge,                                               \
-									 multixactFreezeMinAge,                                        \
-									 multixactFreezeTableAge,                                      \
-									 oldestXmin,                                                   \
-									 freezeLimit,                                                  \
-									 multiXactCutoff)                                              \
-	do                                                                                             \
-	{                                                                                              \
-		struct VacuumCutoffs cutoffs;                                                              \
-		/* vacuum_get_cutoffs uses only the *_age members of the VacuumParams object */            \
-		VacuumParams params = { .freeze_min_age = freezeMinAge,                                    \
-								.freeze_table_age = freezeTableAge,                                \
-								.multixact_freeze_min_age = multixactFreezeMinAge,                 \
-								.multixact_freeze_table_age = multixactFreezeTableAge };           \
-		vacuum_get_cutoffs(rel, &params, &cutoffs);                                                \
-		*(oldestXmin) = cutoffs.OldestXmin;                                                        \
-		*(freezeLimit) = cutoffs.FreezeLimit;                                                      \
-		*(multiXactCutoff) = cutoffs.MultiXactCutoff;                                              \
-	} while (0)
+struct VacuumCutoffs
+{
+	TransactionId relfrozenxid;
+	MultiXactId relminmxid;
+	TransactionId OldestXmin;
+	MultiXactId OldestMxact;
+	TransactionId FreezeLimit;
+	MultiXactId MultiXactCutoff;
+};
+
+static inline bool
+vacuum_get_cutoffs(Relation rel, const VacuumParams *params, struct VacuumCutoffs *cutoffs)
+{
+	return vacuum_set_xid_limits(rel,
+								 0,
+								 0,
+								 0,
+								 0,
+								 &cutoffs->OldestXmin,
+								 &cutoffs->OldestMxact,
+								 &cutoffs->FreezeLimit,
+								 &cutoffs->MultiXactCutoff);
+}
 #endif
 
 /*
- * PG15 updated the signatures of ExecARUpdateTriggers and ExecARDeleteTriggers while
- * fixing foreign key handling during cross-partition updates
- *
- * https://github.com/postgres/postgres/commit/ba9a7e39217
- */
-#if PG15_LT
-#define ExecARUpdateTriggersCompat(estate,                                                         \
-								   resultRelInfo,                                                  \
-								   src_partinfo,                                                   \
-								   dst_partinfo,                                                   \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   inewslot,                                                       \
-								   recheckIndexes,                                                 \
-								   transtition_capture,                                            \
-								   is_crosspart_update)                                            \
-	ExecARUpdateTriggers(estate,                                                                   \
-						 resultRelInfo,                                                            \
-						 tupleid,                                                                  \
-						 oldtuple,                                                                 \
-						 inewslot,                                                                 \
-						 recheckIndexes,                                                           \
-						 transtition_capture)
-#define ExecARDeleteTriggersCompat(estate,                                                         \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   ar_delete_trig_tcs,                                             \
-								   is_crosspart_update)                                            \
-	ExecARDeleteTriggers(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs)
-#else
-#define ExecARUpdateTriggersCompat(estate,                                                         \
-								   resultRelInfo,                                                  \
-								   src_partinfo,                                                   \
-								   dst_partinfo,                                                   \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   inewslot,                                                       \
-								   recheckIndexes,                                                 \
-								   transtition_capture,                                            \
-								   is_crosspart_update)                                            \
-	ExecARUpdateTriggers(estate,                                                                   \
-						 resultRelInfo,                                                            \
-						 src_partinfo,                                                             \
-						 dst_partinfo,                                                             \
-						 tupleid,                                                                  \
-						 oldtuple,                                                                 \
-						 inewslot,                                                                 \
-						 recheckIndexes,                                                           \
-						 transtition_capture,                                                      \
-						 is_crosspart_update)
-#define ExecARDeleteTriggersCompat(estate,                                                         \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   ar_delete_trig_tcs,                                             \
-								   is_crosspart_update)                                            \
-	ExecARDeleteTriggers(estate,                                                                   \
-						 resultRelInfo,                                                            \
-						 tupleid,                                                                  \
-						 oldtuple,                                                                 \
-						 ar_delete_trig_tcs,                                                       \
-						 is_crosspart_update)
-#endif
-
-/*
- * PG15 adds new argument TM_FailureData to ExecBRUpdateTriggers
- * as a part of adding support for Merge
- * https://github.com/postgres/postgres/commit/9321c79c
- *
  * PG16 adds TMResult argument to ExecBRUpdateTriggers
  * https://github.com/postgres/postgres/commit/7103ebb7
+ * this was backported to PG15 in
+ * https://github.com/postgres/postgres/commit/7d9a75713ab9
  */
-#if PG15_LT
-#define ExecBRUpdateTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   slot,                                                           \
-								   result,                                                         \
-								   tmfdp)                                                          \
-	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot)
-#elif PG16_LT
-#define ExecBRUpdateTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   slot,                                                           \
-								   result,                                                         \
-								   tmfdp)                                                          \
-	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, tmfdp)
-#else
-#define ExecBRUpdateTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   slot,                                                           \
-								   result,                                                         \
-								   tmfdp)                                                          \
-	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, result, tmfdp)
+#if PG15
+#define ExecBRUpdateTriggers(estate,                                                               \
+							 epqstate,                                                             \
+							 resultRelInfo,                                                        \
+							 tupleid,                                                              \
+							 oldtuple,                                                             \
+							 slot,                                                                 \
+							 result,                                                               \
+							 tmfdp)                                                                \
+	ExecBRUpdateTriggersNew(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, result, tmfdp)
 #endif
 
 /*
  * PG16 adds TMResult argument to ExecBRDeleteTriggers
  * https://github.com/postgres/postgres/commit/9321c79c
+ * this was backported to PG15 in
+ * https://github.com/postgres/postgres/commit/7d9a75713ab9
  */
-#if PG16_LT
-#define ExecBRDeleteTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   relinfo,                                                        \
-								   tupleid,                                                        \
-								   fdw_trigtuple,                                                  \
-								   epqslot,                                                        \
-								   tmresult,                                                       \
-								   tmfd)                                                           \
-	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot)
-#else
-#define ExecBRDeleteTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   relinfo,                                                        \
-								   tupleid,                                                        \
-								   fdw_trigtuple,                                                  \
-								   epqslot,                                                        \
-								   tmresult,                                                       \
-								   tmfd)                                                           \
-	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot, tmresult, tmfd)
+#if PG15
+#define ExecBRDeleteTriggers(estate,                                                               \
+							 epqstate,                                                             \
+							 relinfo,                                                              \
+							 tupleid,                                                              \
+							 fdw_trigtuple,                                                        \
+							 epqslot,                                                              \
+							 tmresult,                                                             \
+							 tmfd)                                                                 \
+	ExecBRDeleteTriggersNew(estate,                                                                \
+							epqstate,                                                              \
+							relinfo,                                                               \
+							tupleid,                                                               \
+							fdw_trigtuple,                                                         \
+							epqslot,                                                               \
+							tmresult,                                                              \
+							tmfd)
 #endif
 
-#if PG14 && PG_VERSION_NUM < 140007
-#include <storage/smgr.h>
-/*
- * RelationGetSmgr
- *		Returns smgr file handle for a relation, opening it if needed.
- *
- * Very little code is authorized to touch rel->rd_smgr directly.  Instead
- * use this function to fetch its value.
- *
- * Note: since a relcache flush can cause the file handle to be closed again,
- * it's unwise to hold onto the pointer returned by this function for any
- * long period.  Recommended practice is to just re-execute RelationGetSmgr
- * each time you need to access the SMgrRelation.  It's quite cheap in
- * comparison to whatever an smgr function is going to do.
- *
- * This has been backported but is not available in all minor versions so
- * we backport ourselves for those versions.
- *
- */
-static inline SMgrRelation
-RelationGetSmgr(Relation rel)
-{
-	if (unlikely(rel->rd_smgr == NULL))
-		smgrsetowner(&(rel->rd_smgr), smgropen(rel->rd_node, rel->rd_backend));
-	return rel->rd_smgr;
-}
-#endif
-
-#if PG15_GE
-#define GenerationContextCreateCompat(parent, name, blockSize)                                     \
-	GenerationContextCreate(parent, name, 0, blockSize, blockSize)
+#if PG16_GE
+#define pgstat_get_local_beentry_by_index_compat(idx) pgstat_get_local_beentry_by_index(idx)
 #else
-#define GenerationContextCreateCompat(parent, name, blockSize)                                     \
-	GenerationContextCreate(parent, name, blockSize)
+#define pgstat_get_local_beentry_by_index_compat(idx) pgstat_fetch_stat_local_beentry(idx)
 #endif
 
 /*
@@ -756,68 +485,6 @@ object_ownercheck(Oid classid, Oid objectid, Oid roleid)
 			Assert(false);
 	}
 	return false;
-}
-#endif
-
-/*
- * PG15 refactored elog.c functions and exposed error_severity
- * but previous versions don't have it exposed, so imported it
- * from Postgres source code.
- *
- * https://github.com/postgres/postgres/commit/ac7c80758a7
- */
-#if PG15_LT
-/*
- * error_severity --- get string representing elevel
- *
- * The string is not localized here, but we mark the strings for translation
- * so that callers can invoke _() on the result.
- *
- * Imported from src/backend/utils/error/elog.c
- */
-static inline const char *
-error_severity(int elevel)
-{
-	const char *prefix;
-
-	switch (elevel)
-	{
-		case DEBUG1:
-		case DEBUG2:
-		case DEBUG3:
-		case DEBUG4:
-		case DEBUG5:
-			prefix = gettext_noop("DEBUG");
-			break;
-		case LOG:
-		case LOG_SERVER_ONLY:
-			prefix = gettext_noop("LOG");
-			break;
-		case INFO:
-			prefix = gettext_noop("INFO");
-			break;
-		case NOTICE:
-			prefix = gettext_noop("NOTICE");
-			break;
-		case WARNING:
-		case WARNING_CLIENT_ONLY:
-			prefix = gettext_noop("WARNING");
-			break;
-		case ERROR:
-			prefix = gettext_noop("ERROR");
-			break;
-		case FATAL:
-			prefix = gettext_noop("FATAL");
-			break;
-		case PANIC:
-			prefix = gettext_noop("PANIC");
-			break;
-		default:
-			prefix = "???";
-			break;
-	}
-
-	return prefix;
 }
 #endif
 
@@ -970,4 +637,31 @@ RestrictSearchPath(void)
 				 allow_system_table_mods,                                                          \
 				 is_internal,                                                                      \
 				 constraintId)
+#endif
+
+#if PG17_LT
+/*
+ * Overflow-aware comparison functions to be used in qsort. Introduced in PG
+ * 17 and included here for older PG versions.
+ */
+static inline int
+pg_cmp_u32(uint32 a, uint32 b)
+{
+	return (a > b) - (a < b);
+}
+
+#endif
+
+#if PG16_LT
+/*
+ * Similarly, wrappers around labs()/llabs() matching our int64.
+ *
+ * Introduced on PG16:
+ * https://github.com/postgres/postgres/commit/357cfefb09115292cfb98d504199e6df8201c957
+ */
+#ifdef HAVE_LONG_INT_64
+#define i64abs(i) labs(i)
+#else
+#define i64abs(i) llabs(i)
+#endif
 #endif

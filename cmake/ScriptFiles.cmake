@@ -16,18 +16,20 @@ set(PRE_INSTALL_SOURCE_FILES
     pre_install/types.post.sql # Must be before tables.sql
     pre_install/tables.sql
     pre_install/cache.sql
+    pre_install/tam.functions.sql
+    pre_install/tam.sql
     pre_install/insert_data.sql)
 
 # Source files that define functions and need to be rerun in update
 set(PRE_INSTALL_FUNCTION_FILES
     pre_install/types.functions.sql
+    pre_install/tam.functions.sql
     )
 
 # The rest of the source files defining mostly functions
 set(SOURCE_FILES
     hypertable.sql
     chunk.sql
-    hypercore.sql
     ddl_internal.sql
     util_time.sql
     util_internal_table_ddl.sql
@@ -52,11 +54,13 @@ set(SOURCE_FILES
     job_api.sql
     policy_api.sql
     policy_internal.sql
+    cagg_api.sql
     cagg_utils.sql
     cagg_migrate.sql
     job_stat_history_log_retention.sql
     osm_api.sql
-    compression_defaults.sql)
+    compression_defaults.sql
+    sparse_index.sql)
 
 if(ENABLE_DEBUG_UTILS AND CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND SOURCE_FILES debug_build_utils.sql)

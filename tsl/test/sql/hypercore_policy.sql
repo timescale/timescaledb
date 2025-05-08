@@ -75,8 +75,7 @@ where time = '2022-06-01 10:14' and device = 1;
 -- Add a new policy that doesn't specify hypercore. It should still
 -- recompress hypercores.
 select add_compression_policy('readings',
-                              compress_after => '1 day'::interval,
-                              hypercore_use_access_method => false)
+                              compress_after => '1 day'::interval)
 as compression_job \gset
 
 -- Run the policy job again to recompress
@@ -134,7 +133,7 @@ select timescaledb_experimental.add_policies('daily',
 select job_id as cagg_compression_job, materialization_hypertable_name as mathyper
 from timescaledb_information.jobs j
 join timescaledb_information.continuous_aggregates ca
-on (ca.materialization_hypertable_name = j.hypertable_name)
+on (ca.view_name = j.hypertable_name)
 where view_name = 'daily' and proc_name = 'policy_compression' \gset
 
 

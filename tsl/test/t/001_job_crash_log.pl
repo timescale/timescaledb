@@ -38,7 +38,7 @@ my $ret = $node->safe_psql('postgres', "$query");
 my $query_add =
   q[select add_job('custom_proc_sleep60', '5 minutes', initial_start => now())];
 my $jobid = $node->safe_psql('postgres', "$query_add");
-is($jobid, '1000', 'job was added');
+is($jobid, 1000, 'job was added');
 
 my $query_pid_exists = <<"END_OF_QUERY";
 select count(*) from pg_stat_activity
@@ -65,7 +65,7 @@ is($node->poll_query_until('postgres', 'SELECT 1', '1'),
 	1, "reconnected after SIGQUIT");
 
 my $errlog = $node->safe_psql('postgres',
-	'select count(*) from _timescaledb_internal.bgw_job_stat_history where job_id = 1000 and succeeded = false'
+	'select count(*) from _timescaledb_internal.bgw_job_stat_history where job_id = 1000 and succeeded is false'
 );
 is($errlog, "1", "there is a row for the crash in the error log");
 

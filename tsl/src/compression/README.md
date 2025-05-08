@@ -67,6 +67,15 @@ structure and does not actually compress it (though TOAST-based compression
 can be applied on top). It is the compression mechanism used when no other
 compression mechanism works. It can store any type of data.
 
+### Bool Compressor
+
+The bool compressor is a simple compression algorithm that stores boolean values
+using the simple8b_rle algorithm only, without any additional processing. During
+decompression it decompresses the data and stores it in memory as a bitmap. The
+row based iterators then walk through the bitmap. The bool compressor differs from
+the other compressors in that it stores the last non-value as a place holder for
+the null values. This is done to make vectorization easier.
+
 # Merging chunks while compressing #
 
 ## Setup ##
@@ -106,9 +115,10 @@ This function determines a segment-by column to use. It returns a JSONB with the
 
 The intuition is as follows:
 
-we use 2 criterias:
-- We want to pick an "important" column for querying. We measure "importance", in terms of how early the column comes in an index (i.e. leading columns are very important, others less so).
+we use 3 criterias:
+- We want to pick an "important" column for querying. We measure "importance", in terms of how early the column comes in an index (i.e. leading columns are very important, others less so). If there are no indexes, all columns will be considered if statistics are populated
 - The column has many rows for the same column value so that the segments will have many rows. We establish that a column will have many values if (i) it is not a dimension and (ii) either statistics tell us so (via `stadistinct` > 1) or, if statistics aren't populated, we check whether the column is a generated identity or serial column.
+- When we have multiple qualifying rows, we select the column where rows are spread most evenly across the distinct values. 
 
 Naturally, statistics give us more confidence that the column has enough rows per segment. In this case we break ties by preferring columns from unique indexes. Otherwise, we prefer columns from non-unique indexes (we are less likely to run into a unique column there).
 

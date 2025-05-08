@@ -102,9 +102,9 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 
 -- You can change this setting with ALTER VIEW (equivalently, specify in WITH clause of CREATE VIEW)
 SELECT alter_job(1000, schedule_interval := '1h');
-                                                                                                  alter_job                                                                                                  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""end_offset"": ""@ 2 hours"", ""start_offset"": null, ""mat_hypertable_id"": 2}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,)
+                                                                                                                        alter_job                                                                                                                         
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""end_offset"": ""@ 2 hours"", ""start_offset"": null, ""mat_hypertable_id"": 2}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1000]")
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
@@ -174,30 +174,10 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
 --
 -- Dealing with timezones
 --
--- You cannot use any functions that depend on the local timezone setting inside a continuous aggregate.
--- For example you cannot cast to the local time. This is because
--- a timezone setting can alter from user-to-user and thus
--- cannot be materialized.
-DROP MATERIALIZED VIEW device_summary;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_6_chunk
-CREATE MATERIALIZED VIEW device_summary
-WITH (timescaledb.continuous, timescaledb.materialized_only=true)
-AS
-SELECT
-  time_bucket('1 hour', observation_time) as bucket,
-  min(observation_time::timestamp) as min_time, --note the cast to localtime
-  device_id,
-  avg(metric) as metric_avg,
-  max(metric)-min(metric) as metric_spread
-FROM
-  device_readings
-GROUP BY bucket, device_id WITH NO DATA;
-ERROR:  only immutable functions supported in continuous aggregate view
---note the error.
--- You have two options:
+-- You have three options:
 -- Option 1: be explicit in your timezone:
 DROP MATERIALIZED VIEW device_summary;
-ERROR:  materialized view "device_summary" does not exist
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_6_chunk
 CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
@@ -234,6 +214,24 @@ SELECT min(min_time)::timestamp FROM device_summary;
  Sat Dec 01 00:00:00 2018
 (1 row)
 
+-- Option 3: use stable expressions in the cagg definition
+-- in this case it is up to the user to ensure cagg refreshes
+-- run with consistent values
+DROP MATERIALIZED VIEW device_summary;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_7_chunk
+CREATE MATERIALIZED VIEW device_summary
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+  time_bucket('1 hour', observation_time) as bucket,
+  min(observation_time::timestamp) as min_time, --note the cast to localtime
+  device_id,
+  avg(metric) as metric_avg,
+  max(metric)-min(metric) as metric_spread
+FROM
+  device_readings
+GROUP BY bucket, device_id WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
 --
 -- test just in time aggregate / materialization only view
 --
@@ -248,7 +246,7 @@ SELECT create_hypertable('device_readings_int','time',chunk_time_interval:=10);
 NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
- (5,public,device_readings_int,t)
+ (6,public,device_readings_int,t)
 (1 row)
 
 SELECT set_integer_now_func('device_readings_int','device_readings_int_now');
@@ -366,7 +364,7 @@ CREATE TABLE whatever(time TIMESTAMPTZ NOT NULL, metric INTEGER);
 SELECT * FROM create_hypertable('whatever', 'time');
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-             8 | public      | whatever   | t
+             9 | public      | whatever   | t
 (1 row)
 
 CREATE MATERIALIZED VIEW whatever_summary WITH (timescaledb.continuous) AS
@@ -381,9 +379,9 @@ SELECT (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'whatever_summary' \gset
 SELECT relname FROM pg_class WHERE oid = :mat_table;
-          relname           
-----------------------------
- _materialized_hypertable_9
+           relname           
+-----------------------------
+ _materialized_hypertable_10
 (1 row)
 
 ----------------------------------------------------------------
@@ -437,18 +435,6 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 INSERT INTO metrics SELECT generate_series('1999-12-20'::timestamptz,'2000-02-01'::timestamptz,'12 day'::interval), 'dev1', 0.25;
-SELECT current_setting('timezone');
- current_setting 
------------------
- PST8PDT
-(1 row)
-
--- should be blocked because non-immutable expression
-\set ON_ERROR_STOP 0
-CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
-SELECT time_bucket('1 day', time, current_setting('timezone')) FROM metrics GROUP BY 1;
-ERROR:  only immutable expressions allowed in time bucket function
-\set ON_ERROR_STOP 1
 CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
 SELECT time_bucket('1 day', time, 'PST8PDT') FROM metrics GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "cagg1"
@@ -505,10 +491,10 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_11_17_chunk |            0 | f       |        
- _hyper_11_18_chunk |            0 | f       |        
- _hyper_11_19_chunk |            0 | f       |        
- _hyper_11_20_chunk |            0 | f       |        
+ _hyper_12_17_chunk |            0 | f       |        
+ _hyper_12_18_chunk |            0 | f       |        
+ _hyper_12_19_chunk |            0 | f       |        
+ _hyper_12_20_chunk |            0 | f       |        
 (4 rows)
 
 -- all caggs in the new format (finalized=true)
@@ -525,7 +511,7 @@ SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE 
 SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestamptz);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_11_17_chunk
+ _timescaledb_internal._hyper_12_17_chunk
 (1 row)
 
 -- should return 3 chunks
@@ -537,9 +523,9 @@ WHERE h.id = c.hypertable_id AND h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_11_18_chunk |            0 | f       |        
- _hyper_11_19_chunk |            0 | f       |        
- _hyper_11_20_chunk |            0 | f       |        
+ _hyper_12_18_chunk |            0 | f       |        
+ _hyper_12_19_chunk |            0 | f       |        
+ _hyper_12_20_chunk |            0 | f       |        
 (3 rows)
 
 -- let's update the catalog to fake an old format cagg (finalized=false)
@@ -561,7 +547,7 @@ SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE 
 SELECT drop_chunks('metrics', older_than => '2000-01-13 00:00:00-02'::timestamptz);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_11_18_chunk
+ _timescaledb_internal._hyper_12_18_chunk
 (1 row)
 
 -- should return 3 chunks and one of them should be marked as dropped
@@ -573,14 +559,14 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_11_18_chunk |            0 | t       |        
- _hyper_11_19_chunk |            0 | f       |        
- _hyper_11_20_chunk |            0 | f       |        
+ _hyper_12_18_chunk |            0 | t       |        
+ _hyper_12_19_chunk |            0 | f       |        
+ _hyper_12_20_chunk |            0 | f       |        
 (3 rows)
 
 -- remove the fake old format cagg
 DROP MATERIALIZED VIEW cagg1;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_21_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_21_chunk
 -- no more old format caggs (finalized=false)
 SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
  user_view_name | finalized 
@@ -594,7 +580,7 @@ SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE 
 SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestamptz);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_11_19_chunk
+ _timescaledb_internal._hyper_12_19_chunk
 (1 row)
 
 -- should return 2 chunks and one of them should be marked as dropped
@@ -607,7 +593,7 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_11_18_chunk |            0 | t       |        
- _hyper_11_20_chunk |            0 | f       |        
+ _hyper_12_18_chunk |            0 | t       |        
+ _hyper_12_20_chunk |            0 | f       |        
 (2 rows)
 

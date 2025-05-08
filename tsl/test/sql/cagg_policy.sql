@@ -505,11 +505,13 @@ SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
 
 ALTER MATERIALIZED VIEW mat_bigint SET (timescaledb.compress);
 ALTER MATERIALIZED VIEW mat_smallint SET (timescaledb.compress);
-\set ON_ERROR_STOP 0
-SELECT add_compression_policy('mat_smallint', 0::smallint);
+-- With immutable compressed chunks, these policies would fail by overlapping the refresh window
 SELECT add_compression_policy('mat_smallint', -4::smallint);
+SELECT remove_compression_policy('mat_smallint');
 SELECT add_compression_policy('mat_bigint', 0::bigint);
-\set ON_ERROR_STOP 1
+SELECT remove_compression_policy('mat_bigint');
+-- End previous limitation tests
+
 SELECT add_compression_policy('mat_smallint', 5::smallint);
 SELECT add_compression_policy('mat_bigint', 20::bigint);
 
@@ -578,14 +580,13 @@ SELECT remove_compression_policy('metrics_cagg');
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" \gset
 
 --verify that jobs were added for the policies ---
-SELECT materialization_hypertable_schema AS "MAT_SCHEMA_NAME",
-       materialization_hypertable_name AS "MAT_TABLE_NAME",
-       materialization_hypertable_schema || '.' || materialization_hypertable_name AS "MAT_NAME"
+SELECT materialization_hypertable_name AS "MAT_TABLE_NAME",
+       view_name AS "VIEW_NAME"
 FROM timescaledb_information.continuous_aggregates
 WHERE view_name = 'metrics_cagg' \gset
 
 SELECT count(*) FROM timescaledb_information.jobs
-WHERE hypertable_name = :'MAT_TABLE_NAME';
+WHERE hypertable_name = :'VIEW_NAME';
 
 --exec the cagg compression job --
 CALL refresh_continuous_aggregate('metrics_cagg', NULL, '2001-02-01 00:00:00+0');
@@ -607,7 +608,7 @@ WHERE hypertable_name = :'MAT_TABLE_NAME' ORDER BY 1;
 DROP MATERIALIZED VIEW metrics_cagg;
 
 SELECT count(*) FROM timescaledb_information.jobs
-WHERE hypertable_name = :'MAT_TABLE_NAME';
+WHERE hypertable_name = :'VIEW_NAME';
 
 -- add test case for issue 4252
 CREATE TABLE IF NOT EXISTS sensor_data(

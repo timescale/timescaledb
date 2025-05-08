@@ -24,7 +24,7 @@
 #include "errors.h"
 #include "guc.h"
 #include "hypercube.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
@@ -77,7 +77,9 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	 * for a compressed hypertable.
 	 */
 	if (dispatch->hypertable->fd.compression_state == HypertableInternalCompressionTable)
-		elog(ERROR, "direct insert into internal compressed hypertable is not supported");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("direct insert into internal compressed hypertable is not supported")));
 
 	cis = ts_subspace_store_get(dispatch->cache, point);
 
@@ -168,22 +170,16 @@ ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkIn
 {
 	if (cis->chunk_compressed)
 	{
-		OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
-
-		if (cis->use_tam && onconflict_action != ONCONFLICT_UPDATE)
-		{
-			/* With our own TAM, a unique index covers both the compressed and
-			 * non-compressed data, so there is no need to decompress anything
-			 * when doing inserts. */
-		}
 		/*
 		 * If this is an INSERT into a compressed chunk with UNIQUE or
 		 * PRIMARY KEY constraints we need to make sure any batches that could
 		 * potentially lead to a conflict are in the decompressed chunk so
 		 * postgres can do proper constraint checking.
 		 */
-		else if (ts_cm_functions->decompress_batches_for_insert)
+		if (ts_cm_functions->decompress_batches_for_insert)
 		{
+			OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+
 			ts_cm_functions->decompress_batches_for_insert(cis, slot);
 
 			/* mark rows visible */
@@ -264,7 +260,6 @@ chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *be
 	cscan->custom_scan_tlist = tlist;
 	cscan->scan.plan.targetlist = tlist;
 
-#if (PG15_GE)
 	if (root->parse->commandType == CMD_MERGE)
 	{
 		/* replace expressions of ROWID_VAR */
@@ -272,7 +267,6 @@ chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *be
 		cscan->scan.plan.targetlist = tlist;
 		cscan->custom_scan_tlist = tlist;
 	}
-#endif
 	return &cscan->scan.plan;
 }
 
@@ -332,7 +326,6 @@ on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
 	state->rri = cis->result_relation_info;
 }
 
-#if PG15_GE
 static AttrNumber
 rel_get_natts(Oid relid)
 {
@@ -356,7 +349,6 @@ attr_is_dropped_or_missing(Oid relid, AttrNumber attno)
 	ReleaseSysCache(tp);
 	return result;
 }
-#endif
 
 static TupleTableSlot *
 chunk_dispatch_exec(CustomScanState *node)
@@ -383,7 +375,6 @@ chunk_dispatch_exec(CustomScanState *node)
 	/* Switch to the executor's per-tuple memory context */
 	old = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
-#if PG15_GE
 	TupleTableSlot *newslot = NULL;
 	if (dispatch->dispatch_state->mtstate->operation == CMD_MERGE)
 	{
@@ -429,10 +420,6 @@ chunk_dispatch_exec(CustomScanState *node)
 	/* Calculate the tuple's point in the N-dimensional hyperspace */
 	point = ts_hyperspace_calculate_point(ht->space, (newslot ? newslot : slot));
 
-#else
-	point = ts_hyperspace_calculate_point(ht->space, slot);
-#endif
-
 	/* Save the main table's (hypertable's) ResultRelInfo */
 	if (!dispatch->hypertable_result_rel_info)
 	{
@@ -445,7 +432,8 @@ chunk_dispatch_exec(CustomScanState *node)
 												   on_chunk_insert_state_changed,
 												   state);
 
-	ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
+	if (!cis->use_tam)
+		ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
 
 	MemoryContextSwitchTo(old);
 
@@ -490,7 +478,7 @@ chunk_dispatch_end(CustomScanState *node)
 
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
-	ts_cache_release(state->hypertable_cache);
+	ts_cache_release(&state->hypertable_cache);
 }
 
 static void

@@ -26,6 +26,7 @@
 #include "dictionary.h"
 #include "dictionary_hash.h"
 #include "simple8b_rle.h"
+#include "simple8b_rle_bitarray.h"
 #include "simple8b_rle_bitmap.h"
 
 /*
@@ -192,6 +193,7 @@ dictionary_compressor_append(DictionaryCompressor *compressor, Datum val)
 		// per_val->bitmap = roaring_dictionary_create();
 		dict_item->index = compressor->next_index;
 		dict_item->key = datumCopy(val, compressor->typbyval, compressor->typlen);
+		Assert(compressor->next_index <= INT16_MAX - 1);
 		compressor->next_index += 1;
 	}
 
@@ -403,6 +405,91 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 		iter->values[i] = res.val;
 	}
 	Assert(array_decompression_iterator_try_next_forward(dictionary_iterator).is_done);
+}
+
+/* Pass through to the specialized functions below for BOOL and TEXT */
+ArrowArray *
+tsl_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+{
+	switch (element_type)
+	{
+		case BOOLOID:
+			return tsl_bool_dictionary_decompress_all(compressed, element_type, dest_mctx);
+		case TEXTOID:
+			return tsl_text_dictionary_decompress_all(compressed, element_type, dest_mctx);
+		default:
+			elog(ERROR, "unsupported dictionary type %u", element_type);
+			break;
+	}
+	return NULL;
+}
+
+ArrowArray *
+tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+{
+	Assert(element_type == BOOLOID);
+
+	compressed = PointerGetDatum(PG_DETOAST_DATUM(compressed));
+	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
+	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+
+	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
+	CheckCompressedData(header->element_type == BOOLOID);
+
+	Simple8bRleSerialized *indices_serialized = bytes_deserialize_simple8b_and_advance(&si);
+
+	Simple8bRleSerialized *nulls_serialized = NULL;
+	if (header->has_nulls)
+	{
+		nulls_serialized = bytes_deserialize_simple8b_and_advance(&si);
+	}
+
+	const uint32 n_notnull = indices_serialized->num_elements;
+	const uint32 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	const uint32 n_padded_bits = n_total + 63;
+	const uint32 n_padded_bytes = n_padded_bits / 8;
+
+	uint64 *validity_bitmap = NULL;
+	uint64 *values = MemoryContextAllocZero(dest_mctx, n_padded_bytes);
+
+	MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+	/* Decompress the nulls */
+	Simple8bRleBitArray validity_bits =
+		simple8brle_bitarray_decompress(nulls_serialized, /* inverted*/ true);
+	validity_bitmap = validity_bits.data;
+	MemoryContextSwitchTo(old_context);
+
+	/* Decompress the values using the iterator based decompressor */
+	{
+		int position = 0;
+		DecompressionIterator *iter =
+			tsl_dictionary_decompression_iterator_from_datum_forward(compressed, BOOLOID);
+		for (DecompressResult r = dictionary_decompression_iterator_try_next_forward(iter);
+			 !r.is_done;
+			 r = dictionary_decompression_iterator_try_next_forward(iter))
+		{
+			if (!r.is_null)
+			{
+				bool data = DatumGetBool(r.val) == true;
+				if (data)
+				{
+					arrow_set_row_validity(values, position, true);
+				}
+			}
+			++position;
+		}
+	}
+
+	ArrowArray *result =
+		MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + (sizeof(void *) * 2));
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = values;
+	result->n_buffers = 2;
+	result->buffers = buffers;
+	result->length = n_total;
+	result->null_count = n_total - n_notnull;
+	return result;
 }
 
 #define ELEMENT_TYPE int16

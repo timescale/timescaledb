@@ -1,2 +1,0 @@
-Fixes: #7378 Remove obsolete job referencing policy_job_error_retention
-Thanks: @pgloader for reporting an issue an internal background job

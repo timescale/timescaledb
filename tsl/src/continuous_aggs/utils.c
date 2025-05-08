@@ -32,15 +32,14 @@ enum
 #define ORIGIN_PARAMETER_NAME "origin"
 
 static Datum
-create_cagg_validate_query_datum(TupleDesc tupdesc, const bool is_valid_query,
-								 const ErrorData *edata)
+create_cagg_validate_query_datum(TupleDesc tupdesc, const bool is_valid_query, ErrorData *edata)
 {
 	NullableDatum datums[Natts_cagg_validate_query] = { { 0 } };
 	HeapTuple tuple;
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
-	ts_datum_set_bool(Anum_cagg_validate_query_valid, datums, is_valid_query);
+	ts_datum_set_bool(Anum_cagg_validate_query_valid, datums, is_valid_query, false);
 	ts_datum_set_text_from_cstring(Anum_cagg_validate_query_error_level,
 								   datums,
 								   edata->elevel > 0 ? error_severity(edata->elevel) : NULL);
@@ -60,7 +59,6 @@ create_cagg_validate_query_datum(TupleDesc tupdesc, const bool is_valid_query,
 
 	Assert(tupdesc->natts == Natts_cagg_validate_query);
 	tuple = ts_heap_form_tuple(tupdesc, datums);
-
 	return HeapTupleGetDatum(tuple);
 }
 
@@ -861,7 +859,10 @@ create_cagg_get_bucket_function_datum(TupleDesc tupdesc, ContinuousAggsBucketFun
 	ts_datum_set_text_from_cstring(Anum_cagg_bucket_function_timezone,
 								   datums,
 								   bf->bucket_time_timezone);
-	ts_datum_set_bool(Anum_cagg_bucket_function_fixed_width, datums, bf->bucket_fixed_interval);
+	ts_datum_set_bool(Anum_cagg_bucket_function_fixed_width,
+					  datums,
+					  bf->bucket_fixed_interval,
+					  false);
 
 	Assert(tupdesc->natts == Natts_cagg_validate_query);
 	tuple = ts_heap_form_tuple(tupdesc, datums);
@@ -913,6 +914,9 @@ cagg_get_bucket_function_datum(int32 mat_hypertable_id, FunctionCallInfo fcinfo)
 /*
  * This function returns the `time_bucket` function Oid in the user view definition
  * of a given materialization hupertable.
+ *
+ * NOTE: this function is deprecated and should be removed in the future, use
+ * `cagg_get_bucket_function_info` instead.
  */
 Datum
 continuous_agg_get_bucket_function(PG_FUNCTION_ARGS)

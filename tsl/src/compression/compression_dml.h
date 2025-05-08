@@ -28,7 +28,13 @@ typedef struct tuple_filtering_constraints
 	OnConflictAction on_conflict;
 	Oid index_relid; /* used for better error messages */
 	bool nullsnotdistinct;
+	bool vectorized_filtering;
 } tuple_filtering_constraints;
+
+typedef bool(BatchMatcher)(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+						   tuple_filtering_constraints *constraints, bool *skip_current_tuple);
+
+bool slot_key_test(TupleTableSlot *slot, ScanKey skey);
 
 ScanKeyData *build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings,
 										  Relation out_rel,
@@ -43,4 +49,4 @@ ScanKeyData *build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation
 								 CompressionSettings *settings, Bitmapset *key_columns,
 								 Bitmapset **null_columns, TupleTableSlot *slot, int *num_scankeys);
 ScanKeyData *build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scankeys,
-										  Bitmapset **null_columns);
+										  Bitmapset **null_columns, bool *delete_only);

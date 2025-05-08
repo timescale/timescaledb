@@ -39,6 +39,11 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_info(_timescal
     LANGUAGE C STRICT IMMUTABLE
     AS '@MODULE_PATHNAME@', 'ts_compressed_data_info';
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_has_nulls(_timescaledb_internal.compressed_data)
+    RETURNS BOOL
+    LANGUAGE C STRICT IMMUTABLE
+    AS '@MODULE_PATHNAME@', 'ts_compressed_data_has_nulls';
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.dimension_info_in(cstring)
     RETURNS _timescaledb_internal.dimension_info
     LANGUAGE C STRICT IMMUTABLE
@@ -49,3 +54,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.dimension_info_out(_timescaled
     LANGUAGE C STRICT IMMUTABLE
     AS '@MODULE_PATHNAME@', 'ts_dimension_info_out';
 
+
+-- Type for bloom filters used by the sparse indexes on compressed hypertables.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1in(cstring) RETURNS _timescaledb_internal.bloom1 AS 'byteain' LANGUAGE INTERNAL STRICT IMMUTABLE PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1out(_timescaledb_internal.bloom1) RETURNS cstring AS 'byteaout' LANGUAGE INTERNAL STRICT IMMUTABLE PARALLEL SAFE;

@@ -752,7 +752,6 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 	return NULL;
 }
 
-#if PG15_GE
 /*
  * Find an equivalence class member expression, all of whose Vars, come from
  * the indicated relation.
@@ -785,7 +784,6 @@ ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 	/* We didn't find any suitable equivalence class expression */
 	return NULL;
 }
-#endif
 
 bool
 ts_has_row_security(Oid relid)
@@ -940,7 +938,7 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 		elog(ERROR, "could not find valid integer_now function for hypertable");
 
 	int64 res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return Int64GetDatum(res);
 }
 
@@ -1214,7 +1212,7 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
 	if (ht == NULL)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		PG_RETURN_NULL();
 	}
 
@@ -1276,7 +1274,7 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 	values[3] = Int64GetDatum(total_relsize.total_size);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return HeapTupleGetDatum(tuple);
 }
@@ -1303,10 +1301,6 @@ ts_get_node_name(Node *node)
 		NODE_CASE(RangeVar);
 		NODE_CASE(TableFunc);
 		NODE_CASE(IntoClause);
-#if PG15_LT
-		/* PG15 removed T_Expr nodetag because it's an abstract type. */
-		NODE_CASE(Expr);
-#endif
 		NODE_CASE(Var);
 		NODE_CASE(Const);
 		NODE_CASE(Param);

@@ -4,9 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include "guc.h"
 #include <access/attnum.h>
 #include <access/tupdesc.h>
-#include <c.h>
 #include <catalog/pg_attribute.h>
 #include <nodes/bitmapset.h>
 #include <stdint.h>
@@ -45,58 +45,6 @@ typedef struct ArrowColumnCacheEntry
 	int16 num_arrays; /* Number of entries in arrow_arrays */
 } ArrowColumnCacheEntry;
 
-/*
- * The function dlist_move_tail only exists for PG14 and above, so provide it
- * for PG13 here.
- */
-#if PG14_LT
-/*
- * Move element from its current position in the list to the tail position in
- * the same list.
- *
- * Undefined behaviour if 'node' is not already part of the list.
- */
-static inline void
-dlist_move_tail(dlist_head *head, dlist_node *node)
-{
-	/* fast path if it's already at the tail */
-	if (head->head.prev == node)
-		return;
-
-	dlist_delete(node);
-	dlist_push_tail(head, node);
-
-	dlist_check(head);
-}
-#endif
-
-static uint16
-get_cache_maxsize(void)
-{
-#ifdef TS_DEBUG
-	const char *maxsize = GetConfigOption("timescaledb.arrow_cache_maxsize", true, false);
-	char *endptr = NULL;
-
-	if (maxsize == NULL)
-		return ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES;
-
-	if (maxsize[0] == '\0')
-		elog(ERROR, "invalid arrow_cache_maxsize value");
-
-	long maxsizel = strtol(maxsize, &endptr, 10);
-
-	errno = 0;
-
-	if (errno == ERANGE || endptr == NULL || endptr[0] != '\0' || maxsizel <= 0 ||
-		maxsizel > UINT16_MAX)
-		elog(ERROR, "invalid arrow_cache_maxsize value");
-
-	return maxsizel & 0xFFFF;
-#else
-	return ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES;
-#endif
-}
-
 void
 arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt)
 {
@@ -115,7 +63,7 @@ arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt)
 													   /* minContextSize = */ 0,
 													   /* initBlockSize = */ 64 * 1024,
 													   /* maxBlockSize = */ 64 * 1024);
-	acache->maxsize = get_cache_maxsize();
+	acache->maxsize = ts_guc_hypercore_arrow_cache_max_entries;
 
 	ctl.keysize = sizeof(ArrowColumnKey);
 	ctl.entrysize = sizeof(ArrowColumnCacheEntry);

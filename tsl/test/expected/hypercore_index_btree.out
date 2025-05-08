@@ -17,6 +17,23 @@ set role :ROLE_DEFAULT_PERM_USER;
 -- emitted plan. This is intended to be used when the structure of the
 -- plan is important, but not the specific chunks scanned nor the
 -- number of heap fetches, rows, loops, etc.
+create function anonymize(ln text) returns text language plpgsql as
+$$
+begin
+    ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+    ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+    ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+    ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+
+    if trim(both from ln) like 'Array: %' then
+       ln := regexp_replace(ln, 'hits=\d+', 'hits=N');
+       ln := regexp_replace(ln, 'misses=\d+', 'misses=N');
+       ln := regexp_replace(ln, 'count=\d+', 'count=N');
+       ln := regexp_replace(ln, 'calls=\d+', 'calls=N');
+    end if;
+    return ln;
+end
+$$;
 create function explain_analyze_anonymize(text) returns setof text
 language plpgsql as
 $$
@@ -26,17 +43,13 @@ begin
     for ln in
         execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
     loop
-        if trim(both from ln) like 'Group Key:%' then
+        -- Group keys are shown for plans in PG15 but not others, so
+        -- we remove these lines to avoid having to have
+        -- version-sensible tests.
+	if trim(both from ln) like 'Group Key:%' then
 	   continue;
 	end if;
-        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
-        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
-        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
-        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
-        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
-        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
-        return next ln;
+        return next anonymize(ln);
     end loop;
 end;
 $$;
@@ -49,14 +62,7 @@ begin
     for ln in
         execute format('explain (costs off, summary off, timing off) %s', $1)
     loop
-        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
-        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
-        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
-        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
-        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
-        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
-        return next ln;
+        return next anonymize(ln);
     end loop;
 end;
 $$;
@@ -351,11 +357,7 @@ select explain_analyze_anonymize(format('select * from %s where owner_id = 3', :
          Scankey: (owner_id = 3)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: (owner_id = 3)
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(17 rows)
+(13 rows)
 
 -- TODO(timescale/timescaledb-private#1117): the Decompress Count here
 -- is not correct, but the result shows correctly.
@@ -364,11 +366,7 @@ select explain_analyze_anonymize(format('select * from %s where owner_id = 3', :
 ------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: (owner_id = 3)
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(6 rows)
+(2 rows)
 
 reset enable_indexscan;
 -- Test index scan on non-segmentby column
@@ -393,11 +391,8 @@ $$, :'hypertable'));
                Index Cond: ((device_id >= 10) AND (device_id <= 20))
          ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                Index Cond: ((device_id >= 10) AND (device_id <= 20))
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 560
-(19 rows)
+ Array: cache hits=N misses=N, decompress count=N calls=N
+(16 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id, avg(temp) from %s where device_id between 10 and 20
@@ -408,11 +403,8 @@ $$, :'chunk1'));
  GroupAggregate (actual rows=N loops=N)
    ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((device_id >= 10) AND (device_id <= 20))
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 149
-(7 rows)
+ Array: cache hits=N misses=N, decompress count=N calls=N
+(4 rows)
 
 -- Test index scan on segmentby column
 select explain_analyze_anonymize(format($$
@@ -433,11 +425,8 @@ $$, :'hypertable'));
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: ((location_id >= 5) AND (location_id <= 10))
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 360
-(17 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(14 rows)
 
 select explain_analyze_anonymize(format($$
     select created_at, location_id, temp from %s where location_id between 5 and 10
@@ -446,11 +435,8 @@ $$, :'chunk1'));
 ------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: ((location_id >= 5) AND (location_id <= 10))
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 60
-(6 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(3 rows)
 
 -- These should generate decompressions as above, but for all columns.
 select explain_analyze_anonymize(format($$
@@ -471,11 +457,7 @@ $$, :'hypertable'));
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: ((location_id >= 5) AND (location_id <= 10))
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(17 rows)
+(13 rows)
 
 select explain_analyze_anonymize(format($$
     select * from %s where location_id between 5 and 10
@@ -484,11 +466,7 @@ $$, :'chunk1'));
 ------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: ((location_id >= 5) AND (location_id <= 10))
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(6 rows)
+(2 rows)
 
 --
 -- Test index only scan
@@ -518,11 +496,7 @@ $$, :'hypertable'));
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: ((location_id >= 5) AND (location_id <= 10))
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(17 rows)
+(13 rows)
 
 -- We just compare the counts here, not the full content.
 select heapam.count as heapam, hypercore.count as hypercore
@@ -558,11 +532,7 @@ $$, :'hypertable'));
    ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((device_id >= 5) AND (device_id <= 10))
          Heap Fetches: N
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(23 rows)
+(19 rows)
 
 select explain_analyze_anonymize(format($$
     select location_id from %s where location_id between 5 and 10
@@ -571,11 +541,7 @@ $$, :'chunk1'));
 ------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: ((location_id >= 5) AND (location_id <= 10))
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(6 rows)
+(2 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id from %s where device_id between 5 and 10
@@ -585,11 +551,7 @@ $$, :'chunk1'));
  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
    Index Cond: ((device_id >= 5) AND (device_id <= 10))
    Heap Fetches: N
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(7 rows)
+(3 rows)
 
 -- Test index only scan with covering indexes.
 --
@@ -620,11 +582,8 @@ $$, :'hypertable'));
                Index Cond: ((location_id >= 5) AND (location_id <= 10))
          ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                Index Cond: ((location_id >= 5) AND (location_id <= 10))
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 150
-(20 rows)
+ Array: cache misses=N, decompress count=N calls=N
+(17 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id, avg(humidity) from %s where device_id between 5 and 10
@@ -653,11 +612,7 @@ $$, :'hypertable'));
          ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                Index Cond: ((device_id >= 5) AND (device_id <= 10))
                Heap Fetches: N
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(25 rows)
+(21 rows)
 
 select explain_analyze_anonymize(format($$
     select location_id, avg(humidity) from %s where location_id between 5 and 10
@@ -669,11 +624,7 @@ $$, :'chunk1'));
    ->  Index Only Scan using _hyper_I_N_chunk_hypertable_location_id_include_humidity_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
          Heap Fetches: N
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(8 rows)
+(4 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id, avg(humidity) from %s where device_id between 5 and 10
@@ -685,11 +636,7 @@ $$, :'chunk1'));
    ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((device_id >= 5) AND (device_id <= 10))
          Heap Fetches: N
- Array Cache Hits: N
- Array Cache Misses: N
- Array Cache Evictions: N
- Array Decompressions: 0
-(8 rows)
+(4 rows)
 
 -------------------------------------
 -- Test UNIQUE and Partial indexes --
@@ -986,4 +933,109 @@ select * from only_nulls_null;
  eventid | time | device | location | value | only_nulls 
 ---------+------+--------+----------+-------+------------
 (0 rows)
+
+--------------------------------------------------
+-- Test unique index creation                   --
+--------------------------------------------------
+create table uniquetable (time timestamptz not null, value int);
+select create_hypertable('uniquetable', 'time', create_default_indexes => false);
+    create_hypertable     
+--------------------------
+ (7,public,uniquetable,t)
+(1 row)
+
+insert into uniquetable values ('2024-01-01 01:00', 1), ('2024-01-01 02:00', 2);
+select format('%I.%I', chunk_schema, chunk_name)::regclass as unique_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'uniquetable'::regclass
+ order by unique_chunk asc
+ limit 1 \gset
+alter table uniquetable set (timescaledb.compress_orderby='time');
+-- Create a non-Hypercore TAM compressed chunk
+select * from compress_chunk(:'unique_chunk');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_19_chunk
+(1 row)
+
+-- Should still be a "heap" chunk
+select c.relname, a.amname from pg_class c
+inner join pg_am a ON (c.relam = a.oid)
+where c.oid = :'unique_chunk'::regclass;
+      relname      | amname 
+-------------------+--------
+ _hyper_7_19_chunk | heap
+(1 row)
+
+insert into uniquetable values ('2024-01-01 01:00', 3);
+-- Convert the chunk to using Hypercore TAM
+alter table :unique_chunk set access method hypercore;
+-- Should now be a chunk using Hypercore TAM
+select c.relname, a.amname from pg_class c
+inner join pg_am a ON (c.relam = a.oid)
+where c.oid = :'unique_chunk'::regclass;
+      relname      |  amname   
+-------------------+-----------
+ _hyper_7_19_chunk | hypercore
+(1 row)
+
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time, value;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ t                 | Mon Jan 01 01:00:00 2024 PST |     1
+ f                 | Mon Jan 01 01:00:00 2024 PST |     3
+ t                 | Mon Jan 01 02:00:00 2024 PST |     2
+(3 rows)
+
+-- Unique index creation should work but fail on uniqueness check
+\set ON_ERROR_STOP 0
+create unique index time_key on uniquetable (time);
+ERROR:  could not create unique index "_hyper_7_19_chunk_time_key"
+DETAIL:  Key ("time")=(Mon Jan 01 01:00:00 2024 PST) is duplicated.
+\set ON_ERROR_STOP 1
+-- Recompress to get all values in compressed format
+select compress_chunk(:'unique_chunk');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_19_chunk
+(1 row)
+
+-- Everything's compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time, value;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ t                 | Mon Jan 01 01:00:00 2024 PST |     1
+ t                 | Mon Jan 01 01:00:00 2024 PST |     3
+ t                 | Mon Jan 01 02:00:00 2024 PST |     2
+(3 rows)
+
+-- Unique index creation should still fail
+\set ON_ERROR_STOP 0
+create unique index time_key on uniquetable (time);
+ERROR:  could not create unique index "_hyper_7_19_chunk_time_key"
+DETAIL:  Key ("time")=(Mon Jan 01 01:00:00 2024 PST) is duplicated.
+\set ON_ERROR_STOP 1
+-- Delete the conflicting value and unique index creation should succeed
+delete from uniquetable where value = 3;
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time;
+ is_compressed_tid |             time             | value 
+-------------------+------------------------------+-------
+ f                 | Mon Jan 01 01:00:00 2024 PST |     1
+ f                 | Mon Jan 01 02:00:00 2024 PST |     2
+(2 rows)
+
+create unique index time_key on uniquetable (time);
+explain (costs off)
+select * from uniquetable where time = '2024-01-01 01:00';
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Index Scan using _hyper_7_19_chunk_time_key on _hyper_7_19_chunk
+   Index Cond: ("time" = 'Mon Jan 01 01:00:00 2024 PST'::timestamp with time zone)
+(2 rows)
+
+select * from uniquetable where time = '2024-01-01 01:00';
+             time             | value 
+------------------------------+-------
+ Mon Jan 01 01:00:00 2024 PST |     1
+(1 row)
 

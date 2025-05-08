@@ -17,10 +17,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Run format on CMake files
         run: |
+          git reset --hard
           find  -name CMakeLists.txt  -exec cmake-format -i {} +
           find src test tsl -name '*.cmake' -exec cmake-format -i {} +
-      - name: Check for diff
-        run: git diff --exit-code
+          git diff --exit-code
 
   perl_checks:
     name: Check Perl code in tree
@@ -38,6 +38,7 @@ jobs:
       - name: Format Perl files, if needed
         if: always()
         run: |
+          git reset --hard
           find . -name '*.p[lm]' -exec perltidy -b -bext=/ {} +
           git diff --exit-code
 
@@ -79,6 +80,7 @@ jobs:
     - name: Check trailing whitespace
       if: always()
       run: |
+        git reset --hard
         find . -type f -regex '.*\.\(c\|h\|sql\|sql\.in\)$' -exec perl -pi -e 's/[ \t]+$//' {} +
         git diff --exit-code
 
@@ -88,8 +90,14 @@ jobs:
         sudo apt install clang-format-14
         sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-14 100
         sudo update-alternatives --set clang-format /usr/bin/clang-format-14
+        git reset --hard
         ./scripts/clang_format_all.sh
         git diff --exit-code
+
+    - name: FIXME annotations left in code (use TODO for long-term notes)
+      if: always()
+      run: |
+        ! grep fixme -niR ./*
 
   python_checks:
     name: Check Python code in tree
@@ -109,12 +117,13 @@ jobs:
 
       - name: Run prospector
         run: |
+          git reset --hard
           find . -type f -name "*.py" -print -exec prospector {} + -exec black {} +
           git diff --exit-code
 
   misc_checks:
     name: Check license, update scripts, git hooks, missing gitignore entries and unnecessary template tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
     steps:

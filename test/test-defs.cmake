@@ -52,14 +52,6 @@ endif()
 configure_file(${PRIMARY_TEST_DIR}/pg_hba.conf.in pg_hba.conf)
 set(TEST_PG_HBA_FILE ${TEST_OUTPUT_DIR}/pg_hba.conf)
 
-# Enable json logs that are supported since PG15, to get additional information
-# about errors from them for CI database.
-if(PG_VERSION_MAJOR LESS 15)
-  set(TEST_PG_LOG_DESTINATION stderr)
-else()
-  set(TEST_PG_LOG_DESTINATION jsonlog,stderr)
-endif()
-
 # This variable is set differently in CI. We use it to save the logs outside the
 # tmp instance, because it is deleted by pg_regress on successful test
 # completion, and we want to run some additional checks on the logs in any case.
@@ -125,25 +117,26 @@ set(PG_REGRESS_OPTS_LOCAL_INSTANCE --port=${TEST_PGPORT_LOCAL})
 
 if(PG_REGRESS)
   set(PG_REGRESS_ENV
-      TEST_PGUSER=${TEST_PGUSER}
-      TEST_PGHOST=${TEST_PGHOST}
-      TEST_ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER}
-      TEST_ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER}
-      TEST_ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2}
-      TEST_ROLE_CLUSTER_SUPERUSER=${TEST_ROLE_CLUSTER_SUPERUSER}
-      TEST_ROLE_1=${TEST_ROLE_1}
-      TEST_ROLE_2=${TEST_ROLE_2}
-      TEST_ROLE_3=${TEST_ROLE_3}
-      TEST_ROLE_READ_ONLY=${TEST_ROLE_READ_ONLY}
-      TEST_ROLE_2_PASS=${TEST_ROLE_2_PASS}
-      TEST_ROLE_3_PASS=${TEST_ROLE_3_PASS}
-      TEST_ROLE_4_PASS=${TEST_ROLE_4_PASS}
+      PG_BINDIR=${PG_BINDIR}
+      PG_REGRESS=${PG_REGRESS}
+      PG_REGRESS_USE_FAKETIME=1
       TEST_DBNAME=${TEST_DBNAME}
       TEST_INPUT_DIR=${TEST_INPUT_DIR}
       TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR}
-      TEST_SCHEDULE=${TEST_SCHEDULE}
-      PG_BINDIR=${PG_BINDIR}
-      PG_REGRESS=${PG_REGRESS})
+      TEST_PGHOST=${TEST_PGHOST}
+      TEST_PGUSER=${TEST_PGUSER}
+      TEST_ROLE_1=${TEST_ROLE_1}
+      TEST_ROLE_2=${TEST_ROLE_2}
+      TEST_ROLE_2_PASS=${TEST_ROLE_2_PASS}
+      TEST_ROLE_3=${TEST_ROLE_3}
+      TEST_ROLE_3_PASS=${TEST_ROLE_3_PASS}
+      TEST_ROLE_4_PASS=${TEST_ROLE_4_PASS}
+      TEST_ROLE_CLUSTER_SUPERUSER=${TEST_ROLE_CLUSTER_SUPERUSER}
+      TEST_ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER}
+      TEST_ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2}
+      TEST_ROLE_READ_ONLY=${TEST_ROLE_READ_ONLY}
+      TEST_ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER}
+      TEST_SCHEDULE=${TEST_SCHEDULE})
 endif()
 
 if(PG_ISOLATION_REGRESS)

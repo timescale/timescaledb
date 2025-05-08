@@ -1,0 +1,202 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--install necessary functions for tests
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\ir include/compression_utils.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- Create some data with NULLs and bools
+CREATE TABLE d (ts int, b bool);
+INSERT INTO d SELECT g AS ts, NULL AS b FROM generate_series(1, 5000) g;
+-- set b to true for even ts values and set some values to NULL
+UPDATE d SET b = (ts % 2 = 0);
+UPDATE d SET b = NULL WHERE (ts % 10 = 0);
+-- add some bools that can be RLE compressed
+INSERT INTO d SELECT g AS ts, true AS b FROM generate_series(5001, 20000) g;
+-- add a few bool columns
+CREATE TABLE t (ts int, b1 bool, b2 bool, b3 bool);
+SELECT create_hypertable('t', 'ts', chunk_time_interval => 5000);
+NOTICE:  adding not-null constraint to column "ts"
+ create_hypertable 
+-------------------
+ (1,public,t,t)
+(1 row)
+
+-- explicitly disable bool compression so the test
+-- doesn't depend on the default setting
+SET timescaledb.enable_bool_compression = off;
+INSERT INTO t
+SELECT
+	d.ts,
+	d.b AS b1, d.b AS b2, d.b AS b3
+FROM d ORDER BY ts;
+SELECT max(ts) FROM t;
+  max  
+-------
+ 20000
+(1 row)
+
+ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+SELECT compress_chunk(show_chunks('t'));
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+(5 rows)
+
+CREATE TABLE chunks_done AS SELECT show_chunks('t') AS chunk_name;
+SELECT * FROM chunks_done;
+               chunk_name               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+(5 rows)
+
+SELECT
+	chunk_schema, chunk_name, compression_status,
+	after_compression_total_bytes
+	-- the before compression size differs on platforms, so I dont't
+	-- display it here, and consequently the compression ratio as well
+FROM
+	chunk_compression_stats('t');
+     chunk_schema      |    chunk_name    | compression_status | after_compression_total_bytes 
+-----------------------+------------------+--------------------+-------------------------------
+ _timescaledb_internal | _hyper_1_1_chunk | Compressed         |                         65536
+ _timescaledb_internal | _hyper_1_2_chunk | Compressed         |                         65536
+ _timescaledb_internal | _hyper_1_3_chunk | Compressed         |                         65536
+ _timescaledb_internal | _hyper_1_4_chunk | Compressed         |                         65536
+ _timescaledb_internal | _hyper_1_5_chunk | Compressed         |                         40960
+(5 rows)
+
+-- enable bool compression and add more data, so the two compression
+-- methods will co-exist and we can test both, plus compare the
+-- compression ratio
+--
+SET timescaledb.enable_bool_compression = on;
+INSERT INTO t
+SELECT
+	(SELECT max(ts) FROM t)+d.ts,
+	d.b AS b1, d.b AS b2, d.b AS b3
+FROM d ORDER BY ts;
+SELECT max(ts) FROM t;
+  max  
+-------
+ 40000
+(1 row)
+
+SELECT
+	compress_chunk(c)
+FROM
+	show_chunks('t') c
+WHERE
+	c NOT IN (SELECT chunk_name FROM chunks_done);
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_1_11_chunk
+ _timescaledb_internal._hyper_1_12_chunk
+ _timescaledb_internal._hyper_1_13_chunk
+ _timescaledb_internal._hyper_1_14_chunk
+(4 rows)
+
+SELECT
+	chunk_schema, chunk_name, compression_status,
+	after_compression_total_bytes
+	-- the before compression size differs on platforms, so I dont't
+	-- display it here, and consequently the compression ratio as well
+	--
+	-- the after compression size should be smaller than it was before
+	-- the bool compression was enabled
+	--
+FROM
+	chunk_compression_stats('t')
+WHERE
+	format('%I.%I', chunk_schema, chunk_name)::regclass NOT IN (SELECT chunk_name FROM chunks_done);
+     chunk_schema      |    chunk_name     | compression_status | after_compression_total_bytes 
+-----------------------+-------------------+--------------------+-------------------------------
+ _timescaledb_internal | _hyper_1_11_chunk | Compressed         |                         40960
+ _timescaledb_internal | _hyper_1_12_chunk | Compressed         |                         40960
+ _timescaledb_internal | _hyper_1_13_chunk | Compressed         |                         40960
+ _timescaledb_internal | _hyper_1_14_chunk | Compressed         |                         40960
+(4 rows)
+
+-- check the compression algorithm for the compressed chunks
+CREATE TABLE compressed_chunks AS
+SELECT
+	format('%I.%I', comp.schema_name, comp.table_name)::regclass as compressed_chunk,
+	ccs.compressed_heap_size,
+	ccs.compressed_toast_size,
+	ccs.compressed_index_size,
+	ccs.numrows_pre_compression,
+	ccs.numrows_post_compression
+FROM
+	show_chunks('t') c
+	INNER JOIN _timescaledb_catalog.chunk cat
+		ON (c = format('%I.%I', cat.schema_name, cat.table_name)::regclass)
+	INNER JOIN _timescaledb_catalog.chunk comp
+		ON (cat.compressed_chunk_id = comp.id)
+	INNER JOIN _timescaledb_catalog.compression_chunk_size ccs
+		ON (comp.id = ccs.compressed_chunk_id);
+CREATE TABLE compression_info (compressed_chunk regclass, result text, compressed_size int, num_rows int);
+DO $$
+DECLARE
+	table_ref regclass;
+BEGIN
+	FOR table_ref IN
+		SELECT compressed_chunk as table_ref FROM compressed_chunks
+	LOOP
+		EXECUTE format(
+			'INSERT INTO compression_info (
+				SELECT
+					%L::regclass as compressed_chunk,
+					(_timescaledb_functions.compressed_data_info(b1))::text as result,
+					sum(pg_column_size(b1)::int) as compressed_size,
+					count(*) as num_rows
+				FROM %s
+				GROUP BY 1,2)',
+			table_ref, table_ref
+		);
+	END LOOP;
+END;
+$$;
+SELECT
+	ci.*,
+	ccs.compressed_toast_size,
+	ccs.numrows_pre_compression,
+	ccs.numrows_post_compression
+FROM
+	compression_info ci
+	INNER JOIN compressed_chunks ccs
+		ON (ci.compressed_chunk = ccs.compressed_chunk)
+ORDER BY
+	1,2,3;
+                compressed_chunk                 |  result   | compressed_size | num_rows | compressed_toast_size | numrows_pre_compression | numrows_post_compression 
+-------------------------------------------------+-----------+-----------------+----------+-----------------------+-------------------------+--------------------------
+ _timescaledb_internal.compress_hyper_2_6_chunk  | (ARRAY,t) |             320 |        5 |                 32768 |                    4999 |                        5
+ _timescaledb_internal.compress_hyper_2_7_chunk  | (ARRAY,f) |             172 |        4 |                 32768 |                    5000 |                        5
+ _timescaledb_internal.compress_hyper_2_7_chunk  | (ARRAY,t) |              62 |        1 |                 32768 |                    5000 |                        5
+ _timescaledb_internal.compress_hyper_2_8_chunk  | (ARRAY,f) |             215 |        5 |                 32768 |                    5000 |                        5
+ _timescaledb_internal.compress_hyper_2_9_chunk  | (ARRAY,f) |             215 |        5 |                 32768 |                    5000 |                        5
+ _timescaledb_internal.compress_hyper_2_10_chunk | (ARRAY,f) |              38 |        1 |                  8192 |                       1 |                        1
+ _timescaledb_internal.compress_hyper_2_15_chunk | (BOOL,f)  |             116 |        4 |                  8192 |                    5000 |                        5
+ _timescaledb_internal.compress_hyper_2_15_chunk | (BOOL,t)  |              69 |        1 |                  8192 |                    5000 |                        5
+ _timescaledb_internal.compress_hyper_2_16_chunk | (BOOL,f)  |             145 |        5 |                  8192 |                    5000 |                        5
+ _timescaledb_internal.compress_hyper_2_17_chunk | (BOOL,f)  |             145 |        5 |                  8192 |                    5000 |                        5
+ _timescaledb_internal.compress_hyper_2_18_chunk | (BOOL,f)  |              29 |        1 |                  8192 |                       1 |                        1
+(11 rows)
+
+DROP TABLE t;
+DROP TABLE d;
+DROP TABLE chunks_done;
+DROP TABLE compression_info;
+-- reset the compression setting
+SET timescaledb.enable_bool_compression = default;

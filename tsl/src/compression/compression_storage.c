@@ -139,11 +139,11 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 		transformRelOptions((Datum) 0, create->options, "toast", validnsps, true, false);
 	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
 	NewRelationCreateToastTable(chunk->table_id, toast_options);
-	ts_catalog_restore_user(&sec_ctx);
-	modify_compressed_toast_table_storage(settings, column_defs, chunk->table_id);
 
+	modify_compressed_toast_table_storage(settings, column_defs, chunk->table_id);
 	set_statistics_on_compressed_chunk(chunk->table_id);
 	set_toast_tuple_target_on_chunk(chunk->table_id);
+	ts_catalog_restore_user(&sec_ctx);
 
 	create_compressed_chunk_indexes(chunk, settings);
 
@@ -306,11 +306,6 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 			appendStringInfoString(buf, ", ");
 			indexcols = lappend(indexcols, segment_elem);
 		}
-	}
-
-	if (list_length(indexcols) == 0)
-	{
-		return;
 	}
 
 	SortByDir ordering;

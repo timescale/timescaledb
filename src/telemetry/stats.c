@@ -273,13 +273,7 @@ add_chunk_stats(HyperStats *stats, Form_pg_class class, const Chunk *chunk,
 	if (ts_chunk_is_compressed(chunk))
 		stats->compressed_chunk_count++;
 
-	/*
-	 * A chunk on a distributed hypertable can be marked as compressed but
-	 * have no compression stats (the stats exists on the data node and might
-	 * not be "imported"). Therefore, the check here is not the same as
-	 * above.
-	 */
-	if (NULL != fd_compr)
+	if (fd_compr)
 	{
 		stats->compressed_heap_size += fd_compr->compressed_heap_size;
 		stats->compressed_indexes_size += fd_compr->compressed_index_size;
@@ -543,6 +537,6 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 
 	systable_endscan(scan);
 	table_close(rel, AccessShareLock);
-	ts_cache_release(htcache);
+	ts_cache_release(&htcache);
 	MemoryContextDelete(relmcxt);
 }

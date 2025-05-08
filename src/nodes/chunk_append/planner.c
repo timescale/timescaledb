@@ -24,7 +24,7 @@
 #include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "nodes/vector_agg.h"
 
 static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,
@@ -40,7 +40,6 @@ static CustomScanMethods chunk_append_plan_methods = {
 bool
 ts_is_chunk_append_plan(Plan *plan)
 {
-#if PG15_GE
 	if (IsA(plan, Result))
 	{
 		if (castNode(Result, plan)->plan.lefttree &&
@@ -51,7 +50,6 @@ ts_is_chunk_append_plan(Plan *plan)
 		}
 		return false;
 	}
-#endif
 	return IsA(plan, CustomScan) &&
 		   castNode(CustomScan, plan)->methods == &chunk_append_plan_methods;
 }
@@ -119,7 +117,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	tlist = orig_tlist;
 
 	/*
-	 * If this is a child of HypertableModify we need to adjust
+	 * If this is a child of ModifyHypertable we need to adjust
 	 * targetlists to not have any ROWID_VAR references as postgres
 	 * asserts that scan targetlists do not have them in setrefs.c
 	 *
@@ -333,9 +331,6 @@ make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperator
 Scan *
 ts_chunk_append_get_scan_plan(Plan *plan)
 {
-	if (plan != NULL && (IsA(plan, Sort) || IsA(plan, Result)))
-		plan = plan->lefttree;
-
 	if (plan == NULL)
 		return NULL;
 
@@ -356,7 +351,6 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 		case T_WorkTableScan:
 		case T_TidRangeScan:
 			return (Scan *) plan;
-			break;
 		case T_CustomScan:
 		{
 			CustomScan *custom = castNode(CustomScan, plan);
@@ -380,13 +374,10 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 				 */
 				return ts_chunk_append_get_scan_plan(linitial(custom->custom_plans));
 			}
-
-			/*
-			 * This is some other unknown custom scan node, we can't recurse
-			 * into it.
-			 */
-			return NULL;
+			break;
 		}
+		case T_Sort:
+		case T_Result:
 		case T_Agg:
 			if (plan->lefttree != NULL)
 			{
@@ -394,12 +385,10 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 				/* Let ts_chunk_append_get_scan_plan handle the subplan */
 				return ts_chunk_append_get_scan_plan(plan->lefttree);
 			}
-			return NULL;
 			break;
-		case T_MergeAppend:
-			return NULL;
 		default:
-			elog(ERROR, "invalid child of chunk append: %s", ts_get_node_name((Node *) plan));
+			break;
 	}
-	pg_unreachable();
+
+	return NULL;
 }

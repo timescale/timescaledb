@@ -33,6 +33,7 @@
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
+#include "bgw/job_stat_history.h"
 #include "bgw/scheduler.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/policy.h"
@@ -54,6 +55,25 @@
 
 static scheduler_test_hook_type scheduler_test_hook = NULL;
 static char *job_entrypoint_function_name = "ts_bgw_job_entrypoint";
+
+/*
+ * Get the mem_guard callbacks.
+ *
+ * You might get a NULL pointer back if there are no mem_guard installed, so
+ * check before using.
+ */
+MGCallbacks *
+ts_get_mem_guard_callbacks(void)
+{
+	static MGCallbacks **mem_guard_callback_ptr = NULL;
+
+	if (mem_guard_callback_ptr)
+		return *mem_guard_callback_ptr;
+
+	mem_guard_callback_ptr = (MGCallbacks **) find_rendezvous_variable(MG_CALLBACKS_VAR_NAME);
+
+	return *mem_guard_callback_ptr;
+}
 
 typedef enum JobLockLifetime
 {
@@ -624,7 +644,7 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 	}
 
 	if (num_found == 0 && fail_if_not_found)
-		elog(ERROR, "job %d not found", bgw_job_id);
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("job %d not found", bgw_job_id)));
 
 	return job;
 }
@@ -765,6 +785,10 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	Datum values[Natts_bgw_job] = { 0 };
 	bool isnull[Natts_bgw_job] = { 0 };
 	bool doReplace[Natts_bgw_job] = { 0 };
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] =
+		NameGetDatum(&updated_job->fd.application_name);
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = true;
 
 	Datum old_schedule_interval =
 		slot_getattr(ti->slot, Anum_bgw_job_schedule_interval, &isnull[0]);
@@ -1140,6 +1164,16 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	pqsignal(SIGTERM, die);
 	BackgroundWorkerUnblockSignals();
 
+	/*
+	 * Set up mem_guard before starting to allocate (any significant amounts
+	 * of) memory but after we have unblocked signals since we have no control
+	 * over how the callback behaves.
+	 */
+	MGCallbacks *callbacks = ts_get_mem_guard_callbacks();
+	if (callbacks && callbacks->version_num == MG_CALLBACKS_VERSION &&
+		callbacks->toggle_allocation_blocking && !callbacks->enabled)
+		callbacks->toggle_allocation_blocking(/*enable=*/true);
+
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
 	log_min_messages = ts_guc_bgw_log_level;
@@ -1151,6 +1185,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	INSTR_TIME_SET_CURRENT(start);
 
 	StartTransactionCommand();
+
 	/* Grab a session lock on the job row to prevent concurrent deletes. Lock is released
 	 * when the job process exits */
 	job = ts_bgw_job_find_with_lock(params.job_id,
@@ -1159,14 +1194,18 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									SESSION_LOCK,
 									/* block */ true,
 									&got_lock);
-	CommitTransactionCommand();
-
 	if (job == NULL)
-		elog(ERROR, "job %d not found when running the background worker", params.job_id);
+		/* If the job is not found, we can't proceed */
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("job %d not found when running the background worker", params.job_id)));
 
 	/* get parameters from bgworker */
 	job->job_history.id = params.job_history_id;
 	job->job_history.execution_start = params.job_history_execution_start;
+	ts_bgw_job_stat_history_update(JOB_STAT_HISTORY_UPDATE_PID, job, JOB_SUCCESS, NULL);
+
+	CommitTransactionCommand();
 
 	elog(DEBUG2, "job %d (%s) found", params.job_id, NameStr(job->fd.application_name));
 
@@ -1191,9 +1230,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		/* The job is responsible for committing or aborting it's own txns */
 		if (IsTransactionState())
-			elog(ERROR,
-				 "TimescaleDB background job \"%s\" failed to end the transaction",
-				 NameStr(job->fd.application_name));
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TRANSACTION_STATE),
+					 errmsg("TimescaleDB background job \"%s\" failed to end the transaction",
+							NameStr(job->fd.application_name))));
 	}
 	PG_CATCH();
 	{
@@ -1218,6 +1258,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		MemoryContextSwitchTo(oldcontext);
 		job_failed = true;
 		edata = CopyErrorData();
+		FlushErrorState();
 
 		/*
 		 * Note that the mark_start happens in the scheduler right before the
@@ -1253,7 +1294,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		elog(LOG, "job %d threw an error", params.job_id);
 
 		CommitTransactionCommand();
-		FlushErrorState();
 		ReThrowError(edata);
 	}
 	PG_END_TRY();
@@ -1375,6 +1415,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	bool nulls[Natts_bgw_job] = { false };
 	int32 job_id;
 	char app_name[NAMEDATALEN];
+	int name_len;
 
 	rel = table_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
@@ -1434,7 +1475,10 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 	job_id = DatumGetInt32(ts_catalog_table_next_seq_id(catalog, BGW_JOB));
-	snprintf(app_name, NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
+	name_len = snprintf(app_name, NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
+
+	if (name_len >= NAMEDATALEN)
+		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("application name too long.")));
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = Int32GetDatum(job_id);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = CStringGetDatum(app_name);

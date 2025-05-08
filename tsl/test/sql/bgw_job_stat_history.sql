@@ -23,7 +23,6 @@ SHOW timescaledb.enable_job_execution_logging;
 
 -- Start Background Workers
 SELECT _timescaledb_functions.start_background_workers();
-SELECT pg_sleep(6);
 
 SELECT add_job('custom_job_ok', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_1 \gset
 SELECT add_job('custom_job_error', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_2 \gset
@@ -44,6 +43,9 @@ ORDER BY job_id;
 -- Log all executions
 ALTER SYSTEM SET timescaledb.enable_job_execution_logging TO ON;
 SELECT pg_reload_conf();
+
+-- Reconnect to make sure the GUC is set
+\c :TEST_DBNAME :ROLE_SUPERUSER
 
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 SELECT scheduled FROM alter_job(:job_id_2, next_start => now());

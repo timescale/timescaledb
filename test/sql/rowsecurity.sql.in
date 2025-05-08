@@ -1695,8 +1695,10 @@ CREATE POLICY p1 ON r2 USING (false);
 ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
 
--- Updates records in both
+-- Updates records in both (terse output to not print CONTEXT, which can be different).
+\set VERBOSITY terse
 UPDATE r1 SET a = a+5;
+\set VERBOSITY default
 
 -- Remove FORCE from r2
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;

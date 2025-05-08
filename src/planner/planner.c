@@ -52,10 +52,11 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "partitioning.h"
 #include "planner/partialize.h"
 #include "planner/planner.h"
+#include "sort_transform.h"
 #include "utils.h"
 
 #include "compat/compat.h"
@@ -226,7 +227,7 @@ planner_hcache_pop(bool release)
 
 	if (release)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		/* If we pop a stack and discover a new hypertable cache, the basrel
 		 * cache can contain invalid entries, so we reset it. */
 		if (planner_hcaches != NIL && hcache != linitial(planner_hcaches))
@@ -286,6 +287,8 @@ typedef struct
 	Query *current_query;
 	PlannerInfo *root;
 } PreprocessQueryContext;
+
+static void preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *context);
 
 void
 replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid)
@@ -398,119 +401,9 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 		Index rti = 1;
 		bool ret;
 
-		/*
-		 * Detect FOREIGN KEY lookup queries and mark the RTE for expansion.
-		 * Unfortunately postgres will create lookup queries for foreign keys
-		 * with `ONLY` preventing hypertable expansion. Only for declarative
-		 * partitioned tables the queries will be created without `ONLY`.
-		 * We try to detect these queries here and undo the `ONLY` flag for
-		 * these specific queries.
-		 *
-		 * The implementation of this on the postgres side can be found in
-		 * src/backend/utils/adt/ri_triggers.c
-		 */
-
 		if (ts_guc_enable_foreign_key_propagation)
 		{
-			/*
-			 * RI_FKey_cascade_del
-			 *
-			 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
-			 */
-			if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
-				context->root->glob->boundParams && query->jointree->quals &&
-				IsA(query->jointree->quals, OpExpr))
-			{
-				RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
-				if (!rte->inh && rte->rtekind == RTE_RELATION)
-				{
-					Hypertable *ht =
-						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-					if (ht)
-					{
-						rte->inh = true;
-					}
-				}
-			}
-
-			/*
-			 * RI_FKey_cascade_upd
-			 *
-			 *  UPDATE [ONLY] <fktable> SET fkatt1 = $1 [, ...]
-			 *      WHERE $n = fkatt1 [AND ...]
-			 */
-			if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
-				context->root->glob->boundParams && query->jointree->quals &&
-				IsA(query->jointree->quals, OpExpr))
-			{
-				RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
-				if (!rte->inh && rte->rtekind == RTE_RELATION)
-				{
-					Hypertable *ht =
-						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-					if (ht)
-					{
-						rte->inh = true;
-					}
-				}
-			}
-
-			/*
-			 * RI_FKey_check
-			 *
-			 * The RI_FKey_check query string built is
-			 *  SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
-			 *       FOR KEY SHARE OF x
-			 */
-			if (query->commandType == CMD_SELECT && query->hasForUpdate &&
-				list_length(query->rtable) == 1 && context->root->glob->boundParams)
-			{
-				RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
-				if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
-					list_length(query->jointree->fromlist) == 1 && query->jointree->quals &&
-					strcmp(rte->eref->aliasname, "x") == 0)
-				{
-					Hypertable *ht =
-						ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-					if (ht)
-					{
-						rte_mark_for_fk_expansion(rte);
-						if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-							query->rowMarks = NIL;
-					}
-				}
-			}
-			/*
-			 * RI_Initial_Check query
-			 *
-			 * The RI_Initial_Check query string built is:
-			 *  SELECT fk.keycols FROM [ONLY] relname fk
-			 *   LEFT OUTER JOIN [ONLY] pkrelname pk
-			 *   ON (pk.pkkeycol1=fk.keycol1 [AND ...])
-			 *   WHERE pk.pkkeycol1 IS NULL AND
-			 * For MATCH SIMPLE:
-			 *   (fk.keycol1 IS NOT NULL [AND ...])
-			 * For MATCH FULL:
-			 *   (fk.keycol1 IS NOT NULL [OR ...])
-			 */
-			if (query->commandType == CMD_SELECT && list_length(query->rtable) == 3)
-			{
-				RangeTblEntry *rte1 = linitial_node(RangeTblEntry, query->rtable);
-				RangeTblEntry *rte2 = lsecond_node(RangeTblEntry, query->rtable);
-				if (!rte1->inh && !rte2->inh && rte1->rtekind == RTE_RELATION &&
-					rte2->rtekind == RTE_RELATION && strcmp(rte1->eref->aliasname, "fk") == 0 &&
-					strcmp(rte2->eref->aliasname, "pk") == 0)
-				{
-					if (ts_hypertable_cache_get_entry(hcache, rte1->relid, CACHE_FLAG_MISSING_OK))
-					{
-						rte_mark_for_fk_expansion(rte1);
-					}
-					if (ts_hypertable_cache_get_entry(hcache, rte2->relid, CACHE_FLAG_MISSING_OK))
-					{
-						rte_mark_for_fk_expansion(rte2);
-					}
-				}
-			}
+			preprocess_fk_checks(query, hcache, context);
 		}
 
 		foreach (lc, query->rtable)
@@ -581,6 +474,121 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 	}
 
 	return expression_tree_walker(node, preprocess_query, context);
+}
+
+/*
+ * Detect FOREIGN KEY lookup queries and mark the RTE for expansion.
+ * Unfortunately postgres will create lookup queries for foreign keys
+ * with `ONLY` preventing hypertable expansion. Only for declarative
+ * partitioned tables the queries will be created without `ONLY`.
+ * We try to detect these queries here and undo the `ONLY` flag for
+ * these specific queries.
+ *
+ * The implementation of this on the postgres side can be found in
+ * src/backend/utils/adt/ri_triggers.c
+ */
+static void
+preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *context)
+{
+	/*
+	 * RI_FKey_cascade_del
+	 *
+	 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
+	 */
+	if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
+		context->root->glob->boundParams && query->jointree->quals &&
+		IsA(query->jointree->quals, OpExpr))
+	{
+		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+		if (!rte->inh && rte->rtekind == RTE_RELATION)
+		{
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+			if (ht)
+			{
+				rte->inh = true;
+			}
+		}
+	}
+
+	/*
+	 * RI_FKey_cascade_upd
+	 *
+	 *  UPDATE [ONLY] <fktable> SET fkatt1 = $1 [, ...]
+	 *      WHERE $n = fkatt1 [AND ...]
+	 */
+	if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
+		context->root->glob->boundParams && query->jointree->quals &&
+		IsA(query->jointree->quals, OpExpr))
+	{
+		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+		if (!rte->inh && rte->rtekind == RTE_RELATION)
+		{
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+			if (ht)
+			{
+				rte->inh = true;
+			}
+		}
+	}
+
+	/*
+	 * RI_FKey_check
+	 *
+	 * The RI_FKey_check query string built is
+	 *  SELECT 1 FROM [ONLY] <pktable> x WHERE pkatt1 = $1 [AND ...]
+	 *       FOR KEY SHARE OF x
+	 */
+	if (query->commandType == CMD_SELECT && query->hasForUpdate &&
+		list_length(query->rtable) == 1 && context->root->glob->boundParams)
+	{
+		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+		if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
+			list_length(query->jointree->fromlist) == 1 && query->jointree->quals &&
+			strcmp(rte->eref->aliasname, "x") == 0)
+		{
+			Hypertable *ht =
+				ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+			if (ht)
+			{
+				rte_mark_for_fk_expansion(rte);
+				if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+					query->rowMarks = NIL;
+			}
+		}
+	}
+	/*
+	 * RI_Initial_Check query
+	 *
+	 * The RI_Initial_Check query string built is:
+	 *  SELECT fk.keycols FROM [ONLY] relname fk
+	 *   LEFT OUTER JOIN [ONLY] pkrelname pk
+	 *   ON (pk.pkkeycol1=fk.keycol1 [AND ...])
+	 *   WHERE pk.pkkeycol1 IS NULL AND
+	 * For MATCH SIMPLE:
+	 *   (fk.keycol1 IS NOT NULL [AND ...])
+	 * For MATCH FULL:
+	 *   (fk.keycol1 IS NOT NULL [OR ...])
+	 */
+	if (query->commandType == CMD_SELECT && list_length(query->rtable) == 3)
+	{
+		RangeTblEntry *rte1 = linitial_node(RangeTblEntry, query->rtable);
+		RangeTblEntry *rte2 = lsecond_node(RangeTblEntry, query->rtable);
+		if (!rte1->inh && !rte2->inh && rte1->rtekind == RTE_RELATION &&
+			rte2->rtekind == RTE_RELATION && strcmp(rte1->eref->aliasname, "fk") == 0 &&
+			strcmp(rte2->eref->aliasname, "pk") == 0)
+		{
+			if (ts_hypertable_cache_get_entry(hcache, rte1->relid, CACHE_FLAG_MISSING_OK))
+			{
+				rte_mark_for_fk_expansion(rte1);
+			}
+			if (ts_hypertable_cache_get_entry(hcache, rte2->relid, CACHE_FLAG_MISSING_OK))
+			{
+				rte_mark_for_fk_expansion(rte2);
+			}
+		}
+	}
 }
 
 static PlannedStmt *
@@ -674,14 +682,14 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			 * standard_planner. Therefore, we fixup the final target list for
 			 * HypertableInsert here.
 			 */
-			ts_hypertable_modify_fixup_tlist(stmt->planTree);
+			ts_modify_hypertable_fixup_tlist(stmt->planTree);
 
 			foreach (lc, stmt->subplans)
 			{
 				Plan *subplan = (Plan *) lfirst(lc);
 
 				if (subplan)
-					ts_hypertable_modify_fixup_tlist(subplan);
+					ts_modify_hypertable_fixup_tlist(subplan);
 			}
 
 			if (IsA(stmt->planTree, Agg))
@@ -935,8 +943,6 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 	return TS_REL_OTHER;
 }
 
-extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
-
 static inline bool
 should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *path, bool ordered,
 					int order_attno)
@@ -1029,7 +1035,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				 * Ordered Append transformation because the RelOptInfo may
 				 * be used for multiple Paths.
 				 */
-				Expr *em_expr = find_em_expr_for_rel(pk->pk_eclass, rel);
+				Expr *em_expr = ts_find_em_expr_for_rel(pk->pk_eclass, rel);
 
 				/*
 				 * If this is a join the ordering information might not be
@@ -1069,11 +1075,8 @@ static inline bool
 should_constraint_aware_append(PlannerInfo *root, Hypertable *ht, Path *path)
 {
 	/* Constraint-aware append currently expects children that scans a real
-	 * "relation" (e.g., not an "upper" relation). So, we do not run it on a
-	 * distributed hypertable because the append children are typically
-	 * per-server relations without a corresponding "real" table in the
-	 * system. Further, per-server appends shouldn't need runtime pruning in any
-	 * case. */
+	 * "relation" (e.g., not an "upper" relation).
+	 */
 	if (root->parse->commandType != CMD_SELECT)
 		return false;
 
@@ -1183,14 +1186,47 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 			break;
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
-			ts_sort_transform_optimization(root, rel);
+		{
 			/*
 			 * Since the sort optimization adds new paths to the rel it has
 			 * to happen before any optimizations that replace pathlist.
 			 */
-			if (ts_cm_functions->set_rel_pathlist_query != NULL)
-				ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
+			List *transformed_query_pathkeys = ts_sort_transform_get_pathkeys(root, rel, rte, ht);
+			if (transformed_query_pathkeys != NIL)
+			{
+				List *orig_query_pathkeys = root->query_pathkeys;
+				root->query_pathkeys = transformed_query_pathkeys;
+
+				/* Create index paths with transformed pathkeys */
+				create_index_paths(root, rel);
+
+				/*
+				 * Call the TSL hooks with the transformed pathkeys as well, so
+				 * that the decompression paths also use this optimization.
+				 */
+				if (ts_cm_functions->set_rel_pathlist_query != NULL)
+					ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
+
+				root->query_pathkeys = orig_query_pathkeys;
+
+				/*
+				 * change returned paths to use original pathkeys. have to go through
+				 * all paths since create_index_paths might have modified existing
+				 * pathkey. Always safe to do transform since ordering of
+				 * transformed_query_pathkey implements ordering of
+				 * orig_query_pathkeys.
+				 */
+				ts_sort_transform_replace_pathkeys(rel->pathlist,
+												   transformed_query_pathkeys,
+												   orig_query_pathkeys);
+			}
+			else
+			{
+				if (ts_cm_functions->set_rel_pathlist_query != NULL)
+					ts_cm_functions->set_rel_pathlist_query(root, rel, rel->relid, rte, ht);
+			}
 			break;
+		}
 		default:
 			break;
 	}
@@ -1301,9 +1337,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 	if (prev_set_rel_pathlist_hook != NULL)
 		(*prev_set_rel_pathlist_hook)(root, rel, rti, rte);
 
-	if (ts_cm_functions->set_rel_pathlist != NULL)
-		ts_cm_functions->set_rel_pathlist(root, rel, rti, rte);
-
 	switch (reltype)
 	{
 		case TS_REL_HYPERTABLE_CHILD:
@@ -1320,7 +1353,6 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 					ts_cm_functions->set_rel_pathlist_dml(root, rel, rti, rte, ht);
 				break;
 			}
-#if PG15_GE
 			/*
 			 * For MERGE command if there is an UPDATE or DELETE action, then
 			 * do not allow this to succeed on compressed chunks
@@ -1339,9 +1371,21 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 				}
 				break;
 			}
-#endif
 			TS_FALLTHROUGH;
 		default:
+			/*
+			 * Set the indexlist for a hypertable parent to NIL since we
+			 * should not try to do any index scans on hypertable parents,
+			 * similar to how it works for partitioned tables.
+			 *
+			 * This can happen when building a merge join path and computing
+			 * cost for it. See get_actual_variable_range().
+			 *
+			 * This has to be after the hypertable is expanded, since the
+			 * indexlist is used during hypertable expansion.
+			 */
+			if (reltype == TS_REL_HYPERTABLE)
+				rel->indexlist = NIL;
 			apply_optimizations(root, reltype, rel, rte, ht);
 			break;
 	}
@@ -1445,9 +1489,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * relevant for code paths that use the postgres inheritance code
 			 * as we don't include the hypertable as child when expanding the
 			 * hypertable ourself.
-			 * We do exclude distributed hypertables for now to not alter
-			 * the trigger behaviour on access nodes, which would otherwise
-			 * no longer fire.
 			 */
 			if (IS_UPDL_CMD(root->parse))
 				mark_dummy_rel(rel);
@@ -1522,7 +1563,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *
  * Modified plan:
  *
- *	[ HypertableModify ]
+ *	[ ModifyHypertable ]
  *		  ^
  *		  |
  *	[ ModifyTable ] -> resultRelation
@@ -1535,12 +1576,9 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *		  |
  *	  [ subplan ]
  *
- * For PG < 14, the modifytable plan is modified for INSERTs only.
- * For PG14+, we modify the plan for DELETEs as well.
- *
  */
 static List *
-replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *input_rel)
+replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *input_rel)
 {
 	List *new_pathlist = NIL;
 	ListCell *lc;
@@ -1562,10 +1600,9 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			{
 				if (ht)
 				{
-					path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
+					path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
 				}
 			}
-#if PG15_GE
 			if (ht && mt->operation == CMD_MERGE)
 			{
 				List *firstMergeActionList = linitial(mt->mergeActionLists);
@@ -1579,12 +1616,11 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					MergeAction *action = (MergeAction *) lfirst(l);
 					if (action->commandType == CMD_INSERT)
 					{
-						path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
+						path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
 						break;
 					}
 				}
 			}
-#endif
 		}
 
 		new_pathlist = lappend(new_pathlist, path);
@@ -1616,7 +1652,7 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 		/* Modify for INSERTs on a hypertable */
 		if (output_rel->pathlist != NIL)
 			output_rel->pathlist =
-				replace_hypertable_modify_paths(root, output_rel->pathlist, input_rel);
+				replace_modify_hypertable_paths(root, output_rel->pathlist, input_rel);
 
 		if (parse->hasAggs && stage == UPPERREL_GROUP_AGG)
 		{

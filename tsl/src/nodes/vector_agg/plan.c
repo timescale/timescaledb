@@ -3,20 +3,23 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #include <postgres.h>
-
+#include <access/attnum.h>
 #include <commands/explain.h>
 #include <executor/executor.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/plannodes.h>
+#include <parser/parsetree.h>
 #include <utils/fmgroids.h>
 
 #include "plan.h"
 
 #include "exec.h"
-#include "nodes/decompress_chunk/planner.h"
+#include "import/list.h"
+#include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"
 
@@ -80,7 +83,7 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 	{
 		/*
 		 * This is already the uncompressed chunk var. We can see it referenced
-		 * by expressions in the output targetlist of DecompressChunk node.
+		 * by expressions in the output targetlist of the child scan node.
 		 */
 		return (Node *) copyObject(var);
 	}
@@ -88,7 +91,7 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 	if (var->varno == OUTER_VAR)
 	{
 		/*
-		 * Reference into the output targetlist of the DecompressChunk node.
+		 * Reference into the output targetlist of the child scan node.
 		 */
 		TargetEntry *decompress_chunk_tentry =
 			castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, var->varattno - 1));
@@ -120,9 +123,9 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
  * variables.
  */
 static List *
-resolve_outer_special_vars(List *agg_tlist, CustomScan *custom)
+resolve_outer_special_vars(List *agg_tlist, Plan *childplan)
 {
-	return castNode(List, resolve_outer_special_vars_mutator((Node *) agg_tlist, custom));
+	return castNode(List, resolve_outer_special_vars_mutator((Node *) agg_tlist, childplan));
 }
 
 /*
@@ -130,10 +133,11 @@ resolve_outer_special_vars(List *agg_tlist, CustomScan *custom)
  * node.
  */
 static Plan *
-vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_targetlist)
+vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
+					   VectorAggGroupingType grouping_type)
 {
 	CustomScan *vector_agg = (CustomScan *) makeNode(CustomScan);
-	vector_agg->custom_plans = list_make1(decompress_chunk);
+	vector_agg->custom_plans = list_make1(childplan);
 	vector_agg->methods = &scan_methods;
 
 	vector_agg->custom_scan_tlist = resolved_targetlist;
@@ -158,7 +162,7 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_ta
 	vector_agg->scan.plan.total_cost = agg->plan.total_cost;
 
 	vector_agg->scan.plan.parallel_aware = false;
-	vector_agg->scan.plan.parallel_safe = decompress_chunk->scan.plan.parallel_safe;
+	vector_agg->scan.plan.parallel_safe = childplan->parallel_safe;
 	vector_agg->scan.plan.async_capable = false;
 
 	vector_agg->scan.plan.plan_node_id = agg->plan.plan_node_id;
@@ -170,13 +174,28 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_ta
 	vector_agg->scan.plan.extParam = bms_copy(agg->plan.extParam);
 	vector_agg->scan.plan.allParam = bms_copy(agg->plan.allParam);
 
-	List *grouping_child_output_offsets = NIL;
-	for (int i = 0; i < agg->numCols; i++)
+	vector_agg->custom_private = ts_new_list(T_List, VASI_Count);
+	lfirst(list_nth_cell(vector_agg->custom_private, VASI_GroupingType)) =
+		makeInteger(grouping_type);
+
+	if (is_columnar_scan(childplan))
 	{
-		grouping_child_output_offsets =
-			lappend_int(grouping_child_output_offsets, AttrNumberGetAttrOffset(agg->grpColIdx[i]));
+		CustomScan *custom = castNode(CustomScan, childplan);
+
+		/*
+		 * ColumnarScan should not project when doing vectorized
+		 * aggregation. If it projects, it will turn the arrow slot into a set
+		 * of virtual slots and the vector data will not be passed up to
+		 * VectorAgg.
+		 *
+		 * To make ColumnarScan avoid projection, unset the custom scan node's
+		 * projection flag. Normally, it is to late to change this flag as
+		 * PostgreSQL already planned projection based on it. However,
+		 * ColumnarScan rechecks this flag before it begins execution and
+		 * ignores any projection if the flag is not set.
+		 */
+		custom->flags &= ~CUSTOMPATH_SUPPORT_PROJECTION;
 	}
-	vector_agg->custom_private = list_make1(grouping_child_output_offsets);
 
 	return (Plan *) vector_agg;
 }
@@ -186,7 +205,7 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk, List *resolved_ta
  * that refers to either a bulk-decompressed or a segmentby column.
  */
 static bool
-is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
+is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 {
 	if (!IsA(expr, Var))
 	{
@@ -194,111 +213,25 @@ is_vector_var(CustomScan *custom, Expr *expr, bool *out_is_segmentby)
 		return false;
 	}
 
-	Var *decompressed_var = castNode(Var, expr);
+	Var *var = castNode(Var, expr);
 
-	/*
-	 * This must be called after resolve_outer_special_vars(), so we should only
-	 * see the uncompressed chunk variables here.
-	 */
-	Ensure((Index) decompressed_var->varno == (Index) custom->scan.scanrelid,
-		   "expected scan varno %d got %d",
-		   custom->scan.scanrelid,
-		   decompressed_var->varno);
-
-	if (decompressed_var->varattno <= 0)
+	if (var->varattno <= 0)
 	{
 		/* Can't work with special attributes like tableoid. */
-		if (out_is_segmentby)
-		{
-			*out_is_segmentby = false;
-		}
 		return false;
 	}
 
-	/*
-	 * Now, we have to translate the decompressed varno into the compressed
-	 * column index, to check if the column supports bulk decompression.
-	 */
-	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
-	int compressed_column_index = 0;
-	for (; compressed_column_index < list_length(decompression_map); compressed_column_index++)
-	{
-		const int custom_scan_attno = list_nth_int(decompression_map, compressed_column_index);
-		if (custom_scan_attno <= 0)
-		{
-			continue;
-		}
+	Assert(var->varattno <= vqinfo->maxattno);
 
-		int uncompressed_chunk_attno = 0;
-		if (custom->custom_scan_tlist == NIL)
-		{
-			uncompressed_chunk_attno = custom_scan_attno;
-		}
-		else
-		{
-			Var *var = castNode(Var,
-								castNode(TargetEntry,
-										 list_nth(custom->custom_scan_tlist,
-												  AttrNumberGetAttrOffset(custom_scan_attno)))
-									->expr);
-			uncompressed_chunk_attno = var->varattno;
-		}
-
-		if (uncompressed_chunk_attno == decompressed_var->varattno)
-		{
-			break;
-		}
-	}
-	Ensure(compressed_column_index < list_length(decompression_map), "compressed column not found");
-
-	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
-	Assert(list_length(decompression_map) == list_length(bulk_decompression_column));
-	const bool bulk_decompression_enabled_for_column =
-		list_nth_int(bulk_decompression_column, compressed_column_index);
-
-	/*
-	 * Bulk decompression can be disabled for all columns in the DecompressChunk
-	 * node settings, we can't do vectorized aggregation for compressed columns
-	 * in that case. For segmentby columns it's still possible.
-	 */
-	List *settings = linitial(custom->custom_private);
-	const bool bulk_decompression_enabled_globally =
-		list_nth_int(settings, DCS_EnableBulkDecompression);
-
-	/*
-	 * Check if this column is a segmentby.
-	 */
-	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
-	Assert(list_length(is_segmentby_column) == list_length(decompression_map));
-	const bool is_segmentby = list_nth_int(is_segmentby_column, compressed_column_index);
-	if (out_is_segmentby)
-	{
-		*out_is_segmentby = is_segmentby;
-	}
-
-	/*
-	 * We support vectorized aggregation either for segmentby columns or for
-	 * columns with bulk decompression enabled.
-	 */
-	if (!is_segmentby &&
-		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
-	{
-		/* Vectorized aggregation not possible for this particular column. */
-		return false;
-	}
-
-	return true;
+	return vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
 }
 
+/*
+ * Whether we can vectorize this particular aggregate.
+ */
 static bool
-can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
+can_vectorize_aggref(const VectorQualInfo *vqi, Aggref *aggref)
 {
-	if (aggref->aggfilter != NULL)
-	{
-		/* Filter clause on aggregate is not supported. */
-		return false;
-	}
-
 	if (aggref->aggdirectargs != NIL)
 	{
 		/* Can't process ordered-set aggregates with direct arguments. */
@@ -319,8 +252,13 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
 
 	if (aggref->aggfilter != NULL)
 	{
-		/* Can't process aggregates with filter clause. */
-		return false;
+		/* Can process aggregates with filter clause if it's vectorizable. */
+		Node *aggfilter_vectorized = vector_qual_make((Node *) aggref->aggfilter, vqi);
+		if (aggfilter_vectorized == NULL)
+		{
+			return false;
+		}
+		aggref->aggfilter = (Expr *) aggfilter_vectorized;
 	}
 
 	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
@@ -341,44 +279,131 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
 	/* The function must have one argument, check it. */
 	Assert(list_length(aggref->args) == 1);
 	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
-	if (!is_vector_var(custom, argument->expr, NULL))
-	{
-		return false;
-	}
 
-	return true;
+	return is_vector_var(vqi, argument->expr);
 }
 
 /*
- * Whether we can perform vectorized aggregation with a given grouping.
- * Currently supports either no grouping or grouping by segmentby columns.
+ * What vectorized grouping strategy we can use for the given grouping columns.
  */
-static bool
-can_vectorize_grouping(Agg *agg, CustomScan *custom, List *resolved_targetlist)
+static VectorAggGroupingType
+get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resolved_targetlist)
 {
-	if (agg->numCols == 0)
-	{
-		return true;
-	}
+	/*
+	 * The Agg->numCols value can be less than the number of the non-aggregated
+	 * vars in the aggregated targetlist, if some of them are equated to a
+	 * constant. This behavior started with PG 16. This case is not very
+	 * important, so we treat all non-aggregated columns as grouping columns to
+	 * keep the vectorized aggregation node simple.
+	 */
+	int num_grouping_columns = 0;
+	bool all_segmentby = true;
+	Var *single_grouping_var = NULL;
 
-	for (int i = 0; i < agg->numCols; i++)
+	ListCell *lc;
+	foreach (lc, resolved_targetlist)
 	{
-		int offset = AttrNumberGetAttrOffset(agg->grpColIdx[i]);
-		TargetEntry *entry = list_nth_node(TargetEntry, resolved_targetlist, offset);
-
-		bool is_segmentby = false;
-		if (!is_vector_var(custom, entry->expr, &is_segmentby))
+		TargetEntry *target_entry = lfirst_node(TargetEntry, lc);
+		if (IsA(target_entry->expr, Aggref))
 		{
-			return false;
+			continue;
 		}
 
-		if (!is_segmentby)
+		if (!IsA(target_entry->expr, Var))
 		{
-			return false;
+			/*
+			 * We shouldn't see anything except Vars or Aggrefs in the
+			 * aggregated targetlists. Just say it's not vectorizable, because
+			 * here we are working with arbitrary plans that we don't control.
+			 */
+			return VAGT_Invalid;
 		}
+
+		num_grouping_columns++;
+
+		if (!is_vector_var(vqinfo, target_entry->expr))
+			return VAGT_Invalid;
+
+		Var *var = castNode(Var, target_entry->expr);
+		all_segmentby &= vqinfo->segmentby_attrs[var->varattno];
+
+		/*
+		 * If we have a single grouping column, record it for the additional
+		 * checks later.
+		 */
+		single_grouping_var = var;
 	}
 
-	return true;
+	if (num_grouping_columns != 1)
+	{
+		single_grouping_var = NULL;
+	}
+
+	Assert(num_grouping_columns == 1 || single_grouping_var == NULL);
+	Assert(num_grouping_columns >= agg->numCols);
+
+	/*
+	 * We support vectorized aggregation without grouping.
+	 */
+	if (num_grouping_columns == 0)
+	{
+		return VAGT_Batch;
+	}
+
+	/*
+	 * We support grouping by any number of columns if all of them are segmentby.
+	 */
+	if (all_segmentby)
+	{
+		return VAGT_Batch;
+	}
+
+	/*
+	 * We support hashed vectorized grouping by one fixed-size by-value
+	 * compressed column.
+	 * We can use our hash table for GroupAggregate as well, because it preserves
+	 * the input order of the keys, but only for the direct order, not reverse.
+	 */
+	if (num_grouping_columns == 1)
+	{
+		int16 typlen;
+		bool typbyval;
+
+		get_typlenbyval(single_grouping_var->vartype, &typlen, &typbyval);
+		if (typbyval)
+		{
+			switch (typlen)
+			{
+				case 2:
+					return VAGT_HashSingleFixed2;
+				case 4:
+					return VAGT_HashSingleFixed4;
+				case 8:
+					return VAGT_HashSingleFixed8;
+				default:
+					Ensure(false, "invalid fixed size %d of a vector type", typlen);
+					break;
+			}
+		}
+#ifdef TS_USE_UMASH
+		else
+		{
+			Ensure(single_grouping_var->vartype == TEXTOID,
+				   "invalid vector type %d for grouping",
+				   single_grouping_var->vartype);
+			return VAGT_HashSingleText;
+		}
+#endif
+	}
+
+#ifdef TS_USE_UMASH
+	/*
+	 * Use hashing of serialized keys when we have many grouping columns.
+	 */
+	return VAGT_HashSerialized;
+#else
+	return VAGT_Invalid;
+#endif
 }
 
 /*
@@ -454,20 +479,63 @@ has_vector_agg_node(Plan *plan, bool *has_normal_agg)
 }
 
 /*
+ * Check if a VectorAgg is possible on top of the given child plan.
+ *
+ * If the child plan is compatible, also initialize the VectorQualInfo struct
+ * for aggregation FILTER clauses.
+ *
+ * Returns true if the scan node is a supported child, otherwise false.
+ */
+static bool
+vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi)
+{
+	if (!IsA(childplan, CustomScan))
+		return false;
+
+	if (childplan->qual != NIL)
+	{
+		/* Can't do vectorized aggregation if we have Postgres quals. */
+		return false;
+	}
+
+	CustomScan *customscan = castNode(CustomScan, childplan);
+
+	if (strcmp(customscan->methods->CustomName, "DecompressChunk") == 0)
+	{
+		vectoragg_plan_decompress_chunk(childplan, vqi);
+		return true;
+	}
+
+	/* We're looking for a baserel scan */
+	if (customscan->scan.scanrelid > 0)
+	{
+		RangeTblEntry *rte = rt_fetch(customscan->scan.scanrelid, rtable);
+
+		if (rte && ts_is_hypercore_am(ts_get_rel_am(rte->relid)))
+		{
+			vectoragg_plan_tam(childplan, rtable, vqi);
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
  * Where possible, replace the partial aggregation plan nodes with our own
  * vectorized aggregation node. The replacement is done in-place.
  */
 Plan *
-try_insert_vector_agg_node(Plan *plan)
+try_insert_vector_agg_node(Plan *plan, List *rtable)
 {
 	if (plan->lefttree)
 	{
-		plan->lefttree = try_insert_vector_agg_node(plan->lefttree);
+		plan->lefttree = try_insert_vector_agg_node(plan->lefttree, rtable);
 	}
 
 	if (plan->righttree)
 	{
-		plan->righttree = try_insert_vector_agg_node(plan->righttree);
+		plan->righttree = try_insert_vector_agg_node(plan->righttree, rtable);
 	}
 
 	List *append_plans = NIL;
@@ -498,7 +566,7 @@ try_insert_vector_agg_node(Plan *plan)
 		ListCell *lc;
 		foreach (lc, append_plans)
 		{
-			lfirst(lc) = try_insert_vector_agg_node(lfirst(lc));
+			lfirst(lc) = try_insert_vector_agg_node(lfirst(lc), rtable);
 		}
 		return plan;
 	}
@@ -541,26 +609,17 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	if (!IsA(agg->plan.lefttree, CustomScan))
-	{
-		/*
-		 * Should have a Custom Scan under aggregation.
-		 */
-		return plan;
-	}
+	Plan *childplan = agg->plan.lefttree;
+	VectorQualInfo vqi;
+	MemSet(&vqi, 0, sizeof(VectorQualInfo));
 
-	CustomScan *custom = castNode(CustomScan, agg->plan.lefttree);
-	if (strcmp(custom->methods->CustomName, "DecompressChunk") != 0)
+	/*
+	 * Build supplementary info to determine whether we can vectorize the
+	 * aggregate FILTER clauses.
+	 */
+	if (!vectoragg_plan_possible(childplan, rtable, &vqi))
 	{
-		/*
-		 * It should be our DecompressChunk node.
-		 */
-		return plan;
-	}
-
-	if (custom->scan.plan.qual != NIL)
-	{
-		/* Can't do vectorized aggregation if we have Postgres quals. */
+		/* Not a compatible vectoragg child node */
 		return plan;
 	}
 
@@ -569,23 +628,38 @@ try_insert_vector_agg_node(Plan *plan)
 	 * the subsequent checks are performed on the aggregated targetlist with
 	 * all variables resolved to uncompressed chunk variables.
 	 */
-	List *resolved_targetlist = resolve_outer_special_vars(agg->plan.targetlist, custom);
+	List *resolved_targetlist = resolve_outer_special_vars(agg->plan.targetlist, childplan);
 
-	if (!can_vectorize_grouping(agg, custom, resolved_targetlist))
+	const VectorAggGroupingType grouping_type =
+		get_vectorized_grouping_type(&vqi, agg, resolved_targetlist);
+	if (grouping_type == VAGT_Invalid)
 	{
-		/* No GROUP BY support for now. */
+		/* The grouping is not vectorizable. */
 		return plan;
+	}
+
+	/*
+	 * The hash grouping strategies do not preserve the input key order when the
+	 * reverse ordering is requested, so in this case they cannot work in
+	 * GroupAggregate mode.
+	 */
+	if (grouping_type != VAGT_Batch && agg->aggstrategy != AGG_HASHED)
+	{
+		if (vqi.reverse)
+		{
+			return plan;
+		}
 	}
 
 	/* Now check the output targetlist. */
 	ListCell *lc;
 	foreach (lc, resolved_targetlist)
 	{
-		TargetEntry *target_entry = castNode(TargetEntry, lfirst(lc));
+		TargetEntry *target_entry = lfirst_node(TargetEntry, lc);
 		if (IsA(target_entry->expr, Aggref))
 		{
 			Aggref *aggref = castNode(Aggref, target_entry->expr);
-			if (!can_vectorize_aggref(aggref, custom))
+			if (!can_vectorize_aggref(&vqi, aggref))
 			{
 				/* Aggregate function not vectorizable. */
 				return plan;
@@ -593,7 +667,7 @@ try_insert_vector_agg_node(Plan *plan)
 		}
 		else if (IsA(target_entry->expr, Var))
 		{
-			if (!is_vector_var(custom, target_entry->expr, NULL))
+			if (!is_vector_var(&vqi, target_entry->expr))
 			{
 				/* Variable not vectorizable. */
 				return plan;
@@ -614,5 +688,5 @@ try_insert_vector_agg_node(Plan *plan)
 	 * Finally, all requirements are satisfied and we can vectorize this partial
 	 * aggregation node.
 	 */
-	return vector_agg_plan_create(agg, custom, resolved_targetlist);
+	return vector_agg_plan_create(childplan, agg, resolved_targetlist, grouping_type);
 }

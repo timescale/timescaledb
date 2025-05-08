@@ -60,6 +60,31 @@ function(GET_PG_CONFIG var)
       PARENT_SCOPE)
 endfunction()
 
+# Search paths for Postgres binaries
+if(WIN32)
+  find_path(
+    PG_PATH postgres.exe
+    PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
+    PATH_SUFFIXES bin 15/bin 16/bin
+    DOC "The path to a PostgreSQL installation")
+elseif(UNIX)
+  find_path(
+    PG_PATH postgres
+    PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
+    PATH_SUFFIXES bin 15/bin 16/bin
+    DOC "The path to a PostgreSQL installation")
+endif()
+
+find_program(
+  PG_CONFIG pg_config
+  HINTS ${PG_PATH}
+  PATH_SUFFIXES bin
+  DOC "The path to the pg_config of the PostgreSQL version to compile against")
+
+if(NOT PG_CONFIG)
+  message(FATAL_ERROR "Unable to find 'pg_config'")
+endif()
+
 configure_file("version.config" "version.config" COPYONLY)
 file(READ version.config VERSION_CONFIG)
 
@@ -76,22 +101,55 @@ if(VERSION_CONFIG
   endif()
 endif()
 
-if(VERSION_CONFIG
-   MATCHES
-   ".*update_from_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
-)
-  set(UPDATE_FROM_VERSION ${CMAKE_MATCH_1})
-endif()
-
+# fallback for < 2.20 downgrade can be removed after we release 2.20
 if(VERSION_CONFIG
    MATCHES
    ".*downgrade_to_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
 )
+  set(UPDATE_FROM_VERSION ${CMAKE_MATCH_1})
   set(DOWNGRADE_TO_VERSION ${CMAKE_MATCH_1})
+  set(PREVIOUS_VERSION ${CMAKE_MATCH_1})
+endif()
+
+if(VERSION_CONFIG MATCHES
+   ".*previous_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
+)
+  set(PREVIOUS_VERSION ${CMAKE_MATCH_1})
 endif()
 
 # a hack to avoid change of SQL extschema variable
 set(extschema "@extschema@")
+
+# If not explicitly specified, try to use the same compiler as Postgres to avoid
+# mismatches and simplify configuration.
+if((NOT DEFINED CMAKE_C_COMPILER) AND (NOT DEFINED ENV{CC}))
+  get_pg_config(PG_CC --cc)
+
+  # The first word might be ccache or similar, so handle this.
+  string(REPLACE " " ";" PG_CC_LIST ${PG_CC})
+  list(POP_FRONT PG_CC_LIST PG_CC_FIRST)
+  if(PG_CC_LIST)
+    # Got multi-word PG CC, treat the first word as ccache.
+    find_program(PG_CCACHE_FOUND ${PG_CC_FIRST})
+    if((NOT DEFINED CMAKE_C_COMPILER_LAUNCHER) AND PG_CCACHE_FOUND)
+      message(
+        STATUS
+          "Using ${PG_CCACHE_FOUND} as C compiler launcher based on pg_config CC"
+      )
+      set(CMAKE_C_COMPILER_LAUNCHER ${PG_CCACHE_FOUND})
+    endif()
+    set(PG_CC ${PG_CC_LIST})
+  else()
+    # Single-word CC.
+    set(PG_CC ${PG_CC_FIRST})
+  endif()
+
+  find_program(PG_CC_FOUND ${PG_CC})
+  if(PG_CC_FOUND)
+    message(STATUS "Using ${PG_CC_FOUND} as CC based on pg_config CC")
+    set(CMAKE_C_COMPILER ${PG_CC_FOUND})
+  endif()
+endif()
 
 # Set project name, version, and language. Language needs to be set for compiler
 # checks
@@ -119,7 +177,7 @@ endif()
 
 message(
   STATUS
-    "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${UPDATE_FROM_VERSION}"
+    "TimescaleDB version ${PROJECT_VERSION_MOD}. Can be updated from version ${PREVIOUS_VERSION}"
 )
 message(STATUS "Build type is ${CMAKE_BUILD_TYPE}")
 
@@ -296,31 +354,6 @@ if(ENABLE_OPTIMIZER_DEBUG)
   add_definitions(-DOPTIMIZER_DEBUG)
 endif()
 
-# Search paths for Postgres binaries
-if(WIN32)
-  find_path(
-    PG_PATH postgres.exe
-    PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
-    PATH_SUFFIXES bin 14/bin 15/bin 16/bin
-    DOC "The path to a PostgreSQL installation")
-elseif(UNIX)
-  find_path(
-    PG_PATH postgres
-    PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
-    PATH_SUFFIXES bin 14/bin 15/bin 16/bin
-    DOC "The path to a PostgreSQL installation")
-endif()
-
-find_program(
-  PG_CONFIG pg_config
-  HINTS ${PG_PATH}
-  PATH_SUFFIXES bin
-  DOC "The path to the pg_config of the PostgreSQL version to compile against")
-
-if(NOT PG_CONFIG)
-  message(FATAL_ERROR "Unable to find 'pg_config'")
-endif()
-
 find_package(Git)
 
 # Check PostgreSQL version
@@ -349,10 +382,10 @@ message(
 
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
-if((${PG_VERSION_MAJOR} LESS "14")
+if((${PG_VERSION_MAJOR} LESS "15")
    OR (${PG_VERSION_MAJOR} GREATER "17")
    AND NOT (${EXPERIMENTAL}))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 14, 15, 16 and 17")
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 15, 16 and 17")
 endif()
 
 # Get PostgreSQL configuration from pg_config
@@ -502,51 +535,49 @@ endif()
 
 # Linter support via clang-tidy. Enabled when using clang as compiler
 option(LINTER "Enable linter support using clang-tidy" OFF)
+set(CLANG_TIDY_EXTRA_OPTS
+    ""
+    CACHE STRING "Additional options for clang-tidy")
 
 if(LINTER)
   find_program(
     CLANG_TIDY clang-tidy
     PATHS /usr/bin /usr/local/bin /usr/local/opt/ /usr/local/opt/llvm/bin
           /opt/bin
-    DOC "The path to the clang-tidy linter")
+    DOC "The path to the clang-tidy linter" REQUIRED)
 
-  if(CLANG_TIDY)
-    message(STATUS "Using clang-tidy ${CLANG_TIDY}")
-    execute_process(COMMAND ${CLANG_TIDY} --version)
-    string(
-      CONCAT
-        CMAKE_C_CLANG_TIDY
-        "${CLANG_TIDY}"
-        ";--checks=clang-diagnostic-*,clang-analyzer-*"
-        ",-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling"
-        ",-clang-analyzer-deadcode.DeadStores"
-        ",bugprone-*"
-        ",-bugprone-branch-clone"
-        ",-bugprone-easily-swappable-parameters"
-        ",-bugprone-implicit-widening-of-multiplication-result"
-        ",-bugprone-narrowing-conversions"
-        ",-bugprone-reserved-identifier"
-        ",-bugprone-suspicious-include"
-        ",readability-*"
-        ",-readability-avoid-const-params-in-decls"
-        ",-readability-braces-around-statements"
-        ",-readability-else-after-return"
-        ",-readability-function-cognitive-complexity"
-        ",-readability-function-size"
-        ",-readability-identifier-length"
-        ",-readability-isolate-declaration"
-        ",-readability-magic-numbers"
-        ",-readability-non-const-parameter"
-        # ";--fix-errors"
-    )
-    if(WARNINGS_AS_ERRORS)
-      set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")
-    else()
-      set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--quiet")
-    endif(WARNINGS_AS_ERRORS)
+  message(STATUS "Using clang-tidy ${CLANG_TIDY}")
+  execute_process(COMMAND ${CLANG_TIDY} --version)
+  string(
+    CONCAT
+      CMAKE_C_CLANG_TIDY
+      "${CLANG_TIDY}"
+      ";--checks=clang-diagnostic-*,clang-analyzer-*"
+      ",-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling"
+      ",-clang-analyzer-deadcode.DeadStores"
+      ",bugprone-*"
+      ",-bugprone-branch-clone"
+      ",-bugprone-easily-swappable-parameters"
+      ",-bugprone-implicit-widening-of-multiplication-result"
+      ",-bugprone-narrowing-conversions"
+      ",-bugprone-reserved-identifier"
+      ",-bugprone-suspicious-include"
+      ",readability-*"
+      ",-readability-avoid-const-params-in-decls"
+      ",-readability-braces-around-statements"
+      ",-readability-else-after-return"
+      ",-readability-function-cognitive-complexity"
+      ",-readability-function-size"
+      ",-readability-identifier-length"
+      ",-readability-isolate-declaration"
+      ",-readability-magic-numbers"
+      ",-readability-non-const-parameter"
+      "${CLANG_TIDY_EXTRA_OPTS}")
+  if(WARNINGS_AS_ERRORS)
+    set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")
   else()
-    message(STATUS "Install clang-tidy to enable code linting")
-  endif(CLANG_TIDY)
+    set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--quiet")
+  endif(WARNINGS_AS_ERRORS)
 endif(LINTER)
 
 if(NOT EXISTS ${PG_INCLUDEDIR}/pg_config.h)
@@ -696,7 +727,7 @@ add_custom_target(licensecheck
 # This needs to be the last subdirectory so that other targets are already
 # defined
 if(CODECOVERAGE)
-  add_subdirectory(codecov)
+  add_subdirectory(coverage)
 endif()
 
 if(IS_DIRECTORY ${PROJECT_SOURCE_DIR}/.git)

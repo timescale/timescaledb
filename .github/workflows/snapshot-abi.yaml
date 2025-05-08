@@ -1,0 +1,172 @@
+# Test ABI versions against snapshot
+#
+#
+
+name: ABI Test Against Snapshot
+"on":
+  schedule:
+    # run daily 20:00 on main branch
+    - cron: '0 20 * * *'
+  push:
+    branches:
+      - prerelease_test
+      - trigger/snapshot-abi
+  pull_request:
+    paths: .github/workflows/snapshot-abi.yaml
+  workflow_dispatch:
+
+jobs:
+  config:
+    runs-on: ubuntu-latest
+    outputs:
+      pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
+      pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
+      pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+    - name: Read configuration
+      id: config
+      run: python .github/gh_config_reader.py
+
+  abi_snapshot_test:
+    name: ABI Snapshot Test PG${{ matrix.pg }}
+    runs-on: ubuntu-latest
+    needs: config
+
+    env:
+      PG_SRC_DIR: pgbuild
+      PG_INSTALL_DIR: postgresql
+      PG_EXTENSIONS: postgres_fdw test_decoding pageinspect pgstattuple
+
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [ 15, 16, 17 ]
+        include:
+          - pg: 15
+            abi_min: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
+          - pg: 16
+            abi_min: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
+          - pg: 17
+            abi_min: ${{ fromJson(needs.config.outputs.pg17_abi_min) }}
+
+    steps:
+
+    - name: Install Linux Dependencies
+      run: |
+        # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
+        # If needed, install them before opening the core dump.
+        sudo apt-get update
+        sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
+          libtest-most-perl pkgconf icu-devtools clang-14 llvm-14 llvm-14-dev llvm-14-tools cmake
+
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v4
+
+    - name: Download Postgres ${{ matrix.pg }}
+      run: |
+        wget -q -O postgresql.tar.bz2 \
+          https://ftp.postgresql.org/pub/source/v${{ matrix.abi_min }}/postgresql-${{ matrix.abi_min }}.tar.bz2
+        mkdir -p ~/$PG_SRC_DIR
+        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        cd ~/$PG_SRC_DIR
+        ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
+          --without-readline --without-zlib --without-libxml --without-llvm
+        make -j $(nproc)
+        for ext in $PG_EXTENSIONS; do
+          make -j $(nproc) -C contrib/${ext}
+        done
+
+    - name: Install postgresql ${{ matrix.pg }}
+      run: |
+        cd ~/$PG_SRC_DIR
+        make install
+        for ext in $PG_EXTENSIONS; do
+          make -C contrib/${ext} install
+        done
+        echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
+
+    - name: Build TimescaleDB
+      run: |
+        ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
+          -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
+          -DWARNINGS_AS_ERRORS=OFF -DREQUIRE_ALL_TESTS=ON \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
+        make -j $(nproc) -C build
+        make -C build install
+        mkdir -p build/install_ext build/install_lib
+        cp `pg_config --sharedir`/extension/timescaledb*.{control,sql} build/install_ext
+        cp `pg_config --pkglibdir`/timescaledb*.so build/install_lib
+
+    - name: Download Postgres ${{ matrix.pg }}-snapshot
+      run: |
+        wget -q -O postgresql.tar.bz2 \
+          https://ftp.postgresql.org/pub/snapshot/${{ matrix.pg }}/postgresql-${{ matrix.pg }}-snapshot.tar.bz2
+        mkdir -p ~/$PG_SRC_DIR-snapshot
+        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR-snapshot --strip-components 1
+        cd ~/$PG_SRC_DIR-snapshot
+        ./configure --prefix=$HOME/$PG_INSTALL_DIR-snapshot --with-openssl \
+          --without-readline --without-zlib --without-libxml --without-llvm
+        make -j $(nproc)
+        for ext in $PG_EXTENSIONS; do
+          make -j $(nproc) -C contrib/${ext}
+        done
+
+    - name: Install PostgreSQL ${{ matrix.pg }}-snapshot
+      run: |
+        cd ~/$PG_SRC_DIR-snapshot
+        make install
+        for ext in $PG_EXTENSIONS; do
+          make -C contrib/${ext} install
+        done
+        echo "$HOME/$PG_INSTALL_DIR-snapshot/bin" >> "${GITHUB_PATH}"
+
+    - name: Copy extension files to postgresql ${{ matrix.pg }}-snapshot
+      run: |
+        BUILD_DIR=build_snapshot ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
+          -DPG_SOURCE_DIR=~/$PG_SRC_DIR-snapshot -DPG_PATH=~/$PG_INSTALL_DIR-snapshot \
+          -DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
+        cp build/install_ext/* `pg_config --sharedir`/extension/
+        cp build/install_lib/* `pg_config --pkglibdir`
+
+    - name: make regresscheck
+      id: regresscheck
+      run: |
+          set -o pipefail
+          make -k -C build_snapshot installcheck IGNORES=bgw_launcher | tee installcheck.log
+
+    - name: Show regression diffs
+      if: always()
+      id: collectlogs
+      run: |
+        find . -name regression.diffs -exec cat {} + > regression.log
+
+        if [[ "${{ runner.os }}" == "Linux" ]] ; then
+          # wait in case there are in-progress coredumps
+          sleep 10
+          if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+          # print OOM killer information
+          sudo journalctl --system -q --facility=kern --grep "Killed process" || true
+        elif [[ "${{ runner.os }}" == "macOS" ]] ; then
+           if [ $(find /cores -type f | wc -l) -gt 0 ]; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
+        fi
+        if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
+        cat regression.log
+
+    - name: Save regression diffs
+      if: always() && steps.collectlogs.outputs.regression_diff == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Regression diff Snapshot ABI Breakage PG${{ matrix.pg }}
+        path: regression.log
+
+    - name: Save postmaster.log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: PostgreSQL log Snapshot ABI Breakage PG${{ matrix.pg }}
+        path: postmaster.log

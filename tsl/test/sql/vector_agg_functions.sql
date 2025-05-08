@@ -3,6 +3,10 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- Uncomment to run this test with hypercore TAM
+--set timescaledb.default_hypercore_use_access_method=true;
+
 -- helper function: float -> pseudorandom float [-0.5..0.5]
 CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
     SELECT hashfloat8(x::float8) / pow(2, 32)
@@ -66,6 +70,17 @@ select *, ss::text as x from (
     from source where s != 1
 ) t
 ;
+
+-- print some reference results before compression
+select ss, count(*) from aggfns group by ss having (ss=11 or ss is null) order by count(*), ss limit 10;
+select ss, min(cdate) from aggfns group by ss having (ss is null) order by min(cdate), ss limit 10;
+select ss, avg(cfloat4) from aggfns group by ss having (ss is null) order by avg(cfloat4), ss limit 10;
+select ss, max(cfloat4) from aggfns group by ss having (ss=11 or ss is null) order by max(cfloat4), ss limit 10;
+select ss, min(cfloat4) from aggfns group by ss having (ss=11 or ss is null) order by min(cfloat4), ss limit 10;
+select ss, stddev(cfloat4) from aggfns group by ss having (ss is null) order by stddev(cfloat4), ss limit 10;
+select ss, avg(cfloat8) from aggfns group by ss having (ss is null or ss=11) order by avg(cfloat8), ss limit 10;
+select ss, max(cfloat8) from aggfns group by ss having (ss is null or ss=11) order by max(cfloat8), ss limit 10;
+
 select count(compress_chunk(x)) from show_chunks('aggfns') x;
 vacuum freeze analyze aggfns;
 
@@ -96,9 +111,16 @@ limit 1
 \gset
 
 set timescaledb.debug_require_vector_agg = :'guc_value';
+
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
--- set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+--set timescaledb.enable_chunkwise_aggregation to off; set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
+
+set max_parallel_workers_per_gather = 0;
+-- Disable sorting to force vectorized agg plans for min and max,
+-- which otherwise can produce a non-vectorized init-plan that does a
+-- sort with limit 1.
+set enable_sort = false;
 
 select
     format('%sselect %s%s(%s) from aggfns%s%s%s;',
@@ -142,7 +164,8 @@ from
         'cint2 is null']) with ordinality as condition(condition, n),
     unnest(array[
         null,
-        's']) with ordinality as grouping(grouping, n)
+        's',
+        'ss']) with ordinality as grouping(grouping, n)
 where
     true
     and (explain is null /* or condition is null and grouping = 's' */)
@@ -156,6 +179,11 @@ order by explain, condition.n, variable, function, grouping.n
 \gexec
 
 
+-- Test multiple aggregate functions as well.
+select count(*), count(cint2), min(cfloat4), cint2 from aggfns group by cint2
+order by count(*) desc, cint2 limit 10
+;
+
 -- Test edge cases for various batch sizes and the filter matching around batch
 -- end.
 select count(*) from edges;
@@ -164,3 +192,9 @@ select s, count(*) from edges group by 1 order by 1;
 select s, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
 select s, count(*), min(f1) from edges where f1 = 64 group by 1 order by 1;
 select s, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
+
+select ss, count(*), min(f1) from edges where f1 = 63 group by 1 order by 1;
+select ss, count(*), min(f1) from edges where f1 = 64 group by 1 order by 1;
+select ss, count(*), min(f1) from edges where f1 = 65 group by 1 order by 1;
+
+reset max_parallel_workers_per_gather;

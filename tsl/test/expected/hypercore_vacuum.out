@@ -391,10 +391,6 @@ NOTICE:  adding not-null constraint to column "time"
 alter table hystable set access method hypercore, set (
       timescaledb.compress_orderby = 'time'
 );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "hystable" is set to ""
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "hystable" is set to ""
 -- vacuum on empty table
 vacuum (index_cleanup on) hystable;
 insert into hystable select * from regtable;
@@ -414,12 +410,15 @@ inner join pg_am am on (cl.relam = am.oid);
 select indexrelid::regclass
 from pg_index i inner join
 compressed_rels crels on (i.indrelid = crels.compressed_relid);
-                               indexrelid                               
-------------------------------------------------------------------------
+                                    indexrelid                                     
+-----------------------------------------------------------------------------------
  _timescaledb_internal.compress_hyper_5_13_chunk_ts_hypercore_proxy_idx
+ _timescaledb_internal.compress_hyper_5_13_chunk__ts_meta_min_1__ts_meta_max_1_idx
  _timescaledb_internal.compress_hyper_5_14_chunk_ts_hypercore_proxy_idx
+ _timescaledb_internal.compress_hyper_5_14_chunk__ts_meta_min_1__ts_meta_max_1_idx
  _timescaledb_internal.compress_hyper_5_15_chunk_ts_hypercore_proxy_idx
-(3 rows)
+ _timescaledb_internal.compress_hyper_5_15_chunk__ts_meta_min_1__ts_meta_max_1_idx
+(6 rows)
 
 -- delete some data to generate garbage
 delete from hystable where temp > 20;

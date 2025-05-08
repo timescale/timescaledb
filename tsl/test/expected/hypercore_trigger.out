@@ -14,6 +14,23 @@
 -- emitted plan. This is intended to be used when the structure of the
 -- plan is important, but not the specific chunks scanned nor the
 -- number of heap fetches, rows, loops, etc.
+create function anonymize(ln text) returns text language plpgsql as
+$$
+begin
+    ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+    ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+    ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+    ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+
+    if trim(both from ln) like 'Array: %' then
+       ln := regexp_replace(ln, 'hits=\d+', 'hits=N');
+       ln := regexp_replace(ln, 'misses=\d+', 'misses=N');
+       ln := regexp_replace(ln, 'count=\d+', 'count=N');
+       ln := regexp_replace(ln, 'calls=\d+', 'calls=N');
+    end if;
+    return ln;
+end
+$$;
 create function explain_analyze_anonymize(text) returns setof text
 language plpgsql as
 $$
@@ -23,17 +40,13 @@ begin
     for ln in
         execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
     loop
-        if trim(both from ln) like 'Group Key:%' then
+        -- Group keys are shown for plans in PG15 but not others, so
+        -- we remove these lines to avoid having to have
+        -- version-sensible tests.
+	if trim(both from ln) like 'Group Key:%' then
 	   continue;
 	end if;
-        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
-        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
-        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
-        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
-        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
-        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
-        return next ln;
+        return next anonymize(ln);
     end loop;
 end;
 $$;
@@ -46,14 +59,7 @@ begin
     for ln in
         execute format('explain (costs off, summary off, timing off) %s', $1)
     loop
-        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
-        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
-        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
-        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
-        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
-        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
-        return next ln;
+        return next anonymize(ln);
     end loop;
 end;
 $$;
@@ -105,6 +111,9 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
  order by chunk2 asc
  limit 1 offset 1 \gset
+-- Set the hypercore access method on the hypertable for transition
+-- tables to work properly.
+alter table :hypertable set access method hypercore;
 create table saved_rows (like :chunk1, new_row bool not null, kind text);
 create table count_stmt (inserts int, updates int, deletes int);
 create function save_row() returns trigger as $$
@@ -365,7 +374,7 @@ create trigger save_insert_transition_table_trg
 insert into readings(created_at, location_id, device_id, owner_id, temp, humidity)
 select created_at, location_id, device_id, owner_id, temp, humidity from sample
 order by created_at limit 2;
-select * from saved_rows;
+select * from saved_rows order by metric_id;
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
 -----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
      11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | t       | INSERT
@@ -373,19 +382,60 @@ select * from saved_rows;
 (2 rows)
 
 truncate saved_rows;
+-- Compress the data again to make sure that it is fully compressed.
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_13_chunk
+ _timescaledb_internal._hyper_1_15_chunk
+ _timescaledb_internal._hyper_1_17_chunk
+ _timescaledb_internal._hyper_1_19_chunk
+(10 rows)
+
 copy readings(created_at, location_id, device_id, owner_id, temp, humidity) from stdin with (format csv);
-select * from saved_rows;
+select * from saved_rows order by metric_id;
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
 -----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
      11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | t       | INSERT
 (1 row)
 
 truncate saved_rows;
+-- Compress the data again to make sure that it is fully compressed.
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_6_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_13_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_15_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_17_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_19_chunk" is already converted to columnstore
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_13_chunk
+ _timescaledb_internal._hyper_1_15_chunk
+ _timescaledb_internal._hyper_1_17_chunk
+ _timescaledb_internal._hyper_1_19_chunk
+(10 rows)
+
 create trigger save_update_transition_table_trg
        after update on readings
        referencing new table as new_table old table as old_table
        for each statement execute function save_transition_table();
-select * from readings where location_id = 999;
+select * from readings where location_id = 999 order by metric_id;
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
 -----------+------------------------------+-------------+----------+-----------+------+----------
      11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14
@@ -394,23 +444,48 @@ select * from readings where location_id = 999;
 (3 rows)
 
 update readings set humidity = 99.99 where location_id = 999;
-select * from saved_rows;
+select * from saved_rows order by metric_id;
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
 -----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
      11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99 | t       | UPDATE
-     11534 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |    99.99 | t       | UPDATE
-     11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99 | t       | UPDATE
      11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | f       | UPDATE
+     11534 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |    99.99 | t       | UPDATE
      11534 | Wed Jun 01 00:02:23 2022 PDT |         999 |      112 |       666 | 3.14 |     3.14 | f       | UPDATE
+     11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99 | t       | UPDATE
      11535 | Wed Jun 01 00:01:35 2022 PDT |         999 |      111 |       666 | 3.14 |     3.14 | f       | UPDATE
 (6 rows)
 
 truncate saved_rows;
+-- Compress the data again to make sure that it is fully compressed.
+select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_6_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_13_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_15_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_17_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_19_chunk" is already converted to columnstore
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_13_chunk
+ _timescaledb_internal._hyper_1_15_chunk
+ _timescaledb_internal._hyper_1_17_chunk
+ _timescaledb_internal._hyper_1_19_chunk
+(10 rows)
+
 create trigger save_delete_transition_table_trg
        after delete on readings
        referencing old table as old_table
        for each statement execute function save_transition_table();
-select * from readings where location_id = 999;
+select * from readings where location_id = 999 order by metric_id;
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
 -----------+------------------------------+-------------+----------+-----------+------+----------
      11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99
@@ -419,7 +494,7 @@ select * from readings where location_id = 999;
 (3 rows)
 
 delete from readings where location_id = 999;
-select * from saved_rows;
+select * from saved_rows order by metric_id;
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity | new_row |  kind  
 -----------+------------------------------+-------------+----------+-----------+------+----------+---------+--------
      11533 | Wed Jun 01 00:01:23 2022 PDT |         999 |      111 |       666 | 3.14 |    99.99 | f       | DELETE

@@ -1,6 +1,9 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+set role :ROLE_1; -- Run test with role_1 because it has CREATEROLE
+                  -- privileges that is needed further down
 \ir include/hypercore_helpers.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -9,6 +12,23 @@
 -- emitted plan. This is intended to be used when the structure of the
 -- plan is important, but not the specific chunks scanned nor the
 -- number of heap fetches, rows, loops, etc.
+create function anonymize(ln text) returns text language plpgsql as
+$$
+begin
+    ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+    ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+    ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+    ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+
+    if trim(both from ln) like 'Array: %' then
+       ln := regexp_replace(ln, 'hits=\d+', 'hits=N');
+       ln := regexp_replace(ln, 'misses=\d+', 'misses=N');
+       ln := regexp_replace(ln, 'count=\d+', 'count=N');
+       ln := regexp_replace(ln, 'calls=\d+', 'calls=N');
+    end if;
+    return ln;
+end
+$$;
 create function explain_analyze_anonymize(text) returns setof text
 language plpgsql as
 $$
@@ -18,17 +38,13 @@ begin
     for ln in
         execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
     loop
-        if trim(both from ln) like 'Group Key:%' then
+        -- Group keys are shown for plans in PG15 but not others, so
+        -- we remove these lines to avoid having to have
+        -- version-sensible tests.
+	if trim(both from ln) like 'Group Key:%' then
 	   continue;
 	end if;
-        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
-        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
-        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
-        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
-        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
-        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
-        return next ln;
+        return next anonymize(ln);
     end loop;
 end;
 $$;
@@ -41,14 +57,7 @@ begin
     for ln in
         execute format('explain (costs off, summary off, timing off) %s', $1)
     loop
-        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
-        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
-        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
-        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
-        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
-        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
-        return next ln;
+        return next anonymize(ln);
     end loop;
 end;
 $$;
@@ -182,15 +191,15 @@ where relparent='test2'::regclass;
 
 -- Show compression settings for hypercore across catalog and views
 select * from _timescaledb_catalog.compression_settings;
-                      relid                      |   segmentby   |        orderby         | orderby_desc | orderby_nullsfirst 
--------------------------------------------------+---------------+------------------------+--------------+--------------------
- test2                                           | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_2_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_4_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_6_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_8_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_10_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_12_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+                  relid                  |                 compress_relid                  |   segmentby   |        orderby         | orderby_desc | orderby_nullsfirst 
+-----------------------------------------+-------------------------------------------------+---------------+------------------------+--------------+--------------------
+ test2                                   |                                                 | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_1_chunk  | _timescaledb_internal.compress_hyper_3_2_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_3_chunk  | _timescaledb_internal.compress_hyper_3_4_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_5_chunk  | _timescaledb_internal.compress_hyper_3_6_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_7_chunk  | _timescaledb_internal.compress_hyper_3_8_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_9_chunk  | _timescaledb_internal.compress_hyper_3_10_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_11_chunk | _timescaledb_internal.compress_hyper_3_12_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
 (7 rows)
 
 select * from timescaledb_information.compression_settings;
@@ -357,7 +366,7 @@ select count(ch) from show_chunks('test4') ch;
 
 select ch as chunk from show_chunks('test4') ch limit 1 \gset
 alter table test4 set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test4" is set to ""
 NOTICE:  default order by for hypertable "test4" is set to ""time" DESC"
 \x on
@@ -475,6 +484,17 @@ from compressed_rel_size_stats;
 ----------------
               0
 (1 row)
+
+-- Compression settings should be removed except for parent
+-- hypertables
+select cs.relid, cl.relname
+from _timescaledb_catalog.compression_settings cs
+left join pg_class cl on (cs.relid = cl.oid);
+ relid | relname 
+-------+---------
+ test2 | test2
+ test3 | test3
+(2 rows)
 
 -- Create hypercores again and check that compression size stats are
 -- updated showing compressed data
@@ -745,12 +765,12 @@ commit;
 -- compressed.
 select compress_chunk(ch, hypercore_use_access_method => true, if_not_compressed => false)
 from show_chunks('test2') ch;
-ERROR:  chunk "_hyper_1_1_chunk" is already compressed
+ERROR:  chunk "_hyper_1_1_chunk" is already converted to columnstore
 -- Compressing from hypercore and not using access method should lead
 -- to an error since it is not supported.
 select compress_chunk(ch, hypercore_use_access_method => false)
 from show_chunks('test2') ch;
-ERROR:  cannot compress "_hyper_1_1_chunk" without using Hypercore access method
+ERROR:  cannot converting to columnstore "_hyper_1_1_chunk" without using Hypercore access method
 \set ON_ERROR_STOP 1
 -- Compressing a hypercore should by default lead to
 -- recompression. First check that :chunk is a hypercore.
@@ -866,31 +886,31 @@ order by rel;
 -- if_not_compressed is false. The commands below are all equivalent
 -- in this case.
 select compress_chunk(:'chunk3', hypercore_use_access_method => false, if_not_compressed=>false);
-ERROR:  chunk "_hyper_1_5_chunk" is already compressed
+ERROR:  chunk "_hyper_1_5_chunk" is already converted to columnstore
 select compress_chunk(:'chunk3', hypercore_use_access_method => NULL, if_not_compressed=>false);
-ERROR:  chunk "_hyper_1_5_chunk" is already compressed
+ERROR:  chunk "_hyper_1_5_chunk" is already converted to columnstore
 select compress_chunk(:'chunk3', if_not_compressed=>false);
-ERROR:  chunk "_hyper_1_5_chunk" is already compressed
+ERROR:  chunk "_hyper_1_5_chunk" is already converted to columnstore
 \set ON_ERROR_STOP 1
 -- For a heap-compressed chunk, these should all be equivalent and
 -- should not do anything when there is nothing to recompress. A
 -- notice should be raised instead of an error.
 select compress_chunk(:'chunk3', hypercore_use_access_method => false);
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_5_chunk
 (1 row)
 
 select compress_chunk(:'chunk3', hypercore_use_access_method => NULL);
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_5_chunk
 (1 row)
 
 select compress_chunk(:'chunk3');
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_5_chunk
@@ -1041,7 +1061,7 @@ select created from create_hypertable('test5', 'time');
 insert into test5 values ('2022-06-01', 1, 1.0), ('2022-08-01', 1, 1.0);
 select ch as chunk from show_chunks('test5') ch limit 1 \gset
 alter table test5 set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test5" is set to ""
 NOTICE:  default order by for hypertable "test5" is set to ""time" DESC"
 select compress_chunk(:'chunk');
@@ -1057,3 +1077,124 @@ select * from amrels where relparent = 'test5'::regclass;
  _timescaledb_internal._hyper_10_47_chunk | heap      | test5
 (2 rows)
 
+-- Check that operations that rewrite the relation are blocked with
+-- invalid setting of transparent decompression GUC
+\set ON_ERROR_STOP 0
+select count(*) from :chunk;
+ count 
+-------
+     1
+(1 row)
+
+set timescaledb.enable_transparent_decompression='hypercore';
+select decompress_chunk(:'chunk');
+ERROR:  operation not compatible with current setting of timescaledb.enable_transparent_decompression
+alter table :chunk set access method heap;
+ERROR:  operation not compatible with current setting of timescaledb.enable_transparent_decompression
+vacuum full :chunk;
+ERROR:  operation not compatible with current setting of timescaledb.enable_transparent_decompression
+select count(*) from :chunk;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 1
+set timescaledb.enable_transparent_decompression=true;
+-- Test chunk creation with non-owner user
+CREATE TABLE conditions (	-- create a regular table
+    time        timestamptz not null,
+    location    text not null,
+    temperature double precision null
+);
+select create_hypertable('conditions', 'time');	-- turn it into a hypertable
+    create_hypertable     
+--------------------------
+ (12,public,conditions,t)
+(1 row)
+
+alter table conditions set (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'location,temperature',
+  timescaledb.compress_orderby = 'time'
+);
+-------------------------------------------------------------------------------
+-- Set hypercore access method on the hypertable
+-------------------------------------------------------------------------------
+alter table conditions set access method hypercore;
+-----------------------
+-- Create a new user
+-----------------------
+create role testuser;
+-- Switch to testuser and show that it can't insert into conditions
+set role testuser;
+\set ON_ERROR_STOP 0
+insert into conditions values ('2024-01-02', 'school', 99.5);
+ERROR:  permission denied for table conditions
+\set ON_ERROR_STOP 1
+--
+-- Now grant privileges to work on conditions
+--
+reset role;
+grant select,insert,update,delete on conditions to testuser;
+set role testuser;
+select current_user;
+ current_user 
+--------------
+ testuser
+(1 row)
+
+select * from show_chunks('conditions') ch
+join _timescaledb_catalog.compression_settings cs on (cs.relid = ch);
+ ch | relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+----+-------+----------------+-----------+---------+--------------+--------------------
+(0 rows)
+
+-- An insert should create a new hypercore chunk, including the compressed chunk
+insert into conditions values ('2024-01-02', 'school', 99.5);
+-- Show hypertable owner
+select relname, relowner::regrole
+from pg_class
+where relname = 'conditions';
+  relname   |  relowner   
+------------+-------------
+ conditions | test_role_1
+(1 row)
+
+-- Show that the new chunk has same owner as hypertable, although
+-- testuser did the insert.
+select chunk, am.amname, cs.compress_relid, cl.relowner::regrole as chunk_owner, ccl.relowner::regrole as compress_chunk_owner
+  from show_chunks('conditions') as chunk
+  join _timescaledb_catalog.compression_settings cs on (cs.relid = chunk)
+  join pg_class cl on (cl.oid = chunk)
+  join pg_class ccl on (ccl.oid = cs.compress_relid)
+  join pg_am am on (cl.relam = am.oid);
+                  chunk                   |  amname   |                  compress_relid                  | chunk_owner | compress_chunk_owner 
+------------------------------------------+-----------+--------------------------------------------------+-------------+----------------------
+ _timescaledb_internal._hyper_12_49_chunk | hypercore | _timescaledb_internal.compress_hyper_13_50_chunk | test_role_1 | test_role_1
+(1 row)
+
+-- Data is not compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from conditions;
+ is_compressed_tid |             time             | location | temperature 
+-------------------+------------------------------+----------+-------------
+ f                 | Tue Jan 02 00:00:00 2024 PST | school   |        99.5
+(1 row)
+
+select compress_chunk(ch) from show_chunks('conditions') ch;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_12_49_chunk
+(1 row)
+
+-- Now the data is compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from conditions;
+ is_compressed_tid |             time             | location | temperature 
+-------------------+------------------------------+----------+-------------
+ t                 | Tue Jan 02 00:00:00 2024 PST | school   |        99.5
+(1 row)
+
+reset role;
+-- Need to revoke privileges to drop user
+revoke all on conditions from testuser;
+drop role testuser;

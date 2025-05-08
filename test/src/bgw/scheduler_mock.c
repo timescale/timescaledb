@@ -17,6 +17,7 @@
 #include <storage/proc.h>
 #include <storage/shmem.h>
 #include <utils/builtins.h>
+#include <utils/errcodes.h>
 #include <utils/guc.h>
 #include <utils/jsonb.h>
 #include <utils/memutils.h>
@@ -232,12 +233,14 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 	BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
 	TestAssertTrue(BGWH_STARTED == status);
 	if (status != BGWH_STARTED)
-		elog(ERROR, "bgw not started");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));
 
 	status = WaitForBackgroundWorkerShutdown(worker_handle);
 	TestAssertTrue(BGWH_STOPPED == status);
 	if (status != BGWH_STOPPED)
-		elog(ERROR, "bgw not stopped");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not stopped")));
 
 	PG_RETURN_VOID();
 }
@@ -265,7 +268,8 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 	status = WaitForBackgroundWorkerStartup(current_handle, &pid);
 	TestAssertTrue(BGWH_STARTED == status);
 	if (status != BGWH_STARTED)
-		elog(ERROR, "bgw not started");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not started")));
 
 	PG_RETURN_VOID();
 }
@@ -278,7 +282,8 @@ ts_bgw_db_scheduler_test_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 		BgwHandleStatus status = WaitForBackgroundWorkerShutdown(current_handle);
 		TestAssertTrue(BGWH_STOPPED == status);
 		if (status != BGWH_STOPPED)
-			elog(ERROR, "bgw not stopped");
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE), errmsg("bgw not stopped")));
 	}
 	PG_RETURN_VOID();
 }
@@ -299,7 +304,7 @@ test_job_2_error()
 	StartTransactionCommand();
 	elog(WARNING, "Before error job 2");
 
-	elog(ERROR, "Error job 2");
+	ereport(ERROR, (errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION), errmsg("Error job 2")));
 
 	elog(WARNING, "After error job 2");
 

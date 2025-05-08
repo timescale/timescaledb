@@ -8,7 +8,84 @@
 -- create_hypertable()
 --
 CREATE TABLE test_table(time bigint NOT NULL, device int);
+-- EXPLAIN should work in read-only mode, when enabling in transaction.
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (COSTS OFF) SELECT * FROM test_table;
+       QUERY PLAN       
+------------------------
+ Seq Scan on test_table
+(1 row)
+
+ROLLBACK;
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
+                   QUERY PLAN                   
+------------------------------------------------
+ Seq Scan on test_table (actual rows=0 loops=1)
+(1 row)
+
+ROLLBACK;
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (COSTS OFF) INSERT INTO test_table VALUES (1, 1);
+      QUERY PLAN      
+----------------------
+ Insert on test_table
+   ->  Result
+(2 rows)
+
+ROLLBACK;
+-- This should give an error since we are using ANALYZE and a DML. The
+-- read-only is checked when executing the actual INSERT statement,
+-- not inside our code.
+\set ON_ERROR_STOP 0
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) INSERT INTO test_table VALUES (1, 1);
+ERROR:  cannot execute INSERT in a read-only transaction
+ROLLBACK;
+\set ON_ERROR_STOP 1
 SET default_transaction_read_only TO on;
+-- EXPLAIN should work in read-only mode, even when using the default.
+START TRANSACTION;
+EXPLAIN (COSTS OFF) SELECT * FROM test_table;
+       QUERY PLAN       
+------------------------
+ Seq Scan on test_table
+(1 row)
+
+ROLLBACK;
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
+                   QUERY PLAN                   
+------------------------------------------------
+ Seq Scan on test_table (actual rows=0 loops=1)
+(1 row)
+
+ROLLBACK;
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (COSTS OFF) INSERT INTO test_table VALUES (1, 1);
+      QUERY PLAN      
+----------------------
+ Insert on test_table
+   ->  Result
+(2 rows)
+
+ROLLBACK;
+-- This should give an error since we are using ANALYZE and a DML. The
+-- read-only is checked when executing the actual INSERT statement,
+-- not inside our code.
+\set ON_ERROR_STOP 0
+START TRANSACTION;
+SET transaction_read_only TO on;
+EXPLAIN (ANALYZE ON, COSTS OFF, TIMING OFF, SUMMARY OFF) INSERT INTO test_table VALUES (1, 1);
+ERROR:  cannot execute INSERT in a read-only transaction
+ROLLBACK;
+\set ON_ERROR_STOP 1
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('test_table', 'time');
 ERROR:  cannot execute create_hypertable() in a read-only transaction
@@ -199,7 +276,7 @@ select set_integer_now_func('test_table_int', 'dummy_now');
 (1 row)
 
 ALTER TABLE test_table_int SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_table_int" is set to ""
 NOTICE:  default order by for hypertable "test_table_int" is set to ""time" DESC"
 INSERT INTO test_table_int VALUES (0, 1), (10,10);
@@ -208,8 +285,8 @@ SELECT config as comp_job_config
 FROM _timescaledb_config.bgw_job WHERE id = :comp_job_id \gset
 SET default_transaction_read_only TO on;
 CALL _timescaledb_functions.policy_compression(:comp_job_id, :'comp_job_config');
-WARNING:  compressing chunk "_timescaledb_internal._hyper_4_2_chunk" failed when compression policy is executed
-ERROR:  compression policy failure
+WARNING:  converting chunk "_timescaledb_internal._hyper_4_2_chunk" to columnstore failed when columnstore policy is executed
+ERROR:  columnstore policy failure
 SET default_transaction_read_only TO off;
 --verify chunks are not compressed
 SELECT count(*) , count(*) FILTER ( WHERE is_compressed is true)

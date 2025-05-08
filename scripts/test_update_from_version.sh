@@ -6,10 +6,9 @@
 # - restored: restore from updated dump
 # - repair: install $FROM_VERSION, update to $TO_VERSION and run integrity tests
 
-set -e
-set -u
+set -xeu
 
-FROM_VERSION=${FROM_VERSION:-$(grep '^downgrade_to_version ' version.config | awk '{ print $3 }')}
+FROM_VERSION=${FROM_VERSION:-$(grep '^previous_version ' version.config | awk '{ print $3 }')}
 TO_VERSION=${TO_VERSION:-$(grep '^version ' version.config | awk '{ print $3 }')}
 
 TEST_REPAIR=${TEST_REPAIR:-false}
@@ -26,12 +25,12 @@ export PGHOST PGPORT PGDATABASE PGDATA
 
 run_sql() {
   local db=${2:-$PGDATABASE}
-  psql -X -q -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -c "${1}"
+  psql -X -q --echo-queries -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -c "${1}"
 }
 
 run_sql_file() {
   local db=${2:-$PGDATABASE}
-  psql -X -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -f "${1}"
+  psql -X -q --echo-queries -d "${db}" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -v WITH_ROLES=true -v WITH_SUPERUSER=true -v WITH_CHUNK=true -f "${1}"
 }
 
 check_version() {
@@ -58,7 +57,10 @@ mkdir -p "${OUTPUT_DIR}/data"
 UNIX_SOCKET_DIR=$(readlink -f "${OUTPUT_DIR}")
 
 initdb > "${OUTPUT_DIR}/initdb.log" 2>&1
-pg_ctl -l "${OUTPUT_DIR}/postgres.log" start -o "-c unix_socket_directories='${UNIX_SOCKET_DIR}' -c timezone=GMT -c client_min_messages=warning -c port=${PGPORT} -c max_prepared_transactions=100 -c shared_preload_libraries=timescaledb -c timescaledb.telemetry_level=off -c max_worker_processes=0"
+
+# Don't try to wrap the settings, pg_ctl can't handle newlines there.
+pg_ctl -l "${OUTPUT_DIR}/postgres.log" start -o "-c unix_socket_directories=${UNIX_SOCKET_DIR} -c timezone=GMT -c client_min_messages=warning -c port=${PGPORT} -c max_prepared_transactions=100 -c shared_preload_libraries=timescaledb -c timescaledb.telemetry_level=off -c max_worker_processes=0 -c log_statement=all"
+
 pg_isready -t 30 > /dev/null
 
 echo -e "\nUpdate test version ${TEST_VERSION} for ${FROM_VERSION} -> ${TO_VERSION}\n"

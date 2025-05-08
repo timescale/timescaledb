@@ -20,12 +20,12 @@ name: Regression Windows
       - 'LICENSE*'
       - NOTICE
       - 'bootstrap*'
+  workflow_dispatch:
 jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
-      pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
       pg17_latest: ${{ steps.config.outputs.pg17_latest }}
@@ -53,16 +53,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 14, 15, 16, 17 ]
+        pg: [ 15, 16, 17 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
-        ignores: ["chunk_adaptive metadata telemetry"]
-        tsl_ignores: ["compression_algos"]
-        tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
-          - pg: 14
-            pg_version: ${{ needs.config.outputs.pg14_latest }}
           - pg: 15
             pg_version: ${{ needs.config.outputs.pg15_latest }}
           - pg: 16
@@ -75,20 +70,40 @@ jobs:
       PGDATA: pgdata
       TABLESPACE1: D:\tablespace1\
       TABLESPACE2: D:\tablespace2\
+      IGNORES: >-
+        compress_bloom_sparse_debug
+        compression_algos
+        bgw_launcher
+        chunk_adaptive
+        metadata
+        telemetry
+      SKIPS: >-
+        bgw_db_scheduler
+        bgw_db_scheduler_fixed
+        hypercore_vectoragg
+        vector_agg_groupagg
+        vector_agg_grouping
+        vector_agg_text
+        vector_agg_uuid_segmentby
+        vectorized_aggregation
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3.1.1
+      uses: Vampire/setup-wsl@v3.1.4
       with:
-        additional-packages:
-          cmake
-          gawk
-          gcc
-          git
-          gnupg
-          make
-          postgresql-client
-          postgresql-common
-          tree
+        distribution: Debian
+
+    - name: Configure apt retries and timeout in WSL
+      shell: wsl-bash {0}
+      run: |
+        echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+
+    - name: Install additional packages in WSL
+      shell: wsl-bash {0}
+      run: |
+        apt-get update
+        apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
 
     - name: Configure git
       # Since we want to reuse the checkout in the WSL environment
@@ -182,22 +197,22 @@ jobs:
       shell: wsl-bash {0}
       run: |
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh || true
+        echo 'Acquire::Retries "10";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
+        echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
         apt-get install -y --force-yes postgresql-server-dev-${{ matrix.pg }}
 
     - name: Run tests
       shell: wsl-bash {0}
+      env:
+        WSLENV: "IGNORES:SKIPS"
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
         cmake -B build_wsl -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DTEST_PGPORT_LOCAL=${{ env.PGPORT }}
 
-        # isolationtester is only packaged with pg14+ so we would have to build our own postgres
-        # to get it for earlier versions so we skip it for < 14.
-        if [[ "${{ matrix.pg }}" -ge "14" ]]; then
-          make -C build_wsl isolationchecklocal | tee -a installcheck.log
-        fi
-
-        make -C build_wsl regresschecklocal IGNORES="${{ matrix.ignores }}" | tee -a installcheck.log
+        make -C build_wsl isolationchecklocal | tee -a installcheck.log
+        make -C build_wsl regresschecklocal IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
 
     - name: Setup postgres cluster for TSL tests
       run: |
@@ -213,19 +228,14 @@ jobs:
 
     - name: Run TSL tests
       shell: wsl-bash {0}
+      env:
+        WSLENV: "IGNORES:SKIPS"
       run: |
         export TEST_TABLESPACE1_PREFIX='${{ env.TABLESPACE1 }}'
         export TEST_TABLESPACE2_PREFIX='${{ env.TABLESPACE2 }}'
 
-        # isolationtester is only packaged with pg14+ so we would have to build our own postgres
-        # to get it for earlier versions so we skip it for < 14.
-        if [[ "${{ matrix.pg }}" -ge "14" ]]; then
-          make -C build_wsl isolationchecklocal-t | tee -a installcheck.log
-        fi
-
-        make -C build_wsl -k regresschecklocal-t \
-          IGNORES="${{ matrix.tsl_ignores }} ${{ matrix.tsl_ignores_version }}" \
-          SKIPS="${{ matrix.tsl_skips }} ${{ matrix.tsl_skips_version }}" | tee -a installcheck.log
+        make -C build_wsl isolationchecklocal-t | tee -a installcheck.log
+        make -C build_wsl -k regresschecklocal-t IGNORES="${IGNORES}" SKIPS="${SKIPS}" | tee -a installcheck.log
 
     - name: Show regression diffs
       id: collectlogs
@@ -254,6 +264,23 @@ jobs:
       with:
         name: PostgreSQL ${{ matrix.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: ${{ env.PGDATA }}\log\postmaster.log
+
+    - name: Upload CMake Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: CMake Logs ${{ matrix.pg }} ${{ matrix.os }} ${{ matrix.build_type }}
+        path: |
+            build_win/CMakeCache.txt
+            build_win/CMakeFiles/CMakeConfigureLog.yaml
+            build_win/CMakeFiles/CMakeError.log
+            build_win/CMakeFiles/CMakeOutput.log
+            build_win/compile_commands.json
+            build_wsl/CMakeCache.txt
+            build_wsl/CMakeFiles/CMakeConfigureLog.yaml
+            build_wsl/CMakeFiles/CMakeError.log
+            build_wsl/CMakeFiles/CMakeOutput.log
+            build_wsl/compile_commands.json
 
     - name: Upload test results to the database
       if: always()

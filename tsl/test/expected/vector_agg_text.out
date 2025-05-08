@@ -1,0 +1,370 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- helper function: float -> pseudorandom float [-0.5..0.5]
+CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
+    SELECT hashfloat8(x::float8) / pow(2, 32)
+$$ LANGUAGE SQL;
+\set CHUNKS 2::int
+\set CHUNK_ROWS 100000::int
+\set GROUPING_CARDINALITY 10::int
+create table agggroup(t int, s int,
+    cint2 int2, cint4 int4, cint8 int8);
+select create_hypertable('agggroup', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
+NOTICE:  adding not-null constraint to column "s"
+   create_hypertable   
+-----------------------
+ (1,public,agggroup,t)
+(1 row)
+
+create view source as
+select s * 10000 + t as t,
+    s,
+    case when t % 1051 = 0 then null
+        else (mix(s + t * 1019) * 32767)::int2 end as cint2,
+    (mix(s + t * 1021) * 32767)::int4 as cint4,
+    (mix(s + t * 1031) * 32767)::int8 as cint8
+from
+    generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
+    generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
+;
+insert into agggroup select * from source where s = 1;
+alter table agggroup set (timescaledb.compress, timescaledb.compress_orderby = 't',
+    timescaledb.compress_segmentby = 's');
+select count(compress_chunk(x)) from show_chunks('agggroup') x;
+ count 
+-------
+     1
+(1 row)
+
+alter table agggroup add column ss int default 11;
+alter table agggroup add column x text default '11';
+insert into agggroup
+select *, ss::text as x from (
+    select *,
+        case
+            -- null in entire batch
+            when s = 2 then null
+            -- null for some rows
+            when s = 3 and t % 1051 = 0 then null
+            -- for some rows same as default
+            when s = 4 and t % 1057 = 0 then 11
+            -- not null for entire batch
+            else s
+        end as ss
+    from source where s != 1
+) t
+;
+-- print a few reference values before compression
+select x, count(*) from agggroup group by x having (x='11' or x is null) order by count(*), x limit 10;
+ x  | count 
+----+-------
+ 11 | 20019
+    | 20019
+(2 rows)
+
+select x, count(cint2) from agggroup group by x having (x='11' or x is null) order by count(cint2), x limit 10;
+ x  | count 
+----+-------
+ 11 | 20000
+    | 20000
+(2 rows)
+
+select x, min(cint2) from agggroup group by x having (x='11' or x is null) order by min(cint2), x limit 10;
+ x  |  min   
+----+--------
+    | -16382
+ 11 | -16378
+(2 rows)
+
+select x, count(*) from agggroup where cint2 > 0 group by x having (x='11' or x is null) order by count(*), x limit 10;
+ x  | count 
+----+-------
+    |  9877
+ 11 | 10105
+(2 rows)
+
+select x, count(cint2) from agggroup where cint2 > 0 group by x having (x='11' or x is null) order by count(cint2), x limit 10;
+ x  | count 
+----+-------
+    |  9877
+ 11 | 10105
+(2 rows)
+
+select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2), x limit 10;
+ x  | min 
+----+-----
+ 11 |   1
+ 3  |   1
+ 5  |   1
+ 7  |   1
+ 8  |   1
+    |   1
+ 9  |   2
+ 6  |   3
+ 0  |   4
+ 4  |   4
+(10 rows)
+
+select x, count(*) from agggroup where cint2 is null group by x having (x='11') order by count(*), x limit 10;
+ x  | count 
+----+-------
+ 11 |    19
+(1 row)
+
+select x, count(cint2) from agggroup where cint2 is null group by x having (x is null) order by count(cint2), x limit 10;
+ x | count 
+---+-------
+   |     0
+(1 row)
+
+select x, count(*) from agggroup where cint2 is null and x is null group by x order by count(*), x limit 10;
+ x | count 
+---+-------
+   |    19
+(1 row)
+
+select x, count(cint2) from agggroup where cint2 is null and x is null group by x order by count(cint2), x limit 10;
+ x | count 
+---+-------
+   |     0
+(1 row)
+
+select x, min(cint2) from agggroup where cint2 is null and x is null group by x order by min(cint2), x limit 10;
+ x | min 
+---+-----
+   |    
+(1 row)
+
+select count(compress_chunk(x)) from show_chunks('agggroup') x;
+ count 
+-------
+     2
+(1 row)
+
+vacuum freeze analyze agggroup;
+-- Long strings
+create table long(t int, a text, b text, c text, d text);
+select create_hypertable('long', 't');
+NOTICE:  adding not-null constraint to column "t"
+ create_hypertable 
+-------------------
+ (3,public,long,t)
+(1 row)
+
+insert into long select n, x, x, x, x from (
+    select n, repeat('1', 100 * 4 + n) x
+    from generate_series(1, 4) n) t
+;
+insert into long values (-1, 'a', 'b', 'c', 'd');
+alter table long set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "long" is set to ""
+NOTICE:  default order by for hypertable "long" is set to "t DESC"
+select count(compress_chunk(x)) from show_chunks('long') x;
+ count 
+-------
+     2
+(1 row)
+
+set timescaledb.debug_require_vector_agg = 'require';
+---- Uncomment to generate reference. Note that there are minor discrepancies
+---- on float4 due to different numeric stability in our and PG implementations.
+--set timescaledb.enable_chunkwise_aggregation to off; set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';
+select
+    format('%sselect %s%s(%s) from agggroup%s%s%s;',
+            explain,
+            grouping || ', ',
+            function, variable,
+            ' where ' || condition,
+            ' group by ' || grouping,
+            format(' order by %s(%s), ', function, variable) || grouping || ' limit 10',
+            function, variable)
+from
+    unnest(array[
+        'explain (costs off) ',
+        null]) explain,
+    unnest(array[
+        'cint2',
+        '*']) variable,
+    unnest(array[
+        'min',
+        'count']) function,
+    unnest(array[
+        null,
+        'cint2 > 0',
+        'cint2 is null',
+        'cint2 is null and x is null']) with ordinality as condition(condition, n),
+    unnest(array['x']) with ordinality as grouping(grouping, n)
+where
+    true
+    and (explain is null /* or condition is null and grouping = 's' */)
+    and (variable != '*' or function = 'count')
+order by explain, condition.n, variable, function, grouping.n
+\gexec
+select x, count(*) from agggroup group by x order by count(*), x limit 10;
+ x  | count 
+----+-------
+ 3  | 19981
+ 4  | 19981
+ 0  | 20000
+ 5  | 20000
+ 6  | 20000
+ 7  | 20000
+ 8  | 20000
+ 9  | 20000
+ 11 | 20019
+    | 20019
+(10 rows)
+
+select x, count(cint2) from agggroup group by x order by count(cint2), x limit 10;
+ x  | count 
+----+-------
+ 3  | 19962
+ 4  | 19962
+ 0  | 19981
+ 5  | 19981
+ 6  | 19981
+ 7  | 19981
+ 8  | 19981
+ 9  | 19981
+ 11 | 20000
+    | 20000
+(10 rows)
+
+select x, min(cint2) from agggroup group by x order by min(cint2), x limit 10;
+ x  |  min   
+----+--------
+ 0  | -16383
+ 4  | -16383
+ 5  | -16383
+ 6  | -16383
+ 7  | -16382
+ 8  | -16382
+    | -16382
+ 3  | -16381
+ 11 | -16378
+ 9  | -16375
+(10 rows)
+
+select x, count(*) from agggroup where cint2 > 0 group by x order by count(*), x limit 10;
+ x  | count 
+----+-------
+    |  9877
+ 3  |  9884
+ 6  |  9890
+ 4  |  9897
+ 8  |  9898
+ 7  |  9973
+ 0  | 10012
+ 9  | 10018
+ 11 | 10105
+ 5  | 10110
+(10 rows)
+
+select x, count(cint2) from agggroup where cint2 > 0 group by x order by count(cint2), x limit 10;
+ x  | count 
+----+-------
+    |  9877
+ 3  |  9884
+ 6  |  9890
+ 4  |  9897
+ 8  |  9898
+ 7  |  9973
+ 0  | 10012
+ 9  | 10018
+ 11 | 10105
+ 5  | 10110
+(10 rows)
+
+select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2), x limit 10;
+ x  | min 
+----+-----
+ 11 |   1
+ 3  |   1
+ 5  |   1
+ 7  |   1
+ 8  |   1
+    |   1
+ 9  |   2
+ 6  |   3
+ 0  |   4
+ 4  |   4
+(10 rows)
+
+select x, count(*) from agggroup where cint2 is null group by x order by count(*), x limit 10;
+ x  | count 
+----+-------
+ 0  |    19
+ 11 |    19
+ 3  |    19
+ 4  |    19
+ 5  |    19
+ 6  |    19
+ 7  |    19
+ 8  |    19
+ 9  |    19
+    |    19
+(10 rows)
+
+select x, count(cint2) from agggroup where cint2 is null group by x order by count(cint2), x limit 10;
+ x  | count 
+----+-------
+ 0  |     0
+ 11 |     0
+ 3  |     0
+ 4  |     0
+ 5  |     0
+ 6  |     0
+ 7  |     0
+ 8  |     0
+ 9  |     0
+    |     0
+(10 rows)
+
+select x, min(cint2) from agggroup where cint2 is null group by x order by min(cint2), x limit 10;
+ x  | min 
+----+-----
+ 0  |    
+ 11 |    
+ 3  |    
+ 4  |    
+ 5  |    
+ 6  |    
+ 7  |    
+ 8  |    
+ 9  |    
+    |    
+(10 rows)
+
+select x, count(*) from agggroup where cint2 is null and x is null group by x order by count(*), x limit 10;
+ x | count 
+---+-------
+   |    19
+(1 row)
+
+select x, count(cint2) from agggroup where cint2 is null and x is null group by x order by count(cint2), x limit 10;
+ x | count 
+---+-------
+   |     0
+(1 row)
+
+select x, min(cint2) from agggroup where cint2 is null and x is null group by x order by min(cint2), x limit 10;
+ x | min 
+---+-----
+   |    
+(1 row)
+
+-- Test grouping by long strings
+select count(*) from long group by a order by 1 limit 10;
+ count 
+-------
+     1
+     1
+     1
+     1
+     1
+(5 rows)
+
+reset timescaledb.debug_require_vector_agg;

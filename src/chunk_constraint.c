@@ -272,9 +272,9 @@ ts_chunk_constraints_add_from_tuple(ChunkConstraints *ccs, const TupleInfo *ti)
 /*
  * Create a dimensional CHECK constraint for a partitioning dimension.
  */
-static Constraint *
-create_dimension_check_constraint(const Dimension *dim, const DimensionSlice *slice,
-								  const char *name)
+Constraint *
+ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlice *slice,
+									   const char *name)
 {
 	Constraint *constr = NULL;
 	bool isvarlena;
@@ -489,7 +489,8 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 
 			dim = ts_hyperspace_get_dimension_by_id(ht->space, slice->fd.dimension_id);
 			Assert(dim);
-			constr = create_dimension_check_constraint(dim, slice, NameStr(cc->fd.constraint_name));
+			constr =
+				ts_chunk_constraint_dimensional_create(dim, slice, NameStr(cc->fd.constraint_name));
 
 			/* In some cases, a CHECK constraint is not needed. For instance,
 			 * if the range is -INF to +INF. */
@@ -610,12 +611,6 @@ ts_chunk_constraint_scan_by_chunk_id(int32 chunk_id, Size num_constraints_hint, 
 
 	return constraints;
 }
-
-typedef struct ChunkConstraintScanData
-{
-	ChunkScanCtx *scanctx;
-	DimensionSlice *slice;
-} ChunkConstraintScanData;
 
 /*
  * Scan for all chunk constraints that match the given slice ID. The chunk

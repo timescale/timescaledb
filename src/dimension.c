@@ -421,17 +421,13 @@ ts_dimension_get_open_slice_ordinal(const Dimension *dim, const DimensionSlice *
 
 	if (i >= 0)
 		return i;
-	else
-	{
-		/*
-		 * Returns the number of slices if the slice not found, i.e., i = -1.
-		 * Dimension slice might not exist if a chunk table is created without
-		 * modifying metadata. It happens only during copy/move chunk for distributed
-		 * hypertable, thus this code, which is used when no space dimension exists,
-		 * is unlikely to be used.
-		 */
-		return vec->num_slices;
-	}
+
+	/*
+	 * Returns the number of slices if the slice not found, i.e., i = -1.
+	 * Dimension slice might not exist if a chunk table is created without
+	 * modifying metadata.
+	 */
+	return vec->num_slices;
 }
 
 /*
@@ -999,13 +995,6 @@ ts_hyperspace_calculate_point(const Hyperspace *hs, TupleTableSlot *slot)
 	return p;
 }
 
-static inline int64
-interval_to_usec(Interval *interval)
-{
-	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
-		   interval->time;
-}
-
 #define INT_TYPE_MAX(type)                                                                         \
 	(int64)(((type) == INT2OID) ? PG_INT16_MAX :                                                   \
 								  (((type) == INT4OID) ? PG_INT32_MAX : PG_INT64_MAX))
@@ -1256,7 +1245,7 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	 */
 	num_slices = num_slices_arg & 0xffff;
 	ts_dimension_update(ht, colname, DIMENSION_TYPE_CLOSED, NULL, NULL, &num_slices, NULL);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();
 }
@@ -1300,7 +1289,7 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 
 	intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	ts_dimension_update(ht, colname, DIMENSION_TYPE_OPEN, &interval, &intervaltype, NULL, NULL);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();
 }
@@ -1655,7 +1644,7 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 	}
 
 	retval = dimension_create_datum(fcinfo, info, is_generic);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_DATUM(retval);
 }

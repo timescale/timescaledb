@@ -85,13 +85,18 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			{
 				tsl_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
 			}
+
+			if (root->numOrderedAggs && !IS_DUMMY_REL(input_rel) && output_rel != NULL)
+			{
+				tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
+			}
 			break;
 		case UPPERREL_WINDOW:
 			if (IsA(linitial(input_rel->pathlist), CustomPath))
 				gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 			break;
 		case UPPERREL_DISTINCT:
-			tsl_skip_scan_paths_add(root, input_rel, output_rel);
+			tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
 			break;
 		default:
 			break;
@@ -186,7 +191,6 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 			return;
 		}
 	}
-#if PG15_GE
 	/*
 	 * We do not support MERGE command with UPDATE/DELETE merge actions on
 	 * compressed hypertables, because Custom Scan (HypertableModify) node is
@@ -199,25 +203,6 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("The MERGE command with UPDATE/DELETE merge actions is not support on "
 							"compressed hypertables")));
-	}
-#endif
-}
-
-/*
- * The fdw needs to expand a distributed hypertable inside the `GetForeignPath`
- * callback. But, since the hypertable base table is not a foreign table, that
- * callback would not normally be called. Thus, we call it manually in this hook.
- */
-void
-tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
-{
-	if (is_dummy_rel(rel))
-	{
-		/*
-		 * Don't have to create any other path if the relation is already proven
-		 * to be empty.
-		 */
-		return;
 	}
 }
 
@@ -252,7 +237,7 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 {
 	if (ts_guc_enable_vectorized_aggregation)
 	{
-		stmt->planTree = try_insert_vector_agg_node(stmt->planTree);
+		stmt->planTree = try_insert_vector_agg_node(stmt->planTree, stmt->rtable);
 	}
 
 #ifdef TS_DEBUG
@@ -268,7 +253,9 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 		 */
 		if ((has_normal_agg || has_vector_agg) && (has_vector_agg != should_have_vector_agg))
 		{
-			elog(ERROR, "vector aggregation inconsistent with debug_require_vector_agg GUC");
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("vector aggregation inconsistent with debug_require_vector_agg GUC")));
 		}
 	}
 #endif

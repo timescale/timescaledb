@@ -1,2 +1,0 @@
-Fixes: #7410 "aggregated compressed column not found" error on aggregation query.
-Thanks: @uasiddiqi for reporting the "aggregated compressed column not found" error.

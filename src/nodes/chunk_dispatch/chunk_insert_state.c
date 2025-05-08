@@ -407,10 +407,6 @@ set_arbiter_indexes(ChunkInsertState *state, const ChunkDispatch *dispatch)
 
 		if (ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index, &cim) < 1)
 		{
-			/*
-			 * In case of distributed hypertables, we don't have information about the
-			 * arbiter index on the remote side, so error out with a helpful hint
-			 */
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("could not find arbiter index for hypertable index \"%s\" on chunk "
@@ -518,7 +514,6 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	state->rel = rel;
 	state->result_relation_info = relinfo;
 	state->estate = dispatch->estate;
-	state->compressed_chunk_table_id = InvalidOid;
 	state->use_tam = ts_is_hypercore_am(chunk->amoid);
 	ts_set_compression_status(state, chunk);
 
@@ -569,7 +564,6 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 
 	state->hypertable_relid = chunk->hypertable_relid;
 	state->chunk_id = chunk->fd.id;
-	state->compressed_chunk_id = chunk->fd.compressed_chunk_id;
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
@@ -637,9 +631,6 @@ ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk)
 	if (state->chunk_compressed)
 	{
 		state->chunk_partial = ts_chunk_is_partial(chunk);
-		if (!OidIsValid(state->compressed_chunk_table_id))
-			state->compressed_chunk_table_id =
-				ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
 	}
 }
 

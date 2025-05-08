@@ -59,7 +59,9 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 		elog(ERROR, "the extension called with a loader should always have a NULL prev hook");
 #endif
 	if (BROKEN && !creating_extension)
-		elog(ERROR, "mock broken " STR(TIMESCALEDB_VERSION_MOD));
+		ereport(ERROR,
+				(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
+				 errmsg("mock broken " STR(TIMESCALEDB_VERSION_MOD))));
 }
 
 void

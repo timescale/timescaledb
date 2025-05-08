@@ -7,6 +7,7 @@
 
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_context.h"
+#include "nodes/decompress_chunk/vector_quals.h"
 #include <executor/tuptable.h>
 
 typedef struct ArrowArray ArrowArray;
@@ -14,6 +15,11 @@ typedef struct ArrowArray ArrowArray;
 /* How to obtain the decompressed datum for individual row. */
 typedef enum
 {
+	/*
+	 * The decompressed value is a boolean and is stored as a vector of bits.
+	 */
+	DT_ArrowBits = -5,
+
 	DT_ArrowTextDict = -4,
 
 	DT_ArrowText = -3,
@@ -102,7 +108,7 @@ typedef struct DecompressBatchState
 	 * row. Indexed same as arrow arrays, w/o accounting for the reverse scan
 	 * direction. Initialized to all ones, i.e. all rows pass.
 	 */
-	uint64 *restrict vector_qual_result;
+	const uint64 *restrict vector_qual_result;
 
 	/*
 	 * This follows DecompressContext.compressed_chunk_columns, but does not
@@ -138,14 +144,18 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
  * This reduces memory usage and improves performance with batch sorted merge.
  */
 #define create_bulk_decompression_mctx(parent_mctx)                                                \
-	GenerationContextCreateCompat(parent_mctx,                                                     \
-								  "DecompressBatchState bulk decompression",                       \
-								  64 * 1024);
+	GenerationContextCreate(parent_mctx,                                                           \
+							"DecompressBatchState bulk decompression",                             \
+							0,                                                                     \
+							64 * 1024,                                                             \
+							64 * 1024);
 
 #define create_per_batch_mctx(dcontext)                                                            \
-	GenerationContextCreateCompat(CurrentMemoryContext,                                            \
-								  "DecompressBatchState per-batch",                                \
-								  dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024);
+	GenerationContextCreate(CurrentMemoryContext,                                                  \
+							"DecompressBatchState per-batch",                                      \
+							0,                                                                     \
+							dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024,            \
+							dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024);
 
 extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 
@@ -172,3 +182,18 @@ compressed_batch_current_tuple(DecompressBatchState *batch_state)
 	Assert(batch_state->per_batch_context != NULL);
 	return &batch_state->decompressed_scan_slot_data.base;
 }
+
+/*
+ * VectorQualState for a compressed batch used to pass
+ * DecompressChunk-specific data to vector qual functions that are shared
+ * across scan nodes.
+ */
+typedef struct CompressedBatchVectorQualState
+{
+	VectorQualState vqstate;
+	DecompressBatchState *batch_state;
+	DecompressContext *dcontext;
+} CompressedBatchVectorQualState;
+
+const ArrowArray *compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr,
+												   bool *is_default_value);

@@ -140,7 +140,8 @@ static Invalidation cut_cagg_invalidation_and_compute_remainder(
 	const CaggInvalidationState *state, const InternalTimeRange *refresh_window,
 	const Invalidation *mergedentry, const Invalidation *current_remainder);
 static void clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
-												 const InternalTimeRange *refresh_window);
+												 const InternalTimeRange *refresh_window,
+												 bool force);
 static void invalidation_state_init(CaggInvalidationState *state, const ContinuousAgg *cagg,
 									Oid dimtype, const CaggsInfo *all_caggs);
 static void invalidation_state_cleanup(const CaggInvalidationState *state);
@@ -878,7 +879,7 @@ cut_cagg_invalidation_and_compute_remainder(const CaggInvalidationState *state,
  */
 static void
 clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
-									 const InternalTimeRange *refresh_window)
+									 const InternalTimeRange *refresh_window, bool force)
 {
 	ScanIterator iterator;
 	int32 cagg_hyper_id = state->mat_hypertable_id;
@@ -891,6 +892,20 @@ clear_cagg_invalidations_for_refresh(const CaggInvalidationState *state,
 	iterator.ctx.snapshot = state->snapshot;
 
 	MemoryContextReset(state->per_tuple_mctx);
+
+	/* Force refresh within the entire window */
+	if (force)
+	{
+		Invalidation logentry;
+
+		logentry.hyper_id = cagg_hyper_id;
+		logentry.lowest_modified_value = refresh_window->start;
+		logentry.greatest_modified_value = refresh_window->end;
+		logentry.is_modified = false;
+		ItemPointerSet(&logentry.tid, InvalidBlockNumber, 0);
+
+		save_invalidation_for_refresh(state, &logentry);
+	}
 
 	/* Process all invalidations for the continuous aggregate */
 	ts_scanner_foreach(&iterator)
@@ -981,7 +996,7 @@ InvalidationStore *
 invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 							  const CaggsInfo *all_caggs_info, const long max_materializations,
 							  bool *do_merged_refresh, InternalTimeRange *ret_merged_refresh_window,
-							  const CaggRefreshCallContext callctx)
+							  const CaggRefreshContext context, bool force)
 {
 	CaggInvalidationState state;
 	InvalidationStore *store = NULL;
@@ -991,7 +1006,7 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 
 	invalidation_state_init(&state, cagg, refresh_window->type, all_caggs_info);
 	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
-	clear_cagg_invalidations_for_refresh(&state, refresh_window);
+	clear_cagg_invalidations_for_refresh(&state, refresh_window, force);
 	count = tuplestore_tuple_count(state.invalidations);
 
 	if (count == 0)
@@ -1020,7 +1035,7 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 													   store,
 													   state.bucket_function,
 													   &merged_refresh_window,
-													   callctx);
+													   context);
 		*do_merged_refresh = true;
 		*ret_merged_refresh_window = merged_refresh_window;
 		invalidation_store_free(store);

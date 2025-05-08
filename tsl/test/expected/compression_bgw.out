@@ -25,7 +25,7 @@ select create_hypertable( 'conditions', 'time', chunk_time_interval=> '31days'::
 --cannot set policy without enabling compression --
 \set ON_ERROR_STOP 0
 select add_compression_policy('conditions', '60d'::interval);
-ERROR:  compression not enabled on hypertable "conditions"
+ERROR:  columnstore not enabled on hypertable "conditions"
 \set ON_ERROR_STOP 1
 -- TEST2 --
 --add a policy to compress chunks --
@@ -37,27 +37,27 @@ select add_compression_policy('conditions', '60d'::interval) AS compressjob_id
 select * from _timescaledb_config.bgw_job where id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |     proc_name      |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                        |      check_schema      |        check_name        | timezone 
 ------+---------------------------+-------------------+-------------+-------------+--------------+------------------------+--------------------+-------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------+------------------------+--------------------------+----------
- 1000 | Compression Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days"} | _timescaledb_functions | policy_compression_check | 
+ 1000 | Columnstore Policy [1000] | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days"} | _timescaledb_functions | policy_compression_check | 
 (1 row)
 
 select * from alter_job(:compressjob_id, schedule_interval=>'1s');
- job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                       config                        | next_start |                  check_config                   | fixed_schedule | initial_start | timezone 
---------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------+------------+-------------------------------------------------+----------------+---------------+----------
-   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | t         | {"hypertable_id": 1, "compress_after": "@ 60 days"} | -infinity  | _timescaledb_functions.policy_compression_check | f              |               | 
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                       config                        | next_start |                  check_config                   | fixed_schedule | initial_start | timezone |     application_name      
+--------+-------------------+-------------+-------------+--------------+-----------+-----------------------------------------------------+------------+-------------------------------------------------+----------------+---------------+----------+---------------------------
+   1000 | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | t         | {"hypertable_id": 1, "compress_after": "@ 60 days"} | -infinity  | _timescaledb_functions.policy_compression_check | f              |               |          | Columnstore Policy [1000]
 (1 row)
 
 --enable maxchunks to 1 so that only 1 chunk is compressed by the job
 SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
  FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
-                                                                                           alter_job                                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 1, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_functions.policy_compression_check,f,,)
+                                                                                                         alter_job                                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1000,"@ 1 sec","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 1, ""compress_after"": ""@ 60 days"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_functions.policy_compression_check,f,,,"Columnstore Policy [1000]")
 (1 row)
 
 select * from _timescaledb_config.bgw_job where id >= 1000 ORDER BY id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |     proc_name      |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                                     config                                      |      check_schema      |        check_name        | timezone 
 ------+---------------------------+-------------------+-------------+-------------+--------------+------------------------+--------------------+-------------------+-----------+----------------+---------------+---------------+---------------------------------------------------------------------------------+------------------------+--------------------------+----------
- 1000 | Compression Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days", "maxchunks_to_compress": 1} | _timescaledb_functions | policy_compression_check | 
+ 1000 | Columnstore Policy [1000] | @ 1 sec           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             1 | {"hypertable_id": 1, "compress_after": "@ 60 days", "maxchunks_to_compress": 1} | _timescaledb_functions | policy_compression_check | 
 (1 row)
 
 insert into conditions
@@ -86,16 +86,16 @@ SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped,
 --cannot set another policy
 \set ON_ERROR_STOP 0
 select add_compression_policy('conditions', '60d'::interval, if_not_exists=>true);
-NOTICE:  compression policy already exists for hypertable "conditions", skipping
+NOTICE:  columnstore policy already exists for hypertable "conditions", skipping
  add_compression_policy 
 ------------------------
                      -1
 (1 row)
 
 select add_compression_policy('conditions', '60d'::interval);
-ERROR:  compression policy already exists for hypertable or continuous aggregate "conditions"
+ERROR:  columnstore policy already exists for hypertable or continuous aggregate "conditions"
 select add_compression_policy('conditions', '30d'::interval, if_not_exists=>true);
-WARNING:  compression policy already exists for hypertable "conditions"
+WARNING:  columnstore policy already exists for hypertable "conditions"
  add_compression_policy 
 ------------------------
                      -1
@@ -153,7 +153,7 @@ SELECT set_integer_now_func('test_table_smallint', 'dummy_now_smallint');
 
 INSERT INTO test_table_smallint SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_smallint SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_table_smallint" is set to ""
 NOTICE:  default order by for hypertable "test_table_smallint" is set to ""time" DESC"
 \set ON_ERROR_STOP 0
@@ -164,7 +164,7 @@ SELECT add_compression_policy('test_table_smallint', 2::SMALLINT) AS compressjob
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |     proc_name      |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |      check_schema      |        check_name        | timezone 
 ------+---------------------------+-------------------+-------------+-------------+--------------+------------------------+--------------------+-------------------+-----------+----------------+---------------+---------------+-------------------------------------------+------------------------+--------------------------+----------
- 1001 | Compression Policy [1001] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             3 | {"hypertable_id": 3, "compress_after": 2} | _timescaledb_functions | policy_compression_check | 
+ 1001 | Columnstore Policy [1001] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             3 | {"hypertable_id": 3, "compress_after": 2} | _timescaledb_functions | policy_compression_check | 
 (1 row)
 
 --will compress all chunks that need compression
@@ -175,8 +175,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name    | before_compression_total_bytes | after_compression_total_bytes 
 ------------------+--------------------------------+-------------------------------
- _hyper_3_5_chunk |                          24576 |                         24576
- _hyper_3_6_chunk |                          24576 |                         24576
+ _hyper_3_5_chunk |                          24576 |                         40960
+ _hyper_3_6_chunk |                          24576 |                         40960
 (2 rows)
 
 --integer tests
@@ -197,14 +197,14 @@ SELECT set_integer_now_func('test_table_integer', 'dummy_now_integer');
 
 INSERT INTO test_table_integer SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_integer SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_table_integer" is set to ""
 NOTICE:  default order by for hypertable "test_table_integer" is set to ""time" DESC"
 SELECT add_compression_policy('test_table_integer', 2::INTEGER) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |     proc_name      |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |      check_schema      |        check_name        | timezone 
 ------+---------------------------+-------------------+-------------+-------------+--------------+------------------------+--------------------+-------------------+-----------+----------------+---------------+---------------+-------------------------------------------+------------------------+--------------------------+----------
- 1002 | Compression Policy [1002] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             5 | {"hypertable_id": 5, "compress_after": 2} | _timescaledb_functions | policy_compression_check | 
+ 1002 | Columnstore Policy [1002] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             5 | {"hypertable_id": 5, "compress_after": 2} | _timescaledb_functions | policy_compression_check | 
 (1 row)
 
 --will compress all chunks that need compression
@@ -215,8 +215,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_5_12_chunk |                          24576 |                         24576
- _hyper_5_13_chunk |                          24576 |                         24576
+ _hyper_5_12_chunk |                          24576 |                         40960
+ _hyper_5_13_chunk |                          24576 |                         40960
 (2 rows)
 
 --bigint test
@@ -237,14 +237,14 @@ SELECT set_integer_now_func('test_table_bigint', 'dummy_now_bigint');
 
 INSERT INTO test_table_bigint SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_bigint SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_table_bigint" is set to ""
 NOTICE:  default order by for hypertable "test_table_bigint" is set to ""time" DESC"
 SELECT add_compression_policy('test_table_bigint', 2::BIGINT) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |     proc_name      |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |      check_schema      |        check_name        | timezone 
 ------+---------------------------+-------------------+-------------+-------------+--------------+------------------------+--------------------+-------------------+-----------+----------------+---------------+---------------+-------------------------------------------+------------------------+--------------------------+----------
- 1003 | Compression Policy [1003] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             7 | {"hypertable_id": 7, "compress_after": 2} | _timescaledb_functions | policy_compression_check | 
+ 1003 | Columnstore Policy [1003] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |             7 | {"hypertable_id": 7, "compress_after": 2} | _timescaledb_functions | policy_compression_check | 
 (1 row)
 
 --will compress all chunks that need compression
@@ -255,8 +255,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_7_19_chunk |                          24576 |                         24576
- _hyper_7_20_chunk |                          24576 |                         24576
+ _hyper_7_19_chunk |                          24576 |                         40960
+ _hyper_7_20_chunk |                          24576 |                         40960
 (2 rows)
 
 --TEST 8
@@ -277,7 +277,7 @@ SELECT set_integer_now_func('test_table_nologin', 'dummy_now_bigint');
 (1 row)
 
 ALTER TABLE test_table_nologin set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_table_nologin" is set to ""
 NOTICE:  default order by for hypertable "test_table_nologin" is set to ""time" DESC"
 \set ON_ERROR_STOP 0
@@ -314,7 +314,7 @@ FROM conditions
 GROUP BY device, time_bucket(INTERVAL '1 hour', "time") WITH NO DATA;
 CALL refresh_continuous_aggregate('conditions_summary', NULL, NULL);
 ALTER TABLE conditions SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "conditions" is set to ""
 NOTICE:  default order by for hypertable "conditions" is set to ""time" DESC"
 SELECT COUNT(*) AS dropped_chunks_count
@@ -336,16 +336,16 @@ SELECT add_compression_policy AS job_id
 -- job compresses only 1 chunk at a time --
 SELECT alter_job(id,config:=jsonb_set(config,'{maxchunks_to_compress}', '1'))
  FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-                                                                                            alter_job                                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_functions.policy_compression_check,f,,)
+                                                                                                          alter_job                                                                                                           
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_functions.policy_compression_check,f,,,"Columnstore Policy [1004]")
 (1 row)
 
 SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
  FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-                                                                                                        alter_job                                                                                                        
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""verbose_log"": true, ""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_functions.policy_compression_check,f,,)
+                                                                                                                      alter_job                                                                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1004,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""verbose_log"": true, ""hypertable_id"": 11, ""compress_after"": ""@ 1 day"", ""maxchunks_to_compress"": 1}",-infinity,_timescaledb_functions.policy_compression_check,f,,,"Columnstore Policy [1004]")
 (1 row)
 
 set client_min_messages TO LOG;
@@ -512,7 +512,7 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 \set ON_ERROR_STOP 0
 -- call compress_chunk when status is not unordered
 SELECT compress_chunk(:'CHUNK_NAME'::regclass);
-psql:include/recompress_basic.sql:107: NOTICE:  chunk "_hyper_14_62_chunk" is already compressed
+psql:include/recompress_basic.sql:107: NOTICE:  chunk "_hyper_14_62_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_14_62_chunk
@@ -520,7 +520,7 @@ psql:include/recompress_basic.sql:107: NOTICE:  chunk "_hyper_14_62_chunk" is al
 
 -- This will succeed and compress the chunk for the test below.
 SELECT compress_chunk(:'CHUNK_NAME'::regclass);
-psql:include/recompress_basic.sql:110: NOTICE:  chunk "_hyper_14_62_chunk" is already compressed
+psql:include/recompress_basic.sql:110: NOTICE:  chunk "_hyper_14_62_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_14_62_chunk
@@ -544,7 +544,7 @@ SELECT compress_chunk(:'CHUNK_NAME'::regclass);
 CREATE TABLE metrics(time timestamptz NOT NULL);
 SELECT hypertable_id AS "HYPERTABLE_ID", schema_name, table_name, created FROM create_hypertable('metrics','time') \gset
 ALTER TABLE metrics SET (timescaledb.compress);
-psql:include/recompress_basic.sql:120: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/recompress_basic.sql:120: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 psql:include/recompress_basic.sql:120: NOTICE:  default segment by for hypertable "metrics" is set to ""
 psql:include/recompress_basic.sql:120: NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 -- create chunk with some data and compress
@@ -582,9 +582,9 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 -- disable recompress in compress job
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','false'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
-                                                                                          alter_job                                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": false, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",,t,"Fri Dec 31 16:00:00 1999 PST",)
+                                                                                                         alter_job                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": false, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",,t,"Fri Dec 31 16:00:00 1999 PST",,"User-Defined Action [1006]")
 (1 row)
 
 -- nothing to do
@@ -616,9 +616,9 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 -- reenable recompress in compress job
 SELECT alter_job(id,config:=jsonb_set(config,'{recompress}','true'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
-                                                                                          alter_job                                                                                          
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": true, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",,t,"Fri Dec 31 16:00:00 1999 PST",)
+                                                                                                        alter_job                                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1006,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""recompress"": true, ""hypertable_id"": 16, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",,t,"Fri Dec 31 16:00:00 1999 PST",,"User-Defined Action [1006]")
 (1 row)
 
 -- should recompress now
@@ -676,6 +676,190 @@ SELECT delete_job(:JOB_RECOMPRESS);
 ------------
  
 (1 row)
+
+--TEST 7
+--compression policy should ignore frozen partially compressed chunks
+CREATE TABLE test_table_frozen(time TIMESTAMPTZ, val SMALLINT);
+SELECT create_hypertable('test_table_frozen', 'time', chunk_time_interval => '1 day'::interval);
+NOTICE:  adding not-null constraint to column "time"
+        create_hypertable        
+---------------------------------
+ (18,public,test_table_frozen,t)
+(1 row)
+
+INSERT INTO test_table_frozen SELECT time, (random()*10)::smallint
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
+ALTER TABLE test_table_frozen SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_table_frozen" is set to ""
+NOTICE:  default order by for hypertable "test_table_frozen" is set to ""time" DESC"
+select add_compression_policy( 'test_table_frozen', compress_after=> '1 day'::interval ) as compressjob_id \gset
+SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
+  id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |     proc_name      |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                       |      check_schema      |        check_name        | timezone 
+------+---------------------------+-------------------+-------------+-------------+--------------+------------------------+--------------------+-------------------+-----------+----------------+---------------+---------------+----------------------------------------------------+------------------------+--------------------------+----------
+ 1008 | Columnstore Policy [1008] | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user | t         | f              |               |            18 | {"hypertable_id": 18, "compress_after": "@ 1 day"} | _timescaledb_functions | policy_compression_check | 
+(1 row)
+
+SELECT show_chunks('test_table_frozen') as first_chunk LIMIT 1 \gset
+--will compress all chunks that need compression
+CALL run_job(:compressjob_id);
+-- make the chunks partial
+INSERT INTO test_table_frozen SELECT time, (random()*10)::smallint
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
+SELECT c.id, c.status
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_table_frozen'
+ORDER BY c.id
+LIMIT 1;
+ id | status 
+----+--------
+ 69 |      9
+(1 row)
+
+-- freeze first chunk
+SELECT _timescaledb_functions.freeze_chunk(:'first_chunk');
+ freeze_chunk 
+--------------
+ t
+(1 row)
+
+-- first chunk status is  1 (Compressed) + 8 (Partially compressed) + 4 (Frozen) = 13
+SELECT c.id, c.status
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_table_frozen'
+ORDER BY c.id
+LIMIT 1;
+ id | status 
+----+--------
+ 69 |     13
+(1 row)
+
+--should recompress all chunks except first since its frozen
+CALL run_job(:compressjob_id);
+-- first chunk status is unchanged
+SELECT c.id, c.status
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_table_frozen'
+ORDER BY c.id
+LIMIT 1;
+ id | status 
+----+--------
+ 69 |     13
+(1 row)
+
+-- unfreeze first chunk
+SELECT _timescaledb_functions.unfreeze_chunk(:'first_chunk');
+ unfreeze_chunk 
+----------------
+ t
+(1 row)
+
+-- should be able to recompress the chunk since its unfrozen
+CALL run_job(:compressjob_id);
+-- first chunk status is Compressed (1)
+SELECT c.id, c.status
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_table_frozen'
+ORDER BY c.id
+LIMIT 1;
+ id | status 
+----+--------
+ 69 |      1
+(1 row)
+
+--TEST 8
+--compression policy errors
+CREATE TABLE test_compression_policy_errors(time TIMESTAMPTZ, val SMALLINT);
+SELECT create_hypertable('test_compression_policy_errors', 'time', chunk_time_interval => '1 day'::interval);
+NOTICE:  adding not-null constraint to column "time"
+              create_hypertable               
+----------------------------------------------
+ (20,public,test_compression_policy_errors,t)
+(1 row)
+
+ALTER TABLE test_compression_policy_errors SET (timescaledb.compress, timescaledb.compress_segmentby = 'val', timescaledb.compress_orderby = 'time');
+INSERT INTO test_compression_policy_errors SELECT time, (random()*10)::smallint
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
+SELECT
+  add_compression_policy(
+    'test_compression_policy_errors',
+    compress_after=> '1 day'::interval,
+    initial_start => now() - interval '1 day'
+  ) as compressjob_id \gset
+SELECT config AS compressjob_config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id \gset
+SELECT FROM alter_job(:compressjob_id, config => jsonb_set(:'compressjob_config'::jsonb, '{recompress}', 'true'));
+--
+(1 row)
+
+-- 31 uncompressed chunks (0 - uncompressed, 1 - compressed)
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_compression_policy_errors'
+GROUP BY c.status
+ORDER BY 2 DESC;
+ status | count 
+--------+-------
+      0 |    31
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Let's mess with the chunk status to for an error when executing the job
+WITH chunks AS (
+  SELECT c.id, c.status
+  FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+  WHERE h.table_name = 'test_compression_policy_errors'
+  ORDER BY c.id LIMIT 20
+)
+UPDATE _timescaledb_catalog.chunk
+SET status = 3
+FROM chunks
+WHERE chunk.id = chunks.id
+  AND chunk.status = 0;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- After the mess 20 = status 3 and 11 = status 0
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_compression_policy_errors'
+GROUP BY c.status
+ORDER BY 2 DESC;
+ status | count 
+--------+-------
+      3 |    20
+      0 |    11
+(2 rows)
+
+\set ON_ERROR_STOP 0
+SET client_min_messages TO ERROR;
+\set VERBOSITY default
+-- This should fail with
+-- 20 chunks failed to compress and 11 chunks compressed successfully
+CALL run_job(:compressjob_id);
+ERROR:  columnstore policy failure
+DETAIL:  Failed to convert '20' chunks to columnstore. Successfully converted '11' chunks.
+CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean,boolean) line 90 at RAISE
+SQL statement "CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method)"
+PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 63 at CALL
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+-- 31 uncompressed chunks (0 - uncompressed, 1 - compressed)
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_compression_policy_errors'
+GROUP BY c.status
+ORDER BY 2 DESC;
+ status | count 
+--------+-------
+      3 |    20
+      1 |    11
+(2 rows)
 
 -- Teardown test
 \c :TEST_DBNAME :ROLE_SUPERUSER

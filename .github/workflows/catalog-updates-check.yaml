@@ -4,7 +4,7 @@ name: Check for unsafe catalog updates
 jobs:
   check_catalog_correctly_updated:
     name: Check updates to latest-dev and reverse-dev are properly handled by PR
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -16,15 +16,21 @@ jobs:
 
       - name: Check sql file contents
         run: |
-          find sql -name '*.sql' -not -path 'sql/updates/*' -not -path 'sql/compat.sql' | xargs -IFILE python scripts/check_updates_ast.py FILE
+          find sql -name '*.sql' -not -path 'sql/updates/*' -not -path 'sql/compat.sql' | xargs -IFILE python scripts/check_updates.py FILE
 
       - name: Check latest-dev contents
         run: |
-          python scripts/check_updates_ast.py --latest "sql/updates/latest-dev.sql"
+          python scripts/check_updates.py --latest "sql/updates/latest-dev.sql"
+
+      - name: Check for idempotency in SQL scripts
+        if: always()
+        run: |
+          python scripts/check_sql_script.py sql/*.sql
 
       # To allow fixing previous mistakes we run the check against reverse-dev but don't
       # fail it on errors.
       - name: Check reverse-dev contents
         if: always()
         run: |
-          python scripts/check_updates_ast.py "sql/updates/reverse-dev.sql" || true
+          python scripts/check_updates.py "sql/updates/reverse-dev.sql" || true
+

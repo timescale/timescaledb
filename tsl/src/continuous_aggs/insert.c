@@ -170,7 +170,7 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	cache_entry->value_is_set = false;
 	cache_entry->lowest_modified_value = INVAL_POS_INFINITY;
 	cache_entry->greatest_modified_value = INVAL_NEG_INFINITY;
-	ts_cache_release(ht_cache);
+	ts_cache_release(&ht_cache);
 }
 
 static inline void

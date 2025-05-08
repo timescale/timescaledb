@@ -36,6 +36,15 @@
 #define TS_DEBUG_LOG(FMT, ...)
 #endif
 
+#define UnassignedDatum (Datum) 0
+
+static inline int64
+interval_to_usec(Interval *interval)
+{
+	return (interval->month * DAYS_PER_MONTH * USECS_PER_DAY) + (interval->day * USECS_PER_DAY) +
+		   interval->time;
+}
+
 #ifdef TS_DEBUG
 
 static inline const char *
@@ -164,9 +173,7 @@ extern TSDLLEXPORT void *ts_create_struct_from_slot(TupleTableSlot *slot, Memory
 extern TSDLLEXPORT AppendRelInfo *ts_get_appendrelinfo(PlannerInfo *root, Index rti,
 													   bool missing_ok);
 
-#if PG15_GE
 extern TSDLLEXPORT Expr *ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel);
-#endif
 
 extern TSDLLEXPORT bool ts_has_row_security(Oid relid);
 
@@ -330,17 +337,20 @@ ts_datum_set_text_from_cstring(const AttrNumber attno, NullableDatum *datums, co
 }
 
 static inline void
-ts_datum_set_bool(const AttrNumber attno, NullableDatum *datums, const bool value)
+ts_datum_set_bool(const AttrNumber attno, NullableDatum *datums, const bool value,
+				  const bool isnull)
 {
-	datums[AttrNumberGetAttrOffset(attno)].value = BoolGetDatum(value);
-	datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = BoolGetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
 static inline void
 ts_datum_set_int32(const AttrNumber attno, NullableDatum *datums, const int32 value,
 				   const bool isnull)
 {
-	datums[AttrNumberGetAttrOffset(attno)].value = Int32GetDatum(value);
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = Int32GetDatum(value);
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
@@ -348,7 +358,8 @@ static inline void
 ts_datum_set_int64(const AttrNumber attno, NullableDatum *datums, const int64 value,
 				   const bool isnull)
 {
-	datums[AttrNumberGetAttrOffset(attno)].value = Int64GetDatum(value);
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = Int64GetDatum(value);
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 
@@ -356,7 +367,8 @@ static inline void
 ts_datum_set_timestamptz(const AttrNumber attno, NullableDatum *datums, const TimestampTz value,
 						 const bool isnull)
 {
-	datums[AttrNumberGetAttrOffset(attno)].value = TimestampTzGetDatum(value);
+	if (!isnull)
+		datums[AttrNumberGetAttrOffset(attno)].value = TimestampTzGetDatum(value);
 	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
 }
 

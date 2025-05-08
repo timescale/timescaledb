@@ -419,6 +419,75 @@ SET timescaledb.enable_tiered_reads=true;
 :EXPLAIN SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
 :EXPLAIN SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 
+-- Test forceful refreshment. Here we simulate the situation that we've seen
+-- with tiered data when `timescaledb.enable_tiered_reads` were disabled on the
+-- server level. In that case we would not see materialized tiered data and
+-- we wouldn't be able to re-materialize the data using a normal refresh call
+-- because it would skip previously materialized ranges, but it should be
+-- possible with `force=>true` parameter.
+CREATE MATERIALIZED VIEW ht_try_weekly
+WITH (timescaledb.continuous) AS
+SELECT time_bucket(interval '1 week', timec) AS ts_bucket, avg(value)
+FROM ht_try
+GROUP BY 1
+WITH NO DATA;
+SELECT * FROM ht_try_weekly;
+SET timescaledb.enable_tiered_reads=false;
+CALL refresh_continuous_aggregate('ht_try_weekly', '2019-12-29', '2020-01-10', force=>false);
+SELECT * FROM ht_try_weekly;
+SET timescaledb.enable_tiered_reads=true;
+CALL refresh_continuous_aggregate('ht_try_weekly', '2019-12-29', '2020-01-10', force=>true);
+SELECT * FROM ht_try_weekly;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
+-- Test refresh policy with different settings of `include_tiered_data` parameter
+CREATE FUNCTION create_test_cagg(include_tiered_data BOOL)
+RETURNS INTEGER AS
+$$
+DECLARE
+	cfg jsonb;
+	job_id INTEGER;
+BEGIN
+	CREATE MATERIALIZED VIEW ht_try_weekly
+	WITH (timescaledb.continuous) AS
+	SELECT time_bucket(interval '1 week', timec) AS ts_bucket, avg(value)
+	FROM ht_try
+	GROUP BY 1
+	WITH NO DATA;
+
+	job_id := add_continuous_aggregate_policy(
+		'ht_try_weekly',
+		start_offset => NULL,
+		end_offset => INTERVAL '1 hour',
+		schedule_interval => INTERVAL '1 hour',
+		include_tiered_data => include_tiered_data
+	);
+
+	cfg := config FROM _timescaledb_config.bgw_job WHERE id = job_id;
+	RAISE NOTICE 'config: %', jsonb_pretty(cfg);
+
+	RETURN job_id;
+END
+$$ LANGUAGE plpgsql;
+
+-- include tiered data
+SELECT create_test_cagg(true) AS job_id \gset
+CALL run_job(:job_id);
+SELECT * FROM ht_try_weekly ORDER BY 1;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
+-- exclude tiered data
+SELECT create_test_cagg(false) AS job_id \gset
+CALL run_job(:job_id);
+SELECT * FROM ht_try_weekly ORDER BY 1;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
+-- default behavior: use instance-wide GUC value
+SELECT create_test_cagg(null) AS job_id \gset
+CALL run_job(:job_id);
+SELECT * FROM ht_try_weekly ORDER BY 1;
+DROP MATERIALIZED VIEW ht_try_weekly;
+
 -- This test verifies that a bugfix regarding the way `ROWID_VAR`s are adjusted
 -- in the chunks' targetlists on DELETE/UPDATE works (including partially
 -- compressed chunks)
@@ -730,6 +799,48 @@ DELETE FROM event WHERE  info = 'osm_chunk_ts';
 DELETE FROM event WHERE  info = 'chunk_ts';
 SELECT * FROM event ORDER BY ts;
 
--- clean up databases created
+-- event triggers on chunk creation
+CREATE TABLE ht_try(timec timestamptz NOT NULL, acq_id bigint, value bigint);
+SELECT create_hypertable('ht_try', 'timec', chunk_time_interval => interval '1 day');
+
+-- creating event triggers requires superuser permissions
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- event trigger on ddl_start
+CREATE OR REPLACE FUNCTION ddl_start_trigger_func() RETURNS EVENT_TRIGGER AS
+$$
+BEGIN
+    RAISE NOTICE 'ddl_start_trigger_func() is invoked';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE EVENT TRIGGER ddl_start_trigger
+ON ddl_command_start WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION ddl_start_trigger_func();
+-- event trigger on ddl_end
+CREATE OR REPLACE FUNCTION ddl_end_trigger_func() RETURNS EVENT_TRIGGER AS
+$$
+DECLARE
+    cmd RECORD;
+BEGIN
+    RAISE NOTICE 'ddl_end_trigger_func() is invoked';
+    FOR cmd IN SELECT * FROM pg_event_trigger_ddl_commands()
+    LOOP
+        RAISE NOTICE 'tag: %, object: %', cmd.command_tag, cmd.object_identity::regclass;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE EVENT TRIGGER ddl_end_trigger
+ON ddl_command_end WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION ddl_end_trigger_func();
+
+-- by default event triggers on chunk creation are disabled
+INSERT INTO ht_try VALUES ('2025-05-01 00:00', 1, 10);
+SET timescaledb.enable_event_triggers = on;
+INSERT INTO ht_try VALUES ('2025-05-02 00:00', 1, 10);
+RESET timescaledb.enable_event_triggers;
+DROP EVENT TRIGGER ddl_start_trigger;
+DROP EVENT TRIGGER ddl_end_trigger;
+DROP TABLE ht_try;
+
+-- clean up databases created
 DROP DATABASE postgres_fdw_db WITH (FORCE);

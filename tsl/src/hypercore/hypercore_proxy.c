@@ -285,10 +285,8 @@ vacuumcleanup_one_index(Relation hsrel, Relation indexrel, IndexBulkDeleteResult
 							false,
 							InvalidTransactionId,
 							InvalidMultiXactId,
-#if PG15_GE
 							NULL,
 							NULL,
-#endif
 							false);
 	}
 
@@ -336,11 +334,7 @@ hypercore_proxy_vacuumcleanup(IndexVacuumInfo *info, IndexBulkDeleteResult *stat
 		 * resulting stats. */
 		vacstate->stats.pages_deleted += result->pages_deleted;
 		vacstate->stats.tuples_removed += result->tuples_removed;
-#if PG14_GE
 		vacstate->stats.pages_newly_deleted += result->pages_newly_deleted;
-#else
-		vacstate->stats.pages_removed += result->pages_removed;
-#endif
 	}
 
 	vac_close_indexes(nindexes, indrels, NoLock);
@@ -389,10 +383,7 @@ hypercore_proxy_validate(Oid opclassoid)
  */
 static bool
 hypercore_proxy_insert(Relation indexRelation, Datum *values, bool *isnull, ItemPointer heap_tid,
-					   Relation heapRelation, IndexUniqueCheck checkUnique,
-#if PG14_GE
-					   bool indexUnchanged,
-#endif
+					   Relation heapRelation, IndexUniqueCheck checkUnique, bool indexUnchanged,
 					   struct IndexInfo *indexInfo)
 {
 	return true;
@@ -440,9 +431,7 @@ hypercore_proxy_handler(PG_FUNCTION_ARGS)
 	amroutine->amproperty = NULL;
 	amroutine->ambuildphasename = NULL;
 	amroutine->amvalidate = hypercore_proxy_validate;
-#if PG14_GE
 	amroutine->amadjustmembers = NULL;
-#endif
 	amroutine->ambeginscan = NULL;
 	amroutine->amrescan = NULL;
 	amroutine->amgettuple = NULL;

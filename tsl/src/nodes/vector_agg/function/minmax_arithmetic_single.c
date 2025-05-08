@@ -26,8 +26,7 @@ FUNCTION_NAME(vector_impl)(void *agg_state, int n, const CTYPE *values, const ui
 		 * Note that we have to properly handle NaNs and Infinities for floats.
 		 */
 		const bool do_replace =
-			new_value_ok && (unlikely(!outer_isvalid) || PREDICATE(outer_result, new_value) ||
-							 isnan((double) new_value));
+			new_value_ok && (unlikely(!outer_isvalid) || PREDICATE(outer_result, new_value));
 
 		outer_result = do_replace ? new_value : outer_result;
 		outer_isvalid = outer_isvalid || do_replace;
@@ -58,6 +57,7 @@ FUNCTION_NAME(one)(void *restrict agg_state, const CTYPE value)
 	}
 }
 
+#include "agg_many_vector_helper.c"
 #include "agg_scalar_helper.c"
 #include "agg_vector_validity_helper.c"
 
@@ -67,6 +67,7 @@ VectorAggFunctions FUNCTION_NAME(argdef) = {
 	.agg_emit = minmax_emit,
 	.agg_scalar = FUNCTION_NAME(scalar),
 	.agg_vector = FUNCTION_NAME(vector),
+	.agg_many_vector = FUNCTION_NAME(many_vector),
 };
 #endif
 

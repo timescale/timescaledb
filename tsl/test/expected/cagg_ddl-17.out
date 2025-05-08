@@ -1520,8 +1520,6 @@ INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_40" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1540,8 +1538,6 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_40" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1609,8 +1605,6 @@ INSERT INTO test_setting VALUES( '2020-11-01', 20);
 --try out 2 settings here --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'false', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_42" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -1629,8 +1623,6 @@ SELECT count(*) from test_setting_cagg ORDER BY 1;
 --now set it back to false --
 ALTER MATERIALIZED VIEW test_setting_cagg SET (timescaledb.materialized_only = 'true', timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_42" is set to ""
 SELECT view_name, compression_enabled, materialized_only
 FROM timescaledb_information.continuous_aggregates
 where view_name = 'test_setting_cagg';
@@ -2106,8 +2098,6 @@ CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_buck
 NOTICE:  refreshing continuous aggregate "cagg1"
 ALTER MATERIALIZED VIEW cagg1 SET (timescaledb.compress);
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_56" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
  count 
 -------
@@ -2117,7 +2107,116 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
 DROP MATERIALIZED VIEW cagg1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_56_70_chunk
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
--------+-----------+---------+--------------+--------------------
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
 (0 rows)
+
+-- test WITH namespace alias
+CREATE TABLE with_alias(time timestamptz not null);
+CREATE MATERIALIZED VIEW cagg_alias
+WITH (tsdb.continuous, tsdb.materialized_only=false) AS
+SELECT time_bucket(INTERVAL '1 day', time) FROM conditions GROUP BY 1 WITH NO DATA;
+ALTER MATERIALIZED VIEW cagg_alias SET (timescaledb.materialized_only=false);
+ALTER MATERIALIZED VIEW cagg_alias SET (tsdb.materialized_only=false);
+DROP MATERIALIZED VIEW cagg_alias;
+-- test SET chunk_time_interval
+CREATE MATERIALIZED VIEW cagg_set
+WITH (tsdb.continuous, tsdb.chunk_time_interval='1day') AS
+SELECT time_bucket(INTERVAL '1 day', time) AS cagg_interval_setter FROM conditions GROUP BY 1 WITH NO DATA;
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 1 day
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='23 day');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 23 days
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='6 month');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 180 days
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='1 year');
+SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
+     column_name      | time_interval 
+----------------------+---------------
+ cagg_interval_setter | @ 360 days
+(1 row)
+
+-- test cagg with stable functions
+CREATE MATERIALIZED VIEW cagg_stable WITH (tsdb.continuous) AS
+SELECT sum(temperature), max(time + INTERVAL '1h')
+FROM conditions
+GROUP BY time_bucket('1week', time), location;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+NOTICE:  refreshing continuous aggregate "cagg_stable"
+SELECT * FROM cagg_stable t ORDER BY t;
+ sum |             max              
+-----+------------------------------
+  65 | Tue Jan 02 10:10:00 2018 UTC
+ 100 | Tue Jan 02 10:30:00 2018 UTC
+ 120 | Tue Jan 02 10:20:00 2018 UTC
+ 355 | Fri Nov 02 11:30:00 2018 UTC
+(4 rows)
+
+--aggregate without combine function but stable function
+CREATE MATERIALIZED VIEW cagg_json_agg WITH (tsdb.continuous, tsdb.materialized_only=false)
+AS SELECT json_agg(location) from conditions group by time_bucket('1week', time), location WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+CREATE FUNCTION test_stablefunc(int) RETURNS int LANGUAGE 'sql' STABLE AS 'SELECT $1 + 10';
+CREATE MATERIALIZED VIEW cagg_stable2 WITH (tsdb.continuous) AS
+SELECT sum(test_stablefunc(temperature::int)), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time) WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+CREATE MATERIALIZED VIEW cagg_stable3 WITH (tsdb.continuous) AS
+SELECT sum(temperature), min(location)
+FROM conditions
+GROUP BY time_bucket('1week', time), test_stablefunc(temperature::int) WITH NO DATA;
+WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+-- test window functions in caggs
+-- first do sanity check that we error without the GUC
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW cagg_window WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1;
+ERROR:  invalid continuous aggregate query
+\set ON_ERROR_STOP 1
+SET timescaledb.enable_cagg_window_functions TO on;
+CREATE MATERIALIZED VIEW cagg_window_1 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1;
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_1"
+CREATE MATERIALIZED VIEW cagg_window_2 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time), location) FROM conditions GROUP BY 1, location;
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_2"
+CREATE MATERIALIZED VIEW cagg_window_3 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER (PARTITION BY time_bucket('1 week',time)) FROM conditions GROUP BY 1, location;
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_3"
+CREATE MATERIALIZED VIEW cagg_window_4 WITH (tsdb.continuous)
+AS SELECT time_bucket('1week', time), rank() OVER w FROM conditions GROUP BY 1, location WINDOW w AS (PARTITION BY time_bucket('1 week',time));
+WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
+NOTICE:  refreshing continuous aggregate "cagg_window_4"
+-- test setting chunk_time_interval on a cagg
+CREATE MATERIALIZED VIEW cagg_chunk_time_interval WITH (tsdb.continuous, tsdb.chunk_time_interval='1000 day') AS SELECT time_bucket('1 week', time) FROM conditions GROUP BY 1 WITH NO DATA;
+SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_time_interval';
+ time_interval 
+---------------
+ @ 1000 days
+(1 row)
+
+ALTER MATERIALIZED VIEW cagg_chunk_time_interval SET (tsdb.chunk_time_interval='110 day');
+SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_time_interval';
+ time_interval 
+---------------
+ @ 110 days
+(1 row)
 

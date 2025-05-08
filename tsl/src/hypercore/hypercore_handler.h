@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <access/attnum.h>
 #include <access/tableam.h>
 #include <access/xact.h>
 #include <fmgr.h>
@@ -30,12 +31,23 @@ extern void hypercore_xact_event(XactEvent event, void *arg);
 extern bool hypercore_set_truncate_compressed(bool onoff);
 extern void hypercore_scan_set_skip_compressed(TableScanDesc scan, bool skip);
 extern void hypercore_skip_compressed_data_for_relation(Oid relid);
+extern int hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid,
+											   TupleTableSlot *slot, Snapshot snapshot,
+											   ItemPointer new_ctid);
 
 typedef struct ColumnCompressionSettings
 {
+	/* Attribute name in the non-compressed relation */
 	NameData attname;
+	/* Attribute number in non-compressed relation */
 	AttrNumber attnum;
-	AttrNumber cattnum; /* Attribute number in the compressed relation */
+	/* Attribute number in the compressed relation */
+	AttrNumber cattnum;
+	/* For orderby columns, these are the attribute numbers of the the min/max
+	 * metadata columns. */
+	AttrNumber cattnum_min;
+	AttrNumber cattnum_max;
+	/* Attribute type */
 	Oid typid;
 	bool is_orderby;
 	bool is_segmentby;
@@ -50,10 +62,7 @@ typedef struct ColumnCompressionSettings
  */
 typedef struct HypercoreInfo
 {
-	int32 hypertable_id;		  /* TimescaleDB ID of parent hypertable */
-	int32 relation_id;			  /* TimescaleDB ID of relation (chunk ID) */
-	int32 compressed_relation_id; /* TimescaleDB ID of compressed relation (chunk ID) */
-	Oid compressed_relid;		  /* Relid of compressed relation */
+	Oid compressed_relid; /* Relid of compressed relation */
 	int num_columns;
 	AttrNumber count_cattno; /* Attribute number of count column in
 							  * compressed rel */
@@ -64,3 +73,16 @@ typedef struct HypercoreInfo
 #define REL_IS_HYPERCORE(rel) ((rel)->rd_tableam == hypercore_routine())
 
 extern HypercoreInfo *RelationGetHypercoreInfo(Relation rel);
+
+static inline bool
+hypercore_column_has_minmax(const ColumnCompressionSettings *column)
+{
+	if (AttributeNumberIsValid(column->cattnum_min))
+	{
+		/* Both min and max should always be set together */
+		Assert(AttributeNumberIsValid(column->cattnum_max));
+		return true;
+	}
+
+	return false;
+}

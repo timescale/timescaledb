@@ -9,8 +9,8 @@ See the Releases tab for the latest release.
 
 **Prerequisites**:
 
-- A standard PostgreSQL 14, 15 or 16 installation with development
-environment (header files) (e.g., `postgresql-server-dev-16` package
+- A standard PostgreSQL 15, 16, or 17 installation with development
+environment (header files) (e.g., `postgresql-server-dev-17` package
 for Linux, Postgres.app for MacOS)
 - C compiler (e.g., gcc or clang)
 - [CMake](https://cmake.org/) version 3.15 or greater
@@ -31,7 +31,7 @@ make install
 Note, if you have multiple versions of PostgreSQL installed you can specify the path to `pg_config`
 that should be used by using `./bootstrap -DPG_CONFIG=/path/to/pg_config`.
 
-Please see our [additional configuration instructions](https://docs.timescale.com/getting-started/installation).
+Please see our [additional configuration instructions](https://docs.timescale.com/self-hosted/latest/install/).
 
 #### Building from source (Windows)
 
@@ -42,7 +42,7 @@ See the Releases tab for the latest release.
 
 **Prerequisites**:
 
-- A standard [PostgreSQL 14, 15 or 16 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
+- A standard [PostgreSQL 15, 16, or 17 64-bit installation](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads#windows)
 - OpenSSL for Windows
 - Microsoft Visual Studio 2017 with CMake and Git components
 - OR Visual Studio 2015/2016 with [CMake](https://cmake.org/) version 3.15 or greater and Git

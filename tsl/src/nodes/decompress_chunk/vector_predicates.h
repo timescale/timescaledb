@@ -18,6 +18,12 @@ void vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 
 void vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result);
 
+/* this implements the vectorized BooleanTest, where NULLs are handled in a special way:
+ * for example IS_NOT_TRUE(NULL) is true and IS_NOT_FALSE(NULL) is true, plus there are
+ * NULL test types, like IS_UNKNOWN and IS_NOT_UNKNOWN.
+ */
+void vector_booleantest(const ArrowArray *arrow, int test_type, uint64 *restrict result);
+
 typedef enum VectorQualSummary
 {
 	AllRowsPass,
@@ -26,7 +32,7 @@ typedef enum VectorQualSummary
 } VectorQualSummary;
 
 static pg_attribute_always_inline VectorQualSummary
-get_vector_qual_summary(uint64 *restrict qual_result, size_t n_rows)
+get_vector_qual_summary(const uint64 *qual_result, size_t n_rows)
 {
 	bool any_rows_pass = false;
 	bool all_rows_pass = true;

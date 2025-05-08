@@ -514,7 +514,188 @@ set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same';
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same';
 
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
+
+-- Test the nonstandard Postgres NaN comparison that doesn't match the IEEE floats.
+create table nans(t int, cfloat4 float4, cfloat8 float8);
+select create_hypertable('nans', 't', chunk_time_interval => 1024 * 1024 * 1024);
+alter table nans set (timescaledb.compress);
+insert into nans select pow(2, n), x, x
+    from unnest(array[null, 0, 1, 'nan', '-inf', '+inf']::float8[])
+        with ordinality as x(x, n)
+;
+select count(compress_chunk(x)) from show_chunks('nans') x;
+
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.debug_require_vector_qual to 'require';
+
+select format('select sum(t) from nans where %s %s %s::%s;',
+    variable, op, value, type)
+from
+    unnest(array['cfloat4', 'cfloat8']) variable,
+    unnest(array['=', '!=', '<', '<=', '>', '>=']) op,
+    unnest(array['null', '0', '1', '''nan''', '''-inf''', '''+inf''']) value,
+    unnest(array['float4', 'float8', 'numeric']) type
+\gexec
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
+
+-- Test predicates on boolean columns can be vectorized
+-- with the bool compression enabled.
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.enable_bool_compression = on;
+
+create table bool_table(ts int, b bool);
+select create_hypertable('bool_table', 'ts');
+alter table bool_table set (timescaledb.compress);
+insert into bool_table values (100, true), (101, false), (102, null);
+
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+set timescaledb.debug_require_vector_qual to 'require';
+
+-- BooleanTest expressions
+select * from bool_table where b is true order by 1;
+select * from bool_table where b is false order by 1;
+select * from bool_table where b is not true order by 1;
+select * from bool_table where b is not false order by 1;
+select * from bool_table where b is unknown order by 1;
+select * from bool_table where b is not unknown order by 1;
+
+-- Combinations of nulls and bool exprs
+select * from bool_table where b = true order by 1;
+select * from bool_table where b = true or b = false order by 1;
+select * from bool_table where b = true and b = false order by 1;
+select * from bool_table where b = true or b is null order by 1;
+select * from bool_table where b = true or b is not null order by 1;
+select * from bool_table where b = true and b is null order by 1;
+select * from bool_table where b = true and b is not null order by 1;
+select * from bool_table where b = false order by 1;
+select * from bool_table where b = false or b is null order by 1;
+select * from bool_table where b = false or b is not null order by 1;
+select * from bool_table where b = false and b is null order by 1;
+select * from bool_table where b = false and b is not null order by 1;
+select * from bool_table where b is null order by 1;
+select * from bool_table where b is null or b is not null order by 1;
+select * from bool_table where b is null and b is not null order by 1;
+select * from bool_table where b is not null order by 1;
+
+delete from bool_table where b is null;
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+
+select * from bool_table where b is true order by 1;
+select * from bool_table where b is false order by 1;
+select * from bool_table where b is not true order by 1;
+select * from bool_table where b is not false order by 1;
+select * from bool_table where b is unknown order by 1;
+select * from bool_table where b is not unknown order by 1;
+select * from bool_table where b = true order by 1;
+select * from bool_table where b = true or b = false order by 1;
+select * from bool_table where b = true and b = false order by 1;
+select * from bool_table where b = true or b is null order by 1;
+select * from bool_table where b = true or b is not null order by 1;
+select * from bool_table where b = true and b is null order by 1;
+select * from bool_table where b = true and b is not null order by 1;
+select * from bool_table where b = false order by 1;
+select * from bool_table where b = false or b is null order by 1;
+select * from bool_table where b = false or b is not null order by 1;
+select * from bool_table where b = false and b is null order by 1;
+select * from bool_table where b = false and b is not null order by 1;
+select * from bool_table where b is null order by 1;
+select * from bool_table where b is null or b is not null order by 1;
+select * from bool_table where b is null and b is not null order by 1;
+select * from bool_table where b is not null order by 1;
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.enable_bool_compression;
+
+-- Check that the bool compression changes didn't mess up the
+-- array compression support for the bools.
+delete from bool_table;
+set timescaledb.enable_bool_compression = off;
+insert into bool_table values (100, true), (101, false), (102, null);
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+
+select * from bool_table where b is true order by 1;
+select * from bool_table where b is false order by 1;
+select * from bool_table where b is not true order by 1;
+select * from bool_table where b is not false order by 1;
+select * from bool_table where b is unknown order by 1;
+select * from bool_table where b is not unknown order by 1;
+select * from bool_table where b = true order by 1;
+select * from bool_table where b = true or b = false order by 1;
+select * from bool_table where b = true and b = false order by 1;
+select * from bool_table where b = true or b is null order by 1;
+select * from bool_table where b = true or b is not null order by 1;
+select * from bool_table where b = true and b is null order by 1;
+select * from bool_table where b = true and b is not null order by 1;
+select * from bool_table where b = false order by 1;
+select * from bool_table where b = false or b is null order by 1;
+select * from bool_table where b = false or b is not null order by 1;
+select * from bool_table where b = false and b is null order by 1;
+select * from bool_table where b = false and b is not null order by 1;
+select * from bool_table where b is null order by 1;
+select * from bool_table where b is null or b is not null order by 1;
+select * from bool_table where b is null and b is not null order by 1;
+select * from bool_table where b is not null order by 1;
+
+delete from bool_table where b is null;
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+
+select * from bool_table where b is true order by 1;
+select * from bool_table where b is false order by 1;
+select * from bool_table where b is not true order by 1;
+select * from bool_table where b is not false order by 1;
+select * from bool_table where b is unknown order by 1;
+select * from bool_table where b is not unknown order by 1;
+select * from bool_table where b = true order by 1;
+select * from bool_table where b = true or b = false order by 1;
+select * from bool_table where b = true and b = false order by 1;
+select * from bool_table where b = true or b is null order by 1;
+select * from bool_table where b = true or b is not null order by 1;
+select * from bool_table where b = true and b is null order by 1;
+select * from bool_table where b = true and b is not null order by 1;
+select * from bool_table where b = false order by 1;
+select * from bool_table where b = false or b is null order by 1;
+select * from bool_table where b = false or b is not null order by 1;
+select * from bool_table where b = false and b is null order by 1;
+select * from bool_table where b = false and b is not null order by 1;
+select * from bool_table where b is null order by 1;
+select * from bool_table where b is null or b is not null order by 1;
+select * from bool_table where b is null and b is not null order by 1;
+select * from bool_table where b is not null order by 1;
+
+-- At this point the bool data is generated as 'bool compression disabed'
+-- meaning, it is compressed with array compression. I try to confuse the
+-- executor by creating a vectorized plan and still hoping to get the right
+-- results.
+set timescaledb.debug_require_vector_qual to 'require';
+set timescaledb.enable_bool_compression = on;
+select * from bool_table where b is true order by 1;
+select * from bool_table where b is false order by 1;
+select * from bool_table where b is not true order by 1;
+select * from bool_table where b is not false order by 1;
+select * from bool_table where b is unknown order by 1;
+select * from bool_table where b is not unknown order by 1;
+select * from bool_table where b = true order by 1;
+select * from bool_table where b = true or b = false order by 1;
+select * from bool_table where b = true and b = false order by 1;
+select * from bool_table where b = true or b is null order by 1;
+select * from bool_table where b = true or b is not null order by 1;
+select * from bool_table where b = true and b is null order by 1;
+select * from bool_table where b = true and b is not null order by 1;
+select * from bool_table where b = false order by 1;
+select * from bool_table where b = false or b is null order by 1;
+select * from bool_table where b = false or b is not null order by 1;
+select * from bool_table where b = false and b is null order by 1;
+select * from bool_table where b = false and b is not null order by 1;
+select * from bool_table where b is null order by 1;
+select * from bool_table where b is null or b is not null order by 1;
+select * from bool_table where b is null and b is not null order by 1;
+select * from bool_table where b is not null order by 1;
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bool_compression;
 

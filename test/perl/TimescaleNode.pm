@@ -12,14 +12,8 @@ package TimescaleNode;
 # and would restrict the versions of perltidy that can be used to format the
 # sources.
 
-use if $ENV{PG_VERSION_MAJOR} >= 15, 'parent', qw(PostgreSQL::Test::Cluster);
-
-use if $ENV{PG_VERSION_MAJOR} < 15, 'parent', qw(PostgresNode);
-
-use
-  if $ENV{PG_VERSION_MAJOR} >= 15, 'PostgreSQL::Test::Utils', qw(slurp_file);
-
-use if $ENV{PG_VERSION_MAJOR} < 15, 'TestLib', qw(slurp_file);
+use parent PostgreSQL::Test::Cluster;
+use PostgreSQL::Test::Utils qw(slurp_file);
 
 use strict;
 use warnings;
@@ -30,10 +24,7 @@ $SIG{__DIE__} = \&Carp::confess;
 sub create
 {
 	my ($class, $name, %kwargs) = @_;
-	my $self =
-	  ($ENV{PG_VERSION_MAJOR} >= 15)
-	  ? $class->new($name)
-	  : $class->get_new_node($name);
+	my $self = $class->new($name);
 	$self->init(%kwargs);
 	$self->start(%kwargs);
 	$self->safe_psql('postgres', 'CREATE EXTENSION timescaledb');
@@ -58,21 +49,26 @@ sub psql_is
 {
 	my ($self, $db, $query, $expected_stdout, $testname) = @_;
 	my ($psql_rc, $psql_out, $psql_err) = $self->SUPER::psql($db, $query);
-	if (($ENV{PG_VERSION_MAJOR} >= 15))
-	{
-		PostgreSQL::Test::Cluster::ok(!$psql_rc, "$testname: err_code check");
-		PostgreSQL::Test::Cluster::is($psql_err, '',
-			"$testname: error_msg check");
-		PostgreSQL::Test::Cluster::is($psql_out, $expected_stdout,
-			"$testname: psql output check");
-	}
-	else
-	{
-		PostgresNode::ok(!$psql_rc, "$testname: err_code check");
-		PostgresNode::is($psql_err, '', "$testname: error_msg check");
-		PostgresNode::is($psql_out, $expected_stdout,
-			"$testname: psql output check");
-	}
+	PostgreSQL::Test::Cluster::ok(!$psql_rc, "$testname: err_code check");
+	PostgreSQL::Test::Cluster::is($psql_err, '',
+		"$testname: error_msg check");
+	PostgreSQL::Test::Cluster::is($psql_out, $expected_stdout,
+		"$testname: psql output check");
+}
+
+# remove leading and trailing whitespace
+sub strip
+{
+	my ($str) = @_;
+	$str =~ s/^\s+|\s+$//g;
+	return $str;
+}
+
+sub safe_psql
+{
+	my ($self, $db, $query) = @_;
+	my $psql_out = $self->SUPER::safe_psql($db, $query);
+	return strip($psql_out);
 }
 
 1;

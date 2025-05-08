@@ -403,3 +403,62 @@ select * from nullvalues where only_nulls is null
 except
 select * from only_nulls_null;
 
+--------------------------------------------------
+-- Test unique index creation                   --
+--------------------------------------------------
+create table uniquetable (time timestamptz not null, value int);
+select create_hypertable('uniquetable', 'time', create_default_indexes => false);
+insert into uniquetable values ('2024-01-01 01:00', 1), ('2024-01-01 02:00', 2);
+
+select format('%I.%I', chunk_schema, chunk_name)::regclass as unique_chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'uniquetable'::regclass
+ order by unique_chunk asc
+ limit 1 \gset
+
+alter table uniquetable set (timescaledb.compress_orderby='time');
+
+-- Create a non-Hypercore TAM compressed chunk
+select * from compress_chunk(:'unique_chunk');
+
+-- Should still be a "heap" chunk
+select c.relname, a.amname from pg_class c
+inner join pg_am a ON (c.relam = a.oid)
+where c.oid = :'unique_chunk'::regclass;
+
+insert into uniquetable values ('2024-01-01 01:00', 3);
+
+-- Convert the chunk to using Hypercore TAM
+alter table :unique_chunk set access method hypercore;
+
+-- Should now be a chunk using Hypercore TAM
+select c.relname, a.amname from pg_class c
+inner join pg_am a ON (c.relam = a.oid)
+where c.oid = :'unique_chunk'::regclass;
+
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time, value;
+
+-- Unique index creation should work but fail on uniqueness check
+\set ON_ERROR_STOP 0
+create unique index time_key on uniquetable (time);
+\set ON_ERROR_STOP 1
+
+-- Recompress to get all values in compressed format
+select compress_chunk(:'unique_chunk');
+
+-- Everything's compressed
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time, value;
+
+-- Unique index creation should still fail
+\set ON_ERROR_STOP 0
+create unique index time_key on uniquetable (time);
+\set ON_ERROR_STOP 1
+
+-- Delete the conflicting value and unique index creation should succeed
+delete from uniquetable where value = 3;
+select _timescaledb_debug.is_compressed_tid(ctid), * from :unique_chunk order by time;
+create unique index time_key on uniquetable (time);
+
+explain (costs off)
+select * from uniquetable where time = '2024-01-01 01:00';
+select * from uniquetable where time = '2024-01-01 01:00';

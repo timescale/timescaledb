@@ -27,7 +27,6 @@
 #include "compat/compat.h"
 
 #include "bgw/job.h"
-#include "compression_with_clause.h"
 #include "cross_module_fn.h"
 #include "errors.h"
 #include "func_cache.h"
@@ -42,100 +41,10 @@
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
+#include "with_clause/alter_table_with_clause.h"
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
-
-static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
-		[ContinuousEnabled] = {
-			.arg_names = {"continuous", NULL},
-			.type_id = BOOLOID,
-			.default_val = (Datum)false,
-		},
-		[ContinuousViewOptionCreateGroupIndex] = {
-			.arg_names = {"create_group_indexes", NULL},
-			.type_id = BOOLOID,
-			.default_val = (Datum)true,
-		},
-		[ContinuousViewOptionMaterializedOnly] = {
-			.arg_names = {"materialized_only", NULL},
-			.type_id = BOOLOID,
-			.default_val = (Datum)true,
-		},
-		[ContinuousViewOptionCompress] = {
-			.arg_names = {"enable_columnstore", "compress", NULL},
-			.type_id = BOOLOID,
-		},
-		[ContinuousViewOptionFinalized] = {
-			.arg_names = {"finalized", NULL},
-			.type_id = BOOLOID,
-			.default_val = (Datum)true,
-		},
-		[ContinuousViewOptionCompressSegmentBy] = {
-			.arg_names = {"segmentby", "compress_segmentby", NULL},
-			.type_id = TEXTOID,
-		},
-		[ContinuousViewOptionCompressOrderBy] = {
-			.arg_names = {"orderby", "compress_orderby", NULL},
-			 .type_id = TEXTOID,
-		},
-		[ContinuousViewOptionCompressChunkTimeInterval] = {
-			.arg_names = {"compress_chunk_time_interval", NULL},
-			 .type_id = INTERVALOID,
-		},
-};
-
-WithClauseResult *
-ts_continuous_agg_with_clause_parse(const List *defelems)
-{
-	return ts_with_clauses_parse(defelems,
-								 continuous_aggregate_with_clause_def,
-								 TS_ARRAY_LEN(continuous_aggregate_with_clause_def));
-}
-
-List *
-ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
-{
-	List *ret = NIL;
-
-	for (int i = 0; i < CompressOptionMax; i++)
-	{
-		int option_index = 0;
-		switch (i)
-		{
-			case CompressEnabled:
-				option_index = ContinuousViewOptionCompress;
-				break;
-			case CompressSegmentBy:
-				option_index = ContinuousViewOptionCompressSegmentBy;
-				break;
-			case CompressOrderBy:
-				option_index = ContinuousViewOptionCompressOrderBy;
-				break;
-			case CompressChunkTimeInterval:
-				option_index = ContinuousViewOptionCompressChunkTimeInterval;
-				break;
-			default:
-				elog(ERROR, "Unhandled compression option");
-				break;
-		}
-
-		const WithClauseResult *input = &with_clauses[option_index];
-		WithClauseDefinition def = continuous_aggregate_with_clause_def[option_index];
-
-		if (!input->is_default)
-		{
-			Node *value = (Node *) makeString(ts_with_clause_result_deparse_value(input));
-			DefElem *elem = makeDefElemExtended(EXTENSION_NAMESPACE,
-												(char *) def.arg_names[0],
-												value,
-												DEFELEM_UNSPEC,
-												-1);
-			ret = lappend(ret, elem);
-		}
-	}
-	return ret;
-}
 
 static void
 init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
@@ -1679,4 +1588,48 @@ ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_
 	{
 		return bucket_function->bucket_integer_width;
 	}
+}
+
+/*
+ * Get the width of a bucket
+ */
+int64
+ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function)
+{
+	int64 bucket_width;
+
+	if (bucket_function->bucket_fixed_interval == false)
+	{
+		/*
+		 * There are several cases of variable-sized buckets:
+		 * 1. Monthly buckets
+		 * 2. Buckets with timezones
+		 * 3. Cases 1 and 2 at the same time
+		 *
+		 * For months we simply take 30 days like on interval_to_int64 and
+		 * multiply this number by the number of months in the bucket. This
+		 * reduces the task to days/hours/minutes scenario.
+		 *
+		 * Days/hours/minutes case is handled the same way as for fixed-sized
+		 * buckets. The refresh window at least two buckets in size is adequate
+		 * for such corner cases as DST.
+		 */
+
+		/* bucket_function should always be specified for variable-sized buckets */
+		Assert(bucket_function != NULL);
+		/* ... and bucket_function->bucket_time_width too */
+		Assert(bucket_function->bucket_time_width != NULL);
+
+		/* Make a temporary copy of bucket_width */
+		Interval interval = *bucket_function->bucket_time_width;
+		interval.day += 30 * interval.month;
+		interval.month = 0;
+		bucket_width = ts_interval_value_to_internal(IntervalPGetDatum(&interval), INTERVALOID);
+	}
+	else
+	{
+		bucket_width = ts_continuous_agg_fixed_bucket_width(bucket_function);
+	}
+
+	return bucket_width;
 }

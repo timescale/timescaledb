@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+set max_parallel_workers_per_gather = 0;
+
 -- qual pushdown tests for decompresschunk ---
 -- Test qual pushdown with ints
 CREATE TABLE meta (device_id INT PRIMARY KEY);
@@ -42,6 +44,27 @@ WHERE time > 2::bigint and time < 4;
 SELECT *
 FROM hyper
 WHERE time = 3::bigint;
+
+-- Test some volatile and stable functions
+SET timescaledb.enable_chunk_append TO OFF;
+SET timescaledb.enable_constraint_aware_append TO OFF;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time = device_id;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time = random()::int;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time
+    = CASE WHEN now() > '1970-01-01' THEN random()::int ELSE device_id END;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time
+    = CASE WHEN now() > '1970-01-01' THEN 1 ELSE device_id END;
+
+RESET timescaledb.enable_chunk_append;
+RESET timescaledb.enable_constraint_aware_append;
 
 --- github issue 1855
 --- TESTs for meta column pushdown filters on exprs with casts.
@@ -119,6 +142,7 @@ EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
+RESET enable_seqscan;
 
 -- github issue #5286
 CREATE TABLE deleteme AS
@@ -134,6 +158,7 @@ ALTER TABLE deleteme SET (
 );
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
+VACUUM ANALYZE deleteme;
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 
@@ -161,6 +186,7 @@ ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentb
 
 INSERT INTO svf_pushdown SELECT '2020-01-01';
 SELECT compress_chunk(show_chunks('svf_pushdown'));
+VACUUM ANALYZE svf_pushdown;
 
 -- constraints should be pushed down into scan below decompresschunk in all cases
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
@@ -196,3 +222,4 @@ LATERAL(
     EXISTS (SELECT FROM meta) LIMIT 1
 ) l;
 
+DROP TABLE svf_pushdown;

@@ -4,6 +4,11 @@
 
 SET timescaledb.enable_now_constify TO FALSE;
 
+-- We disable index only scans to avoid some flakiness. It is not
+-- needed for the tests and it is only important which index is
+-- picked.
+SET enable_indexonlyscan TO FALSE;
+
 SELECT
        format('include/%s.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
        format('%s/shared/results/%s_results_uncompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNCOMPRESSED",
@@ -17,8 +22,9 @@ SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed res
 \set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
 
 set work_mem to '64MB';
-
 set max_parallel_workers_per_gather to 0;
+set enable_nestloop to off;
+
 \set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME
 \set TEST_TABLE 'metrics_space'
@@ -80,3 +86,4 @@ GROUP BY 1 ORDER BY 1;
 DROP TABLE i4418_1;
 DROP TABLE i4418_2;
 
+reset enable_nestloop;
