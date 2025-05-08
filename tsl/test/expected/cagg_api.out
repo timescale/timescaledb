@@ -224,10 +224,39 @@ SELECT hypertable_id,
              4 | 4714-11-24 00:00:00 BC
 (3 rows)
 
+-- Show the table definitions since there should be only one trigger
+-- or we will get duplicate entries.
+\d hyper_ts
+                        Table "public.hyper_ts"
+ Column |            Type             | Collation | Nullable | Default 
+--------+-----------------------------+-----------+----------+---------
+ time   | timestamp without time zone |           | not null | 
+ value  | double precision            |           |          | 
+Indexes:
+    "hyper_ts_time_idx" btree ("time" DESC)
+Triggers:
+    ts_cagg_invalidation_trigger AFTER INSERT OR DELETE OR UPDATE ON hyper_ts FOR EACH ROW EXECUTE FUNCTION continuous_agg_invalidation_trigger('1')
+    ts_insert_blocker BEFORE INSERT ON hyper_ts FOR EACH ROW EXECUTE FUNCTION insert_blocker()
+Number of child tables: 2 (Use \d+ to list them.)
+
+\d hyper_tstz
+                     Table "public.hyper_tstz"
+ Column |           Type           | Collation | Nullable | Default 
+--------+--------------------------+-----------+----------+---------
+ time   | timestamp with time zone |           | not null | 
+ value  | double precision         |           |          | 
+Indexes:
+    "hyper_tstz_time_idx" btree ("time" DESC)
+Triggers:
+    ts_cagg_invalidation_trigger AFTER INSERT OR DELETE OR UPDATE ON hyper_tstz FOR EACH ROW EXECUTE FUNCTION continuous_agg_invalidation_trigger('2')
+    ts_insert_blocker BEFORE INSERT ON hyper_tstz FOR EACH ROW EXECUTE FUNCTION insert_blocker()
+Number of child tables: 2 (Use \d+ to list them.)
+
 -- Check that there indeed is something in the hypertable invalidation
 -- log. If not, this will fail anyway. We show the "raw" timestamps,
 -- which is in UTC if it was originally a timestamp with timezone.
-SELECT hypertable_id,
+SELECT DISTINCT
+       hypertable_id,
        _timescaledb_functions.to_timestamp_without_timezone(lowest_modified_value) AS start,
        _timescaledb_functions.to_timestamp_without_timezone(greatest_modified_value) AS finish
   FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
