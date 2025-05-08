@@ -164,3 +164,28 @@ INSERT INTO t13 SELECT '2025-01-01','d1',0.1;
 SELECT compress_chunk(show_chunks('t13'));
 ROLLBACK;
 
+-- test segmentby and orderby
+BEGIN;
+CREATE TABLE t14(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.order_by='value');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t15(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.order_by='time');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t16(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.segment_by='device');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t17(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.segment_by='device', tsdb.order_by='time,value');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t18(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.segmentby='device', tsdb.orderby='time,value');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t18(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.time_column='time',tsdb.compress_segmentby='device', tsdb.compress_orderby='time,value');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
