@@ -1079,6 +1079,9 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 static void
 row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
 {
+	MemoryContext old_ctx;
+	old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
+
 	HeapTuple compressed_tuple;
 
 	for (int col = 0; col < row_compressor->n_input_columns; col++)
@@ -1184,6 +1187,7 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	row_compressor->rows_compressed_into_current_value = 0;
 
 	MemoryContextReset(row_compressor->per_row_ctx);
+	MemoryContextSwitchTo(old_ctx);
 }
 
 void
