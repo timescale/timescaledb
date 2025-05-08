@@ -245,7 +245,12 @@ rollback;
 
 --- Split a compressed/columnstore chunk is not supported
 select * from _timescaledb_catalog.compression_settings;
+
 call convert_to_columnstore('_timescaledb_internal._hyper_1_1_chunk');
+select compress_relid from _timescaledb_catalog.compression_settings where relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass \gset
+
+\d+ :compress_relid
+select * from :compress_relid;
 
 select count(*), sum(device), sum(location), sum(temp) from splitme;
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');

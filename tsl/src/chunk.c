@@ -1819,6 +1819,14 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	else
 		split_point = slice->fd.range_start + (interval_range / 2);
 
+	Oid outfuncid = InvalidOid;
+	bool isvarlena = false;
+
+	getTypeOutputInfo(splitdim_type, &outfuncid, &isvarlena);
+	split_at = ts_internal_to_time_value(split_point, splitdim_type);
+	Datum split_at_str = OidFunctionCall1(outfuncid, split_at);
+	elog(NOTICE, "splitting chunk at %s", DatumGetCString(split_at_str));
+
 	const CompressionSettings *compress_settings = ts_compression_settings_get(relid);
 
 	if (compress_settings)
