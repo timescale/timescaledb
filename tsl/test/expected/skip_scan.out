@@ -1492,10 +1492,6 @@ SELECT format('include/%s_load_comp_query.sql', :'TEST_BASE_NAME') AS "TEST_QUER
 SELECT current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
 -- To avoid ambiguity in test EXPLAIN outputs due to mixing of chunk plans with no SkipScan
 SET max_parallel_workers_per_gather = 0;
--- To avoid choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
--- as cost of scanning and sorting a small dataset can be less than scanning an index
--- TODO: address an issue of not preserving IndexPaths under DecompressChunks in "add_path"
-SET enable_seqscan = false;
 -- Run SkipScan queries on the provided compression layout
 -- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
 -- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
@@ -1543,10 +1539,16 @@ SET enable_seqscan = false;
 :PREFIX SELECT time, dev, val, 'q5_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev, time DESC) a;
 :PREFIX SELECT time, dev, val, 'q5_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev DESC, time) a;
 \qecho WHERE CLAUSES
-:PREFIX SELECT time, dev, val, 'q6_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 5) a;
 :PREFIX SELECT time, dev, val, 'q6_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE time > 5) a;
-:PREFIX SELECT time, dev, val, 'q6_3' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE dev > 5;
 :PREFIX SELECT time, dev, val, 'q6_4' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE time > 5;
+-- Force not choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
+-- as cost of scanning and sorting a small dataset can be less than scanning an index, including startup cost.
+-- After the fix in #8056 we take startup costs into account,
+-- but even startup costs for scanning and sorting can be smaller for seqscan if we also have a filter on the index columns.
+-- So for below queries with filters on "dev" we still need to disable SeqScan to choose IndexScan+SkipScan.
+SET enable_seqscan = false;
+:PREFIX SELECT time, dev, val, 'q6_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_3' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE dev > 5;
 --\qecho immutable func in WHERE clause on :TABLE
 :PREFIX SELECT DISTINCT ON (dev) *, 'q6_5' FROM :TABLE WHERE dev > int_func_immutable();
 --\qecho stable func in WHERE clause on :TABLE
@@ -1606,10 +1608,6 @@ SET timescaledb.enable_compressed_skipscan TO false;
 SELECT current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
 -- To avoid ambiguity in test EXPLAIN outputs due to mixing of chunk plans with no SkipScan
 SET max_parallel_workers_per_gather = 0;
--- To avoid choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
--- as cost of scanning and sorting a small dataset can be less than scanning an index
--- TODO: address an issue of not preserving IndexPaths under DecompressChunks in "add_path"
-SET enable_seqscan = false;
 -- Run SkipScan queries on the provided compression layout
 -- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
 -- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
@@ -1657,10 +1655,16 @@ SET enable_seqscan = false;
 :PREFIX SELECT time, dev, val, 'q5_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev, time DESC) a;
 :PREFIX SELECT time, dev, val, 'q5_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE ORDER BY dev DESC, time) a;
 \qecho WHERE CLAUSES
-:PREFIX SELECT time, dev, val, 'q6_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 5) a;
 :PREFIX SELECT time, dev, val, 'q6_2' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE time > 5) a;
-:PREFIX SELECT time, dev, val, 'q6_3' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE dev > 5;
 :PREFIX SELECT time, dev, val, 'q6_4' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE time > 5;
+-- Force not choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
+-- as cost of scanning and sorting a small dataset can be less than scanning an index, including startup cost.
+-- After the fix in #8056 we take startup costs into account,
+-- but even startup costs for scanning and sorting can be smaller for seqscan if we also have a filter on the index columns.
+-- So for below queries with filters on "dev" we still need to disable SeqScan to choose IndexScan+SkipScan.
+SET enable_seqscan = false;
+:PREFIX SELECT time, dev, val, 'q6_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev > 5) a;
+:PREFIX SELECT time, dev, val, 'q6_3' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a WHERE dev > 5;
 --\qecho immutable func in WHERE clause on :TABLE
 :PREFIX SELECT DISTINCT ON (dev) *, 'q6_5' FROM :TABLE WHERE dev > int_func_immutable();
 --\qecho stable func in WHERE clause on :TABLE
