@@ -218,6 +218,11 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 * Child is live, so add it to the live_childrels list for use below.
 		 */
 		live_childrels = lappend(live_childrels, child_rel);
+
+		/* If consider startup costs on chunks because we can apply SkipScan, should also consider
+		 * startup costs on a hypertable */
+		if (child_rel->consider_startup)
+			parent_rel->consider_startup = true;
 	}
 
 	/* Add paths to the append relation. */
