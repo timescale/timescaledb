@@ -17,6 +17,8 @@ typedef enum CreateTableFlags
 	CreateTableFlagCreateDefaultIndexes,
 	CreateTableFlagAssociatedSchema,
 	CreateTableFlagAssociatedTablePrefix,
+	CreateTableFlagOrderBy,
+	CreateTableFlagSegmentBy,
 } CreateTableFlags;
 
 WithClauseResult *ts_create_table_with_clause_parse(const List *defelems);
