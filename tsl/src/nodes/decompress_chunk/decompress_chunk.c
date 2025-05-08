@@ -429,22 +429,13 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 static void
 cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 {
-	/* Set the row number estimate. */
-	if (path->param_info != NULL)
-	{
-		path->rows = path->param_info->ppi_rows;
-	}
-	else
-	{
-		path->rows = path->parent->rows;
-	}
-
 	/* startup_cost is cost before fetching first tuple */
 	if (compressed_path->rows > 0)
 		path->startup_cost = compressed_path->total_cost / compressed_path->rows;
 
 	/* total_cost is cost for fetching all tuples */
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
+	path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
 }
 
 /* Smoothstep function S1 (the h01 cubic Hermite spline). */
