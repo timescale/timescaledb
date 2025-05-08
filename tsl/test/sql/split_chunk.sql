@@ -78,13 +78,6 @@ select _timescaledb_functions.freeze_chunk('_timescaledb_internal._hyper_1_1_chu
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
 select _timescaledb_functions.unfreeze_chunk('_timescaledb_internal._hyper_1_1_chunk');
 
--- Split a compressed/columnstore chunk is not supported
-begin;
-select * from _timescaledb_catalog.compression_settings;
-call convert_to_columnstore('_timescaledb_internal._hyper_1_1_chunk');
-call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
-rollback;
-
 -- Split by non-owner is not allowed
 set role :ROLE_1;
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
@@ -100,7 +93,7 @@ select * from chunk_slices where hypertable_name = 'splitme';
 
 -- Show that the two tuples ended up in different chunks
 select time, device, temp from _timescaledb_internal._hyper_1_1_chunk order by time;
-select time, device, temp from _timescaledb_internal._hyper_1_3_chunk order by time;
+select time, device, temp from _timescaledb_internal._hyper_1_2_chunk order by time;
 
 select setseed(0.2);
 -- Test split with bigger data set and chunks with more blocks
@@ -119,15 +112,15 @@ from timescaledb_information.chunks
 order by chunk_name, range_start, range_end;
 
 -- Split chunk 2. Save count to compare after split.
-select count(*) from _timescaledb_internal._hyper_1_3_chunk;
-select count(*) orig_count from _timescaledb_internal._hyper_1_3_chunk \gset
+select count(*) from _timescaledb_internal._hyper_1_2_chunk;
+select count(*) orig_count from _timescaledb_internal._hyper_1_2_chunk \gset
 
 -- Generate some garbage so that we can see that it gets cleaned up
 -- during split
-update  _timescaledb_internal._hyper_1_3_chunk set temp = temp+1 where temp > 10;
+update  _timescaledb_internal._hyper_1_2_chunk set temp = temp+1 where temp > 10;
 
 -- This will split in two equal size chunks
-call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
+call split_chunk('_timescaledb_internal._hyper_1_2_chunk');
 
 select chunk_name, range_start, range_end
 from timescaledb_information.chunks
@@ -137,8 +130,8 @@ order by chunk_name, range_start, range_end;
 -- in the original partition and that the tuple counts are roughly the
 -- same across the partitions.
 with counts as (
-    select (select count(*) from _timescaledb_internal._hyper_1_3_chunk) count1,
-            (select count(*) from _timescaledb_internal._hyper_1_4_chunk) count2
+    select (select count(*) from _timescaledb_internal._hyper_1_2_chunk) count1,
+            (select count(*) from _timescaledb_internal._hyper_1_3_chunk) count2
 ) select
   c.count1, c.count2,
   c.count1 + c.count2 as total_count,
@@ -147,8 +140,8 @@ from counts c;
 
 -- Check that both rels return proper data and no columns are messed
 -- up
+select time, device, location, temp from _timescaledb_internal._hyper_1_2_chunk order by time, device limit 3;
 select time, device, location, temp from _timescaledb_internal._hyper_1_3_chunk order by time, device limit 3;
-select time, device, location, temp from _timescaledb_internal._hyper_1_4_chunk order by time, device limit 3;
 
 --
 -- Test split with integer time
@@ -213,7 +206,7 @@ select t, ceil(random()*10), ceil(random()*20), random()*40
 from generate_series('2024-01-03'::timestamptz, '2024-01-10', '10s') t;
 
 select * from chunk_info;
-call split_chunk('_timescaledb_internal._hyper_1_3_chunk');
+call split_chunk('_timescaledb_internal._hyper_1_2_chunk');
 select * from chunk_info;
 
 --
@@ -248,3 +241,13 @@ begin;
 delete from splitme where device = 1;
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
 rollback;
+
+
+--- Split a compressed/columnstore chunk is not supported
+select * from _timescaledb_catalog.compression_settings;
+call convert_to_columnstore('_timescaledb_internal._hyper_1_1_chunk');
+
+select count(*), sum(device), sum(location), sum(temp) from splitme;
+call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
+
+select count(*), sum(device), sum(location), sum(temp) from splitme;

@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include "compression/compression_dml.h"
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/multixact.h>
@@ -42,6 +43,7 @@
 #include <parser/parse_func.h>
 #include <storage/block.h>
 #include <storage/bufmgr.h>
+#include <storage/itemptr.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <storage/smgr.h>
@@ -1417,8 +1419,8 @@ route_compressed_tuple_for_split(TupleTableSlot *slot, const struct SplitPointIn
 #endif
 
 static void
-copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2],
-					  const SplitPointInfo *splitpoint, struct VacuumCutoffs *cutoffs)
+copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2], SplitPointInfo *spi,
+					  struct VacuumCutoffs *cutoffs)
 {
 	TupleTableSlot *srcslot;
 	TableScanDesc scan;
@@ -1523,14 +1525,22 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2],
 
 		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
 
-		int routing_index = splitpoint->route_tuple(srcslot, splitpoint);
+		int routing_index = spi->route_tuple(srcslot, spi);
 		// Assert(routing_index == 0 || routing_index == 1);
 
 		if (routing_index == -1)
 		{
-			elog(NOTICE, "skipping split segment");
+			elog(NOTICE, "found split batch. Dead? %d", isdead);
+
+			if (!isdead)
+			{
+				CompressedSplitPointInfo *cspi = (CompressedSplitPointInfo *) spi;
+				ItemPointerCopy(&srcslot->tts_tid, &cspi->split_segment_tid);
+			}
+			routing_index = 0;
 			continue;
 		}
+
 		rsi = splitinfos[routing_index];
 
 		if (isdead)
@@ -1569,7 +1579,7 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2],
 
 static Oid
 do_split(Relation srcrel, Oid new_chunk_relid, struct VacuumCutoffs *cutoffs,
-		 const SplitPointInfo *splitpoint)
+		 SplitPointInfo *splitpoint)
 {
 	int ti_options = TABLE_INSERT_SKIP_FSM;
 	RelationSplitInfo *splitinfos[2];
@@ -1809,6 +1819,21 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	else
 		split_point = slice->fd.range_start + (interval_range / 2);
 
+	const CompressionSettings *compress_settings = ts_compression_settings_get(relid);
+
+	if (compress_settings)
+	{
+		bool matched = decompress_batch_for_value(compress_settings,
+												  splitdim_attnum,
+												  Int64GetDatum(split_point));
+
+		if (matched)
+		{
+			CommandCounterIncrement();
+			elog(NOTICE, "decompressed split batch");
+		}
+	}
+
 	int64 old_end = slice->fd.range_end;
 
 	/* Update the slice range for the existing chunk */
@@ -1837,7 +1862,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	Assert(new_chunk);
 
 	Chunk *new_compressed_chunk = NULL;
-	const CompressionSettings *compress_settings = ts_compression_settings_get(relid);
 
 	if (compress_settings != NULL)
 	{
@@ -1845,7 +1869,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		new_compressed_chunk = create_compress_chunk(ht_compressed, new_chunk, InvalidOid);
 		ts_chunk_constraints_create(ht_compressed, new_compressed_chunk);
 		ts_trigger_create_all_on_chunk(new_compressed_chunk);
-		elog(NOTICE, "created new compressed chunk");
 	}
 
 	ts_cache_release(&hcache);
@@ -1874,9 +1897,19 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	if (new_compressed_chunk)
 	{
 		int orderby_pos = ts_array_position(compress_settings->fd.orderby, NameStr(splitdim_name));
-		elog(NOTICE, "primary dim %s order by pos %d", NameStr(splitdim_name), orderby_pos);
+		Ensure(orderby_pos > 0,
+			   "primary dimension \"%s\" is not in compression settings",
+			   NameStr(splitdim_name));
+
+		/*
+		 * Get the attribute numbers for the primary dimension's min and max
+		 * values in the compressed relation. We'll use these to get the time
+		 * range of compressed segments in order to route segments to the
+		 * right result chunk.
+		 */
 		const char *min_attname = column_segment_min_name(orderby_pos);
 		const char *max_attname = column_segment_max_name(orderby_pos);
+
 		CompressedSplitPointInfo cspi = {
 			.base = {
 				.point = split_point,
@@ -1888,9 +1921,10 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			.attnum_max = get_attnum(compress_settings->fd.compress_relid, max_attname),
 		};
 
+		ItemPointerSetInvalid(&cspi.split_segment_tid);
+
 		Relation compressed_srcrel =
 			table_open(compress_settings->fd.compress_relid, AccessExclusiveLock);
-		elog(NOTICE, "opened compressed rel");
 		compute_rel_vacuum_cutoffs(compressed_srcrel, &ccutoffs);
 		new_compressed_heap_relid =
 			do_split(compressed_srcrel, new_compressed_chunk->table_id, &ccutoffs, &cspi.base);
