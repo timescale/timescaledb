@@ -21,6 +21,8 @@ alter table dvagg add column c int default 7;
 insert into dvagg select x, x % 5, 11 from generate_series(1001, 1999) x;
 select compress_chunk(show_chunks('dvagg'));
 
+vacuum analyze dvagg;
+
 
 -- Just the most basic vectorized aggregation query on a table with default
 -- compressed column.
