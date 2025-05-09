@@ -19,6 +19,8 @@ static const WithClauseDefinition create_table_with_clauses_def[] = {
 	[CreateTableFlagCreateDefaultIndexes] = {.arg_names = {"create_default_indexes", NULL}, .type_id = BOOLOID, .default_val = (Datum) true,},
 	[CreateTableFlagAssociatedSchema] = {.arg_names = {"associated_schema", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagAssociatedTablePrefix] = {.arg_names = {"associated_table_prefix", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagSegmentBy] = { .arg_names = {"segmentby", "segment_by", "compress_segmentby", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagOrderBy] = { .arg_names = {"orderby", "order_by", "compress_orderby", NULL}, .type_id = TEXTOID,},
 };
 
 WithClauseResult *
@@ -30,12 +32,12 @@ ts_create_table_with_clause_parse(const List *defelems)
 }
 
 Datum
-ts_create_table_parse_chunk_time_interval(WithClauseResult *parsed_options, Oid column_type,
+ts_create_table_parse_chunk_time_interval(WithClauseResult option, Oid column_type,
 										  Oid *interval_type)
 {
-	if (parsed_options[CreateTableFlagChunkTimeInterval].is_default == false)
+	if (option.is_default == false)
 	{
-		Datum textarg = parsed_options[CreateTableFlagChunkTimeInterval].parsed;
+		Datum textarg = option.parsed;
 		switch (column_type)
 		{
 			case INT2OID:

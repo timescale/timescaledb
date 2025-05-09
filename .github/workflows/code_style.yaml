@@ -3,7 +3,7 @@ name: Code style
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
   pull_request:
 
 jobs:
@@ -94,6 +94,11 @@ jobs:
         ./scripts/clang_format_all.sh
         git diff --exit-code
 
+    - name: FIXME annotations left in code (use TODO for long-term notes)
+      if: always()
+      run: |
+        ! grep fixme -niR ./*
+
   python_checks:
     name: Check Python code in tree
     runs-on: ubuntu-latest
@@ -104,6 +109,9 @@ jobs:
           pip install black prospector pylint dodgy \
             mccabe pycodestyle pyflakes \
             psutil pygithub pglast testgres
+          # pinning snowballstemmer to version 2.2.0 due to:
+          # https://github.com/prospector-dev/prospector/issues/763
+          pip install --force-reinstall --no-deps snowballstemmer==2.2.0
           pip list
           pip list --user
 

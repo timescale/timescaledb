@@ -41,7 +41,7 @@ alter table mytab_oneseg set (timescaledb.compress, timescaledb.compress_segment
 NOTICE:  default order by for hypertable "mytab_oneseg" is set to ""time" DESC"
 select show_chunks as chunk_to_compress_1 from show_chunks('mytab_oneseg') limit 1 \gset
 select compress_chunk(:'chunk_to_compress_1');
-INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -118,7 +118,7 @@ alter table mytab_twoseg set (timescaledb.compress, timescaledb.compress_segment
 NOTICE:  default order by for hypertable "mytab_twoseg" is set to ""time" DESC"
 select show_chunks as chunk_to_compress_2 from show_chunks('mytab_twoseg') limit 1 \gset
 select compress_chunk(:'chunk_to_compress_2');
-INFO:  using tuplesort to scan rows from "_hyper_3_3_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_3_3_chunk" for converting to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_3_chunk
@@ -197,7 +197,7 @@ generate_series('2023-01-01 00:00:00+00'::timestamptz, '2023-01-01 00:00:00+00':
 alter table mytab2 set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
 NOTICE:  default order by for hypertable "mytab2" is set to ""time" DESC"
 select compress_chunk(c) from show_chunks('mytab2') c;
-INFO:  using tuplesort to scan rows from "_hyper_5_5_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_5_5_chunk" for converting to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_5_5_chunk
@@ -272,7 +272,7 @@ NOTICE:  default order by for hypertable "test_defaults" is set to ""time" DESC"
 INSERT INTO test_defaults SELECT '2000-01-01', 1;
 INSERT INTO test_defaults SELECT '2001-01-01', 1;
 SELECT compress_chunk(show_chunks) AS "compressed_chunk" FROM show_chunks('test_defaults') ORDER BY show_chunks::text LIMIT 1 \gset
-INFO:  using tuplesort to scan rows from "_hyper_7_7_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_7_7_chunk" for converting to columnstore
 -- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'compressed_chunk';
  numrows_pre_compression | numrows_post_compression |               chunk_name               | chunk_id 
@@ -345,7 +345,7 @@ PREPARE p1 AS
 SELECT * FROM mytab_prep ORDER BY a, c, time DESC;
 select show_chunks as chunk_to_compress_prep from show_chunks('mytab_prep') limit 1 \gset
 SELECT compress_chunk(:'chunk_to_compress_prep'); -- the output of the prepared plan would change before and after compress
-INFO:  using tuplesort to scan rows from "_hyper_9_10_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_9_10_chunk" for converting to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_10_chunk
@@ -415,7 +415,7 @@ select show_chunks as chunk_to_compress_mytab from show_chunks('mytab') limit 1 
 alter table mytab set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
 NOTICE:  default order by for hypertable "mytab" is set to ""time" DESC"
 select compress_chunk(show_chunks('mytab'));
-INFO:  using tuplesort to scan rows from "_hyper_11_12_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_11_12_chunk" for converting to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_12_chunk
@@ -476,11 +476,11 @@ SELECT decompress_chunk(show_chunks('mytab'));
 
 alter table mytab set (timescaledb.compress = false);
 alter table mytab set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "mytab" is set to ""
 NOTICE:  default order by for hypertable "mytab" is set to ""time" DESC"
 select compress_chunk(show_chunks('mytab'));
-INFO:  using tuplesort to scan rows from "_hyper_11_12_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_11_12_chunk" for converting to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_12_chunk
@@ -517,7 +517,7 @@ insert into nullseg_one values (:'start_time', 1, 1), (:'start_time', 1, 2), (:'
 alter table nullseg_one set (timescaledb.compress, timescaledb.compress_segmentby= 'a');
 NOTICE:  default order by for hypertable "nullseg_one" is set to ""time" DESC"
 select compress_chunk(show_chunks('nullseg_one'));
-INFO:  using tuplesort to scan rows from "_hyper_14_15_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_14_15_chunk" for converting to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_14_15_chunk
@@ -571,7 +571,7 @@ insert into nullseg_many values (:'start_time', 1, 1, 1), (:'start_time', 1, 2, 
 alter table nullseg_many set (timescaledb.compress, timescaledb.compress_segmentby= 'a, c');
 NOTICE:  default order by for hypertable "nullseg_many" is set to ""time" DESC"
 select compress_chunk(show_chunks('nullseg_many'));
-INFO:  using tuplesort to scan rows from "_hyper_16_17_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_16_17_chunk" for converting to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_16_17_chunk
@@ -632,7 +632,7 @@ NOTICE:  default order by for hypertable "noseg" is set to ""time" DESC"
 INSERT INTO noseg VALUES ('2025-01-24 09:54:27.323421-07'::timestamptz, 1, 1, 1);
 SELECT show_chunks as chunk_to_compress FROM show_chunks('noseg') LIMIT 1 \gset
 SELECT compress_chunk(:'chunk_to_compress');
-INFO:  using tuplesort to scan rows from "_hyper_18_19_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_18_19_chunk" for converting to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_18_19_chunk
@@ -664,7 +664,7 @@ DETAIL:  Segmentwise recompression will be disabled
 INSERT INTO no_oby (ts,c1) VALUES (6,6);
 SELECT show_chunks as chunk_to_compress FROM show_chunks('no_oby') LIMIT 1 \gset
 SELECT compress_chunk(:'chunk_to_compress');
-INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for converting to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_20_21_chunk
@@ -679,7 +679,7 @@ ERROR:  segmentwise recompression cannot be applied for compression with no orde
 -- Compress wrapper: do full recompress instead of by segment
 SELECT compress_chunk(:'chunk_to_compress');
 NOTICE:  segmentwise recompression is disabled due to no order by, performing full recompression on chunk "_timescaledb_internal._hyper_20_21_chunk"
-INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for compression
+INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for converting to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_20_21_chunk

@@ -82,8 +82,7 @@ CROSSMODULE_WRAPPER(bool_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
-CROSSMODULE_WRAPPER(hypercore_handler);
-CROSSMODULE_WRAPPER(hypercore_proxy_handler);
+CROSSMODULE_WRAPPER(bloom1_contains);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
@@ -100,8 +99,11 @@ CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 CROSSMODULE_WRAPPER(merge_chunks);
+CROSSMODULE_WRAPPER(split_chunk);
 
 /* hypercore */
+CROSSMODULE_WRAPPER(hypercore_handler);
+CROSSMODULE_WRAPPER(hypercore_proxy_handler);
 CROSSMODULE_WRAPPER(is_compressed_tid);
 
 /*
@@ -420,9 +422,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.array_compressor_finish = error_no_default_fn_pg_community,
 	.bool_compressor_append = error_no_default_fn_pg_community,
 	.bool_compressor_finish = error_no_default_fn_pg_community,
-	.hypercore_handler = process_hypercore_handler,
-	.hypercore_proxy_handler = process_hypercore_proxy_handler,
-	.is_compressed_tid = error_no_default_fn_pg_community,
+	.bloom1_contains = error_no_default_fn_pg_community,
 
 	.compression_enable = NULL,
 
@@ -432,8 +432,14 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
+
+	.hypercore_handler = process_hypercore_handler,
+	.hypercore_proxy_handler = process_hypercore_proxy_handler,
+	.is_compressed_tid = error_no_default_fn_pg_community,
+
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
 	.merge_chunks = error_no_default_fn_pg_community,
+	.split_chunk = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

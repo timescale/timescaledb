@@ -7,6 +7,7 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
+    cagg_api.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
@@ -18,6 +19,7 @@ set(TEST_FILES
     chunk_column_stats.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
+    compress_bloom_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
     compressed_collation.sql
@@ -42,6 +44,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     create_table_with.sql
     custom_hashagg.sql
+    decompress_chunk_cost.sql
     decompress_index.sql
     foreign_keys.sql
     hypercore_columnar.sql
@@ -72,6 +75,7 @@ set(TEST_FILES
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
+    split_chunk.sql
     transparent_decompression_join_index.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
@@ -112,6 +116,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_merge.sql
     chunk_utils_compression.sql
     chunk_utils_internal.sql
+    compress_bloom_sparse_debug.sql
     compression_algos.sql
     compression_bgw.sql
     compression_bools.sql

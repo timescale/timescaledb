@@ -17,9 +17,11 @@ typedef enum CreateTableFlags
 	CreateTableFlagCreateDefaultIndexes,
 	CreateTableFlagAssociatedSchema,
 	CreateTableFlagAssociatedTablePrefix,
+	CreateTableFlagOrderBy,
+	CreateTableFlagSegmentBy,
 } CreateTableFlags;
 
 WithClauseResult *ts_create_table_with_clause_parse(const List *defelems);
 
-Datum ts_create_table_parse_chunk_time_interval(WithClauseResult *parsed_options, Oid column_type,
+Datum ts_create_table_parse_chunk_time_interval(WithClauseResult option, Oid column_type,
 												Oid *interval_type);

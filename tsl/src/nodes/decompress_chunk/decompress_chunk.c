@@ -435,12 +435,14 @@ static void
 cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 {
 	/* startup_cost is cost before fetching first tuple */
-	if (compressed_path->rows > 0)
-		path->startup_cost = compressed_path->total_cost / compressed_path->rows;
+	const double compressed_rows = Max(1, compressed_path->rows);
+	path->startup_cost =
+		compressed_path->startup_cost +
+		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
 	/* total_cost is cost for fetching all tuples */
-	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 	path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
+	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 }
 
 /* Smoothstep function S1 (the h01 cubic Hermite spline). */
@@ -868,6 +870,22 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 																   uncompressed_table_pathlist,
 																   &sort_info,
 																   compression_info);
+		/* We want to consider startup costs so that IndexScan is preferred to sorted SeqScan when
+		   we may have a chance to use SkipScan. We consider startup costs for LIMIT queries, and
+		   SkipScan is basically a "LIMIT 1" query run "ndistinct" times. At this point we don't
+		   have all information to check if SkipScan can be used, but we can narrow it down.
+		*/
+		if (!chunk_rel->consider_startup && IsA(compressed_path, IndexPath))
+		{
+			/* Candidate for SELECT DISTINCT SkipScan */
+			if (list_length(root->distinct_pathkeys) == 1
+				/* Candidate for DISTINCT aggregate SkipScan */
+				|| (root->numOrderedAggs >= 1 && list_length(root->group_pathkeys) == 1))
+			{
+				chunk_rel->consider_startup = true;
+			}
+		}
+
 		/*
 		 * Add the paths to the chunk relation.
 		 */

@@ -5,7 +5,7 @@ name: Coccinelle
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
 jobs:
   coccinelle:
     name: Coccinelle

@@ -714,29 +714,26 @@ Oid
 ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tablespacename)
 {
 	Relation rel;
-	ObjectAddress objaddr;
+	ObjectAddress address;
 	int sec_ctx;
 
 	/*
-	 * The CreateForeignTableStmt embeds a regular CreateStmt, so we can use
-	 * it to create both regular and foreign tables
+	 * CreateStmt node to create the chunk table
 	 */
-	CreateForeignTableStmt stmt = {
-		.base.type = T_CreateStmt,
-		.base.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
-									  (char *) NameStr(chunk->fd.table_name),
-									  0),
-		.base.inhRelations = list_make1(makeRangeVar((char *) NameStr(ht->fd.schema_name),
-													 (char *) NameStr(ht->fd.table_name),
-													 0)),
-		.base.tablespacename = tablespacename ? (char *) tablespacename : NULL,
-		/* Propagate storage options of the main table to a regular chunk
-		 * table, but avoid using it for a foreign chunk table. */
-		.base.options =
+	CreateStmt stmt = {
+		.type = T_CreateStmt,
+		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
+								 (char *) NameStr(chunk->fd.table_name),
+								 0),
+		.inhRelations = list_make1(makeRangeVar((char *) NameStr(ht->fd.schema_name),
+												(char *) NameStr(ht->fd.table_name),
+												0)),
+		.tablespacename = tablespacename ? (char *) tablespacename : NULL,
+		.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
-		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
-								 get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
-								 NULL,
+		.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
+							get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
+							NULL,
 	};
 	Oid uid, saved_uid;
 
@@ -758,14 +755,29 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 	if (uid != saved_uid)
 		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
 
-	objaddr = DefineRelation(&stmt.base, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
+	/* Prepare event trigger state and invoke ddl_command_start triggers */
+	if (ts_guc_enable_event_triggers)
+	{
+		EventTriggerBeginCompleteQuery();
+		EventTriggerDDLCommandStart((Node *) &stmt);
+	}
+
+	address = DefineRelation(&stmt, chunk->relkind, rel->rd_rel->relowner, NULL, NULL);
+
+	/* Invoke ddl_command_end triggers and clean up the event trigger state */
+	if (ts_guc_enable_event_triggers)
+	{
+		EventTriggerCollectSimpleCommand(address, InvalidObjectAddress, (Node *) &stmt);
+		EventTriggerDDLCommandEnd((Node *) &stmt);
+		EventTriggerEndCompleteQuery();
+	}
 
 	/* Make the newly defined relation visible so that we can update the
 	 * ACL. */
 	CommandCounterIncrement();
 
 	/* Copy acl from hypertable to chunk relation record */
-	copy_hypertable_acl_to_relid(ht, rel->rd_rel->relowner, objaddr.objectId);
+	copy_hypertable_acl_to_relid(ht, rel->rd_rel->relowner, address.objectId);
 
 	if (chunk->relkind == RELKIND_RELATION)
 	{
@@ -773,13 +785,13 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		 * need to create a toast table explicitly for some of the option
 		 * setting to work
 		 */
-		create_toast_table(&stmt.base, objaddr.objectId);
+		create_toast_table(&stmt, address.objectId);
 
 		/*
 		 * Some options require being table owner to set for example statistics
 		 * so we have to set them before restoring security context
 		 */
-		set_attoptions(rel, objaddr.objectId);
+		set_attoptions(rel, address.objectId);
 
 		if (uid != saved_uid)
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
@@ -789,7 +801,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 
 	table_close(rel, AccessShareLock);
 
-	return objaddr.objectId;
+	return address.objectId;
 }
 
 static int32
@@ -2124,7 +2136,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 															  &funcctx->max_calls,
 															  NULL);
 		}
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 	}
 
 	return show_chunks_return_srf(fcinfo);
@@ -4218,11 +4230,11 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 		if (edata->sqlerrcode == ERRCODE_DEPENDENT_OBJECTS_STILL_EXIST)
 			edata->hint = pstrdup("Use DROP ... to drop the dependent objects.");
 
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ReThrowError(edata);
 	}
 	PG_END_TRY();
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	dc_names = list_concat(dc_names, dc_temp);
 
 	MemoryContextSwitchTo(oldcontext);
@@ -4812,7 +4824,7 @@ ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
 		add_foreign_table_as_chunk(ftable_relid, ht);
 		ret = true;
 	}
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_BOOL(ret);
 }
@@ -5138,7 +5150,7 @@ ts_chunk_drop_osm_chunk(PG_FUNCTION_ARGS)
 		ts_clear_flags_32(ht->fd.status,
 						  HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 	ts_hypertable_update_status_osm(ht);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	PG_RETURN_BOOL(true);
 }
 

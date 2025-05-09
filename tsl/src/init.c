@@ -25,6 +25,7 @@
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "compression/recompress.h"
+#include "compression/sparse_index_bloom1.h"
 #include "config.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
@@ -170,6 +171,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.array_compressor_finish = tsl_array_compressor_finish,
 	.bool_compressor_append = tsl_bool_compressor_append,
 	.bool_compressor_finish = tsl_bool_compressor_finish,
+	.bloom1_contains = bloom1_contains,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,
@@ -194,6 +196,7 @@ CrossModuleFunctions tsl_cm_functions = {
 		tsl_get_compressed_chunk_index_for_recompression,
 	.preprocess_query_tsl = tsl_preprocess_query,
 	.merge_chunks = chunk_merge_chunks,
+	.split_chunk = chunk_split_chunk,
 };
 
 static void

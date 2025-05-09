@@ -44,6 +44,14 @@ static CustomScanMethods decompress_chunk_plan_methods = {
 	.CreateCustomScanState = decompress_chunk_state_create,
 };
 
+/* Check if the provided plan is a DecompressChunkPlan */
+bool
+ts_is_decompress_chunk_plan(Plan *plan)
+{
+	return IsA(plan, CustomScan) &&
+		   castNode(CustomScan, plan)->methods == &decompress_chunk_plan_methods;
+}
+
 void
 _decompress_chunk_init(void)
 {
@@ -272,7 +280,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 	}
 #endif
 	/*
-	 * FIXME this way to determine which columns are used is actually wrong, see
+	 * TODO this way to determine which columns are used is actually wrong, see
 	 * https://github.com/timescale/timescaledb/issues/4195#issuecomment-1104238863
 	 * Left as is for now, because changing it uncovers a whole new story with
 	 * ctid.
@@ -653,6 +661,8 @@ is_not_runtime_constant_walker(Node *node, void *context)
  * Note that we do the same evaluation when doing run time chunk exclusion, but
  * there is no good way to pass the evaluated clauses to the underlying nodes
  * like this DecompressChunk node.
+ *
+ * Similar checks are performed for sparse index pushdown.
  */
 static bool
 is_not_runtime_constant(Node *node)

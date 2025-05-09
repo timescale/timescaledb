@@ -658,11 +658,6 @@ SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'Tim
 -- make sure nobody is using it
 REVOKE CONNECT ON DATABASE :TEST_DBNAME FROM public;
 CALL kill_database_backends(:'TEST_DBNAME');
-SELECT * FROM pg_stat_activity WHERE datname = :'TEST_DBNAME';
- datid | datname | pid | leader_pid | usesysid | usename | application_name | client_addr | client_hostname | client_port | backend_start | xact_start | query_start | state_change | wait_event_type | wait_event | state | backend_xid | backend_xmin | query_id | query | backend_type 
--------+---------+-----+------------+----------+---------+------------------+-------------+-----------------+-------------+---------------+------------+-------------+--------------+-----------------+------------+-------+-------------+--------------+----------+-------+--------------
-(0 rows)
-
 -- Change tablespace
 ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
 WARNING:  you may need to manually restart any running background workers after this command
