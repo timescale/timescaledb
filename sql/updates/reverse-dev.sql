@@ -1,0 +1,1 @@
+DROP PROCEDURE _timescaledb_functions.process_hypertable_invalidations(REGCLASS);
