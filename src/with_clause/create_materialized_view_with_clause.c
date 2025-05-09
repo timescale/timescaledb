@@ -44,7 +44,7 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
         .default_val = (Datum)true,
     },
     [CreateMaterializedViewFlagChunkTimeInterval] = {
-        .arg_names = {"chunk_time_interval", NULL},
+        .arg_names = {"chunk_interval", NULL},
          .type_id = INTERVALOID,
     },
     [CreateMaterializedViewFlagSegmentBy] = {
@@ -56,7 +56,7 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
          .type_id = TEXTOID,
     },
     [CreateMaterializedViewFlagCompressChunkTimeInterval] = {
-        .arg_names = {"compress_chunk_time_interval", NULL},
+        .arg_names = {"compress_chunk_interval", "compress_chunk_time_interval", NULL},
          .type_id = INTERVALOID,
     },
 };
