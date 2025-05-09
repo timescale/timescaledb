@@ -289,7 +289,7 @@ DeltaDeltaCompressor *
 delta_delta_compressor_alloc(void)
 {
 	DeltaDeltaCompressor *compressor = palloc0(sizeof(*compressor));
-	simple8brle_compressor_init(&compressor->delta_delta);
+	simple8brle_compressor_init(&compressor->delta_delta, SIMPLE8B_UNLIMITED_BIT_LIMIT);
 	simple8brle_compressor_init_zero(&compressor->nulls);
 	return compressor;
 }
@@ -395,7 +395,7 @@ delta_delta_compressor_append_null(DeltaDeltaCompressor *compressor)
 		else
 		{
 			/* Need to initialze the null compressor */
-			simple8brle_compressor_init(&compressor->nulls);
+			simple8brle_compressor_init(&compressor->nulls, /*bit_limit*/ 1);
 		}
 	}
 	simple8brle_compressor_append(&compressor->nulls, 1);

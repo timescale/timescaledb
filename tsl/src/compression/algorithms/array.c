@@ -174,7 +174,7 @@ array_compressor_alloc(Oid type_to_compress)
 	compressor->has_nulls = false;
 
 	simple8brle_compressor_init_zero(&compressor->nulls);
-	simple8brle_compressor_init(&compressor->sizes);
+	simple8brle_compressor_init(&compressor->sizes, SIMPLE8B_UNLIMITED_BIT_LIMIT);
 	char_vec_init(&compressor->data, CurrentMemoryContext, 0);
 
 	compressor->type = type_to_compress;
@@ -205,7 +205,7 @@ array_compressor_append_null(ArrayCompressor *compressor)
 		else
 		{
 			/* Need to initialze the null compressor */
-			simple8brle_compressor_init(&compressor->nulls);
+			simple8brle_compressor_init(&compressor->nulls, /*bit_limit*/ 1);
 		}
 	}
 	simple8brle_compressor_append(&compressor->nulls, 1);

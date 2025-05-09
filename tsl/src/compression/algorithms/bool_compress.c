@@ -69,8 +69,7 @@ extern BoolCompressor *
 bool_compressor_alloc(void)
 {
 	BoolCompressor *compressor = palloc0(sizeof(*compressor));
-	simple8brle_compressor_init(&compressor->values);
-	simple8brle_compressor_init_bit_limit(&compressor->values, 1);
+	simple8brle_compressor_init(&compressor->values, SIMPLE8B_UNLIMITED_BIT_LIMIT);
 	simple8brle_compressor_init_zero(&compressor->validity_bitmap);
 	return compressor;
 }
@@ -104,7 +103,7 @@ bool_compressor_append_null(BoolCompressor *compressor)
 		else
 		{
 			/* Need to initialze the null compressor */
-			simple8brle_compressor_init(&compressor->validity_bitmap);
+			simple8brle_compressor_init(&compressor->validity_bitmap, /*bit_limit*/ 1);
 		}
 	}
 	simple8brle_compressor_append(&compressor->values, compressor->last_value);

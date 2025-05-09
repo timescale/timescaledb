@@ -260,17 +260,15 @@ GorillaCompressor *
 gorilla_compressor_alloc(void)
 {
 	GorillaCompressor *compressor = palloc(sizeof(*compressor));
-	simple8brle_compressor_init(&compressor->tag0s);
-	simple8brle_compressor_init(&compressor->tag1s);
-	simple8brle_compressor_init_bit_limit(&compressor->tag0s, 1);
-	simple8brle_compressor_init_bit_limit(&compressor->tag1s, 1);
+	simple8brle_compressor_init(&compressor->tag0s, /*bit_limit*/ 1);
+	simple8brle_compressor_init(&compressor->tag1s, /*bit_limit*/ 1);
 	/*
 	 * The number of leading zeros takes about 5 bits to encode, and changes
 	 * maybe every 100 rows, so use this as a conservative estimate.
 	 */
 	bit_array_init(&compressor->leading_zeros,
 				   /* expected_bits = */ (GLOBAL_MAX_ROWS_PER_COMPRESSION * 5) / 100);
-	simple8brle_compressor_init(&compressor->bits_used_per_xor);
+	simple8brle_compressor_init(&compressor->bits_used_per_xor, SIMPLE8B_UNLIMITED_BIT_LIMIT);
 	/*
 	 * We typically see about 12 bits or 4 decimal digits per row for the "xors"
 	 * part in gorilla compression.
@@ -357,7 +355,7 @@ gorilla_compressor_append_null(GorillaCompressor *compressor)
 		else
 		{
 			/* Need to initialze the null compressor */
-			simple8brle_compressor_init(&compressor->nulls);
+			simple8brle_compressor_init(&compressor->nulls, /*bit_limit*/ 1);
 		}
 	}
 	simple8brle_compressor_append(&compressor->nulls, 1);

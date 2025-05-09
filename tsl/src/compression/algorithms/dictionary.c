@@ -165,7 +165,7 @@ dictionary_compressor_alloc(Oid type)
 
 	compressor->dictionary_items = dictionary_hash_alloc(tentry);
 
-	simple8brle_compressor_init(&compressor->dictionary_indexes);
+	simple8brle_compressor_init(&compressor->dictionary_indexes, SIMPLE8B_UNLIMITED_BIT_LIMIT);
 	simple8brle_compressor_init_zero(&compressor->nulls);
 	return compressor;
 }
@@ -193,7 +193,7 @@ dictionary_compressor_append_null(DictionaryCompressor *compressor)
 		else
 		{
 			/* Need to initialze the null compressor */
-			simple8brle_compressor_init(&compressor->nulls);
+			simple8brle_compressor_init(&compressor->nulls, /*bit_limit*/ 1);
 		}
 	}
 	simple8brle_compressor_append(&compressor->nulls, 1);
