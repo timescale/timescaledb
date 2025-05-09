@@ -2188,7 +2188,6 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 						&row_compressor,
 						RelationGetDescr(rel),
 						new_compressed_rel,
-						RelationGetDescr(old_compressed_rel)->natts,
 						true /*need_bistate*/,
 						HEAP_INSERT_FROZEN);
 
@@ -3780,7 +3779,6 @@ convert_to_hypercore_finish(Oid relid)
 						&row_compressor,
 						RelationGetDescr(relation),
 						compressed_rel,
-						RelationGetDescr(compressed_rel)->natts,
 						true /*need_bistate*/,
 						HEAP_INSERT_FROZEN);
 

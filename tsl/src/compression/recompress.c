@@ -258,7 +258,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 						&row_compressor,
 						RelationGetDescr(uncompressed_chunk_rel),
 						compressed_chunk_rel,
-						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
 						0 /*insert options*/);
 

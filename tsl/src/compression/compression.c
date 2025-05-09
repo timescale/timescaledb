@@ -126,10 +126,6 @@ static void row_compressor_process_ordered_slot(RowCompressor *row_compressor, T
 static void row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row);
 static bool row_compressor_new_row_is_in_new_group(RowCompressor *row_compressor,
 												   TupleTableSlot *row);
-static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row);
-static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
-								 bool changed_groups);
-
 static void create_per_compressed_column(RowDecompressor *decompressor);
 
 /********************
@@ -306,7 +302,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	Ensure(out_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
 
 	TupleDesc in_desc = RelationGetDescr(in_rel);
-	TupleDesc out_desc = RelationGetDescr(out_rel);
 
 	/* Before calling row compressor relation should be segmented and sorted as configured
 	 * by compress_segmentby and compress_orderby.
@@ -465,7 +460,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 						&row_compressor,
 						RelationGetDescr(in_rel),
 						out_rel,
-						out_desc->natts,
 						true /*need_bistate*/,
 						insert_options);
 
@@ -968,7 +962,7 @@ build_column_map(const CompressionSettings *settings, Relation uncompressed_tabl
 void
 row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
 					const TupleDesc noncompressed_tupdesc, Relation compressed_table,
-					int16 num_columns_in_compressed_table, bool need_bistate, int insert_options)
+					bool need_bistate, int insert_options)
 {
 	Name count_metadata_name = DatumGetName(
 		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
@@ -979,6 +973,8 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 			 "missing metadata column '%s' in columnstore table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
+	const TupleDesc ctupdesc = RelationGetDescr(compressed_table);
+
 	*row_compressor = (RowCompressor){
 		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
 											 "compress chunk per-row",
@@ -988,8 +984,8 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 		.resultRelInfo = CatalogOpenIndexes(compressed_table),
 		.n_input_columns = noncompressed_tupdesc->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
-		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
-		.compressed_is_null = palloc(sizeof(bool) * num_columns_in_compressed_table),
+		.compressed_values = palloc(sizeof(Datum) * ctupdesc->natts),
+		.compressed_is_null = palloc(sizeof(bool) * ctupdesc->natts),
 		.rows_compressed_into_current_value = 0,
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
@@ -997,11 +993,11 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 		.insert_options = insert_options,
 	};
 
-	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
+	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * ctupdesc->natts);
 
 	build_column_map(settings,
 					 noncompressed_tupdesc,
-					 RelationGetDescr(compressed_table),
+					 ctupdesc,
 					 &row_compressor->per_column,
 					 &row_compressor->uncompressed_col_to_compressed_col);
 
@@ -1133,7 +1129,7 @@ row_compressor_new_row_is_in_new_group(RowCompressor *row_compressor, TupleTable
 	return false;
 }
 
-static void
+void
 row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 {
 	int col;
@@ -1173,7 +1169,7 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 	row_compressor->rows_compressed_into_current_value += 1;
 }
 
-static HeapTuple
+HeapTuple
 row_compressor_build_tuple(RowCompressor *row_compressor)
 {
 	for (int col = 0; col < row_compressor->n_input_columns; col++)
@@ -1229,7 +1225,7 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 						   row_compressor->compressed_is_null);
 }
 
-static void
+void
 row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups)
 {
 	/* free the compressed values now that we're done with them (the old compressor is freed in
@@ -1269,7 +1265,7 @@ row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups)
 	MemoryContextReset(row_compressor->per_row_ctx);
 }
 
-static void
+void
 row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
 {
 	HeapTuple compressed_tuple = row_compressor_build_tuple(row_compressor);
@@ -1350,11 +1346,12 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	row_compressor->compressed_values[row_compressor->count_metadata_column_offset] =
 		Int32GetDatum(row_compressor->rows_compressed_into_current_value);
 	row_compressor->compressed_is_null[row_compressor->count_metadata_column_offset] = false;
-
+   
 	compressed_tuple = heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
 									   row_compressor->compressed_values,
 									   row_compressor->compressed_is_null);
 	Assert(row_compressor->bistate != NULL);
+
 	heap_insert(row_compressor->compressed_table,
 				compressed_tuple,
 				mycid,
@@ -1662,7 +1659,8 @@ row_decompressor_close(RowDecompressor *decompressor)
 {
 	FreeBulkInsertState(decompressor->bistate);
 	MemoryContextDelete(decompressor->per_compressed_row_ctx);
-	CatalogCloseIndexes(decompressor->indexstate);
+	if (decompressor->indexstate)
+		CatalogCloseIndexes(decompressor->indexstate);
 	FreeExecutorState(decompressor->estate);
 	detoaster_close(&decompressor->detoaster);
 	free_attrmap(decompressor->attrmap);

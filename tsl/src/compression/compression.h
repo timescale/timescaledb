@@ -371,10 +371,14 @@ extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *s
 														  Relation rel);
 extern void row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
 								const TupleDesc noncompressed_tupdesc, Relation compressed_table,
-								int16 num_columns_in_compressed_table, bool need_bistate,
-								int insert_options);
+								bool need_bistate, int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
+extern HeapTuple row_compressor_build_tuple(RowCompressor *row_compressor);
+extern void row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups);
+extern void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
+								 bool changed_groups);
+extern void row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
 											  Relation in_rel);
