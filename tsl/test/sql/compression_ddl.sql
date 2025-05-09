@@ -26,6 +26,8 @@ ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
 
+VACUUM FULL ANALYZE test1;
+
 
 --make sure allowed ddl still work
 ALTER TABLE test1 CLUSTER ON "test1_Time_idx";
@@ -375,6 +377,8 @@ SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) W
 
 SELECT count(decompress_chunk(ch)) FROM show_chunks('test1') ch;
 
+VACUUM FULL ANALYZE test1;
+
 select add_compression_policy('test1', interval '1 day');
 \set ON_ERROR_STOP 0
 ALTER table test1 set (timescaledb.compress='f');
@@ -406,6 +410,8 @@ ALTER TABLESPACE tablespace2 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = '"Time" DESC');
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
+
+VACUUM FULL ANALYZE test1;
 
 DROP TABLE test1 CASCADE;
 DROP TABLESPACE tablespace1;
@@ -627,6 +633,8 @@ FROM compression_insert
 WHERE time >= '2000-01-01 0:00:00+0'
 AND time <= '2000-01-05 23:55:00+0';
 
+VACUUM ANALYZE compression_insert;
+
 -- force index scans to check index mapping
 -- this verifies that we are actually using compressed chunk index scans
 -- previously we could not use indexes on uncompressed chunks due to a bug:
@@ -674,6 +682,8 @@ FROM compression_insert
 WHERE time >= '2000-01-07 0:00:00+0'
 AND time <= '2000-01-11 23:55:00+0';
 
+VACUUM ANALYZE compression_insert;
+
 -- force index scans to check index mapping
 SET enable_seqscan = off;
 EXPLAIN (costs off) SELECT device_id, count(*)
@@ -713,6 +723,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-15 0:00:00+0'
 AND time <= '2000-01-19 23:55:00+0';
+
+VACUUM ANALYZE compression_insert;
 
 -- force index scans to check index mapping
 SET enable_seqscan = off;
@@ -755,6 +767,8 @@ FROM compression_insert
 WHERE time >= '2000-01-22 0:00:00+0'
 AND time <= '2000-01-26 23:55:00+0';
 
+VACUUM ANALYZE compression_insert;
+
 -- force index scans to check index mapping
 SET enable_seqscan = off;
 EXPLAIN (costs off) SELECT device_id, count(*)
@@ -793,6 +807,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-28 0:00:00+0'
 AND time <= '2000-02-01 23:55:00+0';
+
+VACUUM ANALYZE compression_insert;
 
 -- force index scans to check index mapping
 SET enable_seqscan = off;
@@ -874,6 +890,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM test_partials ORDER BY time;
 -- F, F, P, F, F
 INSERT INTO test_partials VALUES ('2024-01-01 00:02', 1, 2);
 SELECT compress_chunk(c) FROM show_chunks('test_partials', newer_than => '2022-01-01') c;
+VACUUM ANALYZE test_partials;
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify result correctness
 SELECT * FROM test_partials ORDER BY time;
@@ -902,6 +919,7 @@ INSERT INTO space_part VALUES
 -- chunk1
 ('2020-01-01 00:01', 1, 1, 1),
 ('2020-01-01 00:01', 2, 1, 1);
+VACUUM ANALYZE space_part;
 
 -------- now enable the space partitioning, this will take effect for chunks created subsequently
 SELECT add_dimension('space_part', 'a', number_partitions => 5);
@@ -919,6 +937,7 @@ INSERT INTO space_part VALUES
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 -- compress them
 SELECT compress_chunk(c, if_not_compressed=>true) FROM show_chunks('space_part') c;
+VACUUM ANALYZE space_part;
 -- plan still ok
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 -- make second one of them partial
@@ -951,6 +970,7 @@ values ('meter1', 1, 2.3, '2022-01-01'::timestamptz, '2022-01-01'::timestamptz),
 select compress_chunk(show_chunks('mytab'));
 REINDEX TABLE mytab; -- should update index
 select decompress_chunk(show_chunks('mytab'));
+vacuum analyze mytab;
 \set EXPLAIN 'EXPLAIN (costs off,timing off,summary off)'
 \set EXPLAIN_ANALYZE 'EXPLAIN (analyze,costs off,timing off,summary off)'
 -- do index scan on uncompressed, should give correct results
