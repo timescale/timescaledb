@@ -759,8 +759,6 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettin
 	return InvalidOid;
 }
 
-#if 1
-
 static void
 build_column_map(const CompressionSettings *settings, const TupleDesc in_tupdesc,
 				 const TupleDesc out_tupdesc, PerColumn **pcolumns, int16 **pmap)
@@ -770,7 +768,6 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_tupdesc
 	PerColumn *columns = palloc0(sizeof(PerColumn) * in_tupdesc->natts);
 	int16 *map = palloc0(sizeof(int16) * in_tupdesc->natts);
 
-	// Compressed is out
 	for (int i = 0; i < in_tupdesc->natts; i++)
 	{
 		Form_pg_attribute attr = TupleDescAttr(in_tupdesc, i);
@@ -850,111 +847,6 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_tupdesc
 	*pcolumns = columns;
 	*pmap = map;
 }
-#else
-
-static void
-build_column_map(const CompressionSettings *settings, Relation uncompressed_table,
-				 Relation compressed_table, PerColumn **pcolumns, int16 **pmap)
-{
-	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
-	TupleDesc out_desc = RelationGetDescr(compressed_table);
-	TupleDesc in_desc = RelationGetDescr(uncompressed_table);
-
-	PerColumn *columns = palloc0(sizeof(PerColumn) * in_desc->natts);
-	int16 *map = palloc0(sizeof(int16) * in_desc->natts);
-
-	for (int i = 0; i < in_desc->natts; i++)
-	{
-		Form_pg_attribute attr = TupleDescAttr(in_desc, i);
-
-		if (attr->attisdropped)
-			continue;
-
-		PerColumn *column = &columns[AttrNumberGetAttrOffset(attr->attnum)];
-		AttrNumber compressed_colnum = get_attnum(compressed_table->rd_id, NameStr(attr->attname));
-		Form_pg_attribute compressed_column_attr =
-			TupleDescAttr(out_desc, AttrNumberGetAttrOffset(compressed_colnum));
-		map[AttrNumberGetAttrOffset(attr->attnum)] = AttrNumberGetAttrOffset(compressed_colnum);
-
-		bool is_segmentby = ts_array_is_member(settings->fd.segmentby, NameStr(attr->attname));
-		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
-
-		if (!is_segmentby)
-		{
-			if (compressed_column_attr->atttypid != compressed_data_type_oid)
-				elog(ERROR,
-					 "expected column '%s' to be a compressed data type",
-					 NameStr(attr->attname));
-
-			AttrNumber segment_min_attr_number =
-				compressed_column_metadata_attno(settings,
-												 uncompressed_table->rd_id,
-												 attr->attnum,
-												 compressed_table->rd_id,
-												 "min");
-			AttrNumber segment_max_attr_number =
-				compressed_column_metadata_attno(settings,
-												 uncompressed_table->rd_id,
-												 attr->attnum,
-												 compressed_table->rd_id,
-												 "max");
-			int16 segment_min_attr_offset = segment_min_attr_number - 1;
-			int16 segment_max_attr_offset = segment_max_attr_number - 1;
-
-			BatchMetadataBuilder *batch_minmax_builder = NULL;
-			if (segment_min_attr_number != InvalidAttrNumber ||
-				segment_max_attr_number != InvalidAttrNumber)
-			{
-				Ensure(segment_min_attr_number != InvalidAttrNumber,
-					   "could not find the min metadata column");
-				Ensure(segment_max_attr_number != InvalidAttrNumber,
-					   "could not find the min metadata column");
-				batch_minmax_builder =
-					batch_metadata_builder_minmax_create(attr->atttypid,
-														 attr->attcollation,
-														 segment_min_attr_offset,
-														 segment_max_attr_offset);
-			}
-
-			Ensure(!is_orderby || batch_minmax_builder != NULL,
-				   "orderby columns must have minmax metadata");
-
-			const AttrNumber bloom_attr_number =
-				compressed_column_metadata_attno(settings,
-												 uncompressed_table->rd_id,
-												 attr->attnum,
-												 compressed_table->rd_id,
-												 "bloom1");
-			if (AttributeNumberIsValid(bloom_attr_number))
-			{
-				const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
-				batch_minmax_builder =
-					batch_metadata_builder_bloom1_create(attr->atttypid, bloom_attr_offset);
-			}
-
-			*column = (PerColumn){
-				.compressor = compressor_for_type(attr->atttypid),
-				.metadata_builder = batch_minmax_builder,
-				.segmentby_column_index = -1,
-			};
-		}
-		else
-		{
-			if (attr->atttypid != compressed_column_attr->atttypid)
-				elog(ERROR,
-					 "expected segment by column \"%s\" to be same type as uncompressed column",
-					 NameStr(attr->attname));
-			int16 index = ts_array_position(settings->fd.segmentby, NameStr(attr->attname));
-			*column = (PerColumn){
-				.segment_info = segment_info_new(attr),
-				.segmentby_column_index = index,
-			};
-		}
-	}
-	*pcolumns = columns;
-	*pmap = map;
-}
-#endif
 
 /********************
  ** row_compressor **
