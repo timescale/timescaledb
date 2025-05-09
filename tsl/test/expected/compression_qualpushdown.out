@@ -31,6 +31,7 @@ SELECT compress_chunk(:'CHUNK_FULL_NAME');
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
+VACUUM FULL ANALYZE hyper;
 -- test for qual pushdown
 explain (costs off, verbose)
 SELECT
@@ -40,9 +41,9 @@ WHERE time > 2::bigint and time < 4;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
    Vectorized Filter: ((_hyper_1_1_chunk."time" > '2'::bigint) AND (_hyper_1_1_chunk."time" < 4))
-   ->  Index Scan using compress_hyper_2_3_chunk_device_id__ts_meta_min_1__ts_meta__idx on _timescaledb_internal.compress_hyper_2_3_chunk
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
          Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.val
-         Index Cond: ((compress_hyper_2_3_chunk._ts_meta_min_1 < 4) AND (compress_hyper_2_3_chunk._ts_meta_max_1 > '2'::bigint))
+         Filter: ((compress_hyper_2_3_chunk._ts_meta_max_1 > '2'::bigint) AND (compress_hyper_2_3_chunk._ts_meta_min_1 < 4))
 (5 rows)
 
 explain (costs off, verbose)
@@ -53,9 +54,9 @@ WHERE time = 3::bigint;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
    Vectorized Filter: (_hyper_1_1_chunk."time" = '3'::bigint)
-   ->  Index Scan using compress_hyper_2_3_chunk_device_id__ts_meta_min_1__ts_meta__idx on _timescaledb_internal.compress_hyper_2_3_chunk
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_3_chunk
          Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.device_id, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk."time", compress_hyper_2_3_chunk.val
-         Index Cond: ((compress_hyper_2_3_chunk._ts_meta_min_1 <= '3'::bigint) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= '3'::bigint))
+         Filter: ((compress_hyper_2_3_chunk._ts_meta_min_1 <= '3'::bigint) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= '3'::bigint))
 (5 rows)
 
 SELECT *
@@ -166,6 +167,7 @@ SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
  _timescaledb_internal._hyper_3_4_chunk
 (1 row)
 
+VACUUM FULL ANALYZE metaseg_tab;
 select factorid, end_dt, logret
 from metaseg_tab
 where fmid = 56
@@ -191,9 +193,9 @@ order by factorid, end_dt;
          Output: _hyper_3_4_chunk.factorid, _hyper_3_4_chunk.end_dt, _hyper_3_4_chunk.logret
          Filter: ((_hyper_3_4_chunk.end_dt >= '12-10-2012'::date) AND (_hyper_3_4_chunk.end_dt <= '12-11-2012'::date))
          Vectorized Filter: (_hyper_3_4_chunk.fmid = 56)
-         ->  Index Scan using compress_hyper_4_5_chunk__ts_meta_min_1__ts_meta_max_1_idx on _timescaledb_internal.compress_hyper_4_5_chunk
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_4_5_chunk
                Output: compress_hyper_4_5_chunk._ts_meta_count, compress_hyper_4_5_chunk.fmid, compress_hyper_4_5_chunk.factorid, compress_hyper_4_5_chunk.start_dt, compress_hyper_4_5_chunk._ts_meta_min_1, compress_hyper_4_5_chunk._ts_meta_max_1, compress_hyper_4_5_chunk.end_dt, compress_hyper_4_5_chunk.interval_number, compress_hyper_4_5_chunk.logret, compress_hyper_4_5_chunk.knowledge_date
-               Index Cond: ((compress_hyper_4_5_chunk._ts_meta_min_1 <= '12-11-2012'::date) AND (compress_hyper_4_5_chunk._ts_meta_max_1 >= '12-10-2012'::date))
+               Filter: ((compress_hyper_4_5_chunk._ts_meta_max_1 >= '12-10-2012'::date) AND (compress_hyper_4_5_chunk._ts_meta_min_1 <= '12-11-2012'::date))
 (10 rows)
 
 --no pushdown here
@@ -256,7 +258,7 @@ SELECT compress_chunk(i) from show_chunks('pushdown_relabel') i;
  _timescaledb_internal._hyper_5_6_chunk
 (1 row)
 
-ANALYZE pushdown_relabel;
+VACUUM FULL ANALYZE pushdown_relabel;
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
                      QUERY PLAN                     
 ----------------------------------------------------
@@ -349,7 +351,7 @@ SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
  _timescaledb_internal._hyper_7_8_chunk
 (1 row)
 
-VACUUM ANALYZE deleteme;
+VACUUM FULL ANALYZE deleteme;
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
                        QUERY PLAN                        
 ---------------------------------------------------------
@@ -388,6 +390,7 @@ SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
  _timescaledb_internal._hyper_9_10_chunk
 (1 row)
 
+VACUUM FULL ANALYZE deleteme;
 EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
@@ -426,7 +429,7 @@ SELECT compress_chunk(show_chunks('svf_pushdown'));
  _timescaledb_internal._hyper_11_12_chunk
 (1 row)
 
-VACUUM ANALYZE svf_pushdown;
+VACUUM FULL ANALYZE svf_pushdown;
 -- constraints should be pushed down into scan below decompresschunk in all cases
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
                         QUERY PLAN                         
