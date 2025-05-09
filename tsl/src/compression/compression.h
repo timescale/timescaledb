@@ -131,6 +131,7 @@ typedef struct RowDecompressor
 	Relation in_rel;
 
 	TupleDesc out_desc;
+	Relation out_rel;
 	CatalogIndexState indexstate;
 	EState *estate;
 

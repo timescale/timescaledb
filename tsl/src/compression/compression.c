@@ -1173,6 +1173,128 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 	row_compressor->rows_compressed_into_current_value += 1;
 }
 
+static HeapTuple
+row_compressor_build_tuple(RowCompressor *row_compressor)
+{
+	for (int col = 0; col < row_compressor->n_input_columns; col++)
+	{
+		PerColumn *column = &row_compressor->per_column[col];
+		Compressor *compressor;
+		int16 compressed_col;
+		if (column->compressor == NULL && column->segment_info == NULL)
+			continue;
+
+		compressor = column->compressor;
+		compressed_col = row_compressor->uncompressed_col_to_compressed_col[col];
+
+		Assert(compressed_col >= 0);
+
+		if (compressor != NULL)
+		{
+			void *compressed_data;
+			Assert(column->segment_info == NULL);
+
+			compressed_data = compressor->finish(compressor);
+			if (compressed_data == NULL)
+			{
+				if (ts_guc_enable_null_compression &&
+					row_compressor->rows_compressed_into_current_value > 0)
+					compressed_data = null_compressor_get_dummy_block();
+			}
+			row_compressor->compressed_is_null[compressed_col] = compressed_data == NULL;
+
+			if (compressed_data != NULL)
+				row_compressor->compressed_values[compressed_col] =
+					PointerGetDatum(compressed_data);
+
+			if (column->metadata_builder != NULL)
+			{
+				column->metadata_builder->insert_to_compressed_row(column->metadata_builder,
+																   row_compressor);
+			}
+		}
+		else if (column->segment_info != NULL)
+		{
+			row_compressor->compressed_values[compressed_col] = column->segment_info->val;
+			row_compressor->compressed_is_null[compressed_col] = column->segment_info->is_null;
+		}
+	}
+
+	row_compressor->compressed_values[row_compressor->count_metadata_column_offset] =
+		Int32GetDatum(row_compressor->rows_compressed_into_current_value);
+	row_compressor->compressed_is_null[row_compressor->count_metadata_column_offset] = false;
+
+	return heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
+						   row_compressor->compressed_values,
+						   row_compressor->compressed_is_null);
+}
+
+static void
+row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups)
+{
+	/* free the compressed values now that we're done with them (the old compressor is freed in
+	 * finish()) */
+	for (int col = 0; col < row_compressor->n_input_columns; col++)
+	{
+		PerColumn *column = &row_compressor->per_column[col];
+		int16 compressed_col;
+		if (column->compressor == NULL && column->segment_info == NULL)
+			continue;
+
+		compressed_col = row_compressor->uncompressed_col_to_compressed_col[col];
+		Assert(compressed_col >= 0);
+		if (row_compressor->compressed_is_null[compressed_col])
+			continue;
+
+		/* don't free the segment-bys if we've overflowed the row, we still need them */
+		if (column->segment_info != NULL && !changed_groups)
+			continue;
+
+		if (column->compressor != NULL || !column->segment_info->typ_by_val)
+			pfree(DatumGetPointer(row_compressor->compressed_values[compressed_col]));
+
+		if (column->metadata_builder != NULL)
+		{
+			column->metadata_builder->reset(column->metadata_builder, row_compressor);
+		}
+
+		row_compressor->compressed_values[compressed_col] = 0;
+		row_compressor->compressed_is_null[compressed_col] = true;
+	}
+
+	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;
+	row_compressor->num_compressed_rows++;
+	row_compressor->rows_compressed_into_current_value = 0;
+
+	MemoryContextReset(row_compressor->per_row_ctx);
+}
+
+static void
+row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
+{
+	HeapTuple compressed_tuple = row_compressor_build_tuple(row_compressor);
+
+	Assert(row_compressor->bistate != NULL);
+	heap_insert(row_compressor->compressed_table,
+				compressed_tuple,
+				mycid,
+				row_compressor->insert_options /*=options*/,
+				row_compressor->bistate);
+	if (row_compressor->resultRelInfo->ri_NumIndices > 0)
+	{
+		ts_catalog_index_insert(row_compressor->resultRelInfo, compressed_tuple);
+	}
+
+	heap_freetuple(compressed_tuple);
+
+	if (NULL != row_compressor->on_flush)
+		row_compressor->on_flush(row_compressor,
+								 row_compressor->rows_compressed_into_current_value);
+
+	row_compressor_clear_batch(row_compressor, changed_groups);
+}
+
+#if 0
 static void
 row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
 {
@@ -1286,6 +1408,8 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	MemoryContextReset(row_compressor->per_row_ctx);
 	MemoryContextSwitchTo(old_ctx);
 }
+
+#endif
 
 void
 row_compressor_reset(RowCompressor *row_compressor)
