@@ -256,7 +256,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	RowCompressor row_compressor;
 	row_compressor_init(settings,
 						&row_compressor,
-						uncompressed_chunk_rel,
+						RelationGetDescr(uncompressed_chunk_rel),
 						compressed_chunk_rel,
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,

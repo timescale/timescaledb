@@ -4,6 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/attmap.h>
+#include <access/attnum.h>
 #include <access/skey.h>
 #include <catalog/heap.h>
 #include <catalog/indexing.h>
@@ -13,6 +15,7 @@
 #include <storage/predicate.h>
 #include <utils/datum.h>
 #include <utils/elog.h>
+#include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
@@ -460,7 +463,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	RowCompressor row_compressor;
 	row_compressor_init(settings,
 						&row_compressor,
-						in_rel,
+						RelationGetDescr(in_rel),
 						out_rel,
 						out_desc->natts,
 						true /*need_bistate*/,
@@ -762,6 +765,99 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettin
 	return InvalidOid;
 }
 
+#if 1
+
+static void
+build_column_map(const CompressionSettings *settings, const TupleDesc in_tupdesc,
+				 const TupleDesc out_tupdesc, PerColumn **pcolumns, int16 **pmap)
+{
+	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+
+	PerColumn *columns = palloc0(sizeof(PerColumn) * in_tupdesc->natts);
+	int16 *map = palloc0(sizeof(int16) * in_tupdesc->natts);
+
+	// Compressed is out
+	for (int i = 0; i < in_tupdesc->natts; i++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(in_tupdesc, i);
+
+		if (attr->attisdropped)
+			continue;
+
+		PerColumn *column = &columns[AttrNumberGetAttrOffset(attr->attnum)];
+		AttrNumber compressed_colnum =
+			get_attnum(settings->fd.compress_relid, NameStr(attr->attname));
+		Form_pg_attribute compressed_column_attr =
+			TupleDescAttr(out_tupdesc, AttrNumberGetAttrOffset(compressed_colnum));
+		map[AttrNumberGetAttrOffset(attr->attnum)] = AttrNumberGetAttrOffset(compressed_colnum);
+
+		bool is_segmentby = ts_array_is_member(settings->fd.segmentby, NameStr(attr->attname));
+		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
+
+		if (!is_segmentby)
+		{
+			if (compressed_column_attr->atttypid != compressed_data_type_oid)
+				elog(ERROR,
+					 "expected column '%s' to be a compressed data type",
+					 NameStr(attr->attname));
+
+			AttrNumber segment_min_attr_number =
+				compressed_column_metadata_attno(settings,
+												 settings->fd.relid,
+												 attr->attnum,
+												 settings->fd.compress_relid,
+												 "min");
+			AttrNumber segment_max_attr_number =
+				compressed_column_metadata_attno(settings,
+												 settings->fd.relid,
+												 attr->attnum,
+												 settings->fd.compress_relid,
+												 "max");
+			int16 segment_min_attr_offset = segment_min_attr_number - 1;
+			int16 segment_max_attr_offset = segment_max_attr_number - 1;
+
+			BatchMetadataBuilder *batch_minmax_builder = NULL;
+			if (segment_min_attr_number != InvalidAttrNumber ||
+				segment_max_attr_number != InvalidAttrNumber)
+			{
+				Ensure(segment_min_attr_number != InvalidAttrNumber,
+					   "could not find the min metadata column");
+				Ensure(segment_max_attr_number != InvalidAttrNumber,
+					   "could not find the min metadata column");
+				batch_minmax_builder =
+					batch_metadata_builder_minmax_create(attr->atttypid,
+														 attr->attcollation,
+														 segment_min_attr_offset,
+														 segment_max_attr_offset);
+			}
+
+			Ensure(!is_orderby || batch_minmax_builder != NULL,
+				   "orderby columns must have minmax metadata");
+
+			*column = (PerColumn){
+				.compressor = compressor_for_type(attr->atttypid),
+				.metadata_builder = batch_minmax_builder,
+				.segmentby_column_index = -1,
+			};
+		}
+		else
+		{
+			if (attr->atttypid != compressed_column_attr->atttypid)
+				elog(ERROR,
+					 "expected segment by column \"%s\" to be same type as uncompressed column",
+					 NameStr(attr->attname));
+			int16 index = ts_array_position(settings->fd.segmentby, NameStr(attr->attname));
+			*column = (PerColumn){
+				.segment_info = segment_info_new(attr),
+				.segmentby_column_index = index,
+			};
+		}
+	}
+	*pcolumns = columns;
+	*pmap = map;
+}
+#else
+
 static void
 build_column_map(const CompressionSettings *settings, Relation uncompressed_table,
 				 Relation compressed_table, PerColumn **pcolumns, int16 **pmap)
@@ -864,13 +960,14 @@ build_column_map(const CompressionSettings *settings, Relation uncompressed_tabl
 	*pcolumns = columns;
 	*pmap = map;
 }
+#endif
 
 /********************
  ** row_compressor **
  ********************/
 void
 row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
-					Relation uncompressed_table, Relation compressed_table,
+					const TupleDesc noncompressed_tupdesc, Relation compressed_table,
 					int16 num_columns_in_compressed_table, bool need_bistate, int insert_options)
 {
 	Name count_metadata_name = DatumGetName(
@@ -889,7 +986,7 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 		.compressed_table = compressed_table,
 		.bistate = need_bistate ? GetBulkInsertState() : NULL,
 		.resultRelInfo = CatalogOpenIndexes(compressed_table),
-		.n_input_columns = RelationGetDescr(uncompressed_table)->natts,
+		.n_input_columns = noncompressed_tupdesc->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
 		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
 		.compressed_is_null = palloc(sizeof(bool) * num_columns_in_compressed_table),
@@ -903,8 +1000,8 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
 
 	build_column_map(settings,
-					 uncompressed_table,
-					 compressed_table,
+					 noncompressed_tupdesc,
+					 RelationGetDescr(compressed_table),
 					 &row_compressor->per_column,
 					 &row_compressor->uncompressed_col_to_compressed_col);
 
@@ -1275,9 +1372,106 @@ segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_n
 	return DatumGetBool(data_is_eq);
 }
 
+/*
+ *
+ */
+static AttrMap *
+build_decompress_attrmap(const TupleDesc indesc, const TupleDesc outdesc)
+{
+	AttrMap *attrMap;
+	int outnatts;
+	int innatts;
+	int i;
+	int nextindesc = -1;
+
+	outnatts = outdesc->natts;
+	innatts = indesc->natts;
+
+	attrMap = make_attrmap(outnatts);
+	for (i = 0; i < outnatts; i++)
+	{
+		Form_pg_attribute outatt = TupleDescAttr(outdesc, i);
+		char *attname;
+		int j;
+
+		if (outatt->attisdropped)
+			continue;
+
+		attname = NameStr(outatt->attname);
+
+		for (j = 0; j < innatts; j++)
+		{
+			Form_pg_attribute inatt;
+
+			nextindesc++;
+			if (nextindesc >= innatts)
+				nextindesc = 0;
+
+			inatt = TupleDescAttr(indesc, nextindesc);
+			if (inatt->attisdropped)
+				continue;
+			if (strcmp(attname, NameStr(inatt->attname)) == 0)
+			{
+				attrMap->attnums[i] = inatt->attnum;
+				break;
+			}
+		}
+	}
+	return attrMap;
+}
+
 /**********************
  ** decompress_chunk **
  **********************/
+
+RowDecompressor
+build_decompressor_from_tupdesc(TupleDesc in_desc, const TupleDesc out_tupdesc)
+{
+	TupleDesc out_desc = CreateTupleDescCopyConstr(out_tupdesc);
+
+	RowDecompressor decompressor = {
+		.num_compressed_columns = in_desc->natts,
+
+		.in_desc = in_desc,
+		.in_rel = NULL,
+
+		.out_desc = out_desc,
+		.indexstate = NULL,
+
+		.mycid = GetCurrentCommandId(true),
+		.bistate = GetBulkInsertState(),
+
+		.compressed_datums = palloc(sizeof(Datum) * in_desc->natts),
+		.compressed_is_nulls = palloc(sizeof(bool) * in_desc->natts),
+
+		/* cache memory used to store the decompressed datums/is_null for form_tuple */
+		.decompressed_datums = palloc(sizeof(Datum) * out_desc->natts),
+		.decompressed_is_nulls = palloc(sizeof(bool) * out_desc->natts),
+
+		.per_compressed_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
+														"decompress chunk per-compressed row",
+														ALLOCSET_DEFAULT_SIZES),
+		.estate = CreateExecutorState(),
+
+		.decompressed_slots =
+			(TupleTableSlot **) palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
+		.attrmap = build_decompress_attrmap(out_tupdesc, in_desc),
+	};
+
+	create_per_compressed_column(&decompressor);
+
+	/*
+	 * We need to make sure decompressed_is_nulls is in a defined state. While this
+	 * will get written for normal columns it will not get written for dropped columns
+	 * since dropped columns don't exist in the compressed chunk so we initialize
+	 * with true here.
+	 */
+	memset(decompressor.decompressed_is_nulls, true, out_desc->natts);
+
+	detoaster_init(&decompressor.detoaster, CurrentMemoryContext);
+
+	return decompressor;
+}
 
 RowDecompressor
 build_decompressor(Relation in_rel, Relation out_rel)
@@ -1312,6 +1506,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 
 		.decompressed_slots =
 			(TupleTableSlot **) palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
+		.attrmap = build_decompress_attrmap(out_desc, in_desc),
 	};
 
 	create_per_compressed_column(&decompressor);
@@ -1346,6 +1541,13 @@ row_decompressor_close(RowDecompressor *decompressor)
 	CatalogCloseIndexes(decompressor->indexstate);
 	FreeExecutorState(decompressor->estate);
 	detoaster_close(&decompressor->detoaster);
+	free_attrmap(decompressor->attrmap);
+
+	pfree(decompressor->compressed_datums);
+	pfree(decompressor->compressed_is_nulls);
+	pfree(decompressor->decompressed_datums);
+	pfree(decompressor->decompressed_is_nulls);
+	pfree(decompressor->decompressed_slots);
 }
 
 void
@@ -1385,7 +1587,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 		if (should_free)
 			heap_freetuple(tuple);
 
-		row_decompressor_decompress_row_to_table(&decompressor);
+		row_decompressor_decompress_row_to_table(&decompressor, out_rel);
 
 		if ((++nrows_processed % report_reltuples) == 0)
 			elog(DEBUG2,
@@ -1436,7 +1638,8 @@ create_per_compressed_column(RowDecompressor *decompressor)
 		 * Assumption: column names are the same on compressed and
 		 *       uncompressed chunk.
 		 */
-		AttrNumber decompressed_colnum = get_attnum(decompressor->out_rel->rd_id, col_name);
+		AttrNumber decompressed_colnum = decompressor->attrmap->attnums[col];
+
 		if (!AttributeNumberIsValid(decompressed_colnum))
 		{
 			*per_compressed_col = (PerCompressedColumn){
@@ -1622,7 +1825,6 @@ decompress_batch(RowDecompressor *decompressor)
 		HeapTuple decompressed_tuple = heap_form_tuple(decompressor->out_desc,
 													   decompressor->decompressed_datums,
 													   decompressor->decompressed_is_nulls);
-		decompressed_tuple->t_tableOid = decompressor->out_rel->rd_id;
 
 		ExecStoreHeapTuple(decompressed_tuple, decompressed_slot, /* should_free = */ false);
 	}
@@ -1766,14 +1968,14 @@ decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *
 }
 
 int
-row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
+row_decompressor_decompress_row_to_table(RowDecompressor *decompressor, Relation outrel)
 {
 	const int n_batch_rows = decompress_batch(decompressor);
 
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
 	/* Insert all decompressed rows into table using the bulk insert API. */
-	table_multi_insert(decompressor->out_rel,
+	table_multi_insert(outrel,
 					   decompressor->decompressed_slots,
 					   n_batch_rows,
 					   decompressor->mycid,

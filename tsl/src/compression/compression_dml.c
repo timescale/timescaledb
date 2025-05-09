@@ -585,7 +585,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		}
 		else
 		{
-			stats.tuples_decompressed += row_decompressor_decompress_row_to_table(&decompressor);
+			stats.tuples_decompressed +=
+				row_decompressor_decompress_row_to_table(&decompressor, out_rel);
 			stats.batches_decompressed++;
 		}
 		write_logical_replication_msg_decompression_end();

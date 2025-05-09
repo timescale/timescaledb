@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <access/attnum.h>
 #include <catalog/indexing.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
@@ -130,7 +131,6 @@ typedef struct RowDecompressor
 	Relation in_rel;
 
 	TupleDesc out_desc;
-	Relation out_rel;
 	CatalogIndexState indexstate;
 	EState *estate;
 
@@ -152,6 +152,7 @@ typedef struct RowDecompressor
 
 	TupleTableSlot **decompressed_slots;
 	int unprocessed_tuples;
+	AttrMap *attrmap;
 
 	Detoaster detoaster;
 } RowDecompressor;
@@ -357,7 +358,8 @@ extern bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datu
 extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
 extern void compress_row_end(CompressSingleRowState *cr);
 extern void compress_row_destroy(CompressSingleRowState *cr);
-extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
+extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor,
+													Relation outrel);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
 extern void compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings,
@@ -367,7 +369,7 @@ extern void compress_chunk_populate_sort_info_for_column(const CompressionSettin
 extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *settings,
 														  Relation rel);
 extern void row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
-								Relation uncompressed_table, Relation compressed_table,
+								const TupleDesc noncompressed_tupdesc, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,
 								int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
@@ -381,6 +383,8 @@ extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
+extern RowDecompressor build_decompressor_from_tupdesc(TupleDesc in_desc,
+													   const TupleDesc out_tupdesc);
 
 extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);

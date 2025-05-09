@@ -1961,7 +1961,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 
 	Ensure(result == TM_Ok, "could not delete compressed segment, result: %u", result);
 
-	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor);
+	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor, relation);
 	/* Return the TID of the decompressed conflicting tuple. Tuple index is
 	 * 1-indexed, so subtract 1. */
 	slot = decompressor.decompressed_slots[tuple_index - 1];
@@ -2186,7 +2186,7 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 	/* Initialize the compressor. */
 	row_compressor_init(settings,
 						&row_compressor,
-						rel,
+						RelationGetDescr(rel),
 						new_compressed_rel,
 						RelationGetDescr(old_compressed_rel)->natts,
 						true /*need_bistate*/,
@@ -3778,7 +3778,7 @@ convert_to_hypercore_finish(Oid relid)
 
 	row_compressor_init(settings,
 						&row_compressor,
-						relation,
+						RelationGetDescr(relation),
 						compressed_rel,
 						RelationGetDescr(compressed_rel)->natts,
 						true /*need_bistate*/,
