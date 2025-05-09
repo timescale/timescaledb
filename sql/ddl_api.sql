@@ -215,4 +215,3 @@ CREATE OR REPLACE PROCEDURE @extschema@.refresh_continuous_aggregate(
     window_end               "any",
     force                    BOOLEAN = FALSE
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
-

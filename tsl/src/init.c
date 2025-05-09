@@ -143,6 +143,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
 	.continuous_agg_call_invalidation_trigger = execute_cagg_trigger,
 	.continuous_agg_refresh = continuous_agg_refresh,
+	.continuous_agg_move_hypertable_invalidations = continuous_agg_move_hypertable_invalidations,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,

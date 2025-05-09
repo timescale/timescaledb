@@ -12,6 +12,7 @@
 #include "materialize.h"
 
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
+extern Datum continuous_agg_move_hypertable_invalidations(PG_FUNCTION_ARGS);
 extern void continuous_agg_calculate_merged_refresh_window(
 	const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 	const InvalidationStore *invalidations, const ContinuousAggsBucketFunction *bucket_function,
