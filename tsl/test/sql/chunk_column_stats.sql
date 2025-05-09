@@ -86,7 +86,8 @@ SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id', true);
 -- enable compression
 ALTER TABLE sample_table SET (
 	timescaledb.compress,
-    timescaledb.compress_orderby = 'time'
+    timescaledb.compress_orderby = 'time',
+    timescaledb.compress_segmentby = 'sensor_id'
 );
 
 --
@@ -288,3 +289,24 @@ ALTER TABLE sample_table1 ALTER COLUMN sensor_id TYPE TEXT;
 
 SELECT * FROM disable_chunk_skipping('sample_table1', 'sensor_id');
 ALTER TABLE sample_table1 ALTER COLUMN sensor_id TYPE TEXT;
+
+-- Check that column mapping between hypertable and chunk doesn't break when
+-- hypertable has dropped columns
+-- See: https://github.com/timescale/timescaledb/issues/7932
+CREATE TABLE sample_table (
+    time TIMESTAMPTZ NOT NULL,
+    sensor_id INTEGER,
+    cpu NUMERIC,
+    temperature BIGINT);
+CREATE INDEX ON sample_table (temperature);
+SELECT create_hypertable('sample_table', 'time', chunk_time_interval=>'7 days'::interval);
+ALTER TABLE sample_table DROP COLUMN sensor_id;
+INSERT INTO sample_table VALUES
+    (now(), 1, 366),
+    (now(), 2, 501);
+ALTER TABLE sample_table SET (timescaledb.compress, timescaledb.compress_orderby='time', timescaledb.compress_segmentby='temperature');
+set timescaledb.enable_chunk_skipping = on;
+SELECT enable_chunk_skipping('sample_table', 'temperature');
+SELECT show_chunks('sample_table') AS "CH_NAME" order by 1 limit 1 \gset
+SELECT compress_chunk(:'CH_NAME');
+SELECT * FROM _timescaledb_catalog.chunk_column_stats;

@@ -85,13 +85,18 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			{
 				tsl_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
 			}
+
+			if (root->numOrderedAggs && !IS_DUMMY_REL(input_rel) && output_rel != NULL)
+			{
+				tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
+			}
 			break;
 		case UPPERREL_WINDOW:
 			if (IsA(linitial(input_rel->pathlist), CustomPath))
 				gapfill_adjust_window_targetlist(root, input_rel, output_rel);
 			break;
 		case UPPERREL_DISTINCT:
-			tsl_skip_scan_paths_add(root, input_rel, output_rel);
+			tsl_skip_scan_paths_add(root, input_rel, output_rel, stage);
 			break;
 		default:
 			break;
@@ -248,7 +253,9 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 		 */
 		if ((has_normal_agg || has_vector_agg) && (has_vector_agg != should_have_vector_agg))
 		{
-			elog(ERROR, "vector aggregation inconsistent with debug_require_vector_agg GUC");
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("vector aggregation inconsistent with debug_require_vector_agg GUC")));
 		}
 	}
 #endif

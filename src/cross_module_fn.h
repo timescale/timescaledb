@@ -19,7 +19,7 @@
 #include "planner/planner.h"
 #include "process_utility.h"
 #include "ts_catalog/continuous_agg.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 
 /*
  * To define a cross-module function add it to this struct, add a default
@@ -34,7 +34,7 @@ typedef struct Hypertable Hypertable;
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 typedef struct CopyChunkState CopyChunkState;
-typedef struct HypertableModifyState HypertableModifyState;
+typedef struct ModifyHypertableState ModifyHypertableState;
 
 typedef struct CrossModuleFunctions
 {
@@ -123,18 +123,20 @@ typedef struct CrossModuleFunctions
 	PGFunction compressed_data_out;
 	PGFunction compressed_data_info;
 	PGFunction compressed_data_has_nulls;
-	bool (*process_compress_table)(AlterTableCmd *cmd, Hypertable *ht,
-								   WithClauseResult *with_clause_options);
+	bool (*process_compress_table)(Hypertable *ht, WithClauseResult *with_clause_options);
 	void (*process_altertable_cmd)(Hypertable *ht, const AlterTableCmd *cmd);
 	void (*process_rename_cmd)(Oid relid, Cache *hcache, const RenameStmt *stmt);
 	PGFunction create_compressed_chunk;
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
 	void (*decompress_batches_for_insert)(const ChunkInsertState *state, TupleTableSlot *slot);
-	bool (*decompress_target_segments)(HypertableModifyState *ht_state);
+	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
 	int (*hypercore_decompress_update_segment)(Relation relation, const ItemPointer ctid,
 											   TupleTableSlot *slot, Snapshot snapshot,
 											   ItemPointer new_tid);
+
+	void (*compression_enable)(Hypertable *ht, WithClauseResult *with_clause_options);
+
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
 	 *  functions because they may be very useful for debugging customer problems if the sql
@@ -152,20 +154,23 @@ typedef struct CrossModuleFunctions
 	PGFunction array_compressor_finish;
 	PGFunction bool_compressor_append;
 	PGFunction bool_compressor_finish;
-	PGFunction hypercore_handler;
-	PGFunction hypercore_proxy_handler;
-	PGFunction is_compressed_tid;
+	PGFunction bloom1_contains;
 
 	PGFunction create_chunk;
 	PGFunction show_chunk;
 
-	PGFunction chunk_create_empty_table;
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
+
+	PGFunction hypercore_handler;
+	PGFunction hypercore_proxy_handler;
+	PGFunction is_compressed_tid;
+
 	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);
 	PGFunction merge_chunks;
+	PGFunction split_chunk;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

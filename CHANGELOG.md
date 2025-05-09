@@ -4,6 +4,52 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.19.3 (2025-04-15)
+
+This release contains bug fixes since the 2.19.2 release. We recommend that you upgrade at the next available opportunity.
+
+**Bug fixes**
+* [#7893](https://github.com/timescale/timescaledb/pull/7893) Don't capture hard errors in with-clause parser
+* [#7903](https://github.com/timescale/timescaledb/pull/7903) Don't capture hard errors for old cagg format
+* [#7912](https://github.com/timescale/timescaledb/pull/7912) Don't capture errors estimating time max spread
+* [#7910](https://github.com/timescale/timescaledb/pull/7910) Fix not using SkipScan over one chunk
+* [#7913](https://github.com/timescale/timescaledb/pull/7913) Allow TAM chunk creation as non-owner
+* [#7935](https://github.com/timescale/timescaledb/pull/7935) Fix TAM segfault on DELETE using segmentby column
+* [#7954](https://github.com/timescale/timescaledb/pull/7954) Allow scheduler restarts to be disabled
+* [#7964](https://github.com/timescale/timescaledb/pull/7964) Crash when grouping by multiple columns of a compressed table, one of which is a UUID segmentby column.
+
+## 2.19.2 (2025-04-07)
+
+This release contains bug fixes since the 2.19.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Features**
+* [#7923](https://github.com/timescale/timescaledb/pull/7923) Add a GUC to set a compression batch size limit
+
+**Bugfixes**
+* [#7911](https://github.com/timescale/timescaledb/pull/7911) Don't create a Hypertable for published tables
+* [#7902](https://github.com/timescale/timescaledb/pull/7902) Fix crash in VectorAgg plan code
+
+**GUCs**
+* `compression_batch_size_limit`: set batch size limit, default: `1000`
+
+**Thanks**
+* @soedirgo for reporting that published tables don't get dropped when they have a hypertable*
+
+## 2.19.1 (2025-04-01)
+
+This release contains bug fixes since the 2.19.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#7816](https://github.com/timescale/timescaledb/pull/7816) Fix `ORDER BY` for direct queries on partial chunks
+* [#7834](https://github.com/timescale/timescaledb/pull/7834) Avoid unnecessary scheduler restarts
+* [#7837](https://github.com/timescale/timescaledb/pull/7837) Ignore frozen chunks in compression policy
+* [#7850](https://github.com/timescale/timescaledb/pull/7850) Add `is_current_xact_tuple` to Arrow TTS
+* [#7890](https://github.com/timescale/timescaledb/pull/7890) Flush error state before doing anything else
+
+**Thanks**
+* @bjornuppeke for reporting a problem with `INSERT INTO ... ON CONFLICT DO NOTHING` on compressed chunks
+* @kav23alex for reporting a segmentation fault on `ALTER TABLE` with `DEFAULT`
+
 ## 2.19.0 (2025-03-18)
 
 This release contains performance improvements and bug fixes since the 2.18.2 release. We recommend that you upgrade at the next available opportunity.

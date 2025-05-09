@@ -421,3 +421,21 @@ SELECT sum(float_value) FROM testtable2 GROUP BY tableoid ORDER BY 1 LIMIT 1;
 -- Postgres versions starting with 16 remove the grouping columns that are
 -- equated to a constant. Check that our planning code handles this well.
 SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY int_value;
+
+--
+-- Test handling of Agg on top of ChunkAppend. This reproduces a crash
+-- in the vector agg planning code introduced in commit 947f7f400.
+--
+CREATE TABLE testtable3 (time timestamptz, location_id int, device_id int, sensor_id int);
+SELECT create_hypertable('testtable3', 'time');
+ALTER TABLE testtable3 SET (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='location_id');
+
+INSERT INTO testtable3 SELECT t, ceil(random() * 20)::int, ceil(random() * 30)::int, ceil(random() * 20)::int FROM generate_series('2024-01-01'::timestamptz, '2024-01-10'::timestamptz, '1h') AS t;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('testtable3') ch;
+
+VACUUM FULL ANALYZE testtable3;
+
+EXPLAIN (costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
+
+SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id \g :TEST_OUTPUT_DIR/vectorized_aggregation_query_result.out

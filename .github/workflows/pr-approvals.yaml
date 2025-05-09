@@ -10,10 +10,9 @@ name: PR Approval Check
   pull_request_review:
 
 jobs:
-
   check_approvals:
     name: Check for sufficient approvals
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -23,11 +22,12 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          set -eu
           echo "PR number is $PR_NUMBER"
-          echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
-          if [[ $? -ne 0 ]]; then
+          if ! echo "$BODY" | egrep -qsi '^disable-check:.*\<approval-count\>'
+          then
             # Get the list of modified files in this pull request
             echo "Modified files: "
             gh pr view $PR_NUMBER --json files
@@ -43,19 +43,12 @@ jobs:
                 gh pr view $PR_NUMBER --json reviews --jq '
                     [
                         .reviews.[]
-                        | select(
-                            (
-                                .authorAssociation == "NONE"
-                                or .authorAssociation == "MEMBER"
-                                or .authorAssociation == "CONTRIBUTOR"
-                            )
-                            and .state == "APPROVED"
-                          )
+                        | select(.authorAssociation == "MEMBER" and .state == "APPROVED")
                     ] | length
                   '
             )
             echo "approvals: $approvals, files: $files"
-            if [[ $approvals -lt 2 ]] && [[ $files -gt 0 ]] ; then
+            if [[ $approvals -lt 2 && $files -gt 0 ]] ; then
               echo "This pull request requires 2 approvals before merging."
               echo
               echo "For trivial changes, you may disable this check by adding this trailer to the pull request message:"

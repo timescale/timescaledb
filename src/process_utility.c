@@ -56,7 +56,6 @@
 #include "annotations.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "compression_with_clause.h"
 #include "copy.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
@@ -85,7 +84,10 @@
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "tss_callbacks.h"
 #include "utils.h"
-#include "with_clause_parser.h"
+#include "with_clause/alter_table_with_clause.h"
+#include "with_clause/create_materialized_view_with_clause.h"
+#include "with_clause/create_table_with_clause.h"
+#include "with_clause/with_clause_parser.h"
 
 #ifdef USE_TELEMETRY
 #include "telemetry/functions.h"
@@ -306,7 +308,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			default:
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("operation not supported on hypertables that have compression "
+						 errmsg("operation not supported on hypertables that have columnstore "
 								"enabled")));
 				break;
 		}
@@ -375,7 +377,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 									 errmsg(
 										 "cannot add column with non-constant default expression "
-										 "to a hypertable that has compression enabled")));
+										 "to a hypertable that has columnstore enabled")));
 					}
 					has_default = true;
 					continue;
@@ -384,7 +386,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("cannot add column with constraints "
-									"to a hypertable that has compression enabled")));
+									"to a hypertable that has columnstore enabled")));
 					break;
 			}
 		}
@@ -394,7 +396,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot add column with NOT NULL constraint without default "
-							"to a hypertable that has compression enabled")));
+							"to a hypertable that has columnstore enabled")));
 		}
 	}
 	if (col->is_not_null || col->identitySequence != NULL)
@@ -402,7 +404,7 @@ check_altertable_add_column_for_compressed(Hypertable *ht, ColumnDef *col)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot add column with constraints to a hypertable that has "
-						"compression enabled")));
+						"columnstore enabled")));
 	}
 	/* not possible to get non-null value here this is set when
 	 * ALTER TABLE ALTER COLUMN ... SET TYPE < > USING ...
@@ -494,7 +496,7 @@ process_drop_trigger_start(ProcessUtilityArgs *args, DropStmt *stmt)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static DDLResult
@@ -764,7 +766,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 		{
 			alterstmt->objectType = OBJECT_MATVIEW;
 			process_alterviewschema(args);
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			return;
 		}
 
@@ -780,7 +782,7 @@ process_altertableschema(ProcessUtilityArgs *args)
 		add_hypertable_to_process_args(args, ht);
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /* Change the schema of a hypertable or a chunk */
@@ -834,7 +836,7 @@ process_copy(ProcessUtilityArgs *args)
 
 		if (ht == NULL)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			return DDL_CONTINUE;
 		}
 	}
@@ -853,7 +855,7 @@ process_copy(ProcessUtilityArgs *args)
 					 errhint("Use \"COPY (SELECT * FROM <hypertable>) TO ...\" to copy all data in "
 							 "hypertable, or copy each chunk individually.")));
 		if (hcache)
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 
 		return DDL_CONTINUE;
 	}
@@ -868,7 +870,7 @@ process_copy(ProcessUtilityArgs *args)
 
 	add_hypertable_to_process_args(args, ht);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	ts_end_tss_store_callback(args->query_string,
 							  args->pstmt->stmt_location,
@@ -927,7 +929,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (NULL == ht)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		CommitTransactionCommand();
 		return -1;
 	}
@@ -935,7 +937,7 @@ foreach_chunk_multitransaction(Oid relid, MemoryContext mctx, mt_process_chunk_t
 	hypertable_id = ht->fd.id;
 	chunks = find_inheritance_children(ht->main_table_relid, NoLock);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	CommitTransactionCommand();
 
 	num_chunks = list_length(chunks);
@@ -1035,7 +1037,7 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 
 	table_endscan(scan);
 	table_close(pgclass, AccessShareLock);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return vacrels;
 }
@@ -1103,7 +1105,7 @@ process_vacuum(ProcessUtilityArgs *args)
 			}
 			vacuum_rels = lappend(vacuum_rels, vacuum_rel);
 		}
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 	}
 
 	stmt->rels = list_concat(ctx.chunk_rels, vacuum_rels);
@@ -1407,7 +1409,7 @@ process_truncate(ProcessUtilityArgs *args)
 		ts_cagg_watermark_update(mat_ht, watermark, isnull, true);
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return DDL_DONE;
 }
@@ -1453,10 +1455,9 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			if (ts_chunk_contains_compressed_data(chunk))
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("dropping compressed chunks not supported"),
-						 errhint(
-							 "Please drop the corresponding chunk on the uncompressed hypertable "
-							 "instead.")));
+						 errmsg("dropping columnstore chunks not supported"),
+						 errhint("Please drop the corresponding chunk on the rowstore hypertable "
+								 "instead.")));
 
 			/* if cascade is enabled, delete the compressed chunk with cascade too. Otherwise
 			 *  it would be blocked if there are dependent objects */
@@ -1479,7 +1480,7 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /*
@@ -1519,8 +1520,8 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("dropping compressed hypertables not supported"),
-							 errhint("Please drop the corresponding uncompressed hypertable "
+							 errmsg("dropping columnstore hypertables not supported"),
+							 errhint("Please drop the corresponding rowstore hypertable "
 									 "instead.")));
 
 				/*
@@ -1560,7 +1561,7 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return result;
 }
@@ -1604,7 +1605,7 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 /* Note that DROP TABLESPACE does not have a hook in event triggers so cannot go
@@ -1849,7 +1850,7 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 					}
 				}
 
-				ts_cache_release(hcache);
+				ts_cache_release(&hcache);
 
 				result = DDL_DONE;
 				if (stmt->objects != NIL)
@@ -2130,7 +2131,7 @@ process_reindex(ProcessUtilityArgs *args)
 			break;
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return result;
 }
@@ -2482,7 +2483,7 @@ process_rename(ProcessUtilityArgs *args)
 			break;
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return DDL_CONTINUE;
 }
 
@@ -2723,9 +2724,10 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg(
-									 "operation not supported on hypertables that have compressed "
+									 "operation not supported on hypertables that have columnstore "
 									 "data"),
-								 errhint("Decompress the data before retrying the operation.")));
+								 errhint("Convert the data to rowstore before retrying the "
+										 "operation.")));
 			}
 			break;
 			/* Other AT commands might not be allowed on compressed chunks, but
@@ -2969,7 +2971,7 @@ verify_constraint(RangeVar *relation, Constraint *constr)
 	if (ht)
 		verify_constraint_hypertable(ht, (Node *) constr);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static void
@@ -3265,7 +3267,7 @@ process_index_start(ProcessUtilityArgs *args)
 			}
 			else
 			{
-				ts_cache_release(hcache);
+				ts_cache_release(&hcache);
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("operation not supported on continuous aggregates that are not "
@@ -3279,7 +3281,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 		if (!ht)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			return DDL_CONTINUE;
 		}
 
@@ -3357,7 +3359,7 @@ process_index_start(ProcessUtilityArgs *args)
 	 * to do here. */
 	if (!OidIsValid(root_table_index.objectId) && stmt->if_not_exists)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		return DDL_DONE;
 	}
 	Assert(OidIsValid(root_table_index.objectId));
@@ -3365,7 +3367,7 @@ process_index_start(ProcessUtilityArgs *args)
 	/* support ONLY ON clause, index on root table already created */
 	if (!stmt->relation->inh)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		return DDL_DONE;
 	}
 
@@ -3397,7 +3399,7 @@ process_index_start(ProcessUtilityArgs *args)
 		foreach_chunk(ht, process_index_chunk, &info);
 
 		ts_catalog_restore_user(&sec_ctx);
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 
 		return DDL_DONE;
 	}
@@ -3424,7 +3426,7 @@ process_index_start(ProcessUtilityArgs *args)
 	CacheInvalidateRelcacheByRelid(info.main_table_relid);
 	CacheInvalidateRelcacheByRelid(info.obj.objectId);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	/* we need a long-lived context in which to store the list of chunks since the per-transaction
 	 * context will get freed at the end of each transaction. Fortunately we're within just such a
@@ -3555,7 +3557,7 @@ process_cluster_start(ProcessUtilityArgs *args)
 		if (!OidIsValid(index_relid))
 		{
 			/* Let regular process utility handle */
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			return DDL_CONTINUE;
 		}
 
@@ -3661,10 +3663,17 @@ process_cluster_start(ProcessUtilityArgs *args)
 		result = DDL_DONE;
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return result;
 }
 
+typedef struct CreateTableInfo
+{
+	bool hypertable;
+	WithClauseResult *with_clauses;
+} CreateTableInfo;
+
+static CreateTableInfo create_table_info = { 0 };
 /*
  * Process create table statements.
  *
@@ -3707,6 +3716,100 @@ process_create_table_end(Node *parsetree)
 				break;
 			default:
 				break;
+		}
+	}
+
+	if (create_table_info.hypertable)
+	{
+		Oid table_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
+		char *time_column =
+			TextDatumGetCString(create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+		NameData time_column_name;
+		NameData associated_schema_name;
+		NameData associated_table_prefix;
+		namestrcpy(&time_column_name, time_column);
+		uint32 flags = 0;
+		bool has_associated_schema = false;
+		bool has_associated_table_prefix = false;
+
+		if (get_attnum(table_relid, time_column) == InvalidAttrNumber)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("column \"%s\" does not exist", time_column)));
+
+		Oid interval_type = InvalidOid;
+		Datum interval = UnassignedDatum;
+
+		if (!create_table_info.with_clauses[CreateTableFlagChunkTimeInterval].is_default)
+		{
+			AttrNumber time_attno = get_attnum(table_relid, time_column);
+			Oid time_type = get_atttype(table_relid, time_attno);
+
+			interval =
+				ts_create_table_parse_chunk_time_interval(create_table_info.with_clauses
+															  [CreateTableFlagChunkTimeInterval],
+														  time_type,
+														  &interval_type);
+		}
+
+		if (!create_table_info.with_clauses[CreateTableFlagCreateDefaultIndexes].is_default)
+		{
+			if (!DatumGetBool(
+					create_table_info.with_clauses[CreateTableFlagCreateDefaultIndexes].parsed))
+				flags |= HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES;
+		}
+
+		if (!create_table_info.with_clauses[CreateTableFlagAssociatedSchema].is_default)
+		{
+			has_associated_schema = true;
+			namestrcpy(&associated_schema_name,
+					   TextDatumGetCString(
+						   create_table_info.with_clauses[CreateTableFlagAssociatedSchema].parsed));
+		}
+
+		if (!create_table_info.with_clauses[CreateTableFlagAssociatedTablePrefix].is_default)
+		{
+			has_associated_table_prefix = true;
+			namestrcpy(&associated_table_prefix,
+					   TextDatumGetCString(
+						   create_table_info.with_clauses[CreateTableFlagAssociatedTablePrefix]
+							   .parsed));
+		}
+
+		DimensionInfo *open_dim_info =
+			ts_dimension_info_create_open(table_relid,
+										  &time_column_name, /* column name */
+										  interval,			 /* interval */
+										  interval_type,	 /* interval type */
+										  InvalidOid		 /* partitioning func */
+			);
+
+		ChunkSizingInfo *csi = ts_chunk_sizing_info_get_default_disabled(table_relid);
+		csi->colname = time_column;
+
+		CatalogSecurityContext sec_ctx;
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		int32 ht_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
+		ts_catalog_restore_user(&sec_ctx);
+
+		if (ts_hypertable_create_from_info(table_relid,
+										   ht_id,
+										   flags,		  /* flags */
+										   open_dim_info, /* open_dim_info */
+										   NULL,		  /* closed_dim_info */
+										   has_associated_schema ?
+											   &associated_schema_name :
+											   NULL, /* associated_schema_name */
+										   has_associated_table_prefix ?
+											   &associated_table_prefix :
+											   NULL, /* associated_table_prefix */
+										   csi))
+		{
+			if (ts_cm_functions->compression_enable)
+			{
+				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
+				ts_cm_functions->compression_enable(ht, create_table_info.with_clauses);
+			}
 		}
 	}
 }
@@ -3971,7 +4074,7 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static inline void
@@ -3985,8 +4088,8 @@ process_altertable_chunk_set_tablespace(AlterTableCmd *cmd, Oid relid)
 	if (ts_chunk_contains_compressed_data(chunk))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("changing tablespace of compressed chunk is not supported"),
-				 errhint("Please use the corresponding chunk on the uncompressed hypertable "
+				 errmsg("changing tablespace of columnstore chunk is not supported"),
+				 errhint("Please use the corresponding chunk on the rowstore hypertable "
 						 "instead.")));
 
 	/* set tablespace for compressed chunk */
@@ -4028,7 +4131,7 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 		cmd->def = (Node *) list_make1(elem);
 		stmt->cmds = lappend(stmt->cmds, cmd);
 	}
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static DDLResult
@@ -4162,7 +4265,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	/* If there are any commands remaining in the list, we need to deal with
 	 * them. Otherwise, we just skip the rest. */
@@ -4197,7 +4300,7 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 
 	if (list_length(cagg_options) > 0)
 	{
-		parse_results = ts_continuous_agg_with_clause_parse(cagg_options);
+		parse_results = ts_create_materialized_view_with_clause_parse(cagg_options);
 		ts_cm_functions->continuous_agg_update_options(cagg, parse_results);
 	}
 }
@@ -4230,7 +4333,7 @@ alter_hypertable_by_id(int32 hypertable_id, AlterTableStmt *stmt, AlterTableCmd 
 	relation_not_only(stmt->relation);
 	AlterTableInternal(ht->main_table_relid, list_make1(cmd), false);
 	(*extra)(ht, cmd);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static DDLResult
@@ -4626,7 +4729,7 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static void
@@ -4667,7 +4770,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 	if (ht == NULL)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		/* check if it's a cagg. We don't support triggers on them yet */
 		if (ts_continuous_agg_find_by_relid(relid) != NULL)
 			ereport(ERROR,
@@ -4691,7 +4794,7 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	 */
 	if (stmt->transitionRels && TRIGGER_FOR_ROW(tgtype))
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("ROW triggers with transition tables are not supported on hypertables")));
@@ -4706,11 +4809,11 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	if (stmt->transitionRels && TRIGGER_FOR_DELETE(tgtype) &&
 		TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && !ts_is_hypercore_am(ht->amoid))
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("DELETE triggers with transition tables not supported"),
-				 errdetail("Compressed hypertables not using \"hypercore\" access method are not "
+				 errdetail("Columnstore hypertables not using \"hypercore\" access method are not "
 						   "supported if the trigger use transition tables.")));
 	}
 
@@ -4722,14 +4825,14 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	 */
 	if (!stmt->row)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		return DDL_CONTINUE;
 	}
 
 	address = ts_hypertable_create_trigger(ht, stmt, args->query_string);
 	Assert(OidIsValid(address.objectId));
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return DDL_DONE;
 }
 
@@ -4819,12 +4922,34 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	if (pg_options != NIL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
+				 errmsg("only timescaledb.enable_columnstore parameters allowed when specifying "
+						"columnstore "
 						"parameters for hypertable")));
 
-	parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
+	parse_results = ts_alter_table_with_clause_parse(compress_options);
 
-	ts_cm_functions->process_compress_table(cmd, ht, parse_results);
+	if (ht && !parse_results[AlterTableFlagChunkTimeInterval].is_default)
+	{
+		Dimension *dim = ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+		Ensure(dim, "hypertable without open dimension");
+		Oid time_type = get_atttype(dim->main_table_relid, dim->column_attno);
+		Oid interval_type = InvalidOid;
+		Datum interval =
+			ts_create_table_parse_chunk_time_interval(parse_results
+														  [AlterTableFlagChunkTimeInterval],
+													  time_type,
+													  &interval_type);
+
+		int64 chunk_interval = ts_interval_value_to_internal(interval, interval_type);
+		ts_dimension_set_chunk_interval(dim, chunk_interval);
+	}
+
+	if (!parse_results[AlterTableFlagCompress].is_default ||
+		!parse_results[AlterTableFlagOrderBy].is_default ||
+		!parse_results[AlterTableFlagSegmentBy].is_default ||
+		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default)
+		ts_cm_functions->process_compress_table(ht, parse_results);
+
 	return DDL_DONE;
 }
 
@@ -4841,7 +4966,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	if (compress_options)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression options cannot be reset")));
+				 errmsg("columnstore options cannot be reset")));
 
 	return DDL_CONTINUE;
 }
@@ -4878,8 +5003,8 @@ process_create_table_as(ProcessUtilityArgs *args)
 
 		if (cagg_options)
 		{
-			parse_results = ts_continuous_agg_with_clause_parse(cagg_options);
-			is_cagg = DatumGetBool(parse_results[ContinuousEnabled].parsed);
+			parse_results = ts_create_materialized_view_with_clause_parse(cagg_options);
+			is_cagg = DatumGetBool(parse_results[CreateMaterializedViewFlagContinuous].parsed);
 		}
 
 		if (!is_cagg)
@@ -4929,6 +5054,41 @@ process_create_stmt(ProcessUtilityArgs *args)
 				errhint("It does not make sense to set the default access method for all "
 						"tables to \"%s\" since it is only supported for hypertables.",
 						TS_HYPERCORE_TAM_NAME));
+
+	List *pg_options = NIL, *hypertable_options = NIL;
+	ts_with_clause_filter(stmt->options, &hypertable_options, &pg_options);
+	stmt->options = pg_options;
+
+	create_table_info.hypertable = false;
+	create_table_info.with_clauses = NULL;
+	/*
+	 * We can only convert the table into a hypertable after postgres has created
+	 * the initial table so we store the information passed in the WITH clause
+	 * and do some initial sanity check and do the actual work of creating the hypertable
+	 * in process_create_table_end.
+	 */
+	if (hypertable_options)
+	{
+		create_table_info.with_clauses = ts_create_table_with_clause_parse(hypertable_options);
+		create_table_info.hypertable =
+			DatumGetBool(create_table_info.with_clauses[CreateTableFlagHypertable].parsed);
+
+		if (!create_table_info.with_clauses[CreateTableFlagHypertable].parsed)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("timescaledb options requires hypertable option"),
+					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+
+		if (create_table_info.hypertable)
+		{
+			if (!create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("hypertable option requires time_column"),
+						 errhint("Use \"timescaledb.time_column\" to specify the column to use as "
+								 "partitioning column.")));
+		}
+	}
 
 	return DDL_CONTINUE;
 }

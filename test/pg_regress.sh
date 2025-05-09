@@ -51,7 +51,7 @@ if [[ -z ${TEST_SCHEDULE} ]];  then
 fi
 
 # PG16 removed the `ignore` feature from `pg_regress`
-# so as an wraparound if we have any IGNORES entry then
+# so as an workaround if we have any IGNORES entry then
 # we merge it together with SKIPS and cleanup the IGNORES
 # https://github.com/postgres/postgres/commit/bd8d453e9b5f8b632a400a9e796fc041aed76d82
 if [[ ${PG_VERSION_MAJOR} -ge 16 ]]; then
@@ -85,7 +85,7 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
 
   echo > ${TEMP_SCHEDULE}
 
-  ALL_TESTS=$(grep '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
+  ALL_TESTS=$(grep -a '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
 
   # to support wildcards in IGNORES we match the IGNORES
   # list against the actual list of tests
@@ -94,6 +94,14 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
       for test_name in ${ALL_TESTS}; do
         if [[ -n ${test_name} ]] && [[ $test_name == $test_pattern ]]; then
           echo "ignore: ${test_name}" >> ${TEMP_SCHEDULE}
+        fi
+      done
+      for test_name in ${SKIPS}
+      do
+        if [[ -n ${test_name} && ${test_name} == ${test_pattern} ]]
+        then
+            echo "The ignored pattern '${test_name}' matches the skipped pattern '${test_pattern}'. This is not allowed."
+            exit 1
         fi
       done
     done
@@ -119,7 +127,7 @@ elif [[ -z ${TESTS} && ( -n ${SKIPS} || -n ${IGNORES} ) ]]; then
 else
   # TESTS was specified so we need to create a new schedule based on that
 
-  ALL_TESTS=$(grep '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
+  ALL_TESTS=$(grep -a '^test: ' ${TEST_SCHEDULE} | sed -e 's!^test: !!' |tr '\n' ' ')
 
   if [[ -z "${TESTS}" ]]; then
     TESTS=${ALL_TESTS}

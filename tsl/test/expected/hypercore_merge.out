@@ -168,7 +168,7 @@ select explain_analyze_anonymize(format($$
 $$, :'hypertable'));
                                                    explain_analyze_anonymize                                                   
 -------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=N loops=N)
+ Custom Scan (ModifyHypertable) (actual rows=N loops=N)
    ->  Merge on readings ht (actual rows=N loops=N)
          Merge on readings ht_1
          Merge on _hyper_I_N_chunk ht_2
@@ -224,11 +224,11 @@ humidity    | 1
 -- Recompress all and try to insert the same rows again. This there
 -- should be no rows inserted.
 select compress_chunk(show_chunks(:'hypertable'), hypercore_use_access_method => true);
-NOTICE:  chunk "_hyper_1_2_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_4_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
-NOTICE:  chunk "_hyper_1_6_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
+NOTICE:  chunk "_hyper_1_6_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -255,7 +255,7 @@ select explain_analyze_anonymize(format($$
 $$, :'hypertable'));
                                                    explain_analyze_anonymize                                                   
 -------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=N loops=N)
+ Custom Scan (ModifyHypertable) (actual rows=N loops=N)
    ->  Merge on readings ht (actual rows=N loops=N)
          Merge on readings ht_1
          Merge on _hyper_I_N_chunk ht_2

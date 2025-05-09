@@ -16,7 +16,6 @@
 
 #include "cache.h"
 #include "compression/create.h"
-#include "compression_with_clause.h"
 #include "continuous_aggs/common.h"
 #include "continuous_aggs/create.h"
 #include "errors.h"
@@ -24,6 +23,8 @@
 #include "options.h"
 #include "scan_iterator.h"
 #include "ts_catalog/continuous_agg.h"
+#include "with_clause/alter_table_with_clause.h"
+#include "with_clause/create_materialized_view_with_clause.h"
 
 static void cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only);
 static List *cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht);
@@ -126,16 +127,15 @@ static void
 cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_defelems)
 {
 	Assert(mat_ht != NULL);
-	WithClauseResult *with_clause_options =
-		ts_compress_hypertable_set_clause_parse(compress_defelems);
+	WithClauseResult *with_clause_options = ts_alter_table_with_clause_parse(compress_defelems);
 
-	if (with_clause_options[CompressEnabled].parsed)
+	if (with_clause_options[AlterTableFlagCompress].parsed)
 	{
 		List *default_compress_defelems = cagg_get_compression_params(agg, mat_ht);
 		WithClauseResult *default_with_clause_options =
-			ts_compress_hypertable_set_clause_parse(default_compress_defelems);
+			ts_alter_table_with_clause_parse(default_compress_defelems);
 		/* Merge defaults if there's any. */
-		for (int i = 0; i < CompressOptionMax; i++)
+		for (int i = 0; i < AlterTableFlagsMax; i++)
 		{
 			if (with_clause_options[i].is_default && !default_with_clause_options[i].is_default)
 			{
@@ -148,25 +148,19 @@ cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_de
 		}
 	}
 
-	AlterTableCmd alter_cmd = {
-		.type = T_AlterTableCmd,
-		.subtype = AT_SetRelOptions,
-		.def = (Node *) compress_defelems,
-	};
-
-	tsl_process_compress_table(&alter_cmd, mat_ht, with_clause_options);
+	tsl_process_compress_table(mat_ht, with_clause_options);
 }
 
 void
 continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_options)
 {
-	if (!with_clause_options[ContinuousEnabled].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagContinuous].is_default)
 		elog(ERROR, "cannot disable continuous aggregates");
 
-	if (!with_clause_options[ContinuousViewOptionMaterializedOnly].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagMaterializedOnly].is_default)
 	{
 		bool materialized_only =
-			DatumGetBool(with_clause_options[ContinuousViewOptionMaterializedOnly].parsed);
+			DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
 
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *mat_ht =
@@ -175,7 +169,7 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		if (materialized_only == agg->data.materialized_only)
 		{
 			/* nothing changed, so just return */
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			return;
 		}
 
@@ -183,20 +177,20 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 
 		cagg_flip_realtime_view_definition(agg, mat_ht);
 		cagg_update_materialized_only(agg, materialized_only);
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 	}
-	if (!with_clause_options[ContinuousViewOptionChunkTimeInterval].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
 	{
 		Cache *hcache = ts_hypertable_cache_pin();
 		Hypertable *mat_ht =
 			ts_hypertable_cache_get_entry_by_id(hcache, agg->data.mat_hypertable_id);
 
-		int64 interval = interval_to_usec(
-			DatumGetIntervalP(with_clause_options[ContinuousViewOptionChunkTimeInterval].parsed));
+		int64 interval = interval_to_usec(DatumGetIntervalP(
+			with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].parsed));
 		Dimension *dim = ts_hyperspace_get_mutable_dimension(mat_ht->space, DIMENSION_TYPE_OPEN, 0);
 
 		ts_dimension_set_chunk_interval(dim, interval);
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 	}
 	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);
 
@@ -208,13 +202,13 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		Assert(mat_ht != NULL);
 
 		cagg_alter_compression(agg, mat_ht, compression_options);
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 	}
-	if (!with_clause_options[ContinuousViewOptionCreateGroupIndex].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].is_default)
 	{
 		elog(ERROR, "cannot alter create_group_indexes option for continuous aggregates");
 	}
-	if (!with_clause_options[ContinuousViewOptionFinalized].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagFinalized].is_default)
 	{
 		elog(ERROR, "cannot alter finalized option for continuous aggregates");
 	}

@@ -194,7 +194,9 @@ ts_compression_settings_get(Oid relid)
 TSDLLEXPORT CompressionSettings *
 ts_compression_settings_get_by_compress_relid(Oid relid)
 {
-	return compression_settings_get(relid, true);
+	CompressionSettings *settings = compression_settings_get(relid, true);
+	Ensure(settings, "compression settings not found for %s", get_rel_name(relid));
+	return settings;
 }
 
 /*

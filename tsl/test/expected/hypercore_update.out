@@ -171,7 +171,7 @@ explain (costs off)
 update :hypertable set temp = 100.0 where created_at = :'created_at';
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on readings
          Update on _hyper_1_2_chunk readings_1
          ->  Result
@@ -209,7 +209,7 @@ explain (costs off)
 update :hypertable set humidity = 110.0 where location_id = :location_id;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on readings
          Update on _hyper_1_1_chunk readings_1
          Update on _hyper_1_2_chunk readings_2

@@ -626,12 +626,16 @@ test_bool_rle(bool nulls, int run_length, int expected_size)
 	Compressor *compressor = bool_compressor_for_type(BOOLOID);
 	int rlen = run_length;
 	bool val = true;
+	int64 compressed_null_count = 0;
 	for (int i = 0; i < TEST_ELEMENTS; ++i)
 	{
 		if (rlen == 0)
 		{
 			if (nulls)
+			{
 				compressor->append_null(compressor);
+				++compressed_null_count;
+			}
 			else
 				compressor->append_val(compressor, BoolGetDatum(val));
 			rlen = run_length;
@@ -652,6 +656,9 @@ test_bool_rle(bool nulls, int run_length, int expected_size)
 	val = true;
 	DecompressionIterator *iter =
 		bool_decompression_iterator_from_datum_forward(compressed, BOOLOID);
+	ArrowArray *bulk_result = bool_decompress_all(compressed, BOOLOID, CurrentMemoryContext);
+	const uint64 *bulk_data = bulk_result->buffers[1];
+	int64 decompressed_null_count = 0;
 
 	for (int i = 0; i < TEST_ELEMENTS; ++i)
 	{
@@ -660,19 +667,36 @@ test_bool_rle(bool nulls, int run_length, int expected_size)
 		if (rlen == 0)
 		{
 			if (nulls)
+			{
+				TestAssertTrue(!arrow_row_is_valid(bulk_result->buffers[0], i));
 				TestAssertTrue(r.is_null);
+				++decompressed_null_count;
+			}
 			else
+			{
+				TestAssertTrue(arrow_row_is_valid(bulk_result->buffers[0], i));
 				TestAssertTrue(DatumGetBool(r.val) == val);
+				const int16 block = i / 64;
+				const int16 offset = i % 64;
+				TestAssertTrue(((bulk_data[block] >> offset) & 1UL) == (int) val);
+			}
 			rlen = run_length;
 			val = !val;
 		}
 		else
 		{
+			TestAssertTrue(arrow_row_is_valid(bulk_result->buffers[0], i));
 			TestAssertTrue(r.is_null == false);
 			TestAssertTrue(DatumGetBool(r.val) == val);
+			const int16 block = i / 64;
+			const int16 offset = i % 64;
+			TestAssertTrue(((bulk_data[block] >> offset) & 1UL) == (int) val);
 			--rlen;
 		}
 	}
+
+	TestAssertInt64Eq(decompressed_null_count, compressed_null_count);
+	TestAssertInt64Eq(bulk_result->null_count, compressed_null_count);
 
 	DecompressResult r = bool_decompression_iterator_try_next_forward(iter);
 	TestAssertTrue(r.is_done);
@@ -711,6 +735,9 @@ test_bool_array(bool nulls, int run_length, int expected_size)
 	DecompressionIterator *iter =
 		tsl_array_decompression_iterator_from_datum_forward(compressed, BOOLOID);
 
+	ArrowArray *bulk_result = tsl_array_decompress_all(compressed, BOOLOID, CurrentMemoryContext);
+	const uint64 *bulk_data = bulk_result->buffers[1];
+
 	for (int i = 0; i < TEST_ELEMENTS; ++i)
 	{
 		DecompressResult r = array_decompression_iterator_try_next_forward(iter);
@@ -718,9 +745,17 @@ test_bool_array(bool nulls, int run_length, int expected_size)
 		if (rlen == 0)
 		{
 			if (nulls)
+			{
+				TestAssertTrue(!arrow_row_is_valid(bulk_result->buffers[0], i));
 				TestAssertTrue(r.is_null);
+			}
 			else
+			{
 				TestAssertTrue(DatumGetBool(r.val) == val);
+				const int16 block = i / 64;
+				const int16 offset = i % 64;
+				TestAssertTrue(((bulk_data[block] >> offset) & 1UL) == (int) val);
+			}
 			rlen = run_length;
 			val = !val;
 		}
@@ -728,11 +763,87 @@ test_bool_array(bool nulls, int run_length, int expected_size)
 		{
 			TestAssertTrue(r.is_null == false);
 			TestAssertTrue(DatumGetBool(r.val) == val);
+			const int16 block = i / 64;
+			const int16 offset = i % 64;
+			TestAssertTrue(((bulk_data[block] >> offset) & 1UL) == (int) val);
 			--rlen;
 		}
 	}
 
 	DecompressResult r = array_decompression_iterator_try_next_forward(iter);
+	TestAssertTrue(r.is_done);
+}
+
+static void
+test_bool_dictionary(bool nulls, int run_length, int expected_size)
+{
+	Compressor *compressor = dictionary_compressor_for_type(BOOLOID);
+	int rlen = run_length;
+	bool val = true;
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		if (rlen == 0)
+		{
+			if (nulls)
+				compressor->append_null(compressor);
+			else
+				compressor->append_val(compressor, BoolGetDatum(val));
+			rlen = run_length;
+			val = !val;
+		}
+		else
+		{
+			compressor->append_val(compressor, BoolGetDatum(val));
+			--rlen;
+		}
+	}
+
+	Datum compressed = (Datum) compressor->finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), expected_size);
+
+	rlen = run_length;
+	val = true;
+	DecompressionIterator *iter =
+		tsl_dictionary_decompression_iterator_from_datum_forward(compressed, BOOLOID);
+
+	ArrowArray *bulk_result =
+		tsl_dictionary_decompress_all(compressed, BOOLOID, CurrentMemoryContext);
+	const uint64 *bulk_data = bulk_result->buffers[1];
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = dictionary_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		if (rlen == 0)
+		{
+			if (nulls)
+			{
+				TestAssertTrue(!arrow_row_is_valid(bulk_result->buffers[0], i));
+				TestAssertTrue(r.is_null);
+			}
+			else
+			{
+				TestAssertTrue(DatumGetBool(r.val) == val);
+				const int16 block = i / 64;
+				const int16 offset = i % 64;
+				TestAssertTrue(((bulk_data[block] >> offset) & 1UL) == (int) val);
+			}
+			rlen = run_length;
+			val = !val;
+		}
+		else
+		{
+			TestAssertTrue(r.is_null == false);
+			TestAssertTrue(DatumGetBool(r.val) == val);
+			const int16 block = i / 64;
+			const int16 offset = i % 64;
+			TestAssertTrue(((bulk_data[block] >> offset) & 1UL) == (int) val);
+			--rlen;
+		}
+	}
+
+	DecompressResult r = dictionary_decompression_iterator_try_next_forward(iter);
 	TestAssertTrue(r.is_done);
 }
 
@@ -836,6 +947,15 @@ test_bool()
 	test_bool_array(/* nulls = */ false,
 					/* run_length = */ TEST_ELEMENTS + 1,
 					/* expected_size = */ 1055);
+
+	/* few select cases for comparison against bool compression: */
+	test_bool_dictionary(/* nulls = */ false, /* run_length = */ 1, /* expected_size = */ 186);
+	test_bool_dictionary(/* nulls = */ true, /* run_length = */ 19, /* expected_size = */ 330);
+	test_bool_dictionary(/* nulls = */ false, /* run_length = */ 600, /* expected_size = */ 74);
+	test_bool_dictionary(/* nulls = */ true, /* run_length = */ 720, /* expected_size = */ 114);
+	test_bool_dictionary(/* nulls = */ false,
+						 /* run_length = */ TEST_ELEMENTS + 1,
+						 /* expected_size = */ 65);
 
 	int baseline = bool_compressed_size(1, 1);
 	int no_rle = bool_compressed_size(64, 2);

@@ -144,7 +144,9 @@ compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot
 			vector_slot_get_compressed_column_values(vector_slot, attnum);
 
 		Assert(values->decompression_type != DT_Invalid);
-		Assert(values->decompression_type != DT_Iterator);
+		Ensure(values->decompression_type != DT_Iterator,
+			   "expected arrow array but got iterator for attnum %d",
+			   attnum);
 
 		if (values->arrow != NULL)
 		{

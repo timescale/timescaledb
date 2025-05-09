@@ -26,30 +26,48 @@ BEGIN
 
     SELECT * INTO STRICT _hypertable_row FROM _timescaledb_catalog.hypertable h WHERE h.table_name = _table_name AND h.schema_name = _schema_name;
 
-    --STEP 1 if column stats exist use unique indexes. Pick the column that comes first in any such indexes. Ties are broken arbitrarily.
+    --STEP 1 if column stats exist use unique indexes.
+    --Pick the column that comes first in any such indexes
+    --Select the column such that tuples are segmented evenly across distinct values.
     --Note: this will only pick a column that is NOT unique in a multi-column unique index.
     with index_attr as (
-        SELECT
+      SELECT
         a.attnum, min(a.pos) as pos
-        FROM
-            (select indkey, indnkeyatts from pg_catalog.pg_index where indisunique and indrelid = relation) i
-        INNER JOIN LATERAL
-            (select * from unnest(i.indkey) with ordinality) a(attnum, pos) ON (TRUE)
-        WHERE a.pos <= i.indnkeyatts
-        GROUP BY 1
-    )
-    SELECT
-      a.attname INTO _segmentby
-    FROM
-      index_attr i
-    INNER JOIN
-      pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
-    --right now stats are from the hypertable itself. Use chunks in the future.
-    INNER JOIN pg_stats s ON (s.attname = a.attname and s.schemaname = _schema_name and s.tablename = _table_name)
-    WHERE
-      a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
+      FROM (
+        SELECT indkey, indnkeyatts
+        FROM pg_catalog.pg_index
+        WHERE indisunique AND indrelid = relation
+      ) i
+      INNER JOIN LATERAL (
+        SELECT * FROM unnest(i.indkey) WITH ORDINALITY
+      ) a(attnum, pos) ON TRUE
+      WHERE a.pos <= i.indnkeyatts
+      GROUP BY a.attnum
+    ),
+    stats_with_stddev as (
+      SELECT
+        a.attname,
+        i.pos,
+        ROUND(stddev_pop(freqs)::numeric, 5) as freq_stddev
+      FROM index_attr i
+      INNER JOIN pg_attribute a ON a.attnum = i.attnum AND a.attrelid = relation
+      INNER JOIN pg_stats s ON s.attname = a.attname
+                            AND s.schemaname = _schema_name
+                            AND s.tablename = _table_name
+                            AND s.inherited = true
+      LEFT JOIN LATERAL unnest(s.most_common_freqs) as freqs ON TRUE
+      WHERE a.attname NOT IN (
+        SELECT column_name
+        FROM _timescaledb_catalog.dimension d
+        WHERE d.hypertable_id = _hypertable_row.id
+      )
       AND s.n_distinct > 1
-    ORDER BY i.pos
+      GROUP BY a.attname, i.pos
+    )
+    SELECT attname
+    INTO _segmentby
+    FROM stats_with_stddev
+    ORDER BY pos ASC, freq_stddev ASC NULLS LAST
     LIMIT 1;
 
     IF FOUND THEN
@@ -57,7 +75,9 @@ BEGIN
     END IF;
 
 
-    --STEP 2 if column stats exist and no unique indexes use non-unique indexes. Pick the column that comes first in any such indexes. Ties are broken arbitrarily.
+    --STEP 2 if column stats exist and no unique indexes use non-unique indexes.
+    --Pick the column that comes first in any such indexes
+    --Select the column such that tuples are segmented evenly across distinct values.
     with index_attr as (
         SELECT
         a.attnum, min(a.pos) as pos
@@ -67,26 +87,69 @@ BEGIN
             (select * from unnest(i.indkey) with ordinality) a(attnum, pos) ON (TRUE)
         WHERE a.pos <= i.indnkeyatts
         GROUP BY 1
-    )
-    SELECT
-      a.attname INTO _segmentby
-    FROM
-      index_attr i
-    INNER JOIN
-      pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
-    --right now stats are from the hypertable itself. Use chunks in the future.
-    INNER JOIN pg_stats s ON (s.attname = a.attname and s.schemaname = _schema_name and s.tablename = _table_name)
-    WHERE
-      a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
+    ),
+    stats_with_stddev as (
+      SELECT
+        a.attname,
+        i.pos,
+        ROUND(stddev_pop(freqs)::numeric, 5) as freq_stddev
+      FROM index_attr i
+      INNER JOIN pg_attribute a ON a.attnum = i.attnum AND a.attrelid = relation
+      INNER JOIN pg_stats s ON s.attname = a.attname
+                            AND s.schemaname = _schema_name
+                            AND s.tablename = _table_name
+                            AND s.inherited = true
+      LEFT JOIN LATERAL unnest(s.most_common_freqs) as freqs ON TRUE
+      WHERE a.attname NOT IN (
+        SELECT column_name
+        FROM _timescaledb_catalog.dimension d
+        WHERE d.hypertable_id = _hypertable_row.id
+      )
       AND s.n_distinct > 1
-    ORDER BY i.pos
+      GROUP BY a.attname, i.pos
+    )
+    SELECT attname
+    INTO _segmentby
+    FROM stats_with_stddev
+    ORDER BY pos ASC, freq_stddev ASC NULLS LAST
     LIMIT 1;
 
     IF FOUND THEN
         return json_build_object('columns', json_build_array(_segmentby), 'confidence', 8);
     END IF;
 
-    --STEP 3 if column stats do not exist use non-unique indexes. Pick the column that comes first in any such indexes. Ties are broken arbitrarily.
+    --STEP 3 if column stats exist but there are no indexes
+    --Select the column such that tuples are segmented evenly across distinct values.
+    with stats_with_stddev as (
+      SELECT
+        a.attname,
+        ROUND(stddev_pop(freqs)::numeric, 5) as freq_stddev
+      FROM pg_attribute a
+      INNER JOIN pg_stats s ON s.attname = a.attname
+                            AND s.schemaname = _schema_name
+                            AND s.tablename = _table_name
+                            AND s.inherited = true
+      LEFT JOIN LATERAL unnest(s.most_common_freqs) as freqs ON TRUE
+      WHERE a.attrelid = relation
+        AND a.attname NOT IN (
+          SELECT column_name
+          FROM _timescaledb_catalog.dimension d
+          WHERE d.hypertable_id = _hypertable_row.id
+        )
+      AND s.n_distinct > 1
+      GROUP BY a.attname
+    )
+    SELECT attname
+    INTO _segmentby
+    FROM stats_with_stddev
+    ORDER BY freq_stddev ASC NULLS LAST
+    LIMIT 1;
+
+    IF FOUND THEN
+        return json_build_object('columns', json_build_array(_segmentby), 'confidence', 7);
+    END IF;
+
+    --STEP 4 if column stats do not exist use non-unique indexes. Pick the column that comes first in any such indexes. Ties are broken arbitrarily.
     with index_attr as (
         SELECT
         a.attnum, min(a.pos) as pos
@@ -105,8 +168,10 @@ BEGIN
       pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
     LEFT JOIN
       pg_catalog.pg_attrdef ad ON (ad.adrelid = relation AND ad.adnum = a.attnum)
-    LEFT JOIN
-      pg_stats s ON (s.attname = a.attname and s.schemaname = _schema_name and s.tablename = _table_name)
+    LEFT JOIN pg_stats s ON s.attname = a.attname
+                          AND s.schemaname = _schema_name
+                          AND s.tablename = _table_name
+                          AND s.inherited = true
     WHERE
       a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
       AND s.n_distinct is null
@@ -121,7 +186,7 @@ BEGIN
             'message',  'Please make sure '|| _segmentby||' is not a unique column and appropriate for a segment by');
     END IF;
 
-    --STEP 4 if column stats do not exist and no non-unique indexes, use unique indexes. Pick the column that comes first in any such indexes. Ties are broken arbitrarily.
+    --STEP 5 if column stats do not exist and no non-unique indexes, use unique indexes. Pick the column that comes first in any such indexes. Ties are broken arbitrarily.
     with index_attr as (
         SELECT
         a.attnum, min(a.pos) as pos
@@ -140,8 +205,10 @@ BEGIN
       pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
     LEFT JOIN
       pg_catalog.pg_attrdef ad ON (ad.adrelid = relation AND ad.adnum = a.attnum)
-    LEFT JOIN
-      pg_stats s ON (s.attname = a.attname and s.schemaname = _schema_name and s.tablename = _table_name)
+    LEFT JOIN pg_stats s ON s.attname = a.attname
+                          AND s.schemaname = _schema_name
+                          AND s.tablename = _table_name
+                          AND s.inherited = true
     WHERE
       a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
       AND s.n_distinct is null
@@ -191,7 +258,7 @@ BEGIN
         return json_build_object(
             'columns', json_build_array(),
             'confidence', 5,
-            'message',  'You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes');
+            'message',  'You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes');
     END IF;
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;

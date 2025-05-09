@@ -408,7 +408,7 @@ SELECT create_hypertable('test_gen', 'id', chunk_time_interval=>10);
 (1 row)
 
 ALTER TABLE test_gen set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test_gen" is set to ""
 NOTICE:  default order by for hypertable "test_gen" is set to "id DESC"
 INSERT into test_gen (payload) SELECT generate_series(1,15) ;
@@ -772,8 +772,6 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE test_ordering SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_ordering" is set to ""
 INSERT INTO test_ordering VALUES (5),(4),(3);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
@@ -914,7 +912,7 @@ SELECT * FROM cagg_conditions ORDER BY 1;
 (1 row)
 
 ALTER TABLE conditions SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "conditions" is set to ""
 NOTICE:  default order by for hypertable "conditions" is set to "timec DESC"
 SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
@@ -961,7 +959,7 @@ SELECT table_name FROM create_hypertable('direct_insert','time');
 (1 row)
 
 ALTER TABLE direct_insert SET(timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "direct_insert" is set to ""
 NOTICE:  default order by for hypertable "direct_insert" is set to ""time" DESC"
 SELECT
@@ -1145,7 +1143,7 @@ ERROR:  duplicate key value violates unique constraint "77_3_unique_null_time_u1
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);
                            QUERY PLAN                            
 -----------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on unique_null (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Result (actual rows=1 loops=1)
@@ -1160,7 +1158,7 @@ SELECT count(*) FROM unique_null;
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', 1, NULL, 1.0);
                            QUERY PLAN                            
 -----------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on unique_null (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Result (actual rows=1 loops=1)
@@ -1175,7 +1173,7 @@ SELECT count(*) FROM unique_null;
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, NULL, 1.0);
                            QUERY PLAN                            
 -----------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on unique_null (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Result (actual rows=1 loops=1)
@@ -1195,3 +1193,150 @@ SELECT count(*) FROM unique_null;
 (1 row)
 
 DROP TABLE unique_null;
+-- test insert with UNIQUE constraint and all compression algorithms
+set timescaledb.enable_bool_compression = on;
+CREATE TABLE unique_all(
+	time timestamptz NOT NULL,
+	device_id int,
+	bool_type bool,
+	numeric_type numeric,
+	float_type float,
+	text_type text,
+	bigint_type bigint,
+	jsonb_type jsonb
+);
+-- Since we don't test uniqueness when we detect a NULL value, making the constraint
+-- with NULLS NOT DISTINCT
+CREATE UNIQUE INDEX ultimate_unique ON unique_all(time, device_id, bool_type, numeric_type, float_type, text_type, bigint_type, jsonb_type) NULLS NOT DISTINCT;
+SELECT table_name FROM create_hypertable('unique_all', 'time');
+ table_name 
+------------
+ unique_all
+(1 row)
+
+ALTER TABLE unique_all SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+WARNING:  column "bool_type" should be used for segmenting or ordering
+WARNING:  column "numeric_type" should be used for segmenting or ordering
+WARNING:  column "float_type" should be used for segmenting or ordering
+WARNING:  column "text_type" should be used for segmenting or ordering
+WARNING:  column "bigint_type" should be used for segmenting or ordering
+WARNING:  column "jsonb_type" should be used for segmenting or ordering
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, false, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 2.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 2.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'second', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 2, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"second":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:08', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:09', 1, NULL, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:10', 1, true, NULL, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:11', 1, true, 1.0, NULL, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:12', 1, true, 1.0, 1.0, NULL, 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:13', 1, true, 1.0, 1.0, 'first', NULL, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:14', 1, true, 1.0, 1.0, 'first', 1, NULL);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
+ count 
+-------
+     1
+(1 row)
+
+-- test duplicates
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, false, 1.0, 1.0, 'first', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 2.0, 1.0, 'first', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 2.0, 'first', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'second', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 2, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"second":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:08', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:09', 1, NULL, 1.0, 1.0, 'first', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:10', 1, true, NULL, 1.0, 'first', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:11', 1, true, 1.0, NULL, 'first', 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:12', 1, true, 1.0, 1.0, NULL, 1, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:13', 1, true, 1.0, 1.0, 'first', NULL, '{"first":true}');
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:14', 1, true, 1.0, 1.0, 'first', 1, NULL);
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+\set ON_ERROR_STOP 1
+-- test non-duplicates
+INSERT INTO unique_all VALUES('2024-01-01 00:01:01', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:02', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:03', 1, true, 3.0, 1.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:04', 1, true, 1.0, 3.0, 'first', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:05', 1, true, 1.0, 1.0, 'third', 1, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:06', 1, true, 1.0, 1.0, 'first', 3, '{"first":true}');
+INSERT INTO unique_all VALUES('2024-01-01 00:07', 1, true, 1.0, 1.0, 'first', 1, '{"third":true}');
+-- test non-duplicates with non-NULL default values
+ALTER TABLE unique_all ADD COLUMN added_non_null int DEFAULT 4;
+DROP INDEX ultimate_unique;
+CREATE UNIQUE INDEX ultimate_unique ON unique_all(time, device_id, bool_type, numeric_type, float_type, text_type, bigint_type, jsonb_type, added_non_null) NULLS NOT DISTINCT;
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4);
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+\set ON_ERROR_STOP 1
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 5);
+-- make sure everything is correct after recompressing the chunk
+SELECT count(decompress_chunk(c)) FROM show_chunks('unique_all') c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4);
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+\set ON_ERROR_STOP 1
+-- test non-duplicates with NULL default values
+ALTER TABLE unique_all ADD COLUMN added_null int DEFAULT NULL;
+DROP INDEX ultimate_unique;
+CREATE UNIQUE INDEX ultimate_unique ON unique_all(time, device_id, bool_type, numeric_type, float_type, text_type, bigint_type, jsonb_type, added_non_null, added_null) NULLS NOT DISTINCT;
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4, NULL);
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 5, NULL);
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+\set ON_ERROR_STOP 1
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 6, NULL);
+-- make sure everything is correct after recompressing the chunk
+SELECT count(decompress_chunk(c)) FROM show_chunks('unique_all') c;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_all') c;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 4, NULL);
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1, '{"first":true}', 5, NULL);
+ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
+\set ON_ERROR_STOP 1
+DROP TABLE unique_all;

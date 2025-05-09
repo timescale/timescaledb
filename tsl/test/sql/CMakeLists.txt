@@ -7,6 +7,7 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
+    cagg_api.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
@@ -18,6 +19,7 @@ set(TEST_FILES
     chunk_column_stats.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
+    compress_bloom_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
     compressed_collation.sql
@@ -36,11 +38,13 @@ set(TEST_FILES
     compression_sequence_num_removal.sql
     compression_settings.sql
     compression_sorted_merge.sql
-    compression_sorted_merge_columns.sql
     compression_sorted_merge_distinct.sql
     compression.sql
     compression_trigger.sql
     compress_sort_transform.sql
+    create_table_with.sql
+    custom_hashagg.sql
+    decompress_chunk_cost.sql
     decompress_index.sql
     foreign_keys.sql
     hypercore_columnar.sql
@@ -67,11 +71,11 @@ set(TEST_FILES
     merge_compress.sql
     modify_exclusion.sql
     move.sql
-    partialize_finalize.sql
     policy_generalization.sql
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
+    split_chunk.sql
     transparent_decompression_join_index.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
@@ -112,15 +116,18 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_merge.sql
     chunk_utils_compression.sql
     chunk_utils_internal.sql
+    compress_bloom_sparse_debug.sql
     compression_algos.sql
     compression_bgw.sql
     compression_bools.sql
+    compression_bool_vectorized.sql
     compression_ddl.sql
     compression_errors.sql
     compression_hypertable.sql
     compression_merge.sql
     compression_indexscan.sql
     compression_segment_meta.sql
+    compression_sorted_merge_columns.sql
     compression_sorted_merge_filter.sql
     cagg_bgw_drop_chunks.sql
     cagg_drop_chunks.sql
@@ -149,6 +156,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     tsl_tables.sql
     license_tsl.sql
     fixed_schedules.sql
+    partialize_finalize.sql
     recompress_chunk_segmentwise.sql
     feature_flags.sql
     vector_agg_default.sql
@@ -156,7 +164,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     vector_agg_grouping.sql
     vector_agg_text.sql
     vector_agg_memory.sql
-    vector_agg_segmentby.sql)
+    vector_agg_segmentby.sql
+    vector_agg_uuid_segmentby.sql)
 
   list(
     APPEND
@@ -175,8 +184,14 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(APPEND TEST_FILES cagg_planning.sql hypercore_parallel.sql
-       hypercore_vectoragg.sql)
+  list(
+    APPEND
+    TEST_FILES
+    cagg_planning.sql
+    hypercore_parallel.sql
+    hypercore_vectoragg.sql
+    skip_scan_dagg.sql
+    plan_skip_scan_dagg.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

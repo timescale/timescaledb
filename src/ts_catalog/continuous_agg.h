@@ -13,7 +13,7 @@
 #include "ts_catalog/catalog.h"
 
 #include "compat/compat.h"
-#include "with_clause_parser.h"
+#include "with_clause/with_clause_parser.h"
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
@@ -46,20 +46,6 @@
 	((funcinfo->origin == ORIGIN_TIMESCALE_EXPERIMENTAL) &&                                        \
 	 (strcmp("time_bucket_ng", funcinfo->funcname) == 0))
 
-typedef enum ContinuousAggViewOption
-{
-	ContinuousEnabled = 0,
-	ContinuousViewOptionCreateGroupIndex,
-	ContinuousViewOptionMaterializedOnly,
-	ContinuousViewOptionCompress,
-	ContinuousViewOptionFinalized,
-	ContinuousViewOptionChunkTimeInterval,
-	ContinuousViewOptionCompressSegmentBy,
-	ContinuousViewOptionCompressOrderBy,
-	ContinuousViewOptionCompressChunkTimeInterval,
-	ContinuousViewOptionMax
-} ContinuousAggViewOption;
-
 typedef enum ContinuousAggViewType
 {
 	ContinuousAggUserView = 0,
@@ -67,11 +53,6 @@ typedef enum ContinuousAggViewType
 	ContinuousAggDirectView,
 	ContinuousAggAnyView
 } ContinuousAggViewType;
-
-extern TSDLLEXPORT WithClauseResult *ts_continuous_agg_with_clause_parse(const List *defelems);
-
-extern TSDLLEXPORT List *
-ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses);
 
 /*
  * Information about the bucketing function.

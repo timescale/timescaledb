@@ -90,7 +90,8 @@ CREATE OR REPLACE FUNCTION @extschema@.add_continuous_aggregate_policy(
     timezone TEXT = NULL,
     include_tiered_data BOOL = NULL,
     buckets_per_batch INTEGER = NULL,
-    max_batches_per_execution INTEGER = NULL
+    max_batches_per_execution INTEGER = NULL,
+    refresh_newest_first BOOL = NULL
 )
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_add'

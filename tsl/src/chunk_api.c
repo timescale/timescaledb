@@ -41,23 +41,6 @@
 #include "utils.h"
 
 /*
- * These values come from the pg_type table.
- */
-#define FLOAT4_TYPELEN sizeof(float4)
-#define FLOAT4_TYPEBYVAL true
-#define FLOAT4_TYPEALIGN 'i'
-#define CSTRING_TYPELEN (-2)
-#define CSTRING_TYPEBYVAL false
-#define CSTRING_TYPEALIGN 'c'
-#define INT4_TYPELEN sizeof(int32)
-#define INT4_TYPEBYVAL true
-#define INT4_TYPEALIGN 'i'
-#define OID_TYPELEN sizeof(Oid)
-#define OID_TYPEBYVAL true
-#define OID_TYPEALIGN 'i'
-#define CSTRING_ARY_TYPELEN (-1)
-
-/*
  * Convert a hypercube to a JSONB value.
  *
  * For instance, a two-dimensional hypercube, with dimensions "time" and
@@ -289,7 +272,7 @@ chunk_show(PG_FUNCTION_ARGS)
 	 */
 	tuple = chunk_form_tuple(chunk, ht, tupdesc, false);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (NULL == tuple)
 		ereport(ERROR,
@@ -380,135 +363,11 @@ chunk_create(PG_FUNCTION_ARGS)
 
 	tuple = chunk_form_tuple(chunk, ht, tupdesc, created);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (NULL == tuple)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
-}
-
-#define CREATE_CHUNK_FUNCTION_NAME "create_chunk"
-#define CREATE_CHUNK_NUM_ARGS 5
-#define CHUNK_CREATE_STMT                                                                          \
-	"SELECT * FROM " FUNCTIONS_SCHEMA_NAME "." CREATE_CHUNK_FUNCTION_NAME "($1, $2, $3, $4, $5)"
-
-#define ESTIMATE_JSON_STR_SIZE(num_dims) (60 * (num_dims))
-
-enum Anum_chunk_relstats
-{
-	Anum_chunk_relstats_chunk_id = 1,
-	Anum_chunk_relstats_hypertable_id,
-	Anum_chunk_relstats_num_pages,
-	Anum_chunk_relstats_num_tuples,
-	Anum_chunk_relstats_num_allvisible,
-	_Anum_chunk_relstats_max,
-};
-
-enum Anum_chunk_colstats
-{
-	Anum_chunk_colstats_chunk_id = 1,
-	Anum_chunk_colstats_hypertable_id,
-	Anum_chunk_colstats_column_id,
-	Anum_chunk_colstats_nullfrac,
-	Anum_chunk_colstats_width,
-	Anum_chunk_colstats_distinct,
-	Anum_chunk_colstats_slot_kinds,
-	Anum_chunk_colstats_slot_op_strings,
-	Anum_chunk_colstats_slot_collations,
-	Anum_chunk_colstats_slot1_numbers,
-	Anum_chunk_colstats_slot2_numbers,
-	Anum_chunk_colstats_slot3_numbers,
-	Anum_chunk_colstats_slot4_numbers,
-	Anum_chunk_colstats_slot5_numbers,
-	Anum_chunk_colstats_slot_valtype_strings,
-	Anum_chunk_colstats_slot1_values,
-	Anum_chunk_colstats_slot2_values,
-	Anum_chunk_colstats_slot3_values,
-	Anum_chunk_colstats_slot4_values,
-	Anum_chunk_colstats_slot5_values,
-	_Anum_chunk_colstats_max,
-};
-
-/*
- * It's not safe to send OIDs for operations or types between postgres instances for user defined
- * types. Instead convert the operation OID to strings and then look up the local OID for the
- * corresponding names on the other node. A single op OID will need 6 strings {op_name,
- * op_namespace, larg_name, larg_namespace, rarg_name, rarg_namespace}
- */
-#define STRINGS_PER_TYPE_OID 2
-#define STRINGS_PER_OP_OID 6
-
-enum StringArrayTypeIdx
-{
-	ENCODED_TYPE_NAME = 0,
-	ENCODED_TYPE_NAMESPACE
-};
-
-enum OpArrayTypeIdx
-{
-	ENCODED_OP_NAME = 0,
-	ENCODED_OP_NAMESPACE,
-	ENCODED_OP_LARG_NAME,
-	ENCODED_OP_LARG_NAMESPACE,
-	ENCODED_OP_RARG_NAME,
-	ENCODED_OP_RARG_NAMESPACE,
-};
-
-#define LargSubarrayForOpArray(op_string_array) (&(op_string_array)[ENCODED_OP_LARG_NAME])
-#define RargSubarrayForOpArray(op_string_array) (&(op_string_array)[ENCODED_OP_RARG_NAME])
-
-Datum
-chunk_create_empty_table(PG_FUNCTION_ARGS)
-{
-	Oid hypertable_relid;
-	Jsonb *slices;
-	const char *schema_name;
-	const char *table_name;
-	Cache *const hcache = ts_hypertable_cache_pin();
-	Hypertable *ht;
-	Hypercube *hc;
-	Oid uid, saved_uid;
-	int sec_ctx;
-
-	GETARG_NOTNULL_OID(hypertable_relid, 0, "hypertable");
-	GETARG_NOTNULL_NULLABLE(slices, 1, "slices", JSONB_P);
-	GETARG_NOTNULL_NULLABLE(schema_name, 2, "chunk schema name", CSTRING);
-	GETARG_NOTNULL_NULLABLE(table_name, 3, "chunk table name", CSTRING);
-
-	ht = ts_hypertable_cache_get_entry(hcache, hypertable_relid, CACHE_FLAG_NONE);
-	Assert(ht != NULL);
-
-	/*
-	 * If the chunk is created in the internal schema, become the catalog
-	 * owner, otherwise become the hypertable owner
-	 */
-	if (strcmp(schema_name, INTERNAL_SCHEMA_NAME) == 0)
-		uid = ts_catalog_database_info_get()->owner_uid;
-	else
-	{
-		Relation rel;
-
-		rel = table_open(ht->main_table_relid, AccessShareLock);
-		uid = rel->rd_rel->relowner;
-		table_close(rel, AccessShareLock);
-	}
-
-	GetUserIdAndSecContext(&saved_uid, &sec_ctx);
-
-	if (uid != saved_uid)
-		SetUserIdAndSecContext(uid, sec_ctx | SECURITY_LOCAL_USERID_CHANGE);
-
-	hc = get_hypercube_from_slices(slices, ht);
-	Assert(NULL != hc);
-	ts_chunk_create_only_table(ht, hc, schema_name, table_name);
-
-	ts_cache_release(hcache);
-
-	/* Need to restore security context */
-	if (uid != saved_uid)
-		SetUserIdAndSecContext(saved_uid, sec_ctx);
-
-	PG_RETURN_BOOL(true);
 }

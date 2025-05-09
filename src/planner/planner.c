@@ -52,7 +52,7 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "partitioning.h"
 #include "planner/partialize.h"
 #include "planner/planner.h"
@@ -227,7 +227,7 @@ planner_hcache_pop(bool release)
 
 	if (release)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		/* If we pop a stack and discover a new hypertable cache, the basrel
 		 * cache can contain invalid entries, so we reset it. */
 		if (planner_hcaches != NIL && hcache != linitial(planner_hcaches))
@@ -682,14 +682,14 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			 * standard_planner. Therefore, we fixup the final target list for
 			 * HypertableInsert here.
 			 */
-			ts_hypertable_modify_fixup_tlist(stmt->planTree);
+			ts_modify_hypertable_fixup_tlist(stmt->planTree);
 
 			foreach (lc, stmt->subplans)
 			{
 				Plan *subplan = (Plan *) lfirst(lc);
 
 				if (subplan)
-					ts_hypertable_modify_fixup_tlist(subplan);
+					ts_modify_hypertable_fixup_tlist(subplan);
 			}
 
 			if (IsA(stmt->planTree, Agg))
@@ -1563,7 +1563,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *
  * Modified plan:
  *
- *	[ HypertableModify ]
+ *	[ ModifyHypertable ]
  *		  ^
  *		  |
  *	[ ModifyTable ] -> resultRelation
@@ -1576,12 +1576,9 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *		  |
  *	  [ subplan ]
  *
- * For PG < 14, the modifytable plan is modified for INSERTs only.
- * For PG14+, we modify the plan for DELETEs as well.
- *
  */
 static List *
-replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *input_rel)
+replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *input_rel)
 {
 	List *new_pathlist = NIL;
 	ListCell *lc;
@@ -1603,7 +1600,7 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			{
 				if (ht)
 				{
-					path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
+					path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
 				}
 			}
 			if (ht && mt->operation == CMD_MERGE)
@@ -1619,7 +1616,7 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					MergeAction *action = (MergeAction *) lfirst(l);
 					if (action->commandType == CMD_INSERT)
 					{
-						path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
+						path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
 						break;
 					}
 				}
@@ -1655,7 +1652,7 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 		/* Modify for INSERTs on a hypertable */
 		if (output_rel->pathlist != NIL)
 			output_rel->pathlist =
-				replace_hypertable_modify_paths(root, output_rel->pathlist, input_rel);
+				replace_modify_hypertable_paths(root, output_rel->pathlist, input_rel);
 
 		if (parse->hasAggs && stage == UPPERREL_GROUP_AGG)
 		{

@@ -245,7 +245,7 @@ tsl_cagg_try_repair(PG_FUNCTION_ARGS)
 	Assert(mat_ht != NULL);
 	cagg_rebuild_view_definition(cagg, mat_ht, force_rebuild);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();
 }

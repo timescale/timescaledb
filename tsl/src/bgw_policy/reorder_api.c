@@ -114,7 +114,8 @@ policy_reorder_check(PG_FUNCTION_ARGS)
 
 	if (PG_ARGISNULL(0))
 	{
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("config must not be NULL")));
+		ereport(ERROR,
+				(errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("config must not be NULL")));
 	}
 
 	policy_reorder_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
@@ -209,7 +210,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 		schedule_interval.month = 0;
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (jobs != NIL)
 	{
@@ -307,7 +308,7 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
 														   FUNCTIONS_SCHEMA_NAME,
 														   ht->fd.id);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (jobs == NIL)
 	{

@@ -1,0 +1,1 @@
+Fixes: #8033 Skip default segmentby if orderby is explicitly set

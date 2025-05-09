@@ -47,6 +47,8 @@
 #include <utils/datum.h>
 
 #include "guc.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/decompress_chunk/exec.h"
 #include "nodes/skip_scan/skip_scan.h"
 
 typedef enum SkipScanStage
@@ -88,6 +90,13 @@ typedef struct SkipScanState
 	/* rescan required before getting next tuple */
 	bool needs_rescan;
 
+	/* child_plan node is the input for skip scan plan node.
+	 * if skip scan is directly over index scan, child_plan = idx_scan
+	 * if skip scan is over compressed chunk,
+	 * idx_scan = compressed index scan,
+	 * child_plan = decompressed input into skip scan
+	 */
+	Plan *child_plan;
 	void *idx_scan;
 } SkipScanState;
 
@@ -102,8 +111,19 @@ skip_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	SkipScanState *state = (SkipScanState *) node;
 	state->ctx = AllocSetContextCreate(estate->es_query_cxt, "skipscan", ALLOCSET_DEFAULT_SIZES);
 
-	state->idx = (ScanState *) ExecInitNode(state->idx_scan, estate, eflags);
-	node->custom_ps = list_make1(state->idx);
+	node->custom_ps = list_make1((ScanState *) ExecInitNode(state->child_plan, estate, eflags));
+	ScanState *child_state = linitial(node->custom_ps);
+	if (state->child_plan == state->idx_scan)
+	{
+		state->idx = child_state;
+	}
+	else if (IsA(child_state, CustomScanState))
+	{
+		Assert(ts_is_decompress_chunk_plan(state->child_plan));
+		state->idx = linitial(castNode(CustomScanState, child_state)->custom_ps);
+	}
+	else
+		elog(ERROR, "unknown subscan type in SkipScan");
 
 	if (IsA(state->idx_scan, IndexScan))
 	{
@@ -164,11 +184,26 @@ skip_scan_rescan_index(SkipScanState *state)
 	 * has not been initialized it will pick up
 	 * any ScanKey changes we did */
 	if (*state->scan_desc)
+	{
 		index_rescan(*state->scan_desc,
 					 *state->scan_keys,
 					 *state->num_scan_keys,
 					 NULL /*orderbys*/,
 					 0 /*norderbys*/);
+
+		/* Discard current compressed index tuple as we are ready to move to the next compressed
+		 * tuple via SkipScan */
+		ScanState *child = linitial(state->cscan_state.custom_ps);
+		if (ts_is_decompress_chunk_plan(state->child_plan))
+		{
+			DecompressChunkState *ds = (DecompressChunkState *) child;
+			TupleTableSlot *slot = ds->batch_queue->funcs->top_tuple(ds->batch_queue);
+			if (slot)
+			{
+				compressed_batch_discard_tuples((DecompressBatchState *) slot);
+			}
+		}
+	}
 	state->needs_rescan = false;
 }
 
@@ -242,6 +277,7 @@ skip_scan_exec(CustomScanState *node)
 {
 	SkipScanState *state = (SkipScanState *) node;
 	TupleTableSlot *result;
+	ScanState *child_state;
 
 	/*
 	 * We are not supporting projection here since no plan
@@ -267,7 +303,8 @@ skip_scan_exec(CustomScanState *node)
 				break;
 
 			case SS_NULLS_FIRST:
-				result = state->idx->ps.ExecProcNode(&state->idx->ps);
+				child_state = linitial(state->cscan_state.custom_ps);
+				result = child_state->ps.ExecProcNode(&child_state->ps);
 
 				/*
 				 * if we found a NULL value we return it, otherwise
@@ -281,7 +318,8 @@ skip_scan_exec(CustomScanState *node)
 
 			case SS_NOT_NULL:
 			case SS_VALUES:
-				result = state->idx->ps.ExecProcNode(&state->idx->ps);
+				child_state = linitial(state->cscan_state.custom_ps);
+				result = child_state->ps.ExecProcNode(&child_state->ps);
 
 				if (!TupIsNull(result))
 				{
@@ -314,7 +352,8 @@ skip_scan_exec(CustomScanState *node)
 				break;
 
 			case SS_NULLS_LAST:
-				result = state->idx->ps.ExecProcNode(&state->idx->ps);
+				child_state = linitial(state->cscan_state.custom_ps);
+				result = child_state->ps.ExecProcNode(&child_state->ps);
 				skip_scan_switch_stage(state, SS_END);
 				return result;
 				break;
@@ -330,7 +369,8 @@ static void
 skip_scan_end(CustomScanState *node)
 {
 	SkipScanState *state = (SkipScanState *) node;
-	ExecEndNode(&state->idx->ps);
+	ScanState *child_state = linitial(state->cscan_state.custom_ps);
+	ExecEndNode(&child_state->ps);
 }
 
 static void
@@ -352,7 +392,8 @@ skip_scan_rescan(CustomScanState *node)
 	state->prev_datum = 0;
 
 	state->needs_rescan = false;
-	ExecReScan(&state->idx->ps);
+	ScanState *child_state = linitial(state->cscan_state.custom_ps);
+	ExecReScan(&child_state->ps);
 	MemoryContextReset(state->ctx);
 }
 
@@ -369,7 +410,16 @@ tsl_skip_scan_state_create(CustomScan *cscan)
 {
 	SkipScanState *state = (SkipScanState *) newNode(sizeof(SkipScanState), T_CustomScanState);
 
-	state->idx_scan = linitial(cscan->custom_plans);
+	state->child_plan = linitial(cscan->custom_plans);
+	if (ts_is_decompress_chunk_plan(state->child_plan))
+	{
+		CustomScan *csplan = castNode(CustomScan, state->child_plan);
+		state->idx_scan = linitial(csplan->custom_plans);
+	}
+	else
+	{
+		state->idx_scan = state->child_plan;
+	}
 	state->stage = SS_BEGIN;
 
 	state->distinct_col_attnum = linitial_int(cscan->custom_private);

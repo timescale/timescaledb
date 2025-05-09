@@ -63,7 +63,9 @@ SELECT
     partial_view_name AS "PART_VIEW_NAME",
     partial_view_schema AS "PART_VIEW_SCHEMA",
     direct_view_name AS "DIR_VIEW_NAME",
-    direct_view_schema AS "DIR_VIEW_SCHEMA"
+    direct_view_schema AS "DIR_VIEW_SCHEMA",
+    user_view_name AS "USER_VIEW_NAME",
+    user_view_schema AS "USER_VIEW_SCHEMA"
 FROM
     _timescaledb_catalog.continuous_agg ca
     JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
@@ -119,8 +121,8 @@ SELECT add_compression_policy('conditions_summary_daily', '100'::integer);
 
 SELECT *
 FROM timescaledb_information.jobs
-WHERE hypertable_schema = :'MAT_SCHEMA_NAME'
-AND hypertable_name = :'MAT_TABLE_NAME'
+WHERE hypertable_schema = :'USER_VIEW_SCHEMA'
+AND hypertable_name = :'USER_VIEW_NAME'
 AND job_id >= 1000 ORDER BY job_id;
 
 -- execute the migration
@@ -135,7 +137,9 @@ SELECT
     partial_view_name AS "NEW_PART_VIEW_NAME",
     partial_view_schema AS "NEW_PART_VIEW_SCHEMA",
     direct_view_name AS "NEW_DIR_VIEW_NAME",
-    direct_view_schema AS "NEW_DIR_VIEW_SCHEMA"
+    direct_view_schema AS "NEW_DIR_VIEW_SCHEMA",
+    user_view_name AS "NEW_USER_VIEW_NAME",
+    user_view_schema AS "NEW_USER_VIEW_SCHEMA"
 FROM
     _timescaledb_catalog.continuous_agg ca
     JOIN _timescaledb_catalog.hypertable h ON (h.id = ca.mat_hypertable_id)
@@ -147,8 +151,8 @@ WHERE
 
 SELECT *
 FROM timescaledb_information.jobs
-WHERE hypertable_schema = :'NEW_MAT_SCHEMA_NAME'
-AND hypertable_name = :'NEW_MAT_TABLE_NAME'
+WHERE hypertable_schema = :'NEW_USER_VIEW_SCHEMA'
+AND hypertable_name = :'NEW_USER_VIEW_NAME'
 AND job_id >= 1000 ORDER BY job_id;
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;

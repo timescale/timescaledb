@@ -345,8 +345,8 @@ extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorith
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot);
-typedef struct HypertableModifyState HypertableModifyState;
-extern bool decompress_target_segments(HypertableModifyState *ht_state);
+typedef struct ModifyHypertableState ModifyHypertableState;
+extern bool decompress_target_segments(ModifyHypertableState *ht_state);
 /* CompressSingleRowState methods */
 struct CompressSingleRowState;
 typedef struct CompressSingleRowState CompressSingleRowState;
@@ -386,6 +386,10 @@ extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
 extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 extern int decompress_batch(RowDecompressor *decompressor);
+extern bool decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos,
+									  int num_attnos);
+extern ArrowArray *decompress_single_column(RowDecompressor *decompressor, AttrNumber attno,
+											bool *default_value);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
@@ -427,4 +431,5 @@ struct decompress_batches_stats
 	int64 batches_filtered;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
+	int64 tuples_deleted;
 };

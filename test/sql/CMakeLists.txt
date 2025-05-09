@@ -12,6 +12,7 @@ set(TEST_FILES
     create_chunks.sql
     create_hypertable.sql
     create_table.sql
+    create_table_with.sql
     constraint.sql
     copy.sql
     copy_where.sql

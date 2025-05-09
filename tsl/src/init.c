@@ -25,6 +25,7 @@
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "compression/recompress.h"
+#include "compression/sparse_index_bloom1.h"
 #include "config.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
@@ -170,6 +171,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.array_compressor_finish = tsl_array_compressor_finish,
 	.bool_compressor_append = tsl_bool_compressor_append,
 	.bool_compressor_finish = tsl_bool_compressor_finish,
+	.bloom1_contains = bloom1_contains,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,
@@ -181,6 +183,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.hypercore_proxy_handler = hypercore_proxy_handler,
 	.hypercore_decompress_update_segment = hypercore_decompress_update_segment,
 	.is_compressed_tid = tsl_is_compressed_tid,
+	.compression_enable = tsl_compression_enable,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
 	.show_chunk = chunk_show,
@@ -188,12 +191,12 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_chunk = chunk_create,
 	.chunk_freeze_chunk = chunk_freeze_chunk,
 	.chunk_unfreeze_chunk = chunk_unfreeze_chunk,
-	.chunk_create_empty_table = chunk_create_empty_table,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
 	.preprocess_query_tsl = tsl_preprocess_query,
 	.merge_chunks = chunk_merge_chunks,
+	.split_chunk = chunk_split_chunk,
 };
 
 static void

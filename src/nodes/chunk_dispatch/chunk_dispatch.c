@@ -24,7 +24,7 @@
 #include "errors.h"
 #include "guc.h"
 #include "hypercube.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
@@ -77,7 +77,9 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	 * for a compressed hypertable.
 	 */
 	if (dispatch->hypertable->fd.compression_state == HypertableInternalCompressionTable)
-		elog(ERROR, "direct insert into internal compressed hypertable is not supported");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("direct insert into internal compressed hypertable is not supported")));
 
 	cis = ts_subspace_store_get(dispatch->cache, point);
 
@@ -476,7 +478,7 @@ chunk_dispatch_end(CustomScanState *node)
 
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
-	ts_cache_release(state->hypertable_cache);
+	ts_cache_release(&state->hypertable_cache);
 }
 
 static void
