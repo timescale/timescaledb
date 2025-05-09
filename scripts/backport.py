@@ -190,7 +190,7 @@ git_check(
 main_commits = [
     line.split("\t")
     for line in git_output(
-        f'log -{HISTORY_DEPTH} --pretty="format:%h\t%s" {source_remote}/{backport_target}..{source_remote}/main'
+        f'log -{HISTORY_DEPTH} --abbrev=12 --pretty="format:%h\t%s" {source_remote}/{backport_target}..{source_remote}/main'
     ).splitlines()
     if line
 ]
@@ -200,7 +200,7 @@ print(f"Have {len(main_commits)} new commits in the main branch.")
 branch_commits = [
     line.split("\t")
     for line in git_output(
-        f'log -{HISTORY_DEPTH} --pretty="format:%h\t%s" {source_remote}/main..{source_remote}/{backport_target}'
+        f'log -{HISTORY_DEPTH} --abbrev=12 --pretty="format:%h\t%s" {source_remote}/main..{source_remote}/{backport_target}'
     ).splitlines()
     if line
 ]

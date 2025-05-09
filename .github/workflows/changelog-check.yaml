@@ -49,10 +49,11 @@ jobs:
           folder=".unreleased"
 
           # Get the list of modified files as a bash array. Exclude the
-          # workflows and tests because they don't require a changelog.
+          # development-related files because they don't require a changelog.
           mapfile -t modified_files < <(gh pr view $PR_NUMBER --json files --jq '
             [.files.[].path | select(
-                    (startswith(".github") or startswith("test") or startswith("tsl/test"))
+                    (startswith(".github") or startswith("test")
+                        or startswith("tsl/test") or startswith("scripts"))
                 | not)] | .[]')
           echo "Modified files: ${modified_files[@]}"
 
