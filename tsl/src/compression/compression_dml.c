@@ -6,17 +6,14 @@
 #include <postgres.h>
 #include <access/genam.h>
 #include <access/sdir.h>
-#include <access/stratnum.h>
 #include <access/tableam.h>
 #include <access/valid.h>
 #include <catalog/pg_am.h>
-#include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <optimizer/optimizer.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
-#include <storage/lockdefs.h>
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
@@ -1678,117 +1675,4 @@ can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 	}
 
 	return true;
-}
-
-static bool
-decompress_batch_for_value_rels(const CompressionSettings *csettings, Relation rel, Relation crel,
-								AttrNumber attnum, Datum value)
-{
-	Relation matching_index_rel = NULL;
-	const char *attname = get_attname(RelationGetRelid(rel), attnum, false);
-	Oid valuetyp = get_atttype(RelationGetRelid(rel), attnum);
-	int16 typlen;
-	bool typbyval;
-
-	get_typlenbyval(valuetyp, &typlen, &typbyval);
-
-	int orderby_pos = ts_array_position(csettings->fd.orderby, attname);
-	Ensure(orderby_pos > 0, "primary dimension \"%s\" is not in compression settings", attname);
-
-	/*
-	 * Get the attribute numbers for the primary dimension's min and max
-	 * values in the compressed relation. We'll use these to get the time
-	 * range of compressed segments in order to route segments to the
-	 * right result chunk.
-	 */
-	const char *min_attname = column_segment_min_name(orderby_pos);
-	const char *max_attname = column_segment_max_name(orderby_pos);
-	/*
-	 * function for the scan key.
-	 */
-	TypeCacheEntry *tce = lookup_type_cache(valuetyp, TYPECACHE_BTREE_OPFAMILY);
-
-	Oid opno = get_opfamily_member(tce->btree_opf, valuetyp, valuetyp, BTLessStrategyNumber);
-
-	BatchFilter filter1 = {
-		.collation = -1,
-		.is_null = false,
-		.is_null_check = false,
-		.is_array_op = false,
-		.strategy = BTLessStrategyNumber,
-		.value = makeConst(valuetyp, 0, -1, typlen, value, false, typbyval),
-		.opcode = get_opcode(opno),
-	};
-
-	namestrcpy(&filter1.column_name, min_attname);
-
-	opno = get_opfamily_member(tce->btree_opf, valuetyp, valuetyp, BTGreaterEqualStrategyNumber);
-
-	BatchFilter filter2 = {
-		.collation = -1,
-		.is_null = false,
-		.is_null_check = false,
-		.is_array_op = false,
-		.strategy = BTGreaterEqualStrategyNumber,
-		.value = makeConst(valuetyp, 0, -1, typlen, value, false, typbyval),
-		.opcode = get_opcode(opno),
-	};
-
-	namestrcpy(&filter1.column_name, max_attname);
-
-	List *index_filters = list_make2(&filter1, &filter2);
-	List *heap_filters = NIL;
-	List *is_null = NIL;
-	ScanKeyData *scankeys = NULL;
-	Bitmapset *null_columns = NULL;
-	int num_scankeys = 0;
-	ScanKeyData *index_scankeys = NULL;
-	int num_index_scankeys = 0;
-	struct decompress_batches_stats stats;
-	int num_mem_scankeys = 0;
-	ScanKeyData *mem_scankeys = NULL;
-	bool delete_only = false;
-
-	matching_index_rel = find_matching_index(crel, &index_filters, &heap_filters);
-	Ensure(matching_index_rel, "no matching index for decompression");
-	index_scankeys = build_index_scankeys(matching_index_rel, index_filters, &num_index_scankeys);
-
-	stats = decompress_batches_scan(crel,
-									rel,
-									matching_index_rel,
-									GetTransactionSnapshot(),
-									index_scankeys,
-									num_index_scankeys,
-									scankeys,
-									num_scankeys,
-									mem_scankeys,
-									num_mem_scankeys,
-									NULL,
-									NULL,
-									delete_only,
-									null_columns,
-									is_null);
-
-	elog(NOTICE,
-		 "decompress stats: " INT64_FORMAT " " INT64_FORMAT " " INT64_FORMAT " " INT64_FORMAT,
-		 stats.batches_decompressed,
-		 stats.tuples_decompressed,
-		 stats.batches_deleted,
-		 stats.tuples_deleted);
-
-	/* close the selected index */
-	index_close(matching_index_rel, AccessShareLock);
-
-	return stats.batches_decompressed > 0;
-}
-
-bool
-decompress_batch_for_value(const CompressionSettings *csettings, AttrNumber attnum, Datum value)
-{
-	Relation rel = table_open(csettings->fd.relid, RowExclusiveLock);
-	Relation crel = table_open(csettings->fd.compress_relid, AccessShareLock);
-	bool match = decompress_batch_for_value_rels(csettings, rel, crel, attnum, value);
-	table_close(rel, NoLock);
-	table_close(crel, NoLock);
-	return match;
 }

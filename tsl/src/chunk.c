@@ -4,11 +4,6 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include "compression/batch_metadata_builder.h"
-#include "compression/compression.h"
-#include "compression/compression_dml.h"
-#include "hypercore/arrow_cache.h"
-#include "hypercore/arrow_tts.h"
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/multixact.h>
@@ -18,7 +13,6 @@
 #include <access/transam.h>
 #include <access/tupconvert.h>
 #include <access/xact.h>
-#include <c.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
@@ -47,7 +41,6 @@
 #include <parser/parse_func.h>
 #include <storage/block.h>
 #include <storage/bufmgr.h>
-#include <storage/itemptr.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <storage/smgr.h>
@@ -68,6 +61,7 @@
 #include "annotations.h"
 #include "cache.h"
 #include "chunk.h"
+#include "compression/compression.h"
 #include "compression/create.h"
 #include "debug_point.h"
 #include "extension.h"
@@ -1375,7 +1369,6 @@ typedef struct CompressedSplitPointInfo
 	SplitPointInfo base;
 	AttrNumber attnum_min;
 	AttrNumber attnum_max;
-	ItemPointerData split_segment_tid;
 	Relation noncompressed_rel;
 } CompressedSplitPointInfo;
 
@@ -1537,7 +1530,6 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2], SplitPo
 		if (routing_index == -1)
 		{
 			CompressedSplitPointInfo *cspi = (CompressedSplitPointInfo *) spi;
-			ItemPointerCopy(&srcslot->tts_tid, &cspi->split_segment_tid);
 
 			RowDecompressor decompressor;
 			RowCompressor compressor[2];
@@ -1905,23 +1897,9 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	getTypeOutputInfo(splitdim_type, &outfuncid, &isvarlena);
 	split_at = ts_internal_to_time_value(split_point, splitdim_type);
 	Datum split_at_str = OidFunctionCall1(outfuncid, split_at);
-	elog(NOTICE, "splitting chunk at %s", DatumGetCString(split_at_str));
+	elog(DEBUG1, "splitting chunk %s at %s", get_rel_name(relid), DatumGetCString(split_at_str));
 
 	const CompressionSettings *compress_settings = ts_compression_settings_get(relid);
-
-	if (false && compress_settings)
-	{
-		bool matched = decompress_batch_for_value(compress_settings,
-												  splitdim_attnum,
-												  Int64GetDatum(split_point));
-
-		if (matched)
-		{
-			CommandCounterIncrement();
-			elog(NOTICE, "decompressed split batch");
-		}
-	}
-
 	int64 old_end = slice->fd.range_end;
 
 	/* Update the slice range for the existing chunk */
@@ -2010,8 +1988,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			.attnum_max = get_attnum(compress_settings->fd.compress_relid, max_attname),
 			.noncompressed_rel = srcrel,
 		};
-
-		ItemPointerSetInvalid(&cspi.split_segment_tid);
 
 		Relation compressed_srcrel =
 			table_open(compress_settings->fd.compress_relid, AccessExclusiveLock);
