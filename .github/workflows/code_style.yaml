@@ -3,7 +3,7 @@ name: Code style
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
   pull_request:
 
 jobs:

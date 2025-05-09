@@ -3,7 +3,7 @@ name: Memory tests
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
       - memory_test
       - trigger/memory_test
   pull_request:

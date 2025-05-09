@@ -7,7 +7,7 @@ name: Regression Windows
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
       - trigger/windows_tests
     paths-ignore:
       - '**.md'
