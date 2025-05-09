@@ -49,19 +49,18 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY device, time DESC LIMIT 1; -- with pushdown
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY device, time DESC LIMIT 1; -- with pushdown
 
--- -- Test direct ordered select from a single partially compressed chunk
--- -- Note that this currently doesn't work: https://github.com/timescale/timescaledb/issues/7084
--- select * from show_chunks('ht_metrics_compressed') chunk order by chunk limit 1 \gset
---
--- :PREFIX
--- SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
---
--- SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
---
--- :PREFIX
--- SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
---
--- SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
+-- Test direct ordered select from a single partially compressed chunk
+select * from show_chunks('ht_metrics_compressed') chunk order by chunk limit 1 \gset
+
+:PREFIX
+SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
+
+SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
+
+:PREFIX
+SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
+
+SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
 
 
 CREATE TABLE test1 (
