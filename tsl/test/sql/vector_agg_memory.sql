@@ -66,6 +66,7 @@ select * from log where (
 truncate log;
 set max_parallel_workers_per_gather = 0;
 set timescaledb.debug_require_vector_agg = 'require';
+set enable_sort to off;
 
 -- We should reliably see HashAggregate here because of the tweaks we made above.
 explain (costs off) select ts_debug_allocated_bytes() bytes,
@@ -86,6 +87,7 @@ format('insert into log
 reset timescaledb.debug_require_vector_agg;
 reset max_parallel_workers_per_gather;
 reset work_mem;
+reset enable_sort;
 
 select * from log where (
     -- For aggregation by segmentby, memory usage should be constant regardless
