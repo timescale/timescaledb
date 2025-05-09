@@ -4,6 +4,12 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO CET;
 SET datestyle TO ISO;
+-- Add unique constraint to hypertable invalidation log to capture
+-- duplicate entries. There should not be any, but for some reason,
+-- they
+ALTER TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+ADD CONSTRAINT hypertable_invalidation_check
+UNIQUE (hypertable_id, lowest_modified_value, greatest_modified_value);
 CREATE VIEW continuous_aggregates AS
 SELECT mat_hypertable_id AS materialization_id,
        format('%I.%I', user_view_schema, user_view_name)::regclass AS continuous_aggregate
