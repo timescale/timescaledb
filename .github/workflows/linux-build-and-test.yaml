@@ -10,7 +10,7 @@ name: Regression
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
