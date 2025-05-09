@@ -1259,3 +1259,21 @@ SELECT compress_chunk(show_chunks('badly_compressed_ht'));
 \set VERBOSITY terse
 
 RESET timescaledb.enable_compression_ratio_warnings;
+
+-- Test vector overallocation error
+CREATE TABLE hyper_86 (time timestamptz, device int8, value text);
+SELECT create_hypertable('hyper_86', 'time', create_default_indexes => false);
+-- This will try to create an array of chars over 1GB allocation limit
+INSERT INTO hyper_86
+VALUES
+	('2025-01-01 00:00:00', 1, repeat(md5(random()::text), 32*1024*200)), --200 MB value
+	('2025-01-01 00:00:01', 1, repeat(md5(random()::text), 32*1024*200)),
+	('2025-01-01 00:00:02', 1, repeat(md5(random()::text), 32*1024*200)),
+	('2025-01-01 00:00:03', 1, repeat(md5(random()::text), 32*1024*200)),
+	('2025-01-01 00:00:04', 1, repeat(md5(random()::text), 32*1024*200)),
+	('2025-01-01 00:00:05', 1, repeat(md5(random()::text), 32*1024*200));
+
+ALTER TABLE hyper_86 SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
+\set ON_ERROR_STOP 0
+SELECT compress_chunk(ch) FROM show_chunks('hyper_86') ch;
+\set ON_ERROR_STOP 1
