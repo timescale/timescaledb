@@ -2121,7 +2121,7 @@ ALTER MATERIALIZED VIEW cagg_alias SET (tsdb.materialized_only=false);
 DROP MATERIALIZED VIEW cagg_alias;
 -- test SET chunk_time_interval
 CREATE MATERIALIZED VIEW cagg_set
-WITH (tsdb.continuous, tsdb.chunk_time_interval='1day') AS
+WITH (tsdb.continuous, tsdb.chunk_interval='1day') AS
 SELECT time_bucket(INTERVAL '1 day', time) AS cagg_interval_setter FROM conditions GROUP BY 1 WITH NO DATA;
 SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
      column_name      | time_interval 
@@ -2129,21 +2129,21 @@ SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE 
  cagg_interval_setter | @ 1 day
 (1 row)
 
-ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='23 day');
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_interval='23 day');
 SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
      column_name      | time_interval 
 ----------------------+---------------
  cagg_interval_setter | @ 23 days
 (1 row)
 
-ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='6 month');
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_interval='6 month');
 SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
      column_name      | time_interval 
 ----------------------+---------------
  cagg_interval_setter | @ 180 days
 (1 row)
 
-ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_time_interval='1 year');
+ALTER MATERIALIZED VIEW cagg_set SET (tsdb.chunk_interval='1 year');
 SELECT column_name, time_interval FROM timescaledb_information.dimensions WHERE column_name='cagg_interval_setter';
      column_name      | time_interval 
 ----------------------+---------------
@@ -2205,16 +2205,16 @@ CREATE MATERIALIZED VIEW cagg_window_4 WITH (tsdb.continuous)
 AS SELECT time_bucket('1week', time), rank() OVER w FROM conditions GROUP BY 1, location WINDOW w AS (PARTITION BY time_bucket('1 week',time));
 WARNING:  window function support is experimental and may result in unexpected results depending on the functions used.
 NOTICE:  refreshing continuous aggregate "cagg_window_4"
--- test setting chunk_time_interval on a cagg
-CREATE MATERIALIZED VIEW cagg_chunk_time_interval WITH (tsdb.continuous, tsdb.chunk_time_interval='1000 day') AS SELECT time_bucket('1 week', time) FROM conditions GROUP BY 1 WITH NO DATA;
-SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_time_interval';
+-- test setting chunk_interval on a cagg
+CREATE MATERIALIZED VIEW cagg_chunk_interval WITH (tsdb.continuous, tsdb.chunk_interval='1000 day') AS SELECT time_bucket('1 week', time) FROM conditions GROUP BY 1 WITH NO DATA;
+SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_interval';
  time_interval 
 ---------------
  @ 1000 days
 (1 row)
 
-ALTER MATERIALIZED VIEW cagg_chunk_time_interval SET (tsdb.chunk_time_interval='110 day');
-SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_time_interval';
+ALTER MATERIALIZED VIEW cagg_chunk_interval SET (tsdb.chunk_interval='110 day');
+SELECT time_interval from timescaledb_information.continuous_aggregates cagg INNER JOIN timescaledb_information.dimensions dim ON cagg.materialization_hypertable_name = dim.hypertable_name  WHERE view_name='cagg_chunk_interval';
  time_interval 
 ---------------
  @ 110 days
