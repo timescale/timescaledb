@@ -852,8 +852,6 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
 	}
 
-	/* FIXME */
-
 	chunk_rel->rows = new_row_estimate;
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
