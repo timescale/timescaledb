@@ -4,7 +4,11 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include "compression/batch_metadata_builder.h"
+#include "compression/compression.h"
 #include "compression/compression_dml.h"
+#include "hypercore/arrow_cache.h"
+#include "hypercore/arrow_tts.h"
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/multixact.h>
@@ -1372,6 +1376,7 @@ typedef struct CompressedSplitPointInfo
 	AttrNumber attnum_min;
 	AttrNumber attnum_max;
 	ItemPointerData split_segment_tid;
+	Relation noncompressed_rel;
 } CompressedSplitPointInfo;
 
 static int
@@ -1431,7 +1436,8 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2], SplitPo
 	estate = CreateExecutorState();
 
 	/* Create the tuple slot */
-	srcslot = MakeSingleTupleTableSlot(RelationGetDescr(srcrel), table_slot_callbacks(srcrel));
+	srcslot = table_slot_create(srcrel, NULL); // MakeSingleTupleTableSlot(RelationGetDescr(srcrel),
+											   // table_slot_callbacks(srcrel));
 
 	/*
 	 * Scan through the rows using SnapshotAny to see everything so that we
@@ -1530,14 +1536,88 @@ copy_tuples_for_split(Relation srcrel, RelationSplitInfo *splitinfos[2], SplitPo
 
 		if (routing_index == -1)
 		{
-			elog(NOTICE, "found split batch. Dead? %d", isdead);
+			CompressedSplitPointInfo *cspi = (CompressedSplitPointInfo *) spi;
+			ItemPointerCopy(&srcslot->tts_tid, &cspi->split_segment_tid);
 
-			if (!isdead)
+			RowDecompressor decompressor;
+			RowCompressor compressor[2];
+			CompressionSettings *csettings =
+				ts_compression_settings_get(RelationGetRelid(cspi->noncompressed_rel));
+
+			decompressor =
+				build_decompressor_from_tupdesc(srcslot->tts_tupleDescriptor,
+												RelationGetDescr(cspi->noncompressed_rel));
+			heap_deform_tuple(tuple,
+							  decompressor.in_desc,
+							  decompressor.compressed_datums,
+							  decompressor.compressed_is_nulls);
+
+			int nrows = decompress_batch(&decompressor);
+
+			row_compressor_init(csettings,
+								&compressor[0],
+								RelationGetDescr(cspi->noncompressed_rel),
+								splitinfos[0]->targetrel,
+								false,
+								0);
+			row_compressor_init(csettings,
+								&compressor[1],
+								RelationGetDescr(cspi->noncompressed_rel),
+								splitinfos[1]->targetrel,
+								false,
+								0);
+
+			for (int i = 0; i < nrows; i++)
 			{
-				CompressedSplitPointInfo *cspi = (CompressedSplitPointInfo *) spi;
-				ItemPointerCopy(&srcslot->tts_tid, &cspi->split_segment_tid);
+				routing_index =
+					route_non_compressed_tuple_for_split(decompressor.decompressed_slots[i], spi);
+				Assert(routing_index == 0 || routing_index == 1);
+				row_compressor_append_row(&compressor[routing_index],
+										  decompressor.decompressed_slots[i]);
 			}
-			routing_index = 0;
+
+			HeapTuple tuple0 = row_compressor_build_tuple(&compressor[0]);
+			HeapTuple tuple1 = row_compressor_build_tuple(&compressor[1]);
+
+			/* Copy over visibility info */
+			memcpy(&tuple0->t_data->t_choice.t_heap,
+				   &tuple->t_data->t_choice.t_heap,
+				   sizeof(HeapTupleFields));
+			memcpy(&tuple1->t_data->t_choice.t_heap,
+				   &tuple->t_data->t_choice.t_heap,
+				   sizeof(HeapTupleFields));
+
+			row_decompressor_close(&decompressor);
+			row_compressor_clear_batch(&compressor[0], false);
+			row_compressor_clear_batch(&compressor[1], false);
+			row_compressor_close(&compressor[0]);
+			row_compressor_close(&compressor[1]);
+
+			if (isdead)
+			{
+				tups_vacuumed += 2;
+
+				/* heap rewrite module still needs to see it... */
+				if (rewrite_heap_dead_tuple(splitinfos[0]->rwstate, tuple0))
+				{
+					/* A previous recently-dead tuple is now known dead */
+					tups_vacuumed += 1;
+					tups_recently_dead -= 1;
+				}
+
+				if (rewrite_heap_dead_tuple(splitinfos[1]->rwstate, tuple1))
+				{
+					/* A previous recently-dead tuple is now known dead */
+					tups_vacuumed += 1;
+					tups_recently_dead -= 1;
+				}
+
+				continue;
+			}
+
+			num_tuples += 2;
+			reform_and_rewrite_tuple(tuple0, srcrel, splitinfos[0]);
+			reform_and_rewrite_tuple(tuple1, srcrel, splitinfos[1]);
 			continue;
 		}
 
@@ -1829,7 +1909,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	const CompressionSettings *compress_settings = ts_compression_settings_get(relid);
 
-	if (compress_settings)
+	if (false && compress_settings)
 	{
 		bool matched = decompress_batch_for_value(compress_settings,
 												  splitdim_attnum,
@@ -1877,6 +1957,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		new_compressed_chunk = create_compress_chunk(ht_compressed, new_chunk, InvalidOid);
 		ts_chunk_constraints_create(ht_compressed, new_compressed_chunk);
 		ts_trigger_create_all_on_chunk(new_compressed_chunk);
+		ts_chunk_set_compressed_chunk(new_chunk, new_compressed_chunk->fd.id);
 	}
 
 	ts_cache_release(&hcache);
@@ -1927,6 +2008,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 			},
 			.attnum_min = get_attnum(compress_settings->fd.compress_relid, min_attname),
 			.attnum_max = get_attnum(compress_settings->fd.compress_relid, max_attname),
+			.noncompressed_rel = srcrel,
 		};
 
 		ItemPointerSetInvalid(&cspi.split_segment_tid);

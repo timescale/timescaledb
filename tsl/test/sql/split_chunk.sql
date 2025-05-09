@@ -252,7 +252,21 @@ select compress_relid from _timescaledb_catalog.compression_settings where relid
 \d+ :compress_relid
 select * from :compress_relid;
 
+
+select * from chunk_slices where hypertable_name = 'splitme';
 select count(*), sum(device), sum(location), sum(temp) from splitme;
+select count(*), sum(device), sum(location), sum(temp) from _timescaledb_internal._hyper_1_1_chunk;
+
 call split_chunk('_timescaledb_internal._hyper_1_1_chunk');
 
+
+select * from chunk_slices where hypertable_name = 'splitme';
 select count(*), sum(device), sum(location), sum(temp) from splitme;
+select count(*), sum(device), sum(location), sum(temp) from _timescaledb_internal._hyper_1_1_chunk;
+select count(*), sum(device), sum(location), sum(temp) from _timescaledb_internal._hyper_1_13_chunk;
+
+select * from timescaledb_information.chunks where chunk_name = '_hyper_1_13_chunk';
+select compress_relid from _timescaledb_catalog.compression_settings where relid = '_timescaledb_internal._hyper_1_13_chunk'::regclass \gset
+
+\d+ :compress_relid
+select * from :compress_relid;
