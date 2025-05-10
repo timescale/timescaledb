@@ -43,7 +43,7 @@ policy_continuous_aggregate_get_mat_hypertable_id(const Jsonb *config)
 
 	if (!found)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_SQL_JSON_MEMBER_NOT_FOUND),
 				 errmsg("could not find \"%s\" in config for job",
 						POL_REFRESH_CONF_KEY_MAT_HYPERTABLE_ID)));
 
