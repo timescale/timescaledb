@@ -7,9 +7,9 @@
 
 #include <libpq/pqformat.h>
 
-#include "compression_sql_test.h"
-
 #include "compression/arrow_c_data_interface.h"
+#include "compression_sql_test.h"
+#include "errors.h"
 
 static uint32
 arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str)
@@ -39,7 +39,7 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
 	if (n != arrow->length)
 	{
 		ereport(errorlevel,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("the bulk decompression result does not match"),
 				 errdetail("Expected %d elements, got %d.", n, (int) arrow->length)));
 	}
@@ -50,7 +50,7 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
 		if (arrow_isnull != results[i].is_null)
 		{
 			ereport(errorlevel,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_TS_UNEXPECTED),
 					 errmsg("the bulk decompression result does not match"),
 					 errdetail("Expected null %d, got %d at row %d.",
 							   results[i].is_null,
@@ -70,7 +70,7 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
 			if (rowbyrow_len != arrow_len)
 			{
 				ereport(errorlevel,
-						(errcode(ERRCODE_INTERNAL_ERROR),
+						(errcode(ERRCODE_TS_UNEXPECTED),
 						 errmsg("the bulk decompression result does not match"),
 						 errdetail("At row %d\n", i)));
 			}
@@ -78,7 +78,7 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
 			if (strncmp(arrow_cstring, rowbyrow_cstring, rowbyrow_len) != 0)
 			{
 				ereport(errorlevel,
-						(errcode(ERRCODE_INTERNAL_ERROR),
+						(errcode(ERRCODE_TS_UNEXPECTED),
 						 errmsg("the bulk decompression result does not match"),
 						 errdetail("At row %d\n", i)));
 			}

@@ -488,7 +488,7 @@ lock_hypertable_tuple(int32 htid, ItemPointer tid, FormData_hypertable *form)
 			else
 			{
 				ereport(ERROR,
-						(errcode(ERRCODE_INTERNAL_ERROR),
+						(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
 						 errmsg("unable to lock hypertable catalog tuple, lock result is %d for "
 								"hypertable "
 								"ID (%d)",
@@ -2369,13 +2369,13 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 					 quote_identifier(NameStr(ht->fd.table_name)));
 
 	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI");
+		ereport(ERROR, (errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 	res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
 
 	if (res < 0)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_DATA_EXCEPTION),
 				 (errmsg("could not find the maximum time value for hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
@@ -2393,7 +2393,9 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
-		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				 errmsg("SPI_finish failed: %s", SPI_result_code_string(res))));
 
 	return max_value;
 }

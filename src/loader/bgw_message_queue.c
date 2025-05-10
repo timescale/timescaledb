@@ -18,6 +18,7 @@
 #include "../compat/compat.h"
 
 #include "bgw_message_queue.h"
+#include "errors.h"
 
 #define BGW_MQ_MAX_MESSAGES 16
 #define BGW_MQ_NAME "ts_bgw_message_queue"
@@ -152,7 +153,7 @@ queue_reset_reader(MessageQueue *queue)
 
 	if (!reset)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("multiple TimescaleDB background worker launchers have been started when "
 						"only one is allowed")));
 }

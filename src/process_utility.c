@@ -1308,7 +1308,12 @@ process_truncate(ProcessUtilityArgs *args)
 						 * Block direct TRUNCATE on frozen chunk.
 						 */
 						if (ts_chunk_is_frozen(chunk))
-							elog(ERROR, "cannot TRUNCATE frozen chunk \"%s\"", get_rel_name(relid));
+						{
+							ereport(ERROR,
+									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+									 errmsg("cannot TRUNCATE frozen chunk \"%s\"",
+											get_rel_name(relid))));
+						}
 
 						Assert(ht != NULL);
 
@@ -1515,7 +1520,9 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 			if (NULL != ht)
 			{
 				if (list_length(stmt->objects) != 1)
-					elog(ERROR, "cannot drop a hypertable along with other objects");
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot drop a hypertable along with other objects")));
 
 				if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 					ereport(ERROR,
@@ -1599,7 +1606,9 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 		if (NULL != ht)
 		{
 			if (list_length(stmt->objects) != 1)
-				elog(ERROR, "cannot drop a hypertable index along with other objects");
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot drop a hypertable index along with other objects")));
 
 			add_hypertable_to_process_args(args, ht);
 		}
@@ -2585,7 +2594,8 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 		appendStringInfo(&command, ")");
 
 		if (SPI_connect() != SPI_OK_CONNECT)
-			elog(ERROR, "could not connect to SPI");
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 		/* Lock down search_path */
 		int save_nestlevel = NewGUCNestLevel();
@@ -2595,7 +2605,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 
 		if (res < 0)
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_DATA_EXCEPTION),
 					 (errmsg("could not verify unique constraint on \"%s\"",
 							 get_rel_name(chunk->table_id)))));
 
@@ -2614,7 +2624,9 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
-			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_EXCEPTION),
+					 errmsg("SPI_finish failed: %s", SPI_result_code_string(res))));
 	}
 }
 
@@ -2643,7 +2655,8 @@ validate_check_constraint(Chunk *chunk, Constraint *con)
 						 deparsed);
 
 		if (SPI_connect() != SPI_OK_CONNECT)
-			elog(ERROR, "could not connect to SPI");
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 		/* Lock down search_path */
 		int save_nestlevel = NewGUCNestLevel();
@@ -2653,7 +2666,7 @@ validate_check_constraint(Chunk *chunk, Constraint *con)
 
 		if (res < 0)
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_DATA_EXCEPTION),
 					 (errmsg("could not verify check constraint on \"%s\"",
 							 get_rel_name(chunk->table_id)))));
 
@@ -2676,7 +2689,9 @@ validate_check_constraint(Chunk *chunk, Constraint *con)
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
-			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_EXCEPTION),
+					 errmsg("SPI_finish failed: %s", SPI_result_code_string(res))));
 	}
 }
 
@@ -2816,13 +2831,14 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 		appendStringInfo(&command, ")");
 
 		if (SPI_connect() != SPI_OK_CONNECT)
-			elog(ERROR, "could not connect to SPI");
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 		int res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
 		if (res < 0)
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_DATA_EXCEPTION),
 					 (errmsg("could not verify presence of NULL values on \"%s\"",
 							 get_rel_name(chunk_relid)))));
 
@@ -2838,7 +2854,9 @@ validate_set_not_null(Hypertable *ht, Oid chunk_relid, void *arg)
 
 		res = SPI_finish();
 		if (res != SPI_OK_FINISH)
-			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+			ereport(ERROR,
+					(errcode(ERRCODE_CONNECTION_EXCEPTION),
+					 errmsg("SPI_finish failed: %s", SPI_result_code_string(res))));
 	}
 }
 
@@ -2934,7 +2952,7 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 	}
 	else
 	{
-		elog(ERROR, "unexpected constraint type");
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("unexpected constraint type")));
 		return;
 	}
 
@@ -3960,11 +3978,12 @@ process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void 
 		Assert(OidIsValid(hyper_index_oid));
 
 		if (!ts_chunk_index_get_by_hypertable_indexrelid(chunk, hyper_index_oid, &cim))
-			elog(ERROR,
-				 "chunk \"%s.%s\" has no index corresponding to hypertable index \"%s\"",
-				 NameStr(chunk->fd.schema_name),
-				 NameStr(chunk->fd.table_name),
-				 stmt->name);
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("chunk \"%s.%s\" has no index corresponding to hypertable index \"%s\"",
+							NameStr(chunk->fd.schema_name),
+							NameStr(chunk->fd.table_name),
+							stmt->name)));
 
 		stmt->name = get_rel_name(cim.indexoid);
 	}
@@ -4983,7 +5002,8 @@ process_viewstmt(ProcessUtilityArgs *args)
 	ts_with_clause_filter(stmt->options, &cagg_options, &pg_options);
 	if (cagg_options)
 		ereport(ERROR,
-				(errmsg("cannot create continuous aggregate with CREATE VIEW"),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot create continuous aggregate with CREATE VIEW"),
 				 errhint("Use CREATE MATERIALIZED VIEW to create a continuous aggregate.")));
 	return DDL_CONTINUE;
 }
@@ -5541,7 +5561,9 @@ ts_timescaledb_process_ddl_event(PG_FUNCTION_ARGS)
 	EventTriggerData *trigdata = (EventTriggerData *) fcinfo->context;
 
 	if (!CALLED_AS_EVENT_TRIGGER(fcinfo))
-		elog(ERROR, "not fired by event trigger manager");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("not fired by event trigger manager")));
 
 	if (!ts_extension_is_loaded_and_not_upgrading())
 		PG_RETURN_NULL();

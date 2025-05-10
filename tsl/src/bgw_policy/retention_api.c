@@ -69,7 +69,7 @@ policy_retention_get_hypertable_id(const Jsonb *config)
 
 	if (!found)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find hypertable_id in config for job")));
 
 	return hypertable_id;
@@ -83,7 +83,7 @@ policy_retention_get_drop_after_int(const Jsonb *config)
 
 	if (!found)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find %s in config for job", POL_RETENTION_CONF_KEY_DROP_AFTER)));
 
 	return drop_after;
@@ -96,7 +96,7 @@ policy_retention_get_drop_after_interval(const Jsonb *config)
 
 	if (interval == NULL)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find %s in config for job", POL_RETENTION_CONF_KEY_DROP_AFTER)));
 
 	return interval;
@@ -110,7 +110,7 @@ policy_retention_get_drop_created_before_interval(const Jsonb *config)
 
 	if (interval == NULL)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find %s in config for job",
 						POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE)));
 

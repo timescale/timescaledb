@@ -20,7 +20,7 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
 	if (n != arrow->length)
 	{
 		ereport(error_type,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("the bulk decompression result does not match"),
 				 errdetail("Expected %d elements, got %d.", n, (int) arrow->length)));
 	}
@@ -31,7 +31,7 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
 		if (arrow_isnull != results[i].is_null)
 		{
 			ereport(error_type,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_TS_UNEXPECTED),
 					 errmsg("the bulk decompression result does not match"),
 					 errdetail("Expected null %d, got %d at row %d.",
 							   results[i].is_null,
@@ -51,7 +51,7 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
 			if (isfinite((double) arrow_value) != isfinite((double) rowbyrow_value))
 			{
 				ereport(error_type,
-						(errcode(ERRCODE_INTERNAL_ERROR),
+						(errcode(ERRCODE_TS_UNEXPECTED),
 						 errmsg("the bulk decompression result does not match"),
 						 errdetail("At row %d\n", i)));
 			}
@@ -59,7 +59,7 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
 			if (isfinite((double) arrow_value) && arrow_value != rowbyrow_value)
 			{
 				ereport(error_type,
-						(errcode(ERRCODE_INTERNAL_ERROR),
+						(errcode(ERRCODE_TS_UNEXPECTED),
 						 errmsg("the bulk decompression result does not match"),
 						 errdetail("At row %d\n", i)));
 			}

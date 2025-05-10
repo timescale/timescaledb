@@ -30,6 +30,7 @@
 #include "compression_storage.h"
 #include "create.h"
 #include "custom_type_cache.h"
+#include "errors.h"
 #include "extension_constants.h"
 #include "guc.h"
 #include "hypertable.h"
@@ -45,7 +46,7 @@
 		if (ret < 0 || ret > NAMEDATALEN)                                                          \
 		{                                                                                          \
 			ereport(ERROR,                                                                         \
-					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
+					(errcode(ERRCODE_TS_UNEXPECTED),                                               \
 					 errmsg("bad compression hypertable internal name")));                         \
 		}                                                                                          \
 	} while (0);
