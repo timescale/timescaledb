@@ -7,6 +7,13 @@
 SET timezone TO CET;
 SET datestyle TO ISO;
 
+-- Add unique constraint to hypertable invalidation log to capture
+-- duplicate entries. There should not be any, but for some reason,
+-- they
+ALTER TABLE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+ADD CONSTRAINT hypertable_invalidation_check
+UNIQUE (hypertable_id, lowest_modified_value, greatest_modified_value);
+
 CREATE VIEW continuous_aggregates AS
 SELECT mat_hypertable_id AS materialization_id,
        format('%I.%I', user_view_schema, user_view_name)::regclass AS continuous_aggregate
@@ -157,6 +164,7 @@ SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
        'tstz_temperature_15m'::regclass,
        '["2025-04-25","2025-04-26"]'::tstzrange
 );
+
 -- Generate some invalidations. These new values need to be before the
 -- invalidation threshold, which is set to end time of the insertion
 -- above.
@@ -176,6 +184,11 @@ SELECT hypertable_id,
        _timescaledb_functions.to_timestamp_without_timezone(watermark) AS watermark
   FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
   ORDER BY 1;
+
+-- Show the table definitions since there should be only one trigger
+-- or we will get duplicate entries.
+\d hyper_ts
+\d hyper_tstz
 
 -- Check that there indeed is something in the hypertable invalidation
 -- log. If not, this will fail anyway. We show the "raw" timestamps,
