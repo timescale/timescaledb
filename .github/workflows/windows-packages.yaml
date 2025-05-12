@@ -40,11 +40,14 @@ jobs:
         pg: [ "15", "16", "17" ]
         include:
           - pg: 15
-            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}.0
+            pkg_version: 15.12.0
+#            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}.0
           - pg: 16
-            pkg_version: ${{ fromJson(needs.config.outputs.pg16_latest) }}.0
+            pkg_version: 16.8.0
+#            pkg_version: ${{ fromJson(needs.config.outputs.pg16_latest) }}.0
           - pg: 17
-            pkg_version: ${{ fromJson(needs.config.outputs.pg17_latest) }}.0
+            pkg_version: 17.4.0
+#            pkg_version: ${{ fromJson(needs.config.outputs.pg17_latest) }}.0
     env:
       # PostgreSQL configuration
       PGPORT: 6543

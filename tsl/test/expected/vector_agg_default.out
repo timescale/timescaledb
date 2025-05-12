@@ -35,22 +35,21 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_1_3_chunk
 (2 rows)
 
+vacuum analyze dvagg;
 -- Just the most basic vectorized aggregation query on a table with default
 -- compressed column.
 explain (costs off) select sum(c) from dvagg;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+                             QUERY PLAN                              
+---------------------------------------------------------------------
  Finalize Aggregate
-   ->  Gather
-         Workers Planned: 2
-         ->  Parallel Append
-               ->  Custom Scan (VectorAgg)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                           ->  Parallel Seq Scan on compress_hyper_2_2_chunk
-               ->  Custom Scan (VectorAgg)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
-                           ->  Parallel Seq Scan on compress_hyper_2_4_chunk
-(10 rows)
+   ->  Append
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+                     ->  Seq Scan on compress_hyper_2_4_chunk
+(8 rows)
 
 select sum(c) from dvagg;
   sum  
@@ -124,21 +123,19 @@ select count(*) from dvagg where b > 10;
 (1 row)
 
 explain (costs off) select sum(c) from dvagg where b in (0, 1, 3);
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
  Finalize Aggregate
-   ->  Gather
-         Workers Planned: 2
-         ->  Parallel Append
-               ->  Custom Scan (VectorAgg)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                           Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
-                           ->  Parallel Seq Scan on compress_hyper_2_2_chunk
-               ->  Custom Scan (VectorAgg)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
-                           Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
-                           ->  Parallel Seq Scan on compress_hyper_2_4_chunk
-(12 rows)
+   ->  Append
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+                     Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
+                     ->  Seq Scan on compress_hyper_2_4_chunk
+(10 rows)
 
 select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
    sum   | sum  |  sum  
@@ -147,35 +144,33 @@ select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
 (1 row)
 
 explain (costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
  Finalize Aggregate
-   ->  Gather
-         Workers Planned: 2
-         ->  Parallel Append
-               ->  Custom Scan (VectorAgg)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                           Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
-                           ->  Parallel Seq Scan on compress_hyper_2_2_chunk
-               ->  Custom Scan (VectorAgg)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
-                           Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
-                           ->  Parallel Seq Scan on compress_hyper_2_4_chunk
-(12 rows)
+   ->  Append
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+                     Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
+                     ->  Seq Scan on compress_hyper_2_4_chunk
+(10 rows)
 
 reset timescaledb.enable_vectorized_aggregation;
 -- The runtime chunk exclusion should work.
 explain (costs off) select sum(c) from dvagg where a < stable_abs(1000);
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
  Finalize Aggregate
    ->  Custom Scan (ChunkAppend) on dvagg
          Chunks excluded during startup: 1
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
                      Vectorized Filter: (a < stable_abs(1000))
-                     ->  Index Scan using compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_2_chunk
-                           Index Cond: (_ts_meta_min_1 < stable_abs(1000))
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+                           Filter: (_ts_meta_min_1 < stable_abs(1000))
 (8 rows)
 
 -- The case with HAVING can still be vectorized because it is applied after

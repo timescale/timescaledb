@@ -40,7 +40,7 @@ jobs:
         then
           base=${{ github.event.pull_request.base.sha }}
           head=${{ github.event.pull_request.head.sha }}
-          count=`git rev-list --count $base..$head`
+          count=`git rev-list --no-merges --count $base..$head`
           if [[ "$count" -ne 1 ]]; then
             echo "Found $count commits in pull request (there should be only one):"
             git log --format=format:'- %h %s' $base..$head
