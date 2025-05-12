@@ -417,7 +417,7 @@ git_check(f"fetch {source_remote}")
 # error.
 print(f"Have {len(prs_to_backport)} PRs to backport.")
 for index, pr_info in enumerate(
-    random.sample(prs_to_backport.values(), len(prs_to_backport))
+    random.sample(sorted(prs_to_backport.values()), len(prs_to_backport))
 ):
     print()
 
