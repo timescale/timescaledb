@@ -44,19 +44,19 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
         .default_val = (Datum)true,
     },
     [CreateMaterializedViewFlagChunkTimeInterval] = {
-        .arg_names = {"chunk_time_interval", NULL},
+        .arg_names = {"chunk_interval", NULL},
          .type_id = INTERVALOID,
     },
-    [CreateMaterializedViewFlagCompressSegmentBy] = {
-        .arg_names = {"segmentby", "compress_segmentby", NULL},
+    [CreateMaterializedViewFlagSegmentBy] = {
+        .arg_names = {"segmentby", "segment_by", "compress_segmentby", NULL},
         .type_id = TEXTOID,
     },
-    [CreateMaterializedViewFlagCompressOrderBy] = {
-        .arg_names = {"orderby", "compress_orderby", NULL},
+    [CreateMaterializedViewFlagOrderBy] = {
+        .arg_names = {"orderby", "order_by", "compress_orderby", NULL},
          .type_id = TEXTOID,
     },
     [CreateMaterializedViewFlagCompressChunkTimeInterval] = {
-        .arg_names = {"compress_chunk_time_interval", NULL},
+        .arg_names = {"compress_chunk_interval", "compress_chunk_time_interval", NULL},
          .type_id = INTERVALOID,
     },
 };
@@ -82,14 +82,14 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 			case AlterTableFlagChunkTimeInterval:
 				continue;
 				break;
-			case AlterTableFlagCompressEnabled:
+			case AlterTableFlagCompress:
 				option_index = CreateMaterializedViewFlagCompress;
 				break;
-			case AlterTableFlagCompressSegmentBy:
-				option_index = CreateMaterializedViewFlagCompressSegmentBy;
+			case AlterTableFlagSegmentBy:
+				option_index = CreateMaterializedViewFlagSegmentBy;
 				break;
-			case AlterTableFlagCompressOrderBy:
-				option_index = CreateMaterializedViewFlagCompressOrderBy;
+			case AlterTableFlagOrderBy:
+				option_index = CreateMaterializedViewFlagOrderBy;
 				break;
 			case AlterTableFlagCompressChunkTimeInterval:
 				option_index = CreateMaterializedViewFlagCompressChunkTimeInterval;

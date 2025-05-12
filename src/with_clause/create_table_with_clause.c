@@ -14,11 +14,13 @@
 
 static const WithClauseDefinition create_table_with_clauses_def[] = {
 	[CreateTableFlagHypertable] = {.arg_names = {"hypertable", NULL}, .type_id = BOOLOID,},
-	[CreateTableFlagTimeColumn] = {.arg_names = {"time_column", NULL}, .type_id = TEXTOID,},
-	[CreateTableFlagChunkTimeInterval] = {.arg_names = {"chunk_time_interval", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagTimeColumn] = {.arg_names = {"partition_column", "partitioning_column", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagChunkTimeInterval] = {.arg_names = {"chunk_interval", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagCreateDefaultIndexes] = {.arg_names = {"create_default_indexes", NULL}, .type_id = BOOLOID, .default_val = (Datum) true,},
 	[CreateTableFlagAssociatedSchema] = {.arg_names = {"associated_schema", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagAssociatedTablePrefix] = {.arg_names = {"associated_table_prefix", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagSegmentBy] = { .arg_names = {"segmentby", "segment_by", "compress_segmentby", NULL}, .type_id = TEXTOID,},
+	[CreateTableFlagOrderBy] = { .arg_names = {"orderby", "order_by", "compress_orderby", NULL}, .type_id = TEXTOID,},
 };
 
 WithClauseResult *

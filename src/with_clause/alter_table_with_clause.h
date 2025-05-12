@@ -16,9 +16,9 @@
 typedef enum AlterTableFlags
 {
 	AlterTableFlagChunkTimeInterval = 0,
-	AlterTableFlagCompressEnabled,
-	AlterTableFlagCompressSegmentBy,
-	AlterTableFlagCompressOrderBy,
+	AlterTableFlagCompress,
+	AlterTableFlagSegmentBy,
+	AlterTableFlagOrderBy,
 	AlterTableFlagCompressChunkTimeInterval,
 	AlterTableFlagsMax
 } AlterTableFlags;
@@ -38,10 +38,10 @@ typedef struct
 } OrderBySettings;
 
 extern TSDLLEXPORT WithClauseResult *ts_alter_table_with_clause_parse(const List *defelems);
-extern TSDLLEXPORT ArrayType *
-ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypertable *hypertable);
-extern TSDLLEXPORT OrderBySettings
-ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertable *hypertable);
+extern TSDLLEXPORT ArrayType *ts_compress_hypertable_parse_segment_by(WithClauseResult segmentby,
+																	  Hypertable *hypertable);
+extern TSDLLEXPORT OrderBySettings ts_compress_hypertable_parse_order_by(WithClauseResult orderby,
+																		 Hypertable *hypertable);
 extern TSDLLEXPORT Interval *
 ts_compress_hypertable_parse_chunk_time_interval(WithClauseResult *parsed_options,
 												 Hypertable *hypertable);
