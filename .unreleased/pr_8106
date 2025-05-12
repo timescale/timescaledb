@@ -1,0 +1,1 @@
+Fixes: #8106 Fix segfault when adding unique compression indexes to compressed chunks
