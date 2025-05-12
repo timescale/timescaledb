@@ -44,19 +44,19 @@ SELECT * FROM cagg_validate_query(NULL);
 SELECT * FROM cagg_validate_query('');
  is_valid | error_level | error_code |     error_message     | error_detail | error_hint 
 ----------+-------------+------------+-----------------------+--------------+------------
- f        | ERROR       | XX000      | failed to parse query |              | 
+ f        | ERROR       | TS501      | failed to parse query |              | 
 (1 row)
 
 SELECT * FROM cagg_validate_query('--');
  is_valid | error_level | error_code |     error_message     | error_detail | error_hint 
 ----------+-------------+------------+-----------------------+--------------+------------
- f        | ERROR       | XX000      | failed to parse query |              | 
+ f        | ERROR       | TS501      | failed to parse query |              | 
 (1 row)
 
 SELECT * FROM cagg_validate_query(';');
  is_valid | error_level | error_code |     error_message     | error_detail | error_hint 
 ----------+-------------+------------+-----------------------+--------------+------------
- f        | ERROR       | XX000      | failed to parse query |              | 
+ f        | ERROR       | TS501      | failed to parse query |              | 
 (1 row)
 
 -- syntax error
@@ -154,7 +154,7 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time", origin
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket_gapfill('1 hour', "time"), count(*) FROM metrics GROUP BY 1 $$);
  is_valid | error_level | error_code |                            error_message                            | error_detail | error_hint 
 ----------+-------------+------------+---------------------------------------------------------------------+--------------+------------
- f        | ERROR       | XX000      | continuous aggregate view must include a valid time bucket function |              | 
+ f        | ERROR       | 0A000      | continuous aggregate view must include a valid time bucket function |              | 
 (1 row)
 
 -- invalid join queries

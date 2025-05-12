@@ -43,6 +43,7 @@
 #include "compression/sparse_index_bloom1.h"
 #include "create.h"
 #include "custom_type_cache.h"
+#include "errors.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "trigger.h"
@@ -91,7 +92,7 @@ compression_column_segment_metadata_name(const char *type, int16 column_index)
 	if (ret < 0 || ret > NAMEDATALEN)
 	{
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad segment metadata column name")));
+				(errcode(ERRCODE_TS_UNEXPECTED), errmsg("bad segment metadata column name")));
 	}
 	return buf;
 }
@@ -523,7 +524,7 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 
 		if (namelen >= NAMEDATALEN)
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_TS_UNEXPECTED),
 					 errmsg("invalid name \"%s\" for compressed chunk",
 							NameStr(compress_chunk->fd.table_name)),
 					 errdetail("The associated table prefix is too long.")));
@@ -783,7 +784,7 @@ drop_existing_compression_table(Hypertable *ht)
 	Hypertable *compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 	if (compressed == NULL)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 errmsg("columnstore-enabled hypertable not found"),
 				 errdetail("columnstore was enabled on \"%s\", but its internal"
 						   " columnstore hypertable could not be found.",
@@ -1108,13 +1109,13 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 					 ht->main_table_relid);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI");
+		ereport(ERROR, (errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
 	if (res < 0)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 (errmsg("could not get the default segment by for a hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
@@ -1147,7 +1148,9 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
-		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				 errmsg("SPI_finish failed: %s", SPI_result_code_string(res))));
 
 	initStringInfo(&result);
 	ts_array_append_stringinfo(column_res, &result);
@@ -1218,7 +1221,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 					 ht->main_table_relid);
 
 	if (SPI_connect() != SPI_OK_CONNECT)
-		elog(ERROR, "could not connect to SPI");
+		ereport(ERROR, (errcode(ERRCODE_CONNECTION_EXCEPTION), errmsg("could not connect to SPI")));
 
 	res = SPI_execute_with_args(command.data,
 								1,
@@ -1229,7 +1232,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 								0 /*count*/);
 	if (res < 0)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_UNEXPECTED),
 				 (errmsg("could not get the default order by for a hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
@@ -1262,7 +1265,9 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
-		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+		ereport(ERROR,
+				(errcode(ERRCODE_CONNECTION_EXCEPTION),
+				 errmsg("SPI_finish failed: %s", SPI_result_code_string(res))));
 
 	if (column_res != NULL)
 		orderby = TextDatumGetCString(PointerGetDatum(column_res));

@@ -62,7 +62,7 @@ policy_reorder_get_hypertable_id(const Jsonb *config)
 
 	if (!found)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find hypertable_id in config for job")));
 
 	return hypertable_id;
@@ -78,7 +78,7 @@ policy_reorder_get_index_name(const Jsonb *config)
 
 	if (index_name == NULL)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
 				 errmsg("could not find index_name in config for job")));
 
 	return index_name;

@@ -29,7 +29,7 @@ makeMaterializeColumnName(char *colbuf, const char *type, int original_query_res
 	int ret = snprintf(colbuf, NAMEDATALEN, "%s_%d_%d", type, original_query_resno, colno);
 	if (ret < 0 || ret >= NAMEDATALEN)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("bad materialization table column name")));
+				(errcode(ERRCODE_TS_UNEXPECTED), errmsg("bad materialization table column name")));
 }
 
 /*

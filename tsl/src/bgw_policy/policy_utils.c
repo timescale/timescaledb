@@ -49,7 +49,7 @@ policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_labe
 
 		if (!found && !null_ok)
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("could not find %s in config for existing job", json_label)));
 
 		if (!found && isnull)
@@ -77,7 +77,7 @@ policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_labe
 		Interval *config_value = ts_jsonb_get_interval_field(config, json_label);
 		if (config_value == NULL && !null_ok)
 			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
 					 errmsg("could not find %s in config for job", json_label)));
 
 		if (config_value == NULL && isnull)
@@ -132,7 +132,9 @@ get_open_dimension_for_hypertable(const Hypertable *ht, bool fail_if_not_found)
 	int32 mat_id = ht->fd.id;
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-		elog(ERROR, "invalid operation on compressed hypertable");
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("invalid operation on compressed hypertable")));
 
 	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
 	Oid partitioning_type = ts_dimension_get_partition_type(open_dim);

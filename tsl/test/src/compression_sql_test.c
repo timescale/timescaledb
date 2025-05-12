@@ -12,8 +12,8 @@
 #include <utils/builtins.h>
 
 #include "compression_sql_test.h"
-
 #include "compression/arrow_c_data_interface.h"
+#include "errors.h"
 
 #if !defined(NDEBUG) || defined(TS_COMPRESSION_FUZZING)
 

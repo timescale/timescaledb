@@ -31,6 +31,7 @@
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
+#include "errors.h"
 #include "extension.h"
 #include "guc.h"
 #include "job.h"
@@ -178,7 +179,7 @@ makeJobErrorData(ScheduledBgwJob *sjob, JobResult res)
 {
 	ErrorData *edata = (ErrorData *) palloc0(sizeof(ErrorData));
 	edata->elevel = ERROR;
-	edata->sqlerrcode = ERRCODE_INTERNAL_ERROR;
+	edata->sqlerrcode = ERRCODE_TS_UNEXPECTED;
 	edata->hint = NULL;
 
 	Assert(res != JOB_SUCCESS);
