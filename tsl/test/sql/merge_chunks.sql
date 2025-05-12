@@ -6,6 +6,11 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE ACCESS METHOD testam TYPE TABLE HANDLER heap_tableam_handler;
 set role :ROLE_DEFAULT_PERM_USER;
+-- A limitation in the tuple routing cache can lead to routing errors
+-- when multi-dimensional time partitions are not aligned. Therefore,
+-- multi-dimensional merges are disabled by default until the routing
+-- is fixed. However, allow it in this test.
+set timescaledb.enable_merge_multidim_chunks = true;
 
 ------------------
 -- Helper views --
@@ -339,6 +344,13 @@ select
     round(ccs.numrows_frozen_immediately::numeric / :total_numrows_frozen_immediately, 1) as numrows_frozen_immediately_fraction
 from _timescaledb_catalog.compression_chunk_size ccs
 order by chunk_id;
+
+\set ON_ERROR_STOP 0
+-- Test blocked multi-dimensional merges
+set timescaledb.enable_merge_multidim_chunks = false;
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+set timescaledb.enable_merge_multidim_chunks = true;
+\set ON_ERROR_STOP 1
 
 --
 -- Merge all chunks until only 1 remains.  Also check that metadata is

@@ -10,7 +10,7 @@ name: Regression Linux i386
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
     paths-ignore:
       - '**.md'
       - 'LICENSE*'

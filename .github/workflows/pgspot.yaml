@@ -5,7 +5,7 @@ name: pgspot
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
 
 jobs:
   pgspot:

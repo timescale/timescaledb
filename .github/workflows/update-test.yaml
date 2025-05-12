@@ -3,7 +3,7 @@ name: Test Update and Downgrade
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
   pull_request:
   workflow_dispatch:
 

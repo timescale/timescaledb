@@ -14,7 +14,7 @@ SET timescaledb.enable_hypertable_create TO off;
 CREATE TABLE test(time timestamptz, device int);
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('test', 'time');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 \set ON_ERROR_STOP 1
 SET timescaledb.enable_hypertable_create TO on;
 SELECT * FROM create_hypertable('test', 'time');
@@ -43,7 +43,7 @@ SELECT * FROM show_chunks('test');
 -- compress_chunk
 \set ON_ERROR_STOP 0
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 \set ON_ERROR_STOP 1
 SET timescaledb.enable_hypertable_compression TO on;
 -- ensure compression cannot be enabled
@@ -68,14 +68,14 @@ SET timescaledb.enable_hypertable_compression TO off;
 -- cannot alter compressed table
 \set ON_ERROR_STOP 0
 ALTER TABLE test ADD COLUMN col1 boolean DEFAULT false NOT NULL;
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 \set ON_ERROR_STOP 1
 SET timescaledb.enable_hypertable_compression TO on;
 ALTER TABLE test ADD COLUMN col1 boolean DEFAULT false NOT NULL;
 SET timescaledb.enable_hypertable_compression TO off;
 \set ON_ERROR_STOP 0
 ALTER TABLE test DROP COLUMN col1;
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 \set ON_ERROR_STOP 1
 -- cagg creation
 SHOW timescaledb.enable_cagg_create;
@@ -94,7 +94,7 @@ SELECT
 FROM
   test
 GROUP BY hour, device;
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 \set ON_ERROR_STOP 1
 SET timescaledb.enable_cagg_create TO on;
 CREATE MATERIALIZED VIEW contagg
@@ -109,7 +109,7 @@ NOTICE:  refreshing continuous aggregate "contagg"
 SET timescaledb.enable_cagg_create TO off;
 \set ON_ERROR_STOP 0
 CALL refresh_continuous_aggregate('contagg', NULL, NULL);
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 \set ON_ERROR_STOP 1
 SET timescaledb.enable_cagg_create TO on;
 -- policy creation
@@ -122,30 +122,30 @@ SHOW timescaledb.enable_policy_create;
 SET timescaledb.enable_policy_create TO off;
 \set ON_ERROR_STOP 0
 select add_retention_policy('test', INTERVAL '4 months', true);
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 select remove_retention_policy('test');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 select add_compression_policy('test', compress_after => NULL);
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 SELECT remove_compression_policy('test');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 SELECT add_continuous_aggregate_policy('contagg', '1 day'::interval, 10 , '1 h'::interval);
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 SELECT remove_continuous_aggregate_policy('contagg');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 CREATE INDEX idx ON test(device);
 SELECT add_reorder_policy('test', 'idx');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 select remove_reorder_policy('test');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 SELECT timescaledb_experimental.add_policies('test', refresh_start_offset => 1, refresh_end_offset => 10, compress_after => 11, drop_after => 20);
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 SELECT timescaledb_experimental.show_policies('test');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 SELECT timescaledb_experimental.alter_policies('test',  refresh_start_offset => 11, compress_after=>13, drop_after => 25);
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 SELECT timescaledb_experimental.remove_all_policies('test');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 SELECT timescaledb_experimental.remove_policies('test', false, 'policy_refresh_continuous_aggregate', 'policy_compression');
-ERROR:  You are using a Dynamic PostgreSQL service. This feature is only available on Time-series services. https://tsdb.co/dynamic-postgresql
+ERROR:  You are using a PostgreSQL service. This feature is only available on Time-series and analytics services. https://docs.timescale.com/use-timescale/latest/services/
 \set ON_ERROR_STOP 1

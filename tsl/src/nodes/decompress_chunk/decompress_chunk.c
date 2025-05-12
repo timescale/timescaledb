@@ -866,6 +866,22 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	{
 		Path *compressed_path = lfirst(lc);
 
+		/* We want to consider startup costs so that IndexScan is preferred to sorted SeqScan when
+		   we may have a chance to use SkipScan. We consider startup costs for LIMIT queries, and
+		   SkipScan is basically a "LIMIT 1" query run "ndistinct" times. At this point we don't
+		   have all information to check if SkipScan can be used, but we can narrow it down.
+		*/
+		if (!chunk_rel->consider_startup && IsA(compressed_path, IndexPath))
+		{
+			/* Candidate for SELECT DISTINCT SkipScan */
+			if (list_length(root->distinct_pathkeys) == 1
+				/* Candidate for DISTINCT aggregate SkipScan */
+				|| (root->numOrderedAggs >= 1 && list_length(root->group_pathkeys) == 1))
+			{
+				chunk_rel->consider_startup = true;
+			}
+		}
+
 		/*
 		 * We skip any BitmapScan parameterized paths here as supporting
 		 * those would require fixing up the internal scan. Since we

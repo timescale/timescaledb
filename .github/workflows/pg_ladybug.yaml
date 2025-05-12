@@ -4,7 +4,7 @@ name: pg_ladybug
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
 jobs:
   pg_ladybug:
     runs-on: ubuntu-latest
