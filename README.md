@@ -23,7 +23,7 @@ Install from a Docker container:
 1. Run the TimescaleDB container:
 
     ```bash
-    docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb:latest-pg17
+    docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb-ha:pg17
     ```
 
 1. Connect to a database:
