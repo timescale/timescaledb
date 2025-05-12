@@ -64,10 +64,8 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 const CompressionInfo *compression_info,
 										 const SortInfo *sort_info);
 
-static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root,
-														 const CompressionInfo *info,
-														 int parallel_workers,
-														 Path *compressed_path);
+static DecompressChunkPath *
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
 
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 											 const Chunk *chunk, RelOptInfo *chunk_rel,
@@ -961,7 +959,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 		}
 
 		Path *chunk_path =
-			(Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
+			(Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
 
 		/*
 		 * Create a path for the batch sorted merge optimization. This optimization performs a
@@ -1146,7 +1144,6 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			 */
 			path = (Path *) decompress_chunk_path_create(root,
 														 compression_info,
-														 compressed_path->parallel_workers,
 														 compressed_path);
 
 			if (consider_partial)
@@ -1883,8 +1880,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 }
 
 static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, int parallel_workers,
-							 Path *compressed_path)
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
 {
 	DecompressChunkPath *path;
 
@@ -1923,9 +1919,10 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, int
 	 * in a parallel plan we only set parallel_safe to true
 	 * when parallel_workers is greater than 0 which is only
 	 * the case when creating partial paths. */
-	path->custom_path.path.parallel_safe = parallel_workers > 0;
-	path->custom_path.path.parallel_workers = parallel_workers;
 	path->custom_path.path.parallel_aware = false;
+	path->custom_path.path.parallel_safe =
+		info->chunk_rel->consider_parallel && compressed_path->parallel_safe;
+	path->custom_path.path.parallel_workers = compressed_path->parallel_workers;
 
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
@@ -2375,7 +2372,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			 * If we didn't have any segmentby columns in pathkeys, try batch sorted merge
 			 * instead.
 			 */
-			if (ts_guc_enable_decompression_sorted_merge && i == 0)
+			if (i == 0)
 			{
 				sort_info.use_batch_sorted_merge =
 					match_pathkeys_to_compression_orderby(pathkeys,
