@@ -5096,8 +5096,9 @@ process_create_stmt(ProcessUtilityArgs *args)
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_COLUMN),
 						 errmsg("hypertable option requires time_column"),
-						 errhint("Use \"timescaledb.time_column\" to specify the column to use as "
-								 "partitioning column.")));
+						 errhint(
+							 "Use \"timescaledb.partition_column\" to specify the column to use as "
+							 "partitioning column.")));
 		}
 	}
 
