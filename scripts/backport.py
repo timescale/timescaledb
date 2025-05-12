@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import random
 import re
 import string
 import subprocess
@@ -412,9 +413,12 @@ print(
 git_check(f"fetch {source_remote}")
 
 # Now, go over the list of PRs that we have collected, and try to backport
-# each of them.
+# each of them. Do it in randomized order to avoid getting stuck on a single
+# error.
 print(f"Have {len(prs_to_backport)} PRs to backport.")
-for index, pr_info in enumerate(prs_to_backport.values()):
+for index, pr_info in enumerate(
+    random.sample(prs_to_backport.values(), len(prs_to_backport))
+):
     print()
 
     # Don't want to have an endless loop that modifies the repository in an
