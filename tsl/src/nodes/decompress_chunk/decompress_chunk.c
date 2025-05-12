@@ -1142,9 +1142,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			 * If this is a partially compressed chunk we have to combine data
 			 * from compressed and uncompressed chunk.
 			 */
-			path = (Path *) decompress_chunk_path_create(root,
-														 compression_info,
-														 compressed_path);
+			path = (Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
 
 			if (consider_partial)
 			{
@@ -2372,7 +2370,7 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			 * If we didn't have any segmentby columns in pathkeys, try batch sorted merge
 			 * instead.
 			 */
-			if (i == 0)
+			if (ts_guc_enable_decompression_sorted_merge && i == 0)
 			{
 				sort_info.use_batch_sorted_merge =
 					match_pathkeys_to_compression_orderby(pathkeys,
