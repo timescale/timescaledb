@@ -157,6 +157,7 @@ SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
        'tstz_temperature_15m'::regclass,
        '["2025-04-25","2025-04-26"]'::tstzrange
 );
+
 -- Generate some invalidations. These new values need to be before the
 -- invalidation threshold, which is set to end time of the insertion
 -- above.
@@ -180,7 +181,12 @@ SELECT hypertable_id,
 -- Check that there indeed is something in the hypertable invalidation
 -- log. If not, this will fail anyway. We show the "raw" timestamps,
 -- which is in UTC if it was originally a timestamp with timezone.
-SELECT hypertable_id,
+--
+-- We ignore duplicates since those will be merged when moving
+-- invalidations and hence does not affect correctness and can cause
+-- test flakiness otherwise.
+SELECT DISTINCT
+       hypertable_id,
        _timescaledb_functions.to_timestamp_without_timezone(lowest_modified_value) AS start,
        _timescaledb_functions.to_timestamp_without_timezone(greatest_modified_value) AS finish
   FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
