@@ -2496,11 +2496,23 @@ hypercore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bs
 {
 	Oid relid = RelationGetRelid(rel);
 	RelStats relstats;
+	VacuumParams cparams;
 
+	memcpy(&cparams, params, sizeof(cparams));
+	relstats_fetch(relid, &relstats);
+
+	/* Vacuum the non-compressed relation */
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	rel->rd_tableam->relation_vacuum(rel, params, bstrategy);
+	rel->rd_tableam = oldtam;
+
+	/*
+	 * The parent table doesn't hold any data, but it still needs to be
+	 * vacuumed to advance relfrozenxid. It doesn't have any compressed data,
+	 * so that part can be skipped.
+	 */
 	if (ts_is_hypertable(relid))
 		return;
-
-	relstats_fetch(relid, &relstats);
 
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
@@ -2508,26 +2520,21 @@ hypercore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bs
 	/* Vacuum the compressed relation */
 	Relation crel = vacuum_open_relation(RelationGetHypercoreInfo(rel)->compressed_relid,
 										 NULL,
-										 params->options,
-										 params->log_min_duration >= 0,
+										 cparams.options,
+										 cparams.log_min_duration >= 0,
 										 lmode);
 
 	if (crel)
 	{
-		crel->rd_tableam->relation_vacuum(crel, params, bstrategy);
+		crel->rd_tableam->relation_vacuum(crel, &cparams, bstrategy);
 		table_close(crel, NoLock);
 	}
 
-	/* Vacuum the non-compressed relation */
-	const TableAmRoutine *oldtam = switch_to_heapam(rel);
-	rel->rd_tableam->relation_vacuum(rel, params, bstrategy);
-	rel->rd_tableam = oldtam;
-
 	/* Unfortunately, relstats are currently incorrectly updated when
-	 * vacuuming, because we vacuum the non-compressed rel separately, and
-	 * last, and it will only update stats based on the data in that
-	 * table. Therefore, as a work-around, it is better to restore relstats to
-	 * what it was before vacuuming.
+	 * vacuuming, because we vacuum the non-compressed rel separately, and, it
+	 * will only update stats based on the data in that table. Therefore, as a
+	 * work-around, it is better to restore relstats to what it was before
+	 * vacuuming.
 	 */
 	relstats_update(relid, &relstats);
 }

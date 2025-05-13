@@ -17,8 +17,8 @@ typedef enum CreateMaterializedViewFlags
 	CreateMaterializedViewFlagCompress,
 	CreateMaterializedViewFlagFinalized,
 	CreateMaterializedViewFlagChunkTimeInterval,
-	CreateMaterializedViewFlagCompressSegmentBy,
-	CreateMaterializedViewFlagCompressOrderBy,
+	CreateMaterializedViewFlagSegmentBy,
+	CreateMaterializedViewFlagOrderBy,
 	CreateMaterializedViewFlagCompressChunkTimeInterval
 } CreateMaterializedViewFlags;
 

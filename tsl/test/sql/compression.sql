@@ -1259,3 +1259,4 @@ SELECT compress_chunk(show_chunks('badly_compressed_ht'));
 \set VERBOSITY terse
 
 RESET timescaledb.enable_compression_ratio_warnings;
+

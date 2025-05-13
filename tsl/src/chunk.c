@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include "extension_constants.h"
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/multixact.h>
@@ -58,6 +59,7 @@
 #include <utils/tuplestore.h>
 
 #include "compat/compat.h"
+#include <string.h>
 #include "annotations.h"
 #include "cache.h"
 #include "chunk.h"
@@ -632,6 +634,24 @@ merge_chunks_lock_upgrade_mode(void)
 	return MERGE_LOCK_ACCESS_EXCLUSIVE;
 }
 
+/*
+ * Use anonymous settings value to disable multidim merges due to a bug in the
+ * routing cache with non-aligned partitions/chunks.
+ */
+static bool
+merge_chunks_multidim_allowed(void)
+{
+	const char *multidim_merge_enabled =
+		GetConfigOption(MAKE_EXTOPTION("enable_merge_multidim_chunks"), true, false);
+
+	if (multidim_merge_enabled == NULL)
+		return false;
+
+	return (pg_strcasecmp("on", multidim_merge_enabled) == 0 ||
+			pg_strcasecmp("1", multidim_merge_enabled) == 0 ||
+			pg_strcasecmp("true", multidim_merge_enabled) == 0);
+}
+
 #if (PG_VERSION_NUM >= 170000 && PG_VERSION_NUM <= 170002)
 /*
  * Workaround for changed behavior in the relation rewrite code that appeared
@@ -1071,6 +1091,22 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("can only merge hypertable chunks")));
+
+		if (!merge_chunks_multidim_allowed())
+		{
+			Cache *hcache;
+			Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid,
+																	 CACHE_FLAG_NONE,
+																	 &hcache);
+			Ensure(ht, "missing hypertable for chunk");
+
+			if (ht->fd.num_dimensions > 1)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot merge chunk in multi-dimensional hypertable")));
+
+			ts_cache_release(&hcache);
+		}
 
 		if (chunk->fd.osm_chunk)
 			ereport(ERROR,

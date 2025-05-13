@@ -337,6 +337,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 											  NULL /*=abbrev*/);
 		 found_tuple;)
 	{
+		CHECK_FOR_INTERRUPTS();
+
 		update_current_segment(current_segment, uncompressed_slot, num_segmentby);
 
 		/* Build scankeys based on uncompressed tuple values */

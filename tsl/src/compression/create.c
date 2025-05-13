@@ -52,6 +52,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
+#include "with_clause/create_table_with_clause.h"
 
 static const char *sparse_index_types[] = { "min", "max", "bloom1" };
 
@@ -891,9 +892,8 @@ bool
 tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
-	bool compress_disable =
-		!with_clause_options[AlterTableFlagCompressEnabled].is_default &&
-		!DatumGetBool(with_clause_options[AlterTableFlagCompressEnabled].parsed);
+	bool compress_disable = !with_clause_options[AlterTableFlagCompress].is_default &&
+							!DatumGetBool(with_clause_options[AlterTableFlagCompress].parsed);
 	CompressionSettings *settings;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
@@ -1304,26 +1304,29 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		update_compress_chunk_time_interval(ht, with_clause_options);
 	}
 
-	if (!with_clause_options[AlterTableFlagCompressSegmentBy].is_default)
+	if (!with_clause_options[AlterTableFlagSegmentBy].is_default)
 	{
-		settings->fd.segmentby = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
+		settings->fd.segmentby =
+			ts_compress_hypertable_parse_segment_by(with_clause_options[AlterTableFlagSegmentBy],
+													ht);
 	}
 	else if (!settings->fd.segmentby && !settings->fd.orderby &&
-			 with_clause_options[AlterTableFlagCompressOrderBy].is_default)
+			 with_clause_options[AlterTableFlagOrderBy].is_default)
 	{
 		settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
 	}
 
-	if (!with_clause_options[AlterTableFlagCompressOrderBy].is_default || !settings->fd.orderby)
+	if (!with_clause_options[AlterTableFlagOrderBy].is_default || !settings->fd.orderby)
 	{
 		OrderBySettings obs;
-		if (with_clause_options[AlterTableFlagCompressOrderBy].is_default)
+		if (with_clause_options[AlterTableFlagOrderBy].is_default)
 		{
 			obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);
 		}
 		else
 		{
-			obs = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
+			obs = ts_compress_hypertable_parse_order_by(with_clause_options[AlterTableFlagOrderBy],
+														ht);
 			obs = add_time_to_order_by_if_not_included(obs, settings->fd.segmentby, ht);
 		}
 		settings->fd.orderby = obs.orderby;
@@ -1470,11 +1473,50 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
  * Enables compression for a hypertable without creating initial configuration
  */
 void
-tsl_compression_enable(Hypertable *ht)
+tsl_compression_enable(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
 	Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
+	if (!with_clause_options[CreateTableFlagOrderBy].is_default ||
+		!with_clause_options[CreateTableFlagSegmentBy].is_default)
+	{
+		CompressionSettings *settings = ts_compression_settings_create(ht->main_table_relid,
+																	   InvalidOid,
+																	   NULL,
+																	   NULL,
+																	   NULL,
+																	   NULL);
+
+		if (!with_clause_options[CreateTableFlagSegmentBy].is_default)
+		{
+			settings->fd.segmentby =
+				ts_compress_hypertable_parse_segment_by(with_clause_options
+															[CreateTableFlagSegmentBy],
+														ht);
+		}
+
+		if (!with_clause_options[CreateTableFlagOrderBy].is_default || !settings->fd.orderby)
+		{
+			OrderBySettings obs;
+			if (with_clause_options[CreateTableFlagOrderBy].is_default)
+			{
+				obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);
+			}
+			else
+			{
+				obs = ts_compress_hypertable_parse_order_by(with_clause_options
+																[CreateTableFlagOrderBy],
+															ht);
+				obs = add_time_to_order_by_if_not_included(obs, settings->fd.segmentby, ht);
+			}
+			settings->fd.orderby = obs.orderby;
+			settings->fd.orderby_desc = obs.orderby_desc;
+			settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
+		}
+
+		ts_compression_settings_update(settings);
+	}
 	int compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
 	ts_hypertable_set_compressed(ht, compress_htid);
 }

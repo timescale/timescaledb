@@ -2542,6 +2542,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 		StringInfoData command;
 		Oid nspcid = get_rel_namespace(chunk->table_id);
 		ListCell *lc;
+		List *dpcontext = deparse_context_for(get_rel_name(chunk->table_id), chunk->table_id);
 
 		initStringInfo(&command);
 		appendStringInfo(&command,
@@ -2561,7 +2562,13 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			{
 				i++;
 				IndexElem *elem = lfirst_node(IndexElem, lc);
-				appendStringInfo(&command, "%s IS NOT NULL", quote_identifier(elem->name));
+				appendStringInfo(&command,
+								 "%s IS NOT NULL",
+								 elem->name ? quote_identifier(elem->name) :
+											  deparse_expression((Node *) elem->expr,
+																 dpcontext,
+																 false,
+																 false));
 				if (i < list_length(stmt->indexParams))
 					appendStringInfo(&command, " AND ");
 			}
@@ -2574,7 +2581,11 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 		{
 			j++;
 			IndexElem *elem = lfirst_node(IndexElem, lc);
-			appendStringInfo(&command, "%s", quote_identifier(elem->name));
+			appendStringInfo(&command,
+							 "%s",
+							 elem->name ?
+								 quote_identifier(elem->name) :
+								 deparse_expression((Node *) elem->expr, dpcontext, false, false));
 			if (j < list_length(stmt->indexParams))
 				appendStringInfo(&command, ",");
 		}
@@ -3808,7 +3819,7 @@ process_create_table_end(Node *parsetree)
 			if (ts_cm_functions->compression_enable)
 			{
 				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
-				ts_cm_functions->compression_enable(ht);
+				ts_cm_functions->compression_enable(ht, create_table_info.with_clauses);
 			}
 		}
 	}
@@ -4944,9 +4955,9 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		ts_dimension_set_chunk_interval(dim, chunk_interval);
 	}
 
-	if (!parse_results[AlterTableFlagCompressEnabled].is_default ||
-		!parse_results[AlterTableFlagCompressOrderBy].is_default ||
-		!parse_results[AlterTableFlagCompressSegmentBy].is_default ||
+	if (!parse_results[AlterTableFlagCompress].is_default ||
+		!parse_results[AlterTableFlagOrderBy].is_default ||
+		!parse_results[AlterTableFlagSegmentBy].is_default ||
 		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default)
 		ts_cm_functions->process_compress_table(ht, parse_results);
 
@@ -5085,8 +5096,9 @@ process_create_stmt(ProcessUtilityArgs *args)
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_COLUMN),
 						 errmsg("hypertable option requires time_column"),
-						 errhint("Use \"timescaledb.time_column\" to specify the column to use as "
-								 "partitioning column.")));
+						 errhint(
+							 "Use \"timescaledb.partition_column\" to specify the column to use as "
+							 "partitioning column.")));
 		}
 	}
 

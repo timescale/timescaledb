@@ -52,3 +52,29 @@ with log as materialized (
 select * from log
     where (select slope / intercept::float > 0.01 from regression)
 ;
+
+-- Test recompression with small batches.
+select count(decompress_chunk(c, true)) from show_chunks('ht_metrics_compressed') c;
+alter table ht_metrics_compressed set (timescaledb.compress,
+    timescaledb.compress_segmentby='time', timescaledb.compress_orderby='value');
+select count(compress_chunk(c, true)) from show_chunks('ht_metrics_compressed') c;
+update ht_metrics_compressed set value = 0 where value < 1 and value > -1;
+with
+to_recompress as (
+  select tableoid::oid::regclass c, count(*) r
+  from ht_metrics_compressed
+  where value = 0
+  group by 1
+),
+log as materialized (
+        select rank() over (order by r) n,
+            ts_debug_allocated_bytes(case
+                when _timescaledb_functions.recompress_chunk_segmentwise(c)::text != ''
+                then 'PortalContext' else '' end) b
+        from show_chunks('ht_metrics_compressed') c
+        join to_recompress using (c)
+        order by r),
+regression as (select regr_slope(b, n) slope, regr_intercept(b, n) intercept from log)
+select * from log
+    where (select slope / intercept::float > 0.01 from regression)
+;

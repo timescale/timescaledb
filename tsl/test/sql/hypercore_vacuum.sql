@@ -258,4 +258,14 @@ alter table readings
       set (timescaledb.compress_orderby = 'time',
       	   timescaledb.compress_segmentby = 'device');
 
+-- Save frozenxid to test that it advances on hypertable root when
+-- root is using Hypercore TAM.
+select relfrozenxid as old_relfrozenxid
+from pg_class where oid = 'readings'::regclass \gset
+
 vacuum analyze readings;
+
+select relfrozenxid as new_relfrozenxid
+from pg_class where oid = 'readings'::regclass \gset
+
+select :new_relfrozenxid > :old_relfrozenxid as frozenxid_advanced_during_vacuum;

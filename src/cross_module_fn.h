@@ -135,7 +135,7 @@ typedef struct CrossModuleFunctions
 											   TupleTableSlot *slot, Snapshot snapshot,
 											   ItemPointer new_tid);
 
-	void (*compression_enable)(Hypertable *ht);
+	void (*compression_enable)(Hypertable *ht, WithClauseResult *with_clause_options);
 
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
