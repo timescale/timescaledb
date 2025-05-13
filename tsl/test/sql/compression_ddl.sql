@@ -842,14 +842,18 @@ VALUES -- chunk1
   ('2020-01-01 00:00'::timestamptz, 1, 2),
   ('2020-01-01 00:01'::timestamptz, 2, 2),
   ('2020-01-01 00:04'::timestamptz, 1, 2),
+  ('2020-01-01 00:05'::timestamptz, 3, 1),
+  ('2020-01-01 00:06'::timestamptz, 3, 2),
   -- chunk2
   ('2021-01-01 00:00'::timestamptz, 1, 2),
   ('2021-01-01 00:04'::timestamptz, 1, 2),
+  ('2021-01-01 00:05'::timestamptz, 3, 1),
   -- chunk3
   ('2022-01-01 00:00'::timestamptz, 1, 2),
   ('2022-01-01 00:04'::timestamptz, 1, 2);
 -- enable compression, compress all chunks
-ALTER TABLE test_partials SET (timescaledb.compress);
+ALTER TABLE test_partials SET (timescaledb.compress,
+    timescaledb.compress_segmentby = 'a', timescaledb.compress_orderby = 'time desc');
 SELECT compress_chunk(show_chunks('test_partials'));
 VACUUM ANALYZE test_partials;
 -- fully compressed
@@ -886,6 +890,7 @@ BEGIN
 END
 $$;
 INSERT INTO test_partials VALUES ('2022-01-01 00:02', 1, 2);
+VACUUM ANALYZE test_partials;
 EXPLAIN (COSTS OFF) SELECT * FROM test_partials ORDER BY time;
 -- F, F, P, F, F
 INSERT INTO test_partials VALUES ('2024-01-01 00:02', 1, 2);
