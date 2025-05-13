@@ -14,5 +14,6 @@
 #include <utils/jsonb.h>
 
 #define POLICY_CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
+#define POLICY_CONFIG_KEY_INCLUDE_TIERED_DATA "include_tiered_data"
 
 extern int32 policy_config_get_hypertable_id(const Jsonb *config);

@@ -622,6 +622,63 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	return true;
 }
 
+void
+policy_move_hyper_inval_read_and_validate_config(Jsonb *config,
+												 PolicyMoveHyperInvalData *policy_data)
+{
+	Oid table_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
+	Cache *hcache;
+	Hypertable *hypertable =
+		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+
+	bool include_tiered_data_isnull;
+	bool include_tiered_data =
+		policy_refresh_cagg_get_include_tiered_data(config, &include_tiered_data_isnull);
+
+	if (policy_data)
+	{
+		policy_data->hypertable = hypertable;
+		policy_data->hcache = hcache;
+		policy_data->include_tiered_data = include_tiered_data;
+		policy_data->include_tiered_data_isnull = include_tiered_data_isnull;
+	}
+}
+
+bool
+policy_move_hyper_inval_execute(int32 job_id, Jsonb *config)
+{
+	PolicyMoveHyperInvalData policy_data;
+
+	policy_move_hyper_inval_read_and_validate_config(config, &policy_data);
+
+	const Dimension *dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
+	Oid dimtype = ts_dimension_get_partition_type(dim);
+
+	bool enable_osm_reads_old = ts_guc_enable_osm_reads;
+
+	if (!policy_data.include_tiered_data_isnull)
+	{
+		SetConfigOption("timescaledb.enable_tiered_reads",
+						policy_data.include_tiered_data ? "on" : "off",
+						PGC_USERSET,
+						PGC_S_SESSION);
+	}
+
+	invalidation_process_hypertable_log(policy_data.hypertable->fd.id, dimtype);
+
+	if (!policy_data.include_tiered_data_isnull)
+	{
+		SetConfigOption("timescaledb.enable_tiered_reads",
+						enable_osm_reads_old ? "on" : "off",
+						PGC_USERSET,
+						PGC_S_SESSION);
+	}
+
+	ts_cache_release(&policy_data.hcache);
+
+	return true;
+}
+
 static void
 job_execute_function(FuncExpr *funcexpr)
 {
