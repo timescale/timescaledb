@@ -29,6 +29,7 @@
 #include <time_utils.h>
 #include <utils.h>
 
+#include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
 #include "guc.h"
 #include "invalidation.h"
@@ -1130,6 +1131,7 @@ continuous_agg_process_hypertable_invalidations(PG_FUNCTION_ARGS)
 
 	Assert(OidIsValid(dimtype));
 
+	invalidation_threshold_get(hypertable_id, dimtype);
 	invalidation_process_hypertable_log(hypertable_id, dimtype);
 
 	PG_RETURN_VOID();
