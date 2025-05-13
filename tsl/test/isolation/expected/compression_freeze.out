@@ -226,7 +226,7 @@ Uncompressed      |    2
 (1 row)
 
 step s1_compress_delete: 
-   SET timescaledb.compress_truncate_behaviour TO truncate_disabled;
+   SET timescaledb.enable_delete_after_compression TO on;
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
  <waiting ...>
 step s2_select_count_and_stats: 
@@ -259,70 +259,6 @@ debug_waitpoint_release
 (1 row)
 
 step s1_compress_delete: <... completed>
-count
------
-    2
-(1 row)
-
-step s2_select_count_and_stats: 
-   SELECT count(*) FROM sensor_data;
-   SELECT compression_status, count(*) FROM chunk_compression_stats('sensor_data') GROUP BY 1 ORDER BY 1, 2;
-
-count
------
-16850
-(1 row)
-
-compression_status|count
-------------------+-----
-Compressed        |    2
-(1 row)
-
-
-starting permutation: s2_lock_compression_after_truncate_or_delete s2_select_count_and_stats s1_compress_truncate_or_delete s2_unlock_compression_after_truncate_or_delete s2_select_count_and_stats
-step s2_lock_compression_after_truncate_or_delete: 
-    SELECT debug_waitpoint_enable('compression_done_after_truncate_or_delete_uncompressed');
-
-debug_waitpoint_enable
-----------------------
-                      
-(1 row)
-
-step s2_select_count_and_stats: 
-   SELECT count(*) FROM sensor_data;
-   SELECT compression_status, count(*) FROM chunk_compression_stats('sensor_data') GROUP BY 1 ORDER BY 1, 2;
-
-count
------
-16850
-(1 row)
-
-compression_status|count
-------------------+-----
-Uncompressed      |    2
-(1 row)
-
-step s1_compress_truncate_or_delete: 
-   SET timescaledb.compress_truncate_behaviour TO truncate_or_delete;
-   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
- <waiting ...>
-step s2_unlock_compression_after_truncate_or_delete: 
-    SELECT locktype, mode, granted, objid FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' ORDER BY relation, locktype, mode, granted;
-    SELECT debug_waitpoint_release('compression_done_after_truncate_or_delete_uncompressed');
-
-locktype|mode               |granted|objid
---------+-------------------+-------+-----
-relation|AccessExclusiveLock|t      |     
-relation|ExclusiveLock      |t      |     
-relation|ShareLock          |t      |     
-(3 rows)
-
-debug_waitpoint_release
------------------------
-                       
-(1 row)
-
-step s1_compress_truncate_or_delete: <... completed>
 count
 -----
     2

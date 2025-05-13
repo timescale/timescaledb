@@ -3,7 +3,7 @@
 # LICENSE-TIMESCALE for a copy of the license.
 
 ###
-# This test verifies if the compressed and uncompressed data are seen in parallel. Since
+# This test verifies if the compressed and uncompressed data are seen in parallel. Since 
 # we freeze the compressed data immediately, it becomes visible to all transactions
 # that are running concurrently. However, parallel transactions should not be able to
 # see the compressed hypertable in the catalog and query the data two times.
@@ -45,12 +45,7 @@ step "s1_compress" {
 }
 
 step "s1_compress_delete" {
-   SET timescaledb.compress_truncate_behaviour TO truncate_disabled;
-   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
-}
-
-step "s1_compress_truncate_or_delete" {
-   SET timescaledb.compress_truncate_behaviour TO truncate_or_delete;
+   SET timescaledb.enable_delete_after_compression TO on;
    SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
 }
 
@@ -76,10 +71,6 @@ step "s2_lock_compression_after_delete" {
     SELECT debug_waitpoint_enable('compression_done_after_delete_uncompressed');
 }
 
-step "s2_lock_compression_after_truncate_or_delete" {
-    SELECT debug_waitpoint_enable('compression_done_after_truncate_or_delete_uncompressed');
-}
-
 step "s2_unlock_compression" {
     SELECT locktype, mode, granted, objid FROM pg_locks WHERE not granted AND (locktype = 'advisory' or relation::regclass::text LIKE '%chunk') ORDER BY relation, locktype, mode, granted;
     SELECT debug_waitpoint_release('compression_done_before_truncate_uncompressed');
@@ -95,11 +86,6 @@ step "s2_unlock_compression_after_delete" {
     SELECT debug_waitpoint_release('compression_done_after_delete_uncompressed');
 }
 
-step "s2_unlock_compression_after_truncate_or_delete" {
-    SELECT locktype, mode, granted, objid FROM pg_locks WHERE granted AND relation::regclass::text LIKE '%hyper%chunk' ORDER BY relation, locktype, mode, granted;
-    SELECT debug_waitpoint_release('compression_done_after_truncate_or_delete_uncompressed');
-}
-
 permutation "s1_select_count" "s2_select_count_and_stats"
 permutation "s1_select_count" "s1_compress" "s1_select_count" "s2_select_count_and_stats"
 permutation "s2_lock_compression" "s2_select_count_and_stats" "s1_compress" "s2_select_count_and_stats" "s2_unlock_compression" "s2_select_count_and_stats"
@@ -109,9 +95,3 @@ permutation "s2_lock_compression_after_truncate" "s2_select_count_and_stats" "s1
 
 # Check after DELETE
 permutation "s2_lock_compression_after_delete" "s2_select_count_and_stats" "s1_compress_delete" "s2_select_count_and_stats" "s2_unlock_compression_after_delete" "s2_select_count_and_stats"
-
-# Check after TRUNCATE OR DELETE
-# Ideally, we want s2 to be a transaction, so that we can test the spin-lock that is triggered here.
-# However, spin locks don't play well with isolation tests, so that is tesed in a TAP test instead `tsl/test/t/004_truncate_or_delete_spin_lock_test.pl`
-
-permutation "s2_lock_compression_after_truncate_or_delete" "s2_select_count_and_stats" "s1_compress_truncate_or_delete" "s2_unlock_compression_after_truncate_or_delete" "s2_select_count_and_stats"

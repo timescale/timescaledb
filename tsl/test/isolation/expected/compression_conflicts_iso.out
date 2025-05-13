@@ -16,7 +16,7 @@ lock_chunktable
 
 step IB: BEGIN;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step C1: 
   BEGIN;
@@ -74,7 +74,7 @@ lock_chunktable
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step C1: 
   BEGIN;
@@ -132,7 +132,7 @@ lock_chunktable
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step C1: 
   BEGIN;
@@ -190,7 +190,7 @@ lock_chunktable
 
 step IB: BEGIN;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step C1: 
   BEGIN;
@@ -254,7 +254,7 @@ lock_chunktable
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step C1: 
   BEGIN;
@@ -318,7 +318,7 @@ lock_chunktable
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step C1: 
   BEGIN;
@@ -392,7 +392,7 @@ step C1:
  <waiting ...>
 step IB: BEGIN;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step C1: <... completed>
@@ -459,7 +459,7 @@ step C1:
  <waiting ...>
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step C1: <... completed>
@@ -526,7 +526,7 @@ step C1:
  <waiting ...>
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step C1: <... completed>
@@ -593,7 +593,7 @@ step C1:
  <waiting ...>
 step IB: BEGIN;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step C1: <... completed>
@@ -660,7 +660,7 @@ step C1:
  <waiting ...>
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step C1: <... completed>
@@ -727,7 +727,7 @@ step C1:
  <waiting ...>
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step C1: <... completed>
@@ -797,7 +797,7 @@ chunk_status
 
 step IB: BEGIN;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) ON CONFLICT DO NOTHING; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -857,7 +857,7 @@ chunk_status
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) ON CONFLICT DO NOTHING; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -917,7 +917,7 @@ chunk_status
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) ON CONFLICT DO NOTHING; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -977,7 +977,7 @@ chunk_status
 
 step IB: BEGIN;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step INu1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 99) ON CONFLICT(time, device) DO UPDATE SET value = 99; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -1043,7 +1043,7 @@ chunk_status
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step INu1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 99) ON CONFLICT(time, device) DO UPDATE SET value = 99; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -1103,7 +1103,7 @@ chunk_status
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step INu1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 99) ON CONFLICT(time, device) DO UPDATE SET value = 99; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -1163,7 +1163,7 @@ chunk_status
 
 step IB: BEGIN;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) ON CONFLICT DO NOTHING; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -1229,7 +1229,7 @@ chunk_status
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) ON CONFLICT DO NOTHING; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -1289,7 +1289,7 @@ chunk_status
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step IN1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 200, 100) ON CONFLICT DO NOTHING; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -1349,7 +1349,7 @@ chunk_status
 
 step IB: BEGIN;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step INu1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 99) ON CONFLICT(time, device) DO UPDATE SET value = 99; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -1415,7 +1415,7 @@ chunk_status
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step INu1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 99) ON CONFLICT(time, device) DO UPDATE SET value = 99; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -1475,7 +1475,7 @@ chunk_status
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step INu1: BEGIN; INSERT INTO ts_device_table VALUES (1, 1, 100, 99) ON CONFLICT(time, device) DO UPDATE SET value = 99; <waiting ...>
 step UnlockChunkTuple: ROLLBACK;
@@ -1521,7 +1521,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1559,7 +1559,7 @@ step RC:
  <waiting ...>
 step IB: BEGIN;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
@@ -1610,7 +1610,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1648,7 +1648,7 @@ step RC:
  <waiting ...>
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
@@ -1699,7 +1699,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1737,7 +1737,7 @@ step RC:
  <waiting ...>
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
@@ -1788,7 +1788,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1826,7 +1826,7 @@ step RC:
  <waiting ...>
 step IB: BEGIN;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
@@ -1877,7 +1877,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1915,7 +1915,7 @@ step RC:
  <waiting ...>
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
@@ -1972,7 +1972,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2010,7 +2010,7 @@ step RC:
  <waiting ...>
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step UnlockChunk: ROLLBACK;
 step RC: <... completed>
@@ -2067,7 +2067,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2153,7 +2153,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2245,7 +2245,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2269,7 +2269,7 @@ lock_chunktable
 
 step IB: BEGIN;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step RC: 
   DO $$
@@ -2334,7 +2334,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2358,7 +2358,7 @@ lock_chunktable
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step RC: 
   DO $$
@@ -2423,7 +2423,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2447,7 +2447,7 @@ lock_chunktable
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
  <waiting ...>
 step RC: 
   DO $$
@@ -2512,7 +2512,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2536,7 +2536,7 @@ lock_chunktable
 
 step IB: BEGIN;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step RC: 
   DO $$
@@ -2607,7 +2607,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2631,7 +2631,7 @@ lock_chunktable
 
 step IBRR: BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step RC: 
   DO $$
@@ -2702,7 +2702,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2726,7 +2726,7 @@ lock_chunktable
 
 step IBS: BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 step Iu1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 98) ON CONFLICT(time, device) DO UPDATE SET value = 98; 
  <waiting ...>
 step RC: 
   DO $$
@@ -2797,7 +2797,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -2883,7 +2883,7 @@ t
 
 step CAc: COMMIT;
 step I1: 
-    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING;
+    INSERT INTO ts_device_table VALUES (1, 1, 100, 100) ON CONFLICT DO NOTHING; 
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
