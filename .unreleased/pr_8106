@@ -1,2 +1,0 @@
-Fixes: #8106 Fix segfault when adding unique compression indexes to compressed chunks
-Thanks: @thotokraa for reporting an issue with unique expression indexes on compressed chunks
