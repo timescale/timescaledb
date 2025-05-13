@@ -1,6 +1,7 @@
 set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/compression_api.c
     ${CMAKE_CURRENT_SOURCE_DIR}/continuous_aggregate_api.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/process_hyper_inval_api.c
     ${CMAKE_CURRENT_SOURCE_DIR}/job.c
     ${CMAKE_CURRENT_SOURCE_DIR}/job_api.c
     ${CMAKE_CURRENT_SOURCE_DIR}/reorder_api.c

@@ -106,6 +106,19 @@ RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_remove'
 LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE PROCEDURE @extschema@.add_process_hypertable_invalidations_policy(
+    hypertable REGCLASS,
+    schedule_interval INTERVAL,
+    if_not_exists BOOL = false,
+    initial_start TIMESTAMPTZ = NULL,
+    timezone TEXT = NULL
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_policy_process_hyper_inval_add';
+
+CREATE OR REPLACE PROCEDURE @extschema@.remove_process_hypertable_invalidations_policy(
+       hypertable REGCLASS,
+       if_exists BOOL = false
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_policy_process_hyper_inval_remove';
+
 /* 1 step policies */
 
 /* Add policies */
