@@ -5,7 +5,6 @@
  */
 
 #include <postgres.h>
-#include "debug_point.h"
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
 #include <utils/inval.h>
@@ -29,14 +28,6 @@
 #include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_settings.h"
 
-/*
- * Timing parameters for spin locking heuristics.
- * These are the same as used by Postgres for truncate locking during lazy vacuum.
- * https://github.com/postgres/postgres/blob/4a0650d359c5981270039eeb634c3b7427aa0af5/src/backend/access/heap/vacuumlazy.c#L82
- */
-#define RECOMPRESS_EXCLUSIVE_LOCK_WAIT_INTERVAL 50 /* ms */
-#define RECOMPRESS_EXCLUSIVE_LOCK_TIMEOUT 5000	   /* ms */
-
 static bool fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 													Relation uncompressed_chunk_rel,
 													Snapshot snapshot);
@@ -59,8 +50,6 @@ static bool check_changed_group(CompressedSegmentInfo *current_segment, TupleTab
 								int nsegmentby_cols);
 static void recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel,
 							   RowCompressor *row_compressor);
-static void try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel);
-
 /*
  * Recompress an existing chunk by decompressing the batches
  * that are affected by the addition of newer data. The existing
@@ -546,7 +535,38 @@ finish:
 	 */
 	if (ConditionalLockRelation(uncompressed_chunk_rel, ExclusiveLock))
 	{
-		try_updating_chunk_status(uncompressed_chunk, uncompressed_chunk_rel);
+		TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, GetLatestSnapshot(), 0, 0);
+		hypercore_scan_set_skip_compressed(scan, true);
+		ScanDirection scan_dir = uncompressed_chunk_rel->rd_tableam == hypercore_routine() ?
+									 ForwardScanDirection :
+									 BackwardScanDirection;
+		TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
+
+		/* Doing a backwards scan with assumption that newly inserted tuples
+		 * are most likely at the end of the heap.
+		 */
+		bool has_tuples = false;
+		if (table_scan_getnextslot(scan, scan_dir, slot))
+		{
+			has_tuples = true;
+		}
+
+		ExecDropSingleTupleTableSlot(slot);
+		table_endscan(scan);
+
+		if (!has_tuples)
+		{
+			if (ts_chunk_clear_status(uncompressed_chunk,
+									  CHUNK_STATUS_COMPRESSED_UNORDERED |
+										  CHUNK_STATUS_COMPRESSED_PARTIAL))
+				ereport(DEBUG1,
+						(errmsg("cleared chunk status for recompression: \"%s.%s\"",
+								NameStr(uncompressed_chunk->fd.schema_name),
+								NameStr(uncompressed_chunk->fd.table_name))));
+
+			/* changed chunk status, so invalidate any plans involving this chunk */
+			CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);
+		}
 	}
 	else if (has_unique_constraints)
 	{
@@ -557,46 +577,13 @@ finish:
 		 * and speculative insertion could potentially cause false negatives during
 		 * constraint checking. For now, our best option here is to bail.
 		 *
-		 * We use a spin lock to wait for the ExclusiveLock or bail out if we can't get it in time.
+		 * This can be improved by using a spin lock to wait for the ExclusiveLock
+		 * or bail out if we can't get it in time.
 		 */
-
-		int lock_retry = 0;
-		while (true)
-		{
-			if (ConditionalLockRelation(uncompressed_chunk_rel, ExclusiveLock))
-			{
-				try_updating_chunk_status(uncompressed_chunk, uncompressed_chunk_rel);
-				break;
-			}
-
-			/*
-			 * Check for interrupts while trying to (re-)acquire the exclusive
-			 * lock.
-			 */
-			CHECK_FOR_INTERRUPTS();
-
-			if (++lock_retry >
-				(RECOMPRESS_EXCLUSIVE_LOCK_TIMEOUT / RECOMPRESS_EXCLUSIVE_LOCK_WAIT_INTERVAL))
-			{
-				/*
-				 * We failed to establish the lock in the specified number of
-				 * retries. This means we give up trying to get the exclusive lock are abort the
-				 * recompression operation
-				 */
-				ereport(ERROR,
-						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
-						 errmsg("aborting recompression due to concurrent DML on uncompressed "
-								"data, retrying with next policy run")));
-				break;
-			}
-
-			(void) WaitLatch(MyLatch,
-							 WL_LATCH_SET | WL_TIMEOUT | WL_EXIT_ON_PM_DEATH,
-							 RECOMPRESS_EXCLUSIVE_LOCK_WAIT_INTERVAL,
-							 WAIT_EVENT_VACUUM_TRUNCATE);
-			ResetLatch(MyLatch);
-			DEBUG_WAITPOINT("chunk_recompress_after_latch");
-		}
+		ereport(ERROR,
+				(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+				 errmsg("aborting recompression due to concurrent DML on uncompressed "
+						"data, retrying with next policy run")));
 	}
 
 	table_close(uncompressed_chunk_rel, NoLock);
@@ -880,48 +867,4 @@ delete_tuple_for_recompression(Relation rel, ItemPointer tid, Snapshot snapshot)
 						   true /* changingPart */);
 
 	return result == TM_Ok;
-}
-
-/* Check if we can update the chunk status to fully compressed after segmentwise recompression
- * We can only do this if there were no concurrent DML operations, so we check to see if there are
- * any uncompressed tuples in the chunk after compression.
- * If there aren't, we can update the chunk status
- *
- * Note: Caller is expected to have an ExclusiveLock on the uncompressed_chunk
- */
-static void
-try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel)
-{
-	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, GetLatestSnapshot(), 0, 0);
-	hypercore_scan_set_skip_compressed(scan, true);
-	ScanDirection scan_dir = uncompressed_chunk_rel->rd_tableam == hypercore_routine() ?
-								 ForwardScanDirection :
-								 BackwardScanDirection;
-	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
-
-	/* Doing a backwards scan with assumption that newly inserted tuples
-	 * are most likely at the end of the heap.
-	 */
-	bool has_tuples = false;
-	if (table_scan_getnextslot(scan, scan_dir, slot))
-	{
-		has_tuples = true;
-	}
-
-	ExecDropSingleTupleTableSlot(slot);
-	table_endscan(scan);
-
-	if (!has_tuples)
-	{
-		if (ts_chunk_clear_status(uncompressed_chunk,
-								  CHUNK_STATUS_COMPRESSED_UNORDERED |
-									  CHUNK_STATUS_COMPRESSED_PARTIAL))
-			ereport(DEBUG1,
-					(errmsg("cleared chunk status for recompression: \"%s.%s\"",
-							NameStr(uncompressed_chunk->fd.schema_name),
-							NameStr(uncompressed_chunk->fd.table_name))));
-
-		/* changed chunk status, so invalidate any plans involving this chunk */
-		CacheInvalidateRelcacheByRelid(uncompressed_chunk->table_id);
-	}
 }
