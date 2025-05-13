@@ -45,6 +45,7 @@ SELECT compress_chunk(ch) FROM show_chunks('testtable') ch LIMIT 3;
  _timescaledb_internal._hyper_1_3_chunk
 (3 rows)
 
+VACUUM ANALYZE testtable;
 -- Vectorized aggregation possible
 SELECT sum(segment_by_value) FROM testtable;
   sum   
@@ -129,25 +130,25 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
                            Output: _hyper_1_1_chunk.segment_by_value
-                           ->  Parallel Index Scan using compress_hyper_2_11_chunk_segment_by_value__ts_meta_min_1___idx on _timescaledb_internal.compress_hyper_2_11_chunk
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                                  Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
-                                 Index Cond: (compress_hyper_2_11_chunk.segment_by_value > 0)
+                                 Filter: (compress_hyper_2_11_chunk.segment_by_value > 0)
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.segment_by_value
-                           ->  Parallel Index Scan using compress_hyper_2_12_chunk_segment_by_value__ts_meta_min_1___idx on _timescaledb_internal.compress_hyper_2_12_chunk
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
                                  Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
-                                 Index Cond: (compress_hyper_2_12_chunk.segment_by_value > 0)
+                                 Filter: (compress_hyper_2_12_chunk.segment_by_value > 0)
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
                            Output: _hyper_1_3_chunk.segment_by_value
-                           ->  Parallel Index Scan using compress_hyper_2_13_chunk_segment_by_value__ts_meta_min_1___idx on _timescaledb_internal.compress_hyper_2_13_chunk
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
                                  Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
-                                 Index Cond: (compress_hyper_2_13_chunk.segment_by_value > 0)
+                                 Filter: (compress_hyper_2_13_chunk.segment_by_value > 0)
                ->  Partial Aggregate
                      Output: PARTIAL sum(_hyper_1_4_chunk.segment_by_value)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_4_chunk
@@ -202,27 +203,27 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0 AND int_v
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
                            Output: _hyper_1_1_chunk.segment_by_value
                            Vectorized Filter: (_hyper_1_1_chunk.int_value > 0)
-                           ->  Parallel Index Scan using compress_hyper_2_11_chunk_segment_by_value__ts_meta_min_1___idx on _timescaledb_internal.compress_hyper_2_11_chunk
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                                  Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
-                                 Index Cond: (compress_hyper_2_11_chunk.segment_by_value > 0)
+                                 Filter: (compress_hyper_2_11_chunk.segment_by_value > 0)
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.segment_by_value
                            Vectorized Filter: (_hyper_1_2_chunk.int_value > 0)
-                           ->  Parallel Index Scan using compress_hyper_2_12_chunk_segment_by_value__ts_meta_min_1___idx on _timescaledb_internal.compress_hyper_2_12_chunk
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
                                  Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
-                                 Index Cond: (compress_hyper_2_12_chunk.segment_by_value > 0)
+                                 Filter: (compress_hyper_2_12_chunk.segment_by_value > 0)
                ->  Custom Scan (VectorAgg)
                      Output: (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
                      Grouping Policy: all compressed batches
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
                            Output: _hyper_1_3_chunk.segment_by_value
                            Vectorized Filter: (_hyper_1_3_chunk.int_value > 0)
-                           ->  Parallel Index Scan using compress_hyper_2_13_chunk_segment_by_value__ts_meta_min_1___idx on _timescaledb_internal.compress_hyper_2_13_chunk
+                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
                                  Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
-                                 Index Cond: (compress_hyper_2_13_chunk.segment_by_value > 0)
+                                 Filter: (compress_hyper_2_13_chunk.segment_by_value > 0)
                ->  Partial Aggregate
                      Output: PARTIAL sum(_hyper_1_4_chunk.segment_by_value)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_4_chunk
@@ -614,8 +615,8 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
 -- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
 SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
-                                                                                                                                                           QUERY PLAN                                                                                                                                                           
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                              QUERY PLAN                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
    Output: sum(_hyper_1_1_chunk.int_value), _hyper_1_1_chunk.segment_by_value
    Group Key: _hyper_1_1_chunk.segment_by_value
@@ -628,22 +629,31 @@ SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
                      Grouping Policy: per compressed batch
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
                            Output: _hyper_1_1_chunk.segment_by_value, _hyper_1_1_chunk.int_value
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                           ->  Sort
                                  Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
+                                 Sort Key: compress_hyper_2_11_chunk.segment_by_value
+                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                       Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
                ->  Custom Scan (VectorAgg)
                      Output: _hyper_1_2_chunk.segment_by_value, (PARTIAL sum(_hyper_1_2_chunk.int_value))
                      Grouping Policy: per compressed batch
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.segment_by_value, _hyper_1_2_chunk.int_value
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                           ->  Sort
                                  Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
+                                 Sort Key: compress_hyper_2_12_chunk.segment_by_value
+                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                       Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
                ->  Custom Scan (VectorAgg)
                      Output: _hyper_1_3_chunk.segment_by_value, (PARTIAL sum(_hyper_1_3_chunk.int_value))
                      Grouping Policy: per compressed batch
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
                            Output: _hyper_1_3_chunk.segment_by_value, _hyper_1_3_chunk.int_value
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                           ->  Sort
                                  Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
+                                 Sort Key: compress_hyper_2_13_chunk.segment_by_value
+                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                       Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
                ->  Partial HashAggregate
                      Output: _hyper_1_4_chunk.segment_by_value, PARTIAL sum(_hyper_1_4_chunk.int_value)
                      Group Key: _hyper_1_4_chunk.segment_by_value
@@ -679,12 +689,12 @@ SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
                      Group Key: _hyper_1_10_chunk.segment_by_value
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                            Output: _hyper_1_10_chunk.segment_by_value, _hyper_1_10_chunk.int_value
-(63 rows)
+(72 rows)
 
 :EXPLAIN
 SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
-                                                                                                                                                              QUERY PLAN                                                                                                                                                              
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                 QUERY PLAN                                                                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: (sum(_hyper_1_1_chunk.segment_by_value)), _hyper_1_1_chunk.segment_by_value
    Sort Key: (sum(_hyper_1_1_chunk.segment_by_value)), _hyper_1_1_chunk.segment_by_value
@@ -700,22 +710,31 @@ SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_b
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
                                  Output: _hyper_1_1_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
+                                       Sort Key: compress_hyper_2_11_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                             Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_2_chunk.segment_by_value, (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
+                                       Sort Key: compress_hyper_2_12_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                             Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_3_chunk.segment_by_value, (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
                                  Output: _hyper_1_3_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
+                                       Sort Key: compress_hyper_2_13_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                             Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
                      ->  Partial HashAggregate
                            Output: _hyper_1_4_chunk.segment_by_value, PARTIAL sum(_hyper_1_4_chunk.segment_by_value)
                            Group Key: _hyper_1_4_chunk.segment_by_value
@@ -751,7 +770,7 @@ SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_b
                            Group Key: _hyper_1_10_chunk.segment_by_value
                            ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                                  Output: _hyper_1_10_chunk.segment_by_value
-(66 rows)
+(75 rows)
 
 SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
  sum  | segment_by_value 
@@ -871,8 +890,8 @@ SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_b
 
 :EXPLAIN
 SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
-                                                                                                                                                              QUERY PLAN                                                                                                                                                              
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                 QUERY PLAN                                                                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: _hyper_1_1_chunk.segment_by_value, (sum(_hyper_1_1_chunk.segment_by_value))
    Sort Key: _hyper_1_1_chunk.segment_by_value, (sum(_hyper_1_1_chunk.segment_by_value))
@@ -888,22 +907,31 @@ SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_b
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
                                  Output: _hyper_1_1_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
+                                       Sort Key: compress_hyper_2_11_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                             Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_2_chunk.segment_by_value, (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
+                                       Sort Key: compress_hyper_2_12_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                             Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_3_chunk.segment_by_value, (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
                                  Output: _hyper_1_3_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
+                                       Sort Key: compress_hyper_2_13_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                             Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
                      ->  Partial HashAggregate
                            Output: _hyper_1_4_chunk.segment_by_value, PARTIAL sum(_hyper_1_4_chunk.segment_by_value)
                            Group Key: _hyper_1_4_chunk.segment_by_value
@@ -939,7 +967,7 @@ SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_b
                            Group Key: _hyper_1_10_chunk.segment_by_value
                            ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                                  Output: _hyper_1_10_chunk.segment_by_value
-(66 rows)
+(75 rows)
 
 SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
  segment_by_value | sum  
@@ -1214,6 +1242,7 @@ NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_1_10_chunk
 (10 rows)
 
+VACUUM ANALYZE testtable;
 -- Vectorized aggregation possible
 SELECT sum(segment_by_value) FROM testtable;
   sum   
