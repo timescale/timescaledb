@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include "cache.h"
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
@@ -619,6 +620,48 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	}
 
 	elog(DEBUG1, "job %d completed recompressing chunk", job_id);
+	return true;
+}
+
+void
+policy_process_hyper_inval_read_and_validate_config(Jsonb *config,
+													PolicyMoveHyperInvalData *policy_data)
+{
+	int32 hypertable_id = policy_config_get_hypertable_id(config);
+	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id, true);
+
+	if (!OidIsValid(table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("configuration hypertable id %d not found", hypertable_id)));
+
+	Cache *hcache;
+	Hypertable *hypertable =
+		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+	if (policy_data)
+	{
+		policy_data->hypertable = hypertable;
+		policy_data->hcache = hcache;
+	}
+	else
+	{
+		ts_cache_release(&hcache);
+	}
+}
+
+bool
+policy_process_hyper_inval_execute(int32 job_id, Jsonb *config)
+{
+	PolicyMoveHyperInvalData policy_data;
+
+	policy_process_hyper_inval_read_and_validate_config(config, &policy_data);
+
+	const Dimension *dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
+	Oid dimtype = ts_dimension_get_partition_type(dim);
+
+	invalidation_process_hypertable_log(policy_data.hypertable->fd.id, dimtype);
+	ts_cache_release(&policy_data.hcache);
+
 	return true;
 }
 

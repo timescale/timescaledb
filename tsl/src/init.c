@@ -12,6 +12,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
+#include "bgw_policy/process_hyper_inval_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "chunk.h"
@@ -97,6 +98,10 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_refresh_cagg_proc = policy_refresh_cagg_proc,
 	.policy_refresh_cagg_check = policy_refresh_cagg_check,
 	.policy_refresh_cagg_remove = policy_refresh_cagg_remove,
+	.policy_process_hyper_inval_add = policy_process_hyper_inval_add,
+	.policy_process_hyper_inval_proc = policy_process_hyper_inval_proc,
+	.policy_process_hyper_inval_check = policy_process_hyper_inval_check,
+	.policy_process_hyper_inval_remove = policy_process_hyper_inval_remove,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_check = policy_reorder_check,
