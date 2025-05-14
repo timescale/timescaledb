@@ -22,6 +22,10 @@ This release contains performance improvements and bug fixes since the 2.19.3 re
 
 Following the deprecation announcement for PostgreSQL 14 in TimescaleDB v2.19.0, PostgreSQL 14 is no longer supported in TimescaleDB v2.20.0. The currently supported PostgreSQL major versions are 15, 16, and 17.
 
+**Windows: Postgres support**
+
+This TimescaleDB release supports the Postgres versions `15.12.0`, `16.8.0` and `17.4.0` on Windows.
+
 **Features**
 * [#7638](https://github.com/timescale/timescaledb/pull/7638) Bloom filter sparse indexes for compressed columns. Can be disabled with the GUC `timescaledb.enable_sparse_index_bloom`
 * [#7756](https://github.com/timescale/timescaledb/pull/7756) Add warning for poor compression ratio
