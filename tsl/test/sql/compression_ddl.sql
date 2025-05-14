@@ -842,34 +842,64 @@ VALUES -- chunk1
   ('2020-01-01 00:00'::timestamptz, 1, 2),
   ('2020-01-01 00:01'::timestamptz, 2, 2),
   ('2020-01-01 00:04'::timestamptz, 1, 2),
+  ('2020-01-01 00:05'::timestamptz, 3, 1),
+  ('2020-01-01 00:06'::timestamptz, 3, 2),
+  ('2020-01-01 00:07'::timestamptz, 3, 3),
+  ('2020-01-01 00:08'::timestamptz, 4, 1),
   -- chunk2
   ('2021-01-01 00:00'::timestamptz, 1, 2),
   ('2021-01-01 00:04'::timestamptz, 1, 2),
+  ('2021-01-01 00:05'::timestamptz, 3, 1),
+  ('2021-01-01 00:06'::timestamptz, 3, 2),
+  ('2021-01-01 00:07'::timestamptz, 3, 3),
   -- chunk3
   ('2022-01-01 00:00'::timestamptz, 1, 2),
-  ('2022-01-01 00:04'::timestamptz, 1, 2);
+  ('2022-01-01 00:04'::timestamptz, 1, 2),
+  ('2022-01-01 00:05'::timestamptz, 3, 1);
 -- enable compression, compress all chunks
-ALTER TABLE test_partials SET (timescaledb.compress);
+ALTER TABLE test_partials SET (timescaledb.compress,
+    timescaledb.compress_segmentby = 'a', timescaledb.compress_orderby = 'time desc');
 SELECT compress_chunk(show_chunks('test_partials'));
 VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+
+
 -- test P, F, F
 INSERT INTO test_partials VALUES ('2020-01-01 00:03', 1, 2);
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
+
+
 -- make second chunk partially compressed
 -- P, P, F
 INSERT INTO test_partials VALUES ('2021-01-01 00:03', 1, 2);
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
+
+
 -- third chunk partially compressed and add new chunk
 -- P, P, P, U
 INSERT INTO test_partials VALUES ('2022-01-01 00:03', 1, 2);
 INSERT INTO test_partials VALUES ('2023-01-01 00:03', 1, 2);
+INSERT INTO test_partials VALUES ('2023-01-01 00:05', 3, 1);
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+
+
 -- F, F, P, U
 -- recompress all chunks
 DO $$
@@ -879,6 +909,7 @@ BEGIN
   FOR chunk IN
   SELECT format('%I.%I', schema_name, table_name)::regclass
     FROM _timescaledb_catalog.chunk WHERE status = 9 and compressed_chunk_id IS NOT NULL AND NOT dropped
+    ORDER BY id
   LOOP
     EXECUTE format('select decompress_chunk(''%s'');', chunk::text);
     EXECUTE format('select compress_chunk(''%s'');', chunk::text);
@@ -886,14 +917,25 @@ BEGIN
 END
 $$;
 INSERT INTO test_partials VALUES ('2022-01-01 00:02', 1, 2);
+VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
 EXPLAIN (COSTS OFF) SELECT * FROM test_partials ORDER BY time;
+
 -- F, F, P, F, F
 INSERT INTO test_partials VALUES ('2024-01-01 00:02', 1, 2);
 SELECT compress_chunk(c) FROM show_chunks('test_partials', newer_than => '2022-01-01') c;
 VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify result correctness
 SELECT * FROM test_partials ORDER BY time;
+
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
 
 -- add test for space partioning with partial chunks
 CREATE TABLE space_part (time timestamptz, a int, b int, c int);
