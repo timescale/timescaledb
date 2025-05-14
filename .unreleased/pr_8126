@@ -1,0 +1,1 @@
+Fixes: #8126 Allow setting bgw_log_level to FATAL and ERROR

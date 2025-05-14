@@ -50,7 +50,12 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 -- We change user to make sure that granting SET and ALTER SYSTEM
 -- privileges to the default user actually works.
 --
+-- We test to set it to FATAL and ERROR to make sure that it is
+-- possible, since users might want to disable LOG level as well.
+--
 SET ROLE :ROLE_DEFAULT_PERM_USER;
+ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'FATAL';
+ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'ERROR';
 ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'DEBUG1';
 SELECT pg_reload_conf();
 
