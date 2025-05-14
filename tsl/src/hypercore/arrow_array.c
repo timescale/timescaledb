@@ -236,6 +236,12 @@ arrow_from_iterator_fixlen(MemoryContext mcxt, DecompressionIterator *iterator, 
 	/* Just a precaution: this should not be a varlen type */
 	Assert(typlen > 0);
 
+	/*
+	 * Bool type should never used iterator decompression because it has a
+	 * bulk decompression implementation
+	 */
+	Assert(typid != BOOLOID);
+
 	for (array_length = 0;; ++array_length)
 	{
 		DecompressResult result = iterator->try_next(iterator);
@@ -476,16 +482,27 @@ arrow_get_datum_fixlen(const ArrowArray *array, Oid typid, int16 typlen, uint16 
 	const uint64 *restrict validity = array->buffers[0];
 	const char *restrict values = array->buffers[1];
 	const ArrowPrivate *apriv = arrow_private_get(array);
+	Datum datum;
 
 	Assert(typlen > 0);
 
 	if (!arrow_row_is_valid(validity, index))
 		return (NullableDatum){ .isnull = true };
 
-	/* In order to handle fixed-length values of arbitrary size that are byref
-	 * and byval, we use fetch_all() rather than rolling our own. This is
-	 * taken from utils/adt/rangetypes.c */
-	Datum datum = ts_fetch_att(&values[index * typlen], apriv->typbyval, typlen);
+	if (typid == BOOLOID)
+	{
+		/* Boolean type is handled differently from other fixed-length
+		 * types. Booleans are stored as bitmap rather than as a fixed length
+		 * type. */
+		datum = BoolGetDatum(arrow_row_is_valid(array->buffers[1], index));
+	}
+	else
+	{
+		/* In order to handle fixed-length values of arbitrary size that are byref
+		 * and byval, we use fetch_all() rather than rolling our own. This is
+		 * taken from utils/adt/rangetypes.c */
+		datum = ts_fetch_att(&values[index * typlen], apriv->typbyval, typlen);
+	}
 
 	TS_DEBUG_LOG("retrieved fixlen value %s row %u from offset %u"
 				 " in memory context %s",
