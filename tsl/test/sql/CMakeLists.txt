@@ -25,6 +25,7 @@ set(TEST_FILES
     compressed_collation.sql
     compressed_detoaster.sql
     compress_float8_corrupt.sql
+    compression_allocation.sql
     compression_conflicts.sql
     compression_constraints.sql
     compression_create_compressed_table.sql

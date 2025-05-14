@@ -33,6 +33,7 @@
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/compression_api.h"
 #include "bgw_policy/continuous_aggregate_api.h"
+#include "bgw_policy/policy_config.h"
 #include "bgw_policy/policy_utils.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
@@ -266,7 +267,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 void
 policy_reorder_read_and_validate_config(Jsonb *config, PolicyReorderData *policy)
 {
-	int32 htid = policy_reorder_get_hypertable_id(config);
+	int32 htid = policy_config_get_hypertable_id(config);
 	Hypertable *ht = ts_hypertable_get_by_id(htid);
 
 	if (!ht)
@@ -319,7 +320,7 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	interval_getter = policy_retention_get_drop_after_interval;
 	bool use_creation_time = false;
 
-	object_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config), false);
+	object_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
 	hypertable = ts_hypertable_cache_get_cache_and_entry(object_relid, CACHE_FLAG_NONE, &hcache);
 
 	open_dim = get_open_dimension_for_hypertable(hypertable, false);
@@ -527,8 +528,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 void
 policy_compression_read_and_validate_config(Jsonb *config, PolicyCompressionData *policy_data)
 {
-	Oid table_relid =
-		ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config), false);
+	Oid table_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
 	Cache *hcache;
 	Hypertable *hypertable =
 		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
@@ -542,8 +542,7 @@ policy_compression_read_and_validate_config(Jsonb *config, PolicyCompressionData
 void
 policy_recompression_read_and_validate_config(Jsonb *config, PolicyCompressionData *policy_data)
 {
-	Oid table_relid =
-		ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config), false);
+	Oid table_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
 	Cache *hcache;
 	Hypertable *hypertable =
 		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);

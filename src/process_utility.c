@@ -2542,6 +2542,7 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 		StringInfoData command;
 		Oid nspcid = get_rel_namespace(chunk->table_id);
 		ListCell *lc;
+		List *dpcontext = deparse_context_for(get_rel_name(chunk->table_id), chunk->table_id);
 
 		initStringInfo(&command);
 		appendStringInfo(&command,
@@ -2561,7 +2562,13 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 			{
 				i++;
 				IndexElem *elem = lfirst_node(IndexElem, lc);
-				appendStringInfo(&command, "%s IS NOT NULL", quote_identifier(elem->name));
+				appendStringInfo(&command,
+								 "%s IS NOT NULL",
+								 elem->name ? quote_identifier(elem->name) :
+											  deparse_expression((Node *) elem->expr,
+																 dpcontext,
+																 false,
+																 false));
 				if (i < list_length(stmt->indexParams))
 					appendStringInfo(&command, " AND ");
 			}
@@ -2574,7 +2581,11 @@ validate_index_constraints(Chunk *chunk, const IndexStmt *stmt)
 		{
 			j++;
 			IndexElem *elem = lfirst_node(IndexElem, lc);
-			appendStringInfo(&command, "%s", quote_identifier(elem->name));
+			appendStringInfo(&command,
+							 "%s",
+							 elem->name ?
+								 quote_identifier(elem->name) :
+								 deparse_expression((Node *) elem->expr, dpcontext, false, false));
 			if (j < list_length(stmt->indexParams))
 				appendStringInfo(&command, ",");
 		}
@@ -5085,8 +5096,9 @@ process_create_stmt(ProcessUtilityArgs *args)
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_COLUMN),
 						 errmsg("hypertable option requires time_column"),
-						 errhint("Use \"timescaledb.time_column\" to specify the column to use as "
-								 "partitioning column.")));
+						 errhint(
+							 "Use \"timescaledb.partition_column\" to specify the column to use as "
+							 "partitioning column.")));
 		}
 	}
 
