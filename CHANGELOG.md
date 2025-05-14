@@ -6,7 +6,7 @@ accidentally triggering the load of a previous DB version.**
 
 ## 2.20.0 (2025-05-15)
 
-This release contains performance improvements and bug fixes since the 2.19.3 release. We recommend that you upgrade at the next available opportunity.
+This release contains performance improvements and bug fixes since the 2.18.2 release. We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.20.0**
 * The columnstore now leverages *bloom filters* to deliver up to 6x faster point queries on columns with high cardinality values, such as UUIDs.
@@ -72,6 +72,7 @@ Following the deprecation announcement for PostgreSQL 14 in TimescaleDB v2.19.0,
 * [#8074](https://github.com/timescale/timescaledb/pull/8074) Fix memory leak in row compressor flush
 * [#8099](https://github.com/timescale/timescaledb/pull/8099) Block chunk merging on multi-dimensional hypertables
 * [#8106](https://github.com/timescale/timescaledb/pull/8106) Fix segfault when adding unique compression indexes to compressed chunks
+* [#8127](https://github.com/timescale/timescaledb/pull/8127) Read bit-packed version of booleans
 
 **GUCs**
 * `timescaledb.enable_sparse_index_bloom`: Enable creation of the bloom1 sparse index on compressed chunks; Default: `ON`
