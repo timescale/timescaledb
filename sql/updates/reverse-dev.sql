@@ -48,3 +48,17 @@ END
 $$;
 DELETE FROM _timescaledb_catalog.chunk_column_stats WHERE chunk_id IS NULL;
 ALTER TABLE _timescaledb_catalog.chunk_column_stats ALTER COLUMN chunk_id SET NOT NULL;
+DROP PROCEDURE @extschema@.refresh_continuous_aggregate(
+    continuous_aggregate REGCLASS,
+    window_start "any",
+    window_end "any",
+    force BOOLEAN,
+    options JSONB
+);
+
+CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
+    continuous_aggregate     REGCLASS,
+    window_start             "any",
+    window_end               "any",
+    force                    BOOLEAN = FALSE
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';

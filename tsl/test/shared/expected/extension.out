@@ -281,7 +281,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  merge_chunks(regclass[])
  move_chunk(regclass,name,name,regclass,boolean)
  recompress_chunk(regclass,boolean)
- refresh_continuous_aggregate(regclass,"any","any",boolean)
+ refresh_continuous_aggregate(regclass,"any","any",boolean,jsonb)
  remove_columnstore_policy(regclass,boolean)
  remove_compression_policy(regclass,boolean)
  remove_continuous_aggregate_policy(regclass,boolean,boolean)

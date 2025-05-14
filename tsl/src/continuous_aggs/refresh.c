@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 
+#include "bgw_policy/policies_v2.h"
 #include <access/xact.h>
 #include <executor/spi.h>
 #include <fmgr.h>
@@ -24,6 +25,7 @@
 #include "hypertable.h"
 #include "invalidation.h"
 #include "invalidation_threshold.h"
+#include "jsonb_utils.h"
 #include "materialize.h"
 #include "process_utility.h"
 #include "refresh.h"
@@ -644,12 +646,23 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool force = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	Jsonb *options = PG_ARGISNULL(4) ? NULL : PG_GETARG_JSONB_P(4);
+	bool process_hypertable_invalidations = true;
 	ContinuousAgg *cagg;
 	InternalTimeRange refresh_window = {
 		.type = InvalidOid,
 	};
 
 	ts_feature_flag_check(FEATURE_CAGG);
+
+	if (options)
+	{
+		bool found;
+		bool value = ts_jsonb_get_bool_field(options,
+											 POL_REFRESH_CONF_KEY_PROCESS_HYPERTABLE_INVALIDATIONS,
+											 &found);
+		process_hypertable_invalidations = !found || value;
+	}
 
 	cagg = cagg_get_by_relid_or_fail(cagg_relid);
 	refresh_window.type = cagg->partition_type;
@@ -677,7 +690,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 									context,
 									PG_ARGISNULL(1),
 									PG_ARGISNULL(2),
-									force);
+									force,
+									process_hypertable_invalidations);
 
 	PG_RETURN_VOID();
 }
@@ -776,7 +790,8 @@ void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg,
 								const CaggRefreshContext context, const bool start_isnull,
-								const bool end_isnull, bool force)
+								const bool end_isnull, bool force,
+								bool process_hypertable_invalidations)
 {
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
@@ -906,7 +921,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		return;
 	}
 
-	invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
+	if (process_hypertable_invalidations)
+		invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
 
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
