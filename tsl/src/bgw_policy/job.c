@@ -36,6 +36,7 @@
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/policy_config.h"
 #include "bgw_policy/policy_utils.h"
+#include "bgw_policy/process_hyper_inval_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "compression/api.h"
@@ -380,6 +381,13 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
 
+	/* See if there is a move hypertable invalidations policy defined */
+	List *jobs =
+		ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_PROCESS_HYPER_INVAL_PROC_NAME,
+												  FUNCTIONS_SCHEMA_NAME,
+												  policy_data.cagg->data.raw_hypertable_id);
+	bool has_move_policy = list_length(jobs) > 0;
+
 	bool enable_osm_reads_old = ts_guc_enable_osm_reads;
 
 	if (!policy_data.include_tiered_data_isnull)
@@ -422,7 +430,8 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										context,
 										refresh_window->start_isnull,
 										refresh_window->end_isnull,
-										false);
+										false,
+										!has_move_policy /* move_hypertable_invalidations */);
 		if (processing_batch >= policy_data.max_batches_per_execution &&
 			processing_batch < context.number_of_batches &&
 			policy_data.max_batches_per_execution > 0)
