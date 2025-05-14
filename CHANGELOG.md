@@ -34,7 +34,7 @@ Following the deprecation announcement for PostgreSQL 14 in TimescaleDB v2.19.0,
 * [#7874](https://github.com/timescale/timescaledb/pull/7874) Support for SkipScan for distinct aggregates over the same column
 * [#7877](https://github.com/timescale/timescaledb/pull/7877) Remove blocker for unique constraints with `ADD COLUMN`
 * [#7878](https://github.com/timescale/timescaledb/pull/7878) Don't block non-immutable functions in continuous aggregates
-* [#7880](https://github.com/timescale/timescaledb/pull/7880) Add experimental support for window functions in caggs
+* [#7880](https://github.com/timescale/timescaledb/pull/7880) Add experimental support for window functions in continuous aggregates
 * [#7899](https://github.com/timescale/timescaledb/pull/7899) Vectorized decompression and filtering for boolean columns
 * [#7915](https://github.com/timescale/timescaledb/pull/7915) New option `refresh_newest_first` to CAgg refresh policy API
 * [#7917](https://github.com/timescale/timescaledb/pull/7917) Remove `_timescaledb_functions.create_chunk_table` function
