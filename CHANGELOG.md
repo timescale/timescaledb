@@ -40,7 +40,7 @@ This TimescaleDB release supports the Postgres versions `15.12.0`, `16.8.0` and 
 * [#7878](https://github.com/timescale/timescaledb/pull/7878) Don't block non-immutable functions in continuous aggregates
 * [#7880](https://github.com/timescale/timescaledb/pull/7880) Add experimental support for window functions in continuous aggregates
 * [#7899](https://github.com/timescale/timescaledb/pull/7899) Vectorized decompression and filtering for boolean columns
-* [#7915](https://github.com/timescale/timescaledb/pull/7915) New option `refresh_newest_first` to CAgg refresh policy API
+* [#7915](https://github.com/timescale/timescaledb/pull/7915) New option `refresh_newest_first` to continuous aggregate refresh policy API
 * [#7917](https://github.com/timescale/timescaledb/pull/7917) Remove `_timescaledb_functions.create_chunk_table` function
 * [#7929](https://github.com/timescale/timescaledb/pull/7929) Add `CREATE TABLE ... WITH` API for creating hypertables
 * [#7946](https://github.com/timescale/timescaledb/pull/7946) Add support for splitting a chunk
