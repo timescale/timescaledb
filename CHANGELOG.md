@@ -72,7 +72,7 @@ This TimescaleDB release supports the Postgres versions `15.12.0`, `16.8.0` and 
 * [#8033](https://github.com/timescale/timescaledb/pull/8033) Skip default `segmentby` if `orderby` is explicitly set
 * [#8061](https://github.com/timescale/timescaledb/pull/8061) Ensure settings for a compressed relation are found
 * [#7515](https://github.com/timescale/timescaledb/pull/7515) Add missing lock to Constraint-aware append
-* [#8067](https://github.com/timescale/timescaledb/pull/8067) Make sure Hypercore TAM parent is vacuumed
+* [#8067](https://github.com/timescale/timescaledb/pull/8067) Make sure hypercore TAM parent is vacuumed
 * [#8074](https://github.com/timescale/timescaledb/pull/8074) Fix memory leak in row compressor flush
 * [#8099](https://github.com/timescale/timescaledb/pull/8099) Block chunk merging on multi-dimensional hypertables
 * [#8106](https://github.com/timescale/timescaledb/pull/8106) Fix segfault when adding unique compression indexes to compressed chunks
