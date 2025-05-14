@@ -146,6 +146,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_on_cagg_joins.sql
     cagg_tableam.sql
     cagg_policy_run.sql
+    cagg_usage.sql
     decompress_memory.sql
     decompress_vector_qual.sql
     exp_cagg_monthly.sql
@@ -181,7 +182,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_ddl.sql.in
     cagg_migrate_function.sql.in
     cagg_repair.sql.in
-    cagg_usage.sql.in
     compression_update_delete.sql.in
     continuous_aggs.sql.in)
 

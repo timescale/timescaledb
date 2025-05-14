@@ -68,10 +68,18 @@ SELECT * FROM device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC, de
  Sun Dec 30 17:00:00 2018 PST | device_2  | 1546190100 |          1800
 (10 rows)
 
---You can view informaton about your continuous aggregates. The meaning of these fields will be explained further down.
+-- You can view informaton about your continuous aggregates. The
+-- meaning of these fields will be explained further down. We don't
+-- show the view definition since that will be different between PG
+-- versions.
 \x
-SELECT * FROM timescaledb_information.continuous_aggregates;
--[ RECORD 1 ]---------------------+-----------------------------------------------------------------------------
+SELECT hypertable_schema, hypertable_name,
+       view_schema, view_name,
+       view_owner, materialized_only, compression_enabled,
+       materialization_hypertable_schema, materialization_hypertable_name,
+       finalized
+  FROM timescaledb_information.continuous_aggregates;
+-[ RECORD 1 ]---------------------+---------------------------
 hypertable_schema                 | public
 hypertable_name                   | device_readings
 view_schema                       | public
@@ -81,12 +89,6 @@ materialized_only                 | t
 compression_enabled               | f
 materialization_hypertable_schema | _timescaledb_internal
 materialization_hypertable_name   | _materialized_hypertable_2
-view_definition                   |  SELECT time_bucket('@ 1 hour'::interval, observation_time) AS bucket,      +
-                                  |     device_id,                                                              +
-                                  |     avg(metric) AS metric_avg,                                              +
-                                  |     (max(metric) - min(metric)) AS metric_spread                            +
-                                  |    FROM device_readings                                                     +
-                                  |   GROUP BY (time_bucket('@ 1 hour'::interval, observation_time)), device_id;
 finalized                         | t
 
 \x
@@ -171,6 +173,40 @@ SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 
  Sun Dec 30 13:00:00 2018 PST | device_1  | 1030783800.33333 |    1546176599
 (1 row)
 
+-- Test refresh without processing hypertable invalidations. Insert
+-- into the hypertable and save away a range we're going to modify.
+INSERT INTO device_readings VALUES ('Sun Dec 30 14:02:00 2018 PST', 'device_2', 2.0);
+SELECT * INTO device_saved FROM device_summary
+ WHERE bucket BETWEEN 'Sun Dec 30 12:00:00 2018 PST' AND 'Sun Dec 30 18:00:00 2018 PST';
+-- This should not show a difference since invalidations are not processed.
+CALL refresh_continuous_aggregate('device_summary', NULL, NULL, options => '{"process_hypertable_invalidations": false }');
+NOTICE:  continuous aggregate "device_summary" is already up-to-date
+SELECT * FROM device_summary FULL JOIN device_saved ON row(device_summary.*) = row(device_saved.*)
+ WHERE (device_summary.bucket IS NULL OR device_saved.bucket IS NULL)
+   AND device_summary.device_id = 'device_2'
+   AND device_summary.bucket BETWEEN 'Sun Dec 30 12:00:00 2018 PST' AND 'Sun Dec 30 15:00:00 2018 PST';
+ bucket | device_id | metric_avg | metric_spread | bucket | device_id | metric_avg | metric_spread 
+--------+-----------+------------+---------------+--------+-----------+------------+---------------
+(0 rows)
+
+-- Refreshing with processing should now show a difference.
+CALL refresh_continuous_aggregate('device_summary', NULL, NULL, options => '{"process_hypertable_invalidations": true }');
+SELECT * FROM device_summary FULL JOIN device_saved ON row(device_summary.*) = row(device_saved.*)
+ WHERE (device_summary.bucket IS NULL OR device_saved.bucket IS NULL)
+   AND device_summary.device_id = 'device_2'
+   AND device_summary.bucket BETWEEN 'Sun Dec 30 12:00:00 2018 PST' AND 'Sun Dec 30 15:00:00 2018 PST';
+            bucket            | device_id |    metric_avg    | metric_spread | bucket | device_id | metric_avg | metric_spread 
+------------------------------+-----------+------------------+---------------+--------+-----------+------------+---------------
+ Sun Dec 30 14:00:00 2018 PST | device_2  | 1030786200.66667 |    1546180198 |        |           |            |              
+(1 row)
+
+-- Checking some cases that should generate an error.
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('device_summary', NULL, NULL, options => '{"process_hypertable_invalidations": "magic" }');
+ERROR:  invalid input syntax for type boolean: "magic"
+CALL refresh_continuous_aggregate('device_summary', NULL, NULL, options => '{"process_hypertable_invalidations": 12 }');
+ERROR:  invalid input syntax for type boolean: "12"
+\set ON_ERROR_STOP 1
 --
 -- Dealing with timezones
 --
