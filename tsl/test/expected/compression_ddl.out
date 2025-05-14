@@ -1885,13 +1885,18 @@ VALUES -- chunk1
   ('2020-01-01 00:04'::timestamptz, 1, 2),
   ('2020-01-01 00:05'::timestamptz, 3, 1),
   ('2020-01-01 00:06'::timestamptz, 3, 2),
+  ('2020-01-01 00:07'::timestamptz, 3, 3),
+  ('2020-01-01 00:08'::timestamptz, 4, 1),
   -- chunk2
   ('2021-01-01 00:00'::timestamptz, 1, 2),
   ('2021-01-01 00:04'::timestamptz, 1, 2),
   ('2021-01-01 00:05'::timestamptz, 3, 1),
+  ('2021-01-01 00:06'::timestamptz, 3, 2),
+  ('2021-01-01 00:07'::timestamptz, 3, 3),
   -- chunk3
   ('2022-01-01 00:00'::timestamptz, 1, 2),
-  ('2022-01-01 00:04'::timestamptz, 1, 2);
+  ('2022-01-01 00:04'::timestamptz, 1, 2),
+  ('2022-01-01 00:05'::timestamptz, 3, 1);
 -- enable compression, compress all chunks
 ALTER TABLE test_partials SET (timescaledb.compress,
     timescaledb.compress_segmentby = 'a', timescaledb.compress_orderby = 'time desc');
@@ -1904,6 +1909,15 @@ SELECT compress_chunk(show_chunks('test_partials'));
 (3 rows)
 
 VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+ count 
+-------
+     7
+     5
+     3
+(3 rows)
+
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
                              QUERY PLAN                             
@@ -1926,6 +1940,15 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 
 -- test P, F, F
 INSERT INTO test_partials VALUES ('2020-01-01 00:03', 1, 2);
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+ count 
+-------
+     8
+     5
+     3
+(3 rows)
+
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
                                 QUERY PLAN                                
 --------------------------------------------------------------------------
@@ -1960,16 +1983,30 @@ SELECT * FROM test_partials ORDER BY time;
  Wed Jan 01 00:04:00 2020 PST | 1 | 2
  Wed Jan 01 00:05:00 2020 PST | 3 | 1
  Wed Jan 01 00:06:00 2020 PST | 3 | 2
+ Wed Jan 01 00:07:00 2020 PST | 3 | 3
+ Wed Jan 01 00:08:00 2020 PST | 4 | 1
  Fri Jan 01 00:00:00 2021 PST | 1 | 2
  Fri Jan 01 00:04:00 2021 PST | 1 | 2
  Fri Jan 01 00:05:00 2021 PST | 3 | 1
+ Fri Jan 01 00:06:00 2021 PST | 3 | 2
+ Fri Jan 01 00:07:00 2021 PST | 3 | 3
  Sat Jan 01 00:00:00 2022 PST | 1 | 2
  Sat Jan 01 00:04:00 2022 PST | 1 | 2
-(11 rows)
+ Sat Jan 01 00:05:00 2022 PST | 3 | 1
+(16 rows)
 
 -- make second chunk partially compressed
 -- P, P, F
 INSERT INTO test_partials VALUES ('2021-01-01 00:03', 1, 2);
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+ count 
+-------
+     8
+     6
+     3
+(3 rows)
+
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
                                 QUERY PLAN                                
 --------------------------------------------------------------------------
@@ -2009,18 +2046,34 @@ SELECT * FROM test_partials ORDER BY time;
  Wed Jan 01 00:04:00 2020 PST | 1 | 2
  Wed Jan 01 00:05:00 2020 PST | 3 | 1
  Wed Jan 01 00:06:00 2020 PST | 3 | 2
+ Wed Jan 01 00:07:00 2020 PST | 3 | 3
+ Wed Jan 01 00:08:00 2020 PST | 4 | 1
  Fri Jan 01 00:00:00 2021 PST | 1 | 2
  Fri Jan 01 00:03:00 2021 PST | 1 | 2
  Fri Jan 01 00:04:00 2021 PST | 1 | 2
  Fri Jan 01 00:05:00 2021 PST | 3 | 1
+ Fri Jan 01 00:06:00 2021 PST | 3 | 2
+ Fri Jan 01 00:07:00 2021 PST | 3 | 3
  Sat Jan 01 00:00:00 2022 PST | 1 | 2
  Sat Jan 01 00:04:00 2022 PST | 1 | 2
-(12 rows)
+ Sat Jan 01 00:05:00 2022 PST | 3 | 1
+(17 rows)
 
 -- third chunk partially compressed and add new chunk
 -- P, P, P, U
 INSERT INTO test_partials VALUES ('2022-01-01 00:03', 1, 2);
 INSERT INTO test_partials VALUES ('2023-01-01 00:03', 1, 2);
+INSERT INTO test_partials VALUES ('2023-01-01 00:05', 3, 1);
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+ count 
+-------
+     8
+     6
+     4
+     2
+(4 rows)
+
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
@@ -2073,6 +2126,16 @@ END
 $$;
 INSERT INTO test_partials VALUES ('2022-01-01 00:02', 1, 2);
 VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+ count 
+-------
+     8
+     6
+     5
+     2
+(4 rows)
+
 EXPLAIN (COSTS OFF) SELECT * FROM test_partials ORDER BY time;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
@@ -2108,6 +2171,17 @@ SELECT compress_chunk(c) FROM show_chunks('test_partials', newer_than => '2022-0
 (2 rows)
 
 VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+ count 
+-------
+     8
+     6
+     5
+     2
+     1
+(5 rows)
+
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
                                 QUERY PLAN                                
 --------------------------------------------------------------------------
@@ -2150,17 +2224,34 @@ SELECT * FROM test_partials ORDER BY time;
  Wed Jan 01 00:04:00 2020 PST | 1 | 2
  Wed Jan 01 00:05:00 2020 PST | 3 | 1
  Wed Jan 01 00:06:00 2020 PST | 3 | 2
+ Wed Jan 01 00:07:00 2020 PST | 3 | 3
+ Wed Jan 01 00:08:00 2020 PST | 4 | 1
  Fri Jan 01 00:00:00 2021 PST | 1 | 2
  Fri Jan 01 00:03:00 2021 PST | 1 | 2
  Fri Jan 01 00:04:00 2021 PST | 1 | 2
  Fri Jan 01 00:05:00 2021 PST | 3 | 1
+ Fri Jan 01 00:06:00 2021 PST | 3 | 2
+ Fri Jan 01 00:07:00 2021 PST | 3 | 3
  Sat Jan 01 00:00:00 2022 PST | 1 | 2
  Sat Jan 01 00:02:00 2022 PST | 1 | 2
  Sat Jan 01 00:03:00 2022 PST | 1 | 2
  Sat Jan 01 00:04:00 2022 PST | 1 | 2
+ Sat Jan 01 00:05:00 2022 PST | 3 | 1
  Sun Jan 01 00:03:00 2023 PST | 1 | 2
+ Sun Jan 01 00:05:00 2023 PST | 3 | 1
  Mon Jan 01 00:02:00 2024 PST | 1 | 2
-(16 rows)
+(22 rows)
+
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+ count 
+-------
+     8
+     6
+     5
+     2
+     1
+(5 rows)
 
 -- add test for space partioning with partial chunks
 CREATE TABLE space_part (time timestamptz, a int, b int, c int);
