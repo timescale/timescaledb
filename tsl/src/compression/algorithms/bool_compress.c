@@ -53,6 +53,7 @@ static void *bool_compressor_finish_and_reset(Compressor *compressor);
 const Compressor bool_compressor_initializer = {
 	.append_val = bool_compressor_append_bool,
 	.append_null = bool_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = bool_compressor_finish_and_reset,
 };
 
