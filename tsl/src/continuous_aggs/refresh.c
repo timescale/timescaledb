@@ -22,7 +22,6 @@
 #include "dimension_slice.h"
 #include "guc.h"
 #include "hypertable.h"
-#include "hypertable_cache.h"
 #include "invalidation.h"
 #include "invalidation_threshold.h"
 #include "materialize.h"
@@ -32,7 +31,6 @@
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
-#include "utils.h"
 
 #define CAGG_REFRESH_LOG_LEVEL                                                                     \
 	(context.callctx == CAGG_REFRESH_POLICY || context.callctx == CAGG_REFRESH_POLICY_BATCHED ?    \
@@ -740,11 +738,8 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * windows.
 	 */
 	LockRelationOid(hyper_relid, ExclusiveLock);
-	const CaggsInfo all_caggs_info =
-		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
 	invalidations = invalidation_process_cagg_log(cagg,
 												  refresh_window,
-												  &all_caggs_info,
 												  ts_guc_cagg_max_individual_materializations,
 												  &do_merged_refresh,
 												  &merged_refresh_window,
@@ -900,10 +895,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		return;
 	}
 
-	/* Process invalidations in the hypertable invalidation log */
-	const CaggsInfo all_caggs_info =
-		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	invalidation_process_hypertable_log(cagg, refresh_window.type, &all_caggs_info);
+	invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
 
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
