@@ -476,16 +476,27 @@ arrow_get_datum_fixlen(const ArrowArray *array, Oid typid, int16 typlen, uint16 
 	const uint64 *restrict validity = array->buffers[0];
 	const char *restrict values = array->buffers[1];
 	const ArrowPrivate *apriv = arrow_private_get(array);
+	Datum datum;
 
 	Assert(typlen > 0);
 
 	if (!arrow_row_is_valid(validity, index))
 		return (NullableDatum){ .isnull = true };
 
-	/* In order to handle fixed-length values of arbitrary size that are byref
-	 * and byval, we use fetch_all() rather than rolling our own. This is
-	 * taken from utils/adt/rangetypes.c */
-	Datum datum = ts_fetch_att(&values[index * typlen], apriv->typbyval, typlen);
+	if (typid == BOOLOID)
+	{
+		/* We have special handling of the Boolean type since, as of version
+		 * of 18.0 of Arrow Arrays, booleans are stored as a bitmap rather
+		 * than as a fixed length type. */
+		datum = BoolGetDatum(arrow_row_is_valid(array->buffers[1], index));
+	}
+	else
+	{
+		/* In order to handle fixed-length values of arbitrary size that are byref
+		 * and byval, we use fetch_all() rather than rolling our own. This is
+		 * taken from utils/adt/rangetypes.c */
+		datum = ts_fetch_att(&values[index * typlen], apriv->typbyval, typlen);
+	}
 
 	TS_DEBUG_LOG("retrieved fixlen value %s row %u from offset %u"
 				 " in memory context %s",
