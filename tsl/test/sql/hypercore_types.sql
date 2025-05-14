@@ -25,6 +25,15 @@ select setseed(1);
 \ir include/hypercore_type_table.sql
 
 -- Test that decompressing and scanning boolean columns works.
+set timescaledb.enable_bool_compression=false;
+\set the_table test_bool_compression_disabled
+\set the_type boolean
+\set the_generator (random() > 0.5)
+\set the_aggregate count(value)
+\set the_clause value = true
+\ir include/hypercore_type_table.sql
+
+set timescaledb.enable_bool_compression=true;
 \set the_table test_bool
 \set the_type boolean
 \set the_generator (random() > 0.5)
