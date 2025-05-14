@@ -46,3 +46,17 @@ $$ LANGUAGE PLPGSQL;
 -- chunk_id.
 ALTER TABLE _timescaledb_catalog.chunk_column_stats ALTER COLUMN chunk_id DROP NOT NULL;
 UPDATE _timescaledb_catalog.chunk_column_stats SET chunk_id = NULL WHERE chunk_id = 0;
+DROP PROCEDURE @extschema@.refresh_continuous_aggregate(
+    continuous_aggregate REGCLASS,
+    window_start "any",
+    window_end "any",
+    force BOOLEAN
+);
+
+CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
+    continuous_aggregate     REGCLASS,
+    window_start             "any",
+    window_end               "any",
+    force                    BOOLEAN = FALSE,
+    options                  JSONB = NULL
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';

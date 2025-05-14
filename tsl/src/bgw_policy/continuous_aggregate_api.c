@@ -11,7 +11,6 @@
 #include <parser/parse_coerce.h>
 #include <utils/acl.h>
 
-#include <jsonb_utils.h>
 #include <utils/builtins.h>
 
 #include "bgw/job.h"
@@ -22,10 +21,9 @@
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
 #include "bgw_policy/policy_utils.h"
-#include "continuous_aggs/materialize.h"
 #include "dimension.h"
 #include "guc.h"
-#include "hypertable_cache.h"
+#include "jsonb_utils.h"
 #include "policy_config.h"
 #include "policy_utils.h"
 #include "time_utils.h"

@@ -20,7 +20,7 @@ extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
 											const CaggRefreshContext context,
 											const bool start_isnull, const bool end_isnull,
-											bool force);
+											bool force, bool process_hypertable_invalidations);
 extern List *continuous_agg_split_refresh_window(ContinuousAgg *cagg,
 												 InternalTimeRange *original_refresh_window,
 												 int32 buckets_per_batch,
