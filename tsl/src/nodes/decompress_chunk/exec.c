@@ -483,6 +483,32 @@ decompress_chunk_end(CustomScanState *node)
 	detoaster_close(&chunk_state->decompress_context.detoaster);
 }
 
+#ifndef NDEBUG
+static void
+check_recent_stats(Oid reloid)
+{
+	/*
+	 * You have to patch Postgres to force pgstat_report_stat(), otherwise it
+	 * uses a long timeout and doesn't report it after every statement.
+	 */
+	PgStat_StatTabEntry *stat = pgstat_fetch_stat_tabentry(reloid);
+	if (stat == NULL ||
+#if PG17_LT
+		stat->changes_since_analyze
+#else
+		stat->mod_since_analyze
+#endif
+			> 0)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("EXPLAIN is requested on uncompressed chunk table %s with stale stats."
+						" Run VACUUM ANALYZE",
+						get_rel_name(reloid))));
+	}
+}
+#endif
+
 /*
  * Output additional information for EXPLAIN of a custom-scan plan node.
  */
@@ -491,6 +517,14 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
 	DecompressContext *dcontext = &chunk_state->decompress_context;
+
+#ifndef NDEBUG
+	/*
+	 * In debug mode, check that we have up-to-date statistics if we're running
+	 * an EXPLAIN. This improves plan stability in the tests.
+	 */
+	check_recent_stats(chunk_state->chunk_relid);
+#endif
 
 	ts_show_scan_qual(chunk_state->vectorized_quals_original,
 					  "Vectorized Filter",

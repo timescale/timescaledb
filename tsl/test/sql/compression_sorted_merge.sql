@@ -378,6 +378,8 @@ SELECT add_compression_policy('sensor_data','1 minute'::INTERVAL);
 
 SELECT compress_chunk(i) FROM show_chunks('sensor_data') i;
 
+VACUUM ANALYZE sensor_data;
+
 -- Ensure the optimization is used for queries on this table
 :PREFIX
 SELECT * FROM sensor_data ORDER BY time DESC LIMIT 1;

@@ -232,6 +232,7 @@ SELECT tableoid::regclass AS "CHUNK_NAME" FROM plan_inval ORDER BY time LIMIT 1
 \gset
 
 SELECT compress_chunk(:'CHUNK_NAME');
+VACUUM ANALYZE plan_inval;
 
 EXECUTE prep_plan;
 EXPLAIN (COSTS OFF) EXECUTE prep_plan;
@@ -263,21 +264,7 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 
 --compress 2 chunks
 SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch LIMIT 2;
-
-CREATE OR REPLACE PROCEDURE reindex_compressed_hypertable(hypertable REGCLASS)
-AS $$
-DECLARE
-  hyper_id int;
-BEGIN
-  SELECT h.compressed_hypertable_id
-  INTO hyper_id
-  FROM _timescaledb_catalog.hypertable h
-  WHERE h.table_name = hypertable::name;
-  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
-    hyper_id);
-END $$ LANGUAGE plpgsql;
--- reindexing compressed hypertable to update statistics
-CALL reindex_compressed_hypertable('test_collation');
+VACUUM ANALYZE test_collation;
 
 --segment bys are pushed down correctly
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
@@ -792,8 +779,6 @@ ORDER BY
 ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id' ,timescaledb.compress_orderby = 'time DESC');
 
 SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
-CALL reindex_compressed_hypertable('f_sensor_data');
-
 VACUUM ANALYZE f_sensor_data;
 
 -- Encourage use of parallel plans
@@ -843,6 +828,8 @@ FROM
     generate_series(1700, 1800, 1 ) AS g2(sensor_id)
 ORDER BY
     time;
+
+VACUUM ANALYZE f_sensor_data;
 
 :explain
 SELECT sum(cpu) FROM f_sensor_data;
@@ -895,6 +882,8 @@ SELECT time, device, device * 0.1 FROM
 SELECT compress_chunk(c) FROM show_chunks('ht_metrics_partially_compressed') c;
 
 INSERT INTO ht_metrics_partially_compressed VALUES ('2020-01-01'::timestamptz, 1, 0.1);
+
+VACUUM ANALYZE ht_metrics_partially_compressed;
 
 :explain
 SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1;
@@ -959,6 +948,8 @@ INSERT INTO i6069 VALUES('2023-07-01', 1, 1),('2023-07-03', 2, 1),('2023-07-05',
 	('2023-07-01', 118, 1),('2023-07-03', 119, 1),('2023-07-05', 120, 1);
 
 SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('i6069') i;
+
+VACUUM ANALYZE i6069;
 
 SET enable_indexscan = ON;
 SET enable_seqscan = OFF;
@@ -1030,6 +1021,7 @@ RESET timescaledb.enable_decompression_sorted_merge;
 
 -- Compress the remaining chunks
 SELECT compress_chunk(ch, if_not_compressed => true) FROM show_chunks('sensor_data_compressed') ch;
+VACUUM ANALYZE sensor_data_compressed;
 
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 
@@ -1046,6 +1038,7 @@ RESET timescaledb.enable_decompression_sorted_merge;
 -- Convert the last chunk into a partially compressed chunk
 INSERT INTO sensor_data_compressed (time, sensor_id, cpu, temperature)
    VALUES ('1980-01-02 01:00:00-00', 2, 4, 14.0);
+VACUUM ANALYZE sensor_data_compressed;
 
 -- Only the first chunks should be accessed (batch sorted merge is enabled)
 :PREFIX
