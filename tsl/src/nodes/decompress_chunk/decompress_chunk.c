@@ -360,6 +360,8 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 DecompressChunkPath *
 copy_decompress_chunk_path(DecompressChunkPath *src)
 {
+	Assert(ts_is_decompress_chunk_path(&src->custom_path.path));
+
 	DecompressChunkPath *dst = palloc(sizeof(DecompressChunkPath));
 	memcpy(dst, src, sizeof(DecompressChunkPath));
 
@@ -958,8 +960,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 				continue;
 		}
 
+		Assert(compressed_path->parallel_workers == 0);
 		Path *chunk_path =
 			(Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+		Assert(chunk_path->parallel_workers == 0);
 
 		/*
 		 * Create a path for the batch sorted merge optimization. This optimization performs a
@@ -1142,7 +1146,11 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			 * If this is a partially compressed chunk we have to combine data
 			 * from compressed and uncompressed chunk.
 			 */
+			Assert(compressed_path->parallel_workers > 0);
+			Assert(compressed_path->parallel_safe);
 			path = (Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+			Assert(path->parallel_workers > 0);
+			Assert(path->parallel_safe);
 
 			if (consider_partial)
 			{
@@ -1913,13 +1921,15 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Pat
 	path->custom_path.methods = &decompress_chunk_path_methods;
 	path->batch_sorted_merge = false;
 
-	/* To prevent a non-parallel path with this node appearing
-	 * in a parallel plan we only set parallel_safe to true
-	 * when parallel_workers is greater than 0 which is only
-	 * the case when creating partial paths. */
+	/*
+	 * DecompressChunk doesn't manage any paralellism itself.
+	 */
 	path->custom_path.path.parallel_aware = false;
-	path->custom_path.path.parallel_safe =
-		info->chunk_rel->consider_parallel && compressed_path->parallel_safe;
+
+	/*
+	 * It can be applied per parallel worker, if its underlying scan is parallel.
+	 */
+	path->custom_path.path.parallel_safe = compressed_path->parallel_safe;
 	path->custom_path.path.parallel_workers = compressed_path->parallel_workers;
 
 	path->custom_path.custom_paths = list_make1(compressed_path);
