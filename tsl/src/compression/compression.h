@@ -128,6 +128,7 @@ typedef struct BulkWriter
 	EState *estate;
 	CommandId mycid;
 	BulkInsertState bistate;
+	int insert_options; /* heap insert options */
 } BulkWriter;
 
 typedef struct RowDecompressor
@@ -228,13 +229,8 @@ typedef struct RowCompressor
 	/* memory context reset per-row is stored */
 	MemoryContext per_row_ctx;
 
-	/* the table we're writing the compressed data to */
-	Relation compressed_table;
-	BulkInsertState bistate;
-	/* segment by index Oid if any */
-	Oid index_oid;
-	/* relation info necessary to update indexes on compressed table */
-	ResultRelInfo *resultRelInfo;
+	/* The descriptor of the compressed tuple we're generating */
+	TupleDesc out_desc;
 
 	/* in theory we could have more input columns than outputted ones, so we
 	   store the number of inputs/compressors separately */
@@ -265,8 +261,6 @@ typedef struct RowCompressor
 	int64 num_compressed_rows;
 	/* flag for checking if we are working on the first tuple */
 	bool first_iteration;
-	/* the heap insert options */
-	int insert_options;
 
 	/* Callback called on every flush. The ntuples argument is the number of
 	 * tuples flushed. Typically used for progress reporting. */
@@ -368,22 +362,22 @@ extern void compress_chunk_populate_sort_info_for_column(const CompressionSettin
 														 Oid *collation, bool *nulls_first);
 extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *settings,
 														  Relation rel);
-extern void row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
-								const TupleDesc noncompressed_tupdesc, Relation compressed_table,
-								bool need_bistate, int insert_options);
+extern void row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *settings,
+								const TupleDesc noncompressed_tupdesc,
+								const TupleDesc compressed_tupdesc);
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern HeapTuple row_compressor_build_tuple(RowCompressor *row_compressor);
 extern void row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
-											  Relation in_rel);
+											  Relation in_rel, BulkWriter *writer);
 extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
 									  const CompressionSettings *settings);
 
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
-extern BulkWriter bulk_writer_build(Relation out_rel);
+extern BulkWriter bulk_writer_build(Relation out_rel, int insert_options);
 extern void bulk_writer_close(BulkWriter *writer);
 extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc);
 

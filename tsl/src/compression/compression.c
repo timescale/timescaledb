@@ -7,6 +7,7 @@
 #include <access/attmap.h>
 #include <access/attnum.h>
 #include <access/skey.h>
+#include <access/tupdesc.h>
 #include <catalog/heap.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_am.h>
@@ -17,6 +18,7 @@
 #include <utils/datum.h>
 #include <utils/elog.h>
 #include <utils/palloc.h>
+#include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
@@ -120,13 +122,13 @@ tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 
 static Tuplesortstate *compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel);
 static void row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
-												CommandId mycid);
+												BulkWriter *writer);
 static void row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row);
 static bool row_compressor_new_row_is_in_new_group(RowCompressor *row_compressor,
 												   TupleTableSlot *row);
 static void create_per_compressed_column(RowDecompressor *decompressor);
 static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row);
-static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
+static void row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer,
 								 bool changed_groups);
 
 /********************
@@ -269,7 +271,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	Relation matched_index_rel = NULL;
 	TupleTableSlot *slot;
 	IndexScanDesc index_scan;
-	CommandId mycid = GetCurrentCommandId(true);
 	HeapTuple in_table_tp = NULL, index_tp = NULL;
 	Form_pg_attribute in_table_attr_tp, index_attr_tp;
 	CompressionStats cstat;
@@ -297,6 +298,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 		out_rel_lockmode = RowExclusiveLock;
 	}
 	Relation out_rel = relation_open(out_table, out_rel_lockmode);
+	BulkWriter writer = bulk_writer_build(out_rel, insert_options);
 
 	/* Sanity check we are dealing with relations */
 	Ensure(in_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
@@ -457,12 +459,12 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	RowCompressor row_compressor;
-	row_compressor_init(settings,
-						&row_compressor,
+
+	Assert(settings->fd.compress_relid == RelationGetRelid(out_rel));
+	row_compressor_init(&row_compressor,
+						settings,
 						RelationGetDescr(in_rel),
-						out_rel,
-						true /*need_bistate*/,
-						insert_options);
+						RelationGetDescr(out_rel));
 
 	if (matched_index_rel != NULL)
 	{
@@ -479,7 +481,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 		report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);
 		while (index_getnext_slot(index_scan, indexscan_direction, slot))
 		{
-			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
+			row_compressor_process_ordered_slot(&row_compressor, slot, &writer);
 			if ((++nrows_processed % report_reltuples) == 0)
 				elog(DEBUG2,
 					 "converted " INT64_FORMAT " rows to columnstore from \"%s\"",
@@ -488,7 +490,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 		}
 
 		if (row_compressor.rows_compressed_into_current_value > 0)
-			row_compressor_flush(&row_compressor, mycid, true);
+			row_compressor_flush(&row_compressor, &writer, true);
 
 		elog(DEBUG1,
 			 "finished converting " INT64_FORMAT " rows to columnstore from \"%s\"",
@@ -506,11 +508,12 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			 RelationGetRelationName(in_rel));
 
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(settings, in_rel);
-		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_desc, in_rel);
+		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_desc, in_rel, &writer);
 		tuplesort_end(sorted_rel);
 	}
 
 	row_compressor_close(&row_compressor);
+	bulk_writer_close(&writer);
 
 	if (ts_guc_enable_delete_after_compression)
 	{
@@ -879,44 +882,39 @@ check_for_limited_size_compressors(PerColumn *pcolumns, int16 natts)
  ** row_compressor **
  ********************/
 void
-row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
-					const TupleDesc noncompressed_tupdesc, Relation compressed_table,
-					bool need_bistate, int insert_options)
+row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *settings,
+					const TupleDesc noncompressed_tupdesc, const TupleDesc compressed_tupdesc)
 {
 	Name count_metadata_name = DatumGetName(
 		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
 	AttrNumber count_metadata_column_num =
-		get_attnum(compressed_table->rd_id, NameStr(*count_metadata_name));
+		get_attnum(settings->fd.compress_relid, NameStr(*count_metadata_name));
+
 	if (count_metadata_column_num == InvalidAttrNumber)
 		elog(ERROR,
 			 "missing metadata column '%s' in columnstore table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
-	const TupleDesc ctupdesc = RelationGetDescr(compressed_table);
-
 	*row_compressor = (RowCompressor){
 		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
 											 "compress chunk per-row",
 											 ALLOCSET_DEFAULT_SIZES),
-		.compressed_table = compressed_table,
-		.bistate = need_bistate ? GetBulkInsertState() : NULL,
-		.resultRelInfo = CatalogOpenIndexes(compressed_table),
+		.out_desc = CreateTupleDescCopyConstr(compressed_tupdesc),
 		.n_input_columns = noncompressed_tupdesc->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
-		.compressed_values = palloc(sizeof(Datum) * ctupdesc->natts),
-		.compressed_is_null = palloc(sizeof(bool) * ctupdesc->natts),
+		.compressed_values = palloc(sizeof(Datum) * compressed_tupdesc->natts),
+		.compressed_is_null = palloc(sizeof(bool) * compressed_tupdesc->natts),
 		.rows_compressed_into_current_value = 0,
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
 		.first_iteration = true,
-		.insert_options = insert_options,
 	};
 
-	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * ctupdesc->natts);
+	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * compressed_tupdesc->natts);
 
 	build_column_map(settings,
 					 noncompressed_tupdesc,
-					 ctupdesc,
+					 compressed_tupdesc,
 					 &row_compressor->per_column,
 					 &row_compressor->uncompressed_col_to_compressed_col);
 
@@ -925,15 +923,12 @@ row_compressor_init(const CompressionSettings *settings, RowCompressor *row_comp
 	row_compressor->needs_fullness_check =
 		check_for_limited_size_compressors(row_compressor->per_column,
 										   row_compressor->n_input_columns);
-
-	row_compressor->index_oid = get_compressed_chunk_index(row_compressor->resultRelInfo, settings);
 }
 
 void
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
-								  TupleDesc sorted_desc, Relation in_rel)
+								  TupleDesc sorted_desc, Relation in_rel, BulkWriter *writer)
 {
-	CommandId mycid = GetCurrentCommandId(true);
 	TupleTableSlot *slot = MakeTupleTableSlot(sorted_desc, &TTSOpsMinimalTuple);
 	bool got_tuple;
 	int64 nrows_processed = 0;
@@ -953,7 +948,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 											slot,
 											NULL /*=abbrev*/))
 	{
-		row_compressor_process_ordered_slot(row_compressor, slot, mycid);
+		row_compressor_process_ordered_slot(row_compressor, slot, writer);
 		if ((++nrows_processed % report_reltuples) == 0)
 			elog(DEBUG2,
 				 "compressed " INT64_FORMAT " rows from \"%s\"",
@@ -962,7 +957,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 	}
 
 	if (row_compressor->rows_compressed_into_current_value > 0)
-		row_compressor_flush(row_compressor, mycid, true);
+		row_compressor_flush(row_compressor, writer, true);
 	elog(DEBUG1,
 		 "finished compressing " INT64_FORMAT " rows from \"%s\"",
 		 nrows_processed,
@@ -1009,7 +1004,7 @@ row_compressor_is_full(RowCompressor *row_compressor, TupleTableSlot *row)
 
 static void
 row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
-									CommandId mycid)
+									BulkWriter *writer)
 {
 	MemoryContext old_ctx;
 	slot_getallattrs(slot);
@@ -1024,7 +1019,7 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 	if (compressed_row_is_full || changed_groups)
 	{
 		if (row_compressor->rows_compressed_into_current_value > 0)
-			row_compressor_flush(row_compressor, mycid, changed_groups);
+			row_compressor_flush(row_compressor, writer, changed_groups);
 		if (changed_groups)
 			row_compressor_update_group(row_compressor, slot);
 	}
@@ -1182,9 +1177,10 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 		Int32GetDatum(row_compressor->rows_compressed_into_current_value);
 	row_compressor->compressed_is_null[row_compressor->count_metadata_column_offset] = false;
 
-	HeapTuple tuple = heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
+	HeapTuple tuple = heap_form_tuple(row_compressor->out_desc,
 									  row_compressor->compressed_values,
 									  row_compressor->compressed_is_null);
+
 	MemoryContextSwitchTo(old_cxt);
 
 	return tuple;
@@ -1234,20 +1230,20 @@ row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups)
 }
 
 static void
-row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
+row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool changed_groups)
 {
 	HeapTuple compressed_tuple = row_compressor_build_tuple(row_compressor);
 	MemoryContext old_cxt = MemoryContextSwitchTo(row_compressor->per_row_ctx);
 
-	Assert(row_compressor->bistate != NULL);
-	heap_insert(row_compressor->compressed_table,
+	Assert(writer->bistate != NULL);
+	heap_insert(writer->out_rel,
 				compressed_tuple,
-				mycid,
-				row_compressor->insert_options /*=options*/,
-				row_compressor->bistate);
-	if (row_compressor->resultRelInfo->ri_NumIndices > 0)
+				writer->mycid,
+				writer->insert_options /*=options*/,
+				writer->bistate);
+	if (writer->indexstate->ri_NumIndices > 0)
 	{
-		ts_catalog_index_insert(row_compressor->resultRelInfo, compressed_tuple);
+		ts_catalog_index_insert(writer->indexstate, compressed_tuple);
 	}
 
 	heap_freetuple(compressed_tuple);
@@ -1269,13 +1265,11 @@ row_compressor_reset(RowCompressor *row_compressor)
 void
 row_compressor_close(RowCompressor *row_compressor)
 {
-	if (row_compressor->bistate)
-		FreeBulkInsertState(row_compressor->bistate);
-	CatalogCloseIndexes(row_compressor->resultRelInfo);
 	pfree(row_compressor->compressed_is_null);
 	pfree(row_compressor->compressed_values);
 	pfree(row_compressor->per_column);
 	pfree(row_compressor->uncompressed_col_to_compressed_col);
+	FreeTupleDesc(row_compressor->out_desc);
 }
 
 /******************
@@ -1416,7 +1410,7 @@ build_decompress_attrmap(const TupleDesc noncompressed_desc, const TupleDesc com
 }
 
 BulkWriter
-bulk_writer_build(Relation out_rel)
+bulk_writer_build(Relation out_rel, int insert_options)
 {
 	BulkWriter writer = {
 		.out_rel = out_rel,
@@ -1424,6 +1418,7 @@ bulk_writer_build(Relation out_rel)
 		.mycid = GetCurrentCommandId(true),
 		.bistate = GetBulkInsertState(),
 		.estate = CreateExecutorState(),
+		.insert_options = insert_options,
 	};
 
 	return writer;
@@ -1527,7 +1522,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 	Relation in_rel = table_open(in_table, ExclusiveLock);
 	int64 nrows_processed = 0;
 
-	BulkWriter writer = bulk_writer_build(out_rel);
+	BulkWriter writer = bulk_writer_build(out_rel, 0);
 	RowDecompressor decompressor =
 		build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
