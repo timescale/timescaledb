@@ -1851,6 +1851,7 @@ FROM
     generate_series(1700, 1800, 1 ) AS g2(sensor_id)
 ORDER BY
     time;
+VACUUM ANALYZE f_sensor_data;
 :explain
 SELECT sum(cpu) FROM f_sensor_data;
                                                                                                                                                         QUERY PLAN                                                                                                                                                        
@@ -1907,6 +1908,7 @@ INSERT INTO ts_device_table SELECT generate_series(0,999,1), 1, 100, 20;
 ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='time');
 WARNING:  column "device" should be used for segmenting or ordering
 SELECT compress_chunk(i) AS chunk_name FROM show_chunks('ts_device_table') i \gset
+VACUUM ANALYZE ts_device_table;
 SELECT count(*) FROM ts_device_table;
  count 
 -------
@@ -1969,6 +1971,7 @@ SELECT compress_chunk(c) FROM show_chunks('ht_metrics_partially_compressed') c;
 (2 rows)
 
 INSERT INTO ht_metrics_partially_compressed VALUES ('2020-01-01'::timestamptz, 1, 0.1);
+VACUUM ANALYZE ht_metrics_partially_compressed;
 :explain
 SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1;
                                                                                                                                    QUERY PLAN                                                                                                                                    
@@ -2073,6 +2076,7 @@ SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('i6069') i;
  _timescaledb_internal._hyper_43_83_chunk
 (3 rows)
 
+VACUUM ANALYZE i6069;
 SET enable_indexscan = ON;
 SET enable_seqscan = OFF;
 :explain
@@ -2186,7 +2190,7 @@ SELECT compress_chunk(ch) FROM show_chunks('sensor_data_compressed') ch LIMIT 3;
  _timescaledb_internal._hyper_45_89_chunk
 (3 rows)
 
-ANALYZE sensor_data_compressed;
+VACUUM ANALYZE sensor_data_compressed;
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
              time             | sensor_id | cpu | temperature 
 ------------------------------+-----------+-----+-------------
@@ -2310,6 +2314,7 @@ NOTICE:  chunk "_hyper_45_89_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_45_93_chunk
 (7 rows)
 
+VACUUM ANALYZE sensor_data_compressed;
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
              time             | sensor_id | cpu | temperature 
 ------------------------------+-----------+-----+-------------
@@ -2643,7 +2648,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 RESET timescaledb.enable_decompression_sorted_merge;
 -- create another chunk
 INSERT INTO stattest SELECT '2021/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(125,140) v;
-ANALYZE stattest;
+VACUUM ANALYZE stattest;
 SELECT count(*) from show_chunks('stattest');
  count 
 -------
