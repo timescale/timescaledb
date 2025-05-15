@@ -426,6 +426,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						bool delete_only, Bitmapset *null_columns, List *is_nulls)
 {
 	HeapTuple compressed_tuple;
+	BulkWriter writer;
 	RowDecompressor decompressor;
 	bool decompressor_initialized = false;
 	bool valid = false;
@@ -520,8 +521,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 		if (!decompressor_initialized)
 		{
-			decompressor = build_decompressor(in_rel, out_rel);
+			decompressor = build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 			decompressor_initialized = true;
+			writer = bulk_writer_build(out_rel);
 			meta_count_attno = TupleDescGetAttrNumber(decompressor.in_desc,
 													  COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 			Assert(meta_count_attno != InvalidAttrNumber);
@@ -548,6 +550,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		if (skip_current_tuple && *skip_current_tuple)
 		{
 			row_decompressor_close(&decompressor);
+			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
 			ExecDropSingleTupleTableSlot(slot);
 			return stats;
@@ -578,6 +581,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		{
 			write_logical_replication_msg_decompression_end();
 			row_decompressor_close(&decompressor);
+			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
 			report_error(result);
 			return stats;
@@ -591,7 +595,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		else
 		{
 			stats.tuples_decompressed +=
-				row_decompressor_decompress_row_to_table(&decompressor, out_rel);
+				row_decompressor_decompress_row_to_table(&decompressor, &writer);
 			stats.batches_decompressed++;
 		}
 		write_logical_replication_msg_decompression_end();
@@ -601,6 +605,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	if (decompressor_initialized)
 	{
 		row_decompressor_close(&decompressor);
+		bulk_writer_close(&writer);
 	}
 
 	if (ts_guc_debug_compression_path_info)
