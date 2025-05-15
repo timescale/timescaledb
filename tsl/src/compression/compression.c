@@ -1415,41 +1415,54 @@ build_decompress_attrmap(const TupleDesc noncompressed_desc, const TupleDesc com
 	return attrMap;
 }
 
+BulkWriter
+bulk_writer_build(Relation out_rel)
+{
+	BulkWriter writer = {
+		.out_rel = out_rel,
+		.indexstate = CatalogOpenIndexes(out_rel),
+		.mycid = GetCurrentCommandId(true),
+		.bistate = GetBulkInsertState(),
+		.estate = CreateExecutorState(),
+	};
+
+	return writer;
+}
+
+void
+bulk_writer_close(BulkWriter *writer)
+{
+	FreeBulkInsertState(writer->bistate);
+	if (writer->indexstate)
+		CatalogCloseIndexes(writer->indexstate);
+	FreeExecutorState(writer->estate);
+}
+
 /**********************
  ** decompress_chunk **
  **********************/
 
 RowDecompressor
-build_decompressor(Relation in_rel, Relation out_rel)
+build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc)
 {
-	TupleDesc in_desc = RelationGetDescr(in_rel);
-	TupleDesc out_desc = CreateTupleDescCopyConstr(RelationGetDescr(out_rel));
 	AttrNumber count_meta_attnum = InvalidAttrNumber;
 	AttrMap *attrmap = build_decompress_attrmap(out_desc, in_desc, &count_meta_attnum);
 
+	Assert(AttributeNumberIsValid(count_meta_attnum));
+
 	RowDecompressor decompressor = {
 		.count_compressed_attindex = AttrNumberGetAttrOffset(count_meta_attnum),
-		.in_desc = in_desc,
-
-		.out_desc = out_desc,
-		.out_rel = out_rel,
-		.indexstate = CatalogOpenIndexes(out_rel),
-
-		.mycid = GetCurrentCommandId(true),
-		.bistate = GetBulkInsertState(),
-
+		.in_desc = CreateTupleDescCopyConstr(in_desc),
+		.out_desc = CreateTupleDescCopyConstr(out_desc),
 		.compressed_datums = palloc(sizeof(Datum) * in_desc->natts),
 		.compressed_is_nulls = palloc(sizeof(bool) * in_desc->natts),
 
 		/* cache memory used to store the decompressed datums/is_null for form_tuple */
 		.decompressed_datums = palloc(sizeof(Datum) * out_desc->natts),
 		.decompressed_is_nulls = palloc(sizeof(bool) * out_desc->natts),
-
 		.per_compressed_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
 														"decompress chunk per-compressed row",
 														ALLOCSET_DEFAULT_SIZES),
-		.estate = CreateExecutorState(),
-
 		.decompressed_slots =
 			(TupleTableSlot **) palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
 		.attrmap = attrmap,
@@ -1482,14 +1495,11 @@ row_decompressor_reset(RowDecompressor *decompressor)
 void
 row_decompressor_close(RowDecompressor *decompressor)
 {
-	FreeBulkInsertState(decompressor->bistate);
 	MemoryContextDelete(decompressor->per_compressed_row_ctx);
-	if (decompressor->indexstate)
-		CatalogCloseIndexes(decompressor->indexstate);
-	FreeExecutorState(decompressor->estate);
 	detoaster_close(&decompressor->detoaster);
 	free_attrmap(decompressor->attrmap);
-
+	FreeTupleDesc(decompressor->in_desc);
+	FreeTupleDesc(decompressor->out_desc);
 	pfree(decompressor->compressed_datums);
 	pfree(decompressor->compressed_is_nulls);
 	pfree(decompressor->decompressed_datums);
@@ -1517,7 +1527,9 @@ decompress_chunk(Oid in_table, Oid out_table)
 	Relation in_rel = table_open(in_table, ExclusiveLock);
 	int64 nrows_processed = 0;
 
-	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
+	BulkWriter writer = bulk_writer_build(out_rel);
+	RowDecompressor decompressor =
+		build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
 	TableScanDesc scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
 	int64 report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);
@@ -1535,7 +1547,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 		if (should_free)
 			heap_freetuple(tuple);
 
-		row_decompressor_decompress_row_to_table(&decompressor, out_rel);
+		row_decompressor_decompress_row_to_table(&decompressor, &writer);
 
 		if ((++nrows_processed % report_reltuples) == 0)
 			elog(DEBUG2,
@@ -1551,6 +1563,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 	table_endscan(scan);
 	ExecDropSingleTupleTableSlot(slot);
 	row_decompressor_close(&decompressor);
+	bulk_writer_close(&writer);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
@@ -1912,19 +1925,19 @@ decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *
 }
 
 int
-row_decompressor_decompress_row_to_table(RowDecompressor *decompressor, Relation outrel)
+row_decompressor_decompress_row_to_table(RowDecompressor *decompressor, BulkWriter *writer)
 {
 	const int n_batch_rows = decompress_batch(decompressor);
 
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
 	/* Insert all decompressed rows into table using the bulk insert API. */
-	table_multi_insert(outrel,
+	table_multi_insert(writer->out_rel,
 					   decompressor->decompressed_slots,
 					   n_batch_rows,
-					   decompressor->mycid,
+					   writer->mycid,
 					   /* options = */ 0,
-					   decompressor->bistate);
+					   writer->bistate);
 
 	/*
 	 * Now, update the indexes. If we have several indexes, we want to first
@@ -1937,22 +1950,22 @@ row_decompressor_decompress_row_to_table(RowDecompressor *decompressor, Relation
 	 * set it to this temporary ResultRelInfo, and insert all rows into this
 	 * single index.
 	 */
-	if (decompressor->indexstate->ri_NumIndices > 0)
+	if (writer->indexstate->ri_NumIndices > 0)
 	{
-		ResultRelInfo indexstate_copy = *decompressor->indexstate;
+		ResultRelInfo indexstate_copy = *writer->indexstate;
 		Relation single_index_relation;
 		IndexInfo *single_index_info;
 		indexstate_copy.ri_NumIndices = 1;
 		indexstate_copy.ri_IndexRelationDescs = &single_index_relation;
 		indexstate_copy.ri_IndexRelationInfo = &single_index_info;
-		for (int i = 0; i < decompressor->indexstate->ri_NumIndices; i++)
+		for (int i = 0; i < writer->indexstate->ri_NumIndices; i++)
 		{
-			single_index_relation = decompressor->indexstate->ri_IndexRelationDescs[i];
-			single_index_info = decompressor->indexstate->ri_IndexRelationInfo[i];
+			single_index_relation = writer->indexstate->ri_IndexRelationDescs[i];
+			single_index_info = writer->indexstate->ri_IndexRelationInfo[i];
 			for (int row = 0; row < n_batch_rows; row++)
 			{
 				TupleTableSlot *decompressed_slot = decompressor->decompressed_slots[row];
-				EState *estate = decompressor->estate;
+				EState *estate = writer->estate;
 				ExprContext *econtext = GetPerTupleExprContext(estate);
 
 				/* Arrange for econtext's scan tuple to be the tuple under test */
