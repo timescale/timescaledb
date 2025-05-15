@@ -1928,6 +1928,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 	int n_batch_rows = 0;
 	uint16 tuple_index;
 	bool should_free;
+	CommandId cid = GetCurrentCommandId(true);
 
 	/* Nothing to do if this is not a compressed segment */
 	if (!is_compressed_tid(ctid))
@@ -1950,9 +1951,9 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 
 	/* Must delete the segment before calling the decompression function below
 	 * or otherwise index updates will lead to conflicts */
-	result = table_tuple_delete(decompressor.in_rel,
+	result = table_tuple_delete(crel,
 								&cslot->tts_tid,
-								decompressor.mycid,
+								cid,
 								snapshot,
 								InvalidSnapshot,
 								true,
@@ -1961,7 +1962,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 
 	Ensure(result == TM_Ok, "could not delete compressed segment, result: %u", result);
 
-	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor);
+	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor, relation);
 	/* Return the TID of the decompressed conflicting tuple. Tuple index is
 	 * 1-indexed, so subtract 1. */
 	slot = decompressor.decompressed_slots[tuple_index - 1];
@@ -2186,9 +2187,8 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 	/* Initialize the compressor. */
 	row_compressor_init(settings,
 						&row_compressor,
-						rel,
+						RelationGetDescr(rel),
 						new_compressed_rel,
-						RelationGetDescr(old_compressed_rel)->natts,
 						true /*need_bistate*/,
 						HEAP_INSERT_FROZEN);
 
@@ -3785,9 +3785,8 @@ convert_to_hypercore_finish(Oid relid)
 
 	row_compressor_init(settings,
 						&row_compressor,
-						relation,
+						RelationGetDescr(relation),
 						compressed_rel,
-						RelationGetDescr(compressed_rel)->natts,
 						true /*need_bistate*/,
 						HEAP_INSERT_FROZEN);
 

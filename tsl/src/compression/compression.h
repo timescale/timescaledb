@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <access/attnum.h>
 #include <catalog/indexing.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
@@ -15,7 +16,6 @@
 
 typedef struct BulkInsertStateData *BulkInsertState;
 
-#include "compat/compat.h"
 #include "batch_metadata_builder_minmax.h"
 #include "hypertable.h"
 #include "nodes/decompress_chunk/detoaster.h"
@@ -124,11 +124,9 @@ typedef struct PerCompressedColumn
 typedef struct RowDecompressor
 {
 	PerCompressedColumn *per_compressed_cols;
-	int16 num_compressed_columns;
 	int16 count_compressed_attindex;
 
 	TupleDesc in_desc;
-	Relation in_rel;
 
 	TupleDesc out_desc;
 	Relation out_rel;
@@ -137,8 +135,6 @@ typedef struct RowDecompressor
 
 	CommandId mycid;
 	BulkInsertState bistate;
-
-	bool delete_only;
 
 	Datum *compressed_datums;
 	bool *compressed_is_nulls;
@@ -149,10 +145,10 @@ typedef struct RowDecompressor
 	MemoryContext per_compressed_row_ctx;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
-	int64 batches_deleted;
 
 	TupleTableSlot **decompressed_slots;
 	int unprocessed_tuples;
+	AttrMap *attrmap;
 
 	Detoaster detoaster;
 } RowDecompressor;
@@ -360,7 +356,8 @@ extern bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datu
 extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
 extern void compress_row_end(CompressSingleRowState *cr);
 extern void compress_row_destroy(CompressSingleRowState *cr);
-extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
+extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor,
+													Relation outrel);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
 extern void compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings,
@@ -370,11 +367,12 @@ extern void compress_chunk_populate_sort_info_for_column(const CompressionSettin
 extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *settings,
 														  Relation rel);
 extern void row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
-								Relation uncompressed_table, Relation compressed_table,
-								int16 num_columns_in_compressed_table, bool need_bistate,
-								int insert_options);
+								const TupleDesc noncompressed_tupdesc, Relation compressed_table,
+								bool need_bistate, int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
+extern HeapTuple row_compressor_build_tuple(RowCompressor *row_compressor);
+extern void row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
 											  Relation in_rel);
