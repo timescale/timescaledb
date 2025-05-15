@@ -6,7 +6,7 @@ accidentally triggering the load of a previous DB version.**
 
 ## 2.20.0 (2025-05-15)
 
-This release contains performance improvements and bug fixes since the 2.18.2 release. We recommend that you upgrade at the next available opportunity.
+This release contains performance improvements and bug fixes since the 2.19.3 release. We recommend that you upgrade at the next available opportunity.
 
 **Highlighted features in TimescaleDB v2.20.0**
 * The columnstore now leverages *bloom filters* to deliver up to 6x faster point queries on columns with high cardinality values, such as UUIDs.
