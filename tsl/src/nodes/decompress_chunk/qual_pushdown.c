@@ -77,20 +77,42 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 
 			if (IsA(expr, BoolExpr) && ((BoolExpr *) expr)->boolop == AND_EXPR)
 			{
-				/* have to separate out and expr into different restrict infos */
+				/* have to split the bool AND into different restrict infos */
 				ListCell *lc_and;
 				BoolExpr *bool_expr = (BoolExpr *) expr;
 				foreach (lc_and, bool_expr->args)
 				{
+					RestrictInfo *pushed_down_ri = make_simple_restrictinfo(root, lfirst(lc_and));
+					if (context.needs_recheck)
+					{
+						/*
+						 * Our cost model is not good enough to properly account
+						 * for the selectivity of rechecked quals. Reset the
+						 * selectivity of the compressed quals so that at least
+						 * we don't heavily underestimate the uncompressed row
+						 * number.
+						 */
+						pushed_down_ri->norm_selec = 1.;
+					}
 					compressed_rel->baserestrictinfo =
-						lappend(compressed_rel->baserestrictinfo,
-								make_simple_restrictinfo(root, lfirst(lc_and)));
+						lappend(compressed_rel->baserestrictinfo, pushed_down_ri);
 				}
 			}
 			else
+			{
+				RestrictInfo *pushed_down_ri = make_simple_restrictinfo(root, expr);
+				if (context.needs_recheck)
+				{
+					/*
+					 * See comments above.
+					 */
+					pushed_down_ri->norm_selec = 1.;
+				}
 				compressed_rel->baserestrictinfo =
-					lappend(compressed_rel->baserestrictinfo, make_simple_restrictinfo(root, expr));
+					lappend(compressed_rel->baserestrictinfo, pushed_down_ri);
+			}
 		}
+
 		/* We need to check the restriction clause on the decompress node if the clause can't be
 		 * pushed down or needs re-checking */
 		if (!context.can_pushdown || context.needs_recheck || chunk_partial)
