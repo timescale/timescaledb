@@ -380,8 +380,7 @@ on conflict (location, device, time) do nothing;
          ->  Custom Scan (ChunkDispatch) (actual rows=8641 loops=1)
                ->  Subquery Scan on "*SELECT*" (actual rows=8641 loops=1)
                      ->  Function Scan on generate_series t (actual rows=8641 loops=1)
- Array: cache misses=2, decompress count=4 calls=4
-(10 rows)
+(9 rows)
 
 -- This should show values for all columns
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
@@ -450,8 +449,7 @@ order by time desc;
          Scankey: (location = '1'::text)
          Vectorized Filter: (location = '1'::text)
          Rows Removed by Filter: 113
- Array: cache misses=27, decompress count=81 calls=239
-(8 rows)
+(7 rows)
 
 --  Save the data for comparison with seqscan
 create temp table chunk_saved as
@@ -529,8 +527,7 @@ select count(*) from :chunk where location = 1::text;
          Scankey: (location = '1'::text)
          Vectorized Filter: (location = '1'::text)
          Rows Removed by Filter: 113
- Array: cache misses=27, decompress count=27 calls=27
-(6 rows)
+(5 rows)
 
 -- Testing same thing with SeqScan. It still decompresses in the
 -- count(*) case, although it shouldn't have to. So, probably an
@@ -544,8 +541,7 @@ select count(*) from :chunk where device = 1;
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=17 loops=1)
          Filter: (device = 1)
          Rows Removed by Filter: 392
- Array: cache misses=30, decompress count=62 calls=410
-(5 rows)
+(4 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select device from :chunk where device = 1;
@@ -564,8 +560,7 @@ select count(*) from :chunk where location = 1::text;
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=89 loops=1)
          Filter: (location = '1'::text)
          Rows Removed by Filter: 320
- Array: cache misses=30, decompress count=62 calls=410
-(5 rows)
+(4 rows)
 
 -- ColumnarScan declares itself as projection capable. This query
 -- would add a Result node on top if ColumnarScan couldn't project.

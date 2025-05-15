@@ -1,0 +1,1 @@
+Implements: #7724 Use arrow cache only for index scans
