@@ -251,7 +251,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	/******************** row decompressor **************/
 
-	RowDecompressor decompressor = build_decompressor(compressed_chunk_rel, uncompressed_chunk_rel);
+	RowDecompressor decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
+													  RelationGetDescr(uncompressed_chunk_rel));
+
 	/********** row compressor *******************/
 	RowCompressor row_compressor;
 	row_compressor_init(settings,

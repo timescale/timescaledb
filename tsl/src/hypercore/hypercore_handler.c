@@ -1943,7 +1943,10 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 	cslot = arrow_slot_get_compressed_slot(slot, NULL);
 	HeapTuple tuple = ExecFetchSlotHeapTuple(cslot, false, &should_free);
 
-	RowDecompressor decompressor = build_decompressor(crel, relation);
+	RowDecompressor decompressor =
+		build_decompressor(RelationGetDescr(crel), RelationGetDescr(relation));
+	BulkWriter writer = bulk_writer_build(relation);
+
 	heap_deform_tuple(tuple,
 					  RelationGetDescr(crel),
 					  decompressor.compressed_datums,
@@ -1962,7 +1965,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 
 	Ensure(result == TM_Ok, "could not delete compressed segment, result: %u", result);
 
-	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor, relation);
+	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor, &writer);
 	/* Return the TID of the decompressed conflicting tuple. Tuple index is
 	 * 1-indexed, so subtract 1. */
 	slot = decompressor.decompressed_slots[tuple_index - 1];
@@ -1971,6 +1974,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 	/* Need to make decompressed (and deleted segment) visible */
 	CommandCounterIncrement();
 	row_decompressor_close(&decompressor);
+	bulk_writer_close(&writer);
 	table_close(crel, NoLock);
 
 	return n_batch_rows;

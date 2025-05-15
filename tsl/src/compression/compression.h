@@ -121,6 +121,15 @@ typedef struct PerCompressedColumn
 	int16 decompressed_column_offset;
 } PerCompressedColumn;
 
+typedef struct BulkWriter
+{
+	Relation out_rel;
+	CatalogIndexState indexstate;
+	EState *estate;
+	CommandId mycid;
+	BulkInsertState bistate;
+} BulkWriter;
+
 typedef struct RowDecompressor
 {
 	PerCompressedColumn *per_compressed_cols;
@@ -129,13 +138,6 @@ typedef struct RowDecompressor
 	TupleDesc in_desc;
 
 	TupleDesc out_desc;
-	Relation out_rel;
-	CatalogIndexState indexstate;
-	EState *estate;
-
-	CommandId mycid;
-	BulkInsertState bistate;
-
 	Datum *compressed_datums;
 	bool *compressed_is_nulls;
 
@@ -357,7 +359,7 @@ extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableS
 extern void compress_row_end(CompressSingleRowState *cr);
 extern void compress_row_destroy(CompressSingleRowState *cr);
 extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor,
-													Relation outrel);
+													BulkWriter *writer);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
 extern void compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings,
@@ -381,7 +383,9 @@ extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
 
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
-extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
+extern BulkWriter bulk_writer_build(Relation out_rel);
+extern void bulk_writer_close(BulkWriter *writer);
+extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc);
 
 extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
