@@ -1945,7 +1945,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 
 	RowDecompressor decompressor =
 		build_decompressor(RelationGetDescr(crel), RelationGetDescr(relation));
-	BulkWriter writer = bulk_writer_build(relation);
+	BulkWriter writer = bulk_writer_build(relation, 0);
 
 	heap_deform_tuple(tuple,
 					  RelationGetDescr(crel),
@@ -2185,22 +2185,28 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 											 AccessExclusiveLock);
 	Relation new_compressed_rel = table_open(new_compressed_relid, AccessExclusiveLock);
 	RowCompressor row_compressor;
+	BulkWriter writer;
 	double reltuples;
 	int32 relpages;
 
 	/* Initialize the compressor. */
-	row_compressor_init(settings,
-						&row_compressor,
+	Assert(settings->fd.relid == RelationGetRelid(rel));
+	row_compressor_init(&row_compressor,
+						settings,
 						RelationGetDescr(rel),
-						new_compressed_rel,
-						true /*need_bistate*/,
-						HEAP_INSERT_FROZEN);
+						RelationGetDescr(new_compressed_rel));
 
+	writer = bulk_writer_build(new_compressed_rel, HEAP_INSERT_FROZEN);
 	row_compressor.on_flush = on_compression_progress;
-	row_compressor_append_sorted_rows(&row_compressor, tuplesort, tupdesc, old_compressed_rel);
+	row_compressor_append_sorted_rows(&row_compressor,
+									  tuplesort,
+									  tupdesc,
+									  old_compressed_rel,
+									  &writer);
 	reltuples = row_compressor.num_compressed_rows;
 	relpages = RelationGetNumberOfBlocks(new_compressed_rel);
 	row_compressor_close(&row_compressor);
+	bulk_writer_close(&writer);
 
 	table_close(new_compressed_rel, NoLock);
 	table_close(old_compressed_rel, NoLock);
@@ -3787,19 +3793,23 @@ convert_to_hypercore_finish(Oid relid)
 	const CompressionSettings *settings = ts_compression_settings_get(conversionstate->relid);
 	RowCompressor row_compressor;
 
-	row_compressor_init(settings,
-						&row_compressor,
+	Assert(settings->fd.relid == RelationGetRelid(relation));
+	Assert(settings->fd.compress_relid == RelationGetRelid(compressed_rel));
+
+	row_compressor_init(&row_compressor,
+						settings,
 						RelationGetDescr(relation),
-						compressed_rel,
-						true /*need_bistate*/,
-						HEAP_INSERT_FROZEN);
+						RelationGetDescr(compressed_rel));
+	BulkWriter writer = bulk_writer_build(compressed_rel, HEAP_INSERT_FROZEN);
 
 	row_compressor_append_sorted_rows(&row_compressor,
 									  conversionstate->tuplesortstate,
 									  tupdesc,
-									  compressed_rel);
+									  compressed_rel,
+									  &writer);
 
 	row_compressor_close(&row_compressor);
+	bulk_writer_close(&writer);
 	tuplesort_end(conversionstate->tuplesortstate);
 	conversionstate->tuplesortstate = NULL;
 

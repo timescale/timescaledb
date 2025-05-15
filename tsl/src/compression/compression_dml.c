@@ -523,7 +523,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		{
 			decompressor = build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 			decompressor_initialized = true;
-			writer = bulk_writer_build(out_rel);
+			writer = bulk_writer_build(out_rel, 0);
 			meta_count_attno = TupleDescGetAttrNumber(decompressor.in_desc,
 													  COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 			Assert(meta_count_attno != InvalidAttrNumber);
