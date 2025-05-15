@@ -99,7 +99,7 @@ jobs:
         # from the last released version and not current branch.
         prev_version=$(wget --quiet -O - \
           https://raw.githubusercontent.com/timescale/timescaledb/${{ steps.versions.outputs.version }}/version.config \
-          | grep update_from_version | sed -e 's!update_from_version = !!')
+          | grep previous_version | sed -e 's!previous_version = !!')
         yum downgrade -y timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }}-${prev_version}
         sudo -u postgres psql -X -c "ALTER EXTENSION timescaledb UPDATE TO '${prev_version}'" \
           -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb';"
