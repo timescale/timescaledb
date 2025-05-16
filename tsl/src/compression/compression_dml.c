@@ -57,8 +57,6 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 static BatchFilter *make_batchfilter(char *column_name, StrategyNumber strategy, Oid collation,
 									 RegProcedure opcode, Const *value, bool is_null_check,
 									 bool is_null, bool is_array_op);
-static inline TM_Result delete_compressed_tuple(RowDecompressor *decompressor, Snapshot snapshot,
-												HeapTuple compressed_tuple);
 static void report_error(TM_Result result);
 
 static bool key_column_is_null(tuple_filtering_constraints *constraints, Relation chunk_rel,
@@ -78,6 +76,7 @@ TupleDescGetAttrNumber(TupleDesc desc, const char *name)
 		if (strcmp(name, NameStr(desc->attrs[i].attname)) == 0)
 			return desc->attrs[i].attnum;
 	}
+
 	return InvalidAttrNumber;
 }
 
@@ -427,6 +426,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 						bool delete_only, Bitmapset *null_columns, List *is_nulls)
 {
 	HeapTuple compressed_tuple;
+	BulkWriter writer;
 	RowDecompressor decompressor;
 	bool decompressor_initialized = false;
 	bool valid = false;
@@ -521,9 +521,9 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 
 		if (!decompressor_initialized)
 		{
-			decompressor = build_decompressor(in_rel, out_rel);
-			decompressor.delete_only = delete_only;
+			decompressor = build_decompressor(RelationGetDescr(in_rel), RelationGetDescr(out_rel));
 			decompressor_initialized = true;
+			writer = bulk_writer_build(out_rel, 0);
 			meta_count_attno = TupleDescGetAttrNumber(decompressor.in_desc,
 													  COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 			Assert(meta_count_attno != InvalidAttrNumber);
@@ -550,12 +550,23 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		if (skip_current_tuple && *skip_current_tuple)
 		{
 			row_decompressor_close(&decompressor);
+			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
 			ExecDropSingleTupleTableSlot(slot);
 			return stats;
 		}
 		write_logical_replication_msg_decompression_start();
-		result = delete_compressed_tuple(&decompressor, snapshot, compressed_tuple);
+
+		TM_FailureData tmfd;
+		result = table_tuple_delete(in_rel,
+									&compressed_tuple->t_self,
+									GetCurrentCommandId(true),
+									snapshot,
+									InvalidSnapshot,
+									true,
+									&tmfd,
+									false);
+
 		/* skip reporting error if isolation level is < Repeatable Read
 		 * since somebody decompressed the data concurrently, we need to take
 		 * that data into account as well when in Read Committed level
@@ -570,11 +581,12 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		{
 			write_logical_replication_msg_decompression_end();
 			row_decompressor_close(&decompressor);
+			bulk_writer_close(&writer);
 			decompress_batch_endscan(scan);
 			report_error(result);
 			return stats;
 		}
-		if (decompressor.delete_only)
+		if (delete_only)
 		{
 			stats.batches_deleted++;
 			stats.tuples_deleted += DatumGetInt32(
@@ -582,7 +594,8 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 		}
 		else
 		{
-			stats.tuples_decompressed += row_decompressor_decompress_row_to_table(&decompressor);
+			stats.tuples_decompressed +=
+				row_decompressor_decompress_row_to_table(&decompressor, &writer);
 			stats.batches_decompressed++;
 		}
 		write_logical_replication_msg_decompression_end();
@@ -592,6 +605,7 @@ decompress_batches_scan(Relation in_rel, Relation out_rel, Relation index_rel, S
 	if (decompressor_initialized)
 	{
 		row_decompressor_close(&decompressor);
+		bulk_writer_close(&writer);
 	}
 
 	if (ts_guc_debug_compression_path_info)
@@ -1497,23 +1511,6 @@ find_matching_index(Relation comp_chunk_rel, List **index_filters, List **heap_f
 	if (ts_guc_debug_compression_path_info)
 		elog(INFO, "Index \"%s\" is used for scan. ", RelationGetRelationName(result_rel));
 	return result_rel;
-}
-
-static inline TM_Result
-delete_compressed_tuple(RowDecompressor *decompressor, Snapshot snapshot,
-						HeapTuple compressed_tuple)
-{
-	TM_FailureData tmfd;
-	TM_Result result;
-	result = table_tuple_delete(decompressor->in_rel,
-								&compressed_tuple->t_self,
-								decompressor->mycid,
-								snapshot,
-								InvalidSnapshot,
-								true,
-								&tmfd,
-								false);
-	return result;
 }
 
 static void
