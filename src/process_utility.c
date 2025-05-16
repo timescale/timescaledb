@@ -5573,6 +5573,12 @@ ts_process_utility_set_expect_chunk_modification(bool expect)
 }
 
 bool
+ts_process_utility_is_top_level(void)
+{
+	return last_process_utility_context == PROCESS_UTILITY_TOPLEVEL;
+}
+
+bool
 ts_process_utility_is_context_nonatomic(void)
 {
 	ProcessUtilityContext context = last_process_utility_context;

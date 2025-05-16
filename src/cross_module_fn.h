@@ -46,6 +46,10 @@ typedef struct CrossModuleFunctions
 	PGFunction policy_refresh_cagg_proc;
 	PGFunction policy_refresh_cagg_check;
 	PGFunction policy_refresh_cagg_remove;
+	PGFunction policy_move_hyper_inval_add;
+	PGFunction policy_move_hyper_inval_proc;
+	PGFunction policy_move_hyper_inval_check;
+	PGFunction policy_move_hyper_inval_remove;
 	PGFunction policy_reorder_add;
 	PGFunction policy_reorder_proc;
 	PGFunction policy_reorder_check;
@@ -106,6 +110,7 @@ typedef struct CrossModuleFunctions
 													 HeapTuple chunk_tuple,
 													 HeapTuple chunk_newtuple, bool update);
 	PGFunction continuous_agg_refresh;
+	PGFunction continuous_agg_move_hypertable_invalidations;
 	void (*continuous_agg_invalidate_raw_ht)(const Hypertable *raw_ht, int64 start, int64 end);
 	void (*continuous_agg_invalidate_mat_ht)(const Hypertable *raw_ht, const Hypertable *mat_ht,
 											 int64 start, int64 end);

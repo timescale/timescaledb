@@ -30,6 +30,10 @@ CROSSMODULE_WRAPPER(policy_compression_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_add);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_proc);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_check);
+CROSSMODULE_WRAPPER(policy_move_hyper_inval_remove);
+CROSSMODULE_WRAPPER(policy_move_hyper_inval_add);
+CROSSMODULE_WRAPPER(policy_move_hyper_inval_proc);
+CROSSMODULE_WRAPPER(policy_move_hyper_inval_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_remove);
 CROSSMODULE_WRAPPER(policy_reorder_add);
 CROSSMODULE_WRAPPER(policy_reorder_proc);
@@ -87,6 +91,7 @@ CROSSMODULE_WRAPPER(bloom1_contains);
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
+CROSSMODULE_WRAPPER(continuous_agg_move_hypertable_invalidations);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
@@ -358,6 +363,10 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policy_refresh_cagg_proc = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_check = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_remove = error_no_default_fn_pg_community,
+	.policy_move_hyper_inval_add = error_no_default_fn_pg_community,
+	.policy_move_hyper_inval_proc = error_no_default_fn_pg_community,
+	.policy_move_hyper_inval_check = error_no_default_fn_pg_community,
+	.policy_move_hyper_inval_remove = error_no_default_fn_pg_community,
 	.policy_reorder_add = error_no_default_fn_pg_community,
 	.policy_reorder_proc = error_no_default_fn_pg_community,
 	.policy_reorder_check = error_no_default_fn_pg_community,
@@ -392,6 +401,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
 	.continuous_agg_call_invalidation_trigger = continuous_agg_call_invalidation_trigger_default,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
+	.continuous_agg_move_hypertable_invalidations = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,

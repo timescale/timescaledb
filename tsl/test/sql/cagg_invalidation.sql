@@ -9,6 +9,14 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
 
+CREATE VIEW hypertable_invalidation_thresholds AS
+SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
+       watermark AS threshold
+  FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+  JOIN _timescaledb_catalog.hypertable ht
+    ON hypertable_id = ht.id
+ORDER BY 1;
+
 CREATE TABLE conditions (time bigint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
 
@@ -805,3 +813,71 @@ CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-01-01 01:00
 
 -- CAgg should be up-to-date now
 CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-01-01 01:00:00+00');
+
+--
+-- Test the invalidation move function
+--
+
+-- Make sure to move the threshold for the insertions we are going to
+-- do.
+CALL refresh_continuous_aggregate('measure_10', 0, 200);
+
+SELECT * FROM hypertable_invalidation_thresholds
+ WHERE hypertable IN ('conditions'::regclass, 'measurements'::regclass);
+SELECT * FROM hyper_invals;
+
+-- Save away the contents of some materialized views so that we can
+-- check that they are not updated when we move invalidations.
+SELECT * INTO saved_measure_10 FROM measure_10;
+SELECT * INTO saved_cond_10 FROM cond_10;
+
+-- Generate some invalidations for the hypertables
+INSERT INTO conditions VALUES (110, 14, 23.7);
+INSERT INTO conditions VALUES (110, 15, 23.8), (119, 3, 23.6);
+INSERT INTO conditions VALUES (160, 13, 23.7), (170, 4, 23.7);
+INSERT INTO measurements VALUES (120, 14, 23.7);
+INSERT INTO measurements VALUES (130, 15, 23.8), (180, 3, 23.6);
+
+-- Move hypertable invalidations one hypertable at a time and see that
+-- they are moved and that attached continuous aggregates are not
+-- updated.
+SELECT * FROM hyper_invals;
+CALL _timescaledb_functions.process_hypertable_invalidations('measurements');
+SELECT * FROM measure_10
+    FULL JOIN saved_measure_10
+           ON row(measure_10.*) = row(saved_measure_10.*)
+        WHERE measure_10.bucket IS NULL OR saved_measure_10.bucket IS NULL
+     ORDER BY 1, 2;
+SELECT * FROM hyper_invals;
+CALL _timescaledb_functions.process_hypertable_invalidations('conditions');
+SELECT * FROM cond_10
+    FULL JOIN saved_cond_10
+           ON row(cond_10.*) = row(saved_cond_10.*)
+        WHERE cond_10.bucket IS NULL OR saved_cond_10.bucket IS NULL
+     ORDER BY 1, 2;
+SELECT * FROM hyper_invals;
+
+-- Check that once we refresh the continuous aggregates, the changes
+-- are there.
+CALL refresh_continuous_aggregate('measure_10', NULL, NULL);
+SELECT * FROM measure_10
+    FULL JOIN saved_measure_10
+           ON row(measure_10.*) = row(saved_measure_10.*)
+        WHERE measure_10.bucket IS NULL OR saved_measure_10.bucket IS NULL
+     ORDER BY 1, 2;
+CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
+SELECT * FROM cond_10
+    FULL JOIN saved_cond_10
+           ON row(cond_10.*) = row(saved_cond_10.*)
+        WHERE cond_10.bucket IS NULL OR saved_cond_10.bucket IS NULL
+     ORDER BY 1, 2;
+
+-- These should fail for different reasons
+\set ON_ERROR_STOP 0
+CALL _timescaledb_functions.process_hypertable_invalidations(NULL);
+CALL _timescaledb_functions.process_hypertable_invalidations(0);
+CALL _timescaledb_functions.process_hypertable_invalidations('measure_10');
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+CALL _timescaledb_functions.process_hypertable_invalidations('measurements');
+\set ON_ERROR_STOP 1
+
