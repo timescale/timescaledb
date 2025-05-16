@@ -1,11 +1,11 @@
 # Apply "released" labels to the PRs that got into a particular release.
-name: Label Released
+name: Label Released PRs
 
 on:
   release:
     types: [published]
   push:
-    branches: [trigger/released-labels]
+    branches: [trigger/label-released-prs]
 
 permissions:
   contents: read
@@ -14,10 +14,15 @@ permissions:
 
 jobs:
   label-release:
-    runs-on: ubuntu-latest
+    name: Label Released PRs
+    runs-on: timescaledb-runner-arm64
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Python Dependencies
+        run: |
+          pip install PyGithub requests
 
       - name: Get latest release tag
         run: |
