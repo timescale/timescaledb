@@ -101,20 +101,13 @@ if(VERSION_CONFIG
   endif()
 endif()
 
-# fallback for < 2.20 downgrade can be removed after we release 2.20
-if(VERSION_CONFIG
-   MATCHES
-   ".*downgrade_to_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
-)
-  set(UPDATE_FROM_VERSION ${CMAKE_MATCH_1})
-  set(DOWNGRADE_TO_VERSION ${CMAKE_MATCH_1})
-  set(PREVIOUS_VERSION ${CMAKE_MATCH_1})
-endif()
-
 if(VERSION_CONFIG MATCHES
    ".*previous_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
 )
   set(PREVIOUS_VERSION ${CMAKE_MATCH_1})
+else()
+  message(
+    FATAL_ERROR "Could not determine previous version from version.config")
 endif()
 
 # a hack to avoid change of SQL extschema variable
