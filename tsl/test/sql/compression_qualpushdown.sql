@@ -177,7 +177,7 @@ ALTER TABLE deleteme_with_bytea SET (
 );
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
-VACUUM FULL ANALYZE deleteme;
+VACUUM FULL ANALYZE deleteme_with_bytea;
 
 EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
 EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123';

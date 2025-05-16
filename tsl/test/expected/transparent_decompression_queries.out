@@ -53,6 +53,7 @@ select * from test_chartab order by mac_id , ts limit 2;
        8864 | 0014070000011039 | 150 | Sat Dec 14 02:52:05.863 2019
 (2 rows)
 
+VACUUM ANALYZE test_chartab;
 -- test constraintawareappend sort node handling
 SET enable_hashagg TO false;
 SET timescaledb.enable_chunkwise_aggregation TO false;
@@ -188,17 +189,17 @@ WHERE check_equal_228(rtt) ORDER BY ts;
 EXPLAIN (analyze,costs off,timing off,summary off)
 SELECT * from test_chartab
 WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
- Sort (actual rows=1 loops=1)
-   Sort Key: test_chartab.ts
-   Sort Method: quicksort 
-   ->  Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
-         Chunks excluded during startup: 0
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
-               Filter: check_equal_228(rtt)
-               Rows Removed by Filter: 2
-               Vectorized Filter: (ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
+   Order: test_chartab.ts
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
+         Filter: ((ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone) AND check_equal_228(rtt))
+         Rows Removed by Filter: 2
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: compress_hyper_2_3_chunk._ts_meta_min_1
+               Sort Method: quicksort 
                ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3 loops=1)
                      Filter: (_ts_meta_min_1 < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
 (11 rows)

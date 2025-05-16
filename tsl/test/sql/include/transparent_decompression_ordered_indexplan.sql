@@ -12,6 +12,8 @@ INSERT INTO metrics_ordered_idx2(time,device_id,device_id_peer,v0, v1) SELECT ge
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics_ordered_idx2') ch;
 
+VACUUM ANALYZE metrics_ordered_idx2;
+
 --all queries have only prefix of compress_orderby in ORDER BY clause
 
 -- should have ordered DecompressChunk path because segmentby columns have equality constraints

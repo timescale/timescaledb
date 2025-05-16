@@ -390,14 +390,14 @@ SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
  _timescaledb_internal._hyper_9_10_chunk
 (1 row)
 
-VACUUM FULL ANALYZE deleteme;
+VACUUM FULL ANALYZE deleteme_with_bytea;
 EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                        
+----------------------------------------------------------
  Result
    ->  Custom Scan (DecompressChunk) on _hyper_9_10_chunk
-         ->  Index Scan using compress_hyper_10_11_chunk_bdata__ts_meta_min_1__ts_meta_ma_idx on compress_hyper_10_11_chunk
-               Index Cond: (bdata = '\x'::bytea)
+         ->  Seq Scan on compress_hyper_10_11_chunk
+               Filter: (bdata = '\x'::bytea)
 (4 rows)
 
 EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123';

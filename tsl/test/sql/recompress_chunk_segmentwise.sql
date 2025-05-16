@@ -193,6 +193,7 @@ SELECT * FROM mytab_prep ORDER BY a, c, time DESC;
 select show_chunks as chunk_to_compress_prep from show_chunks('mytab_prep') limit 1 \gset
 SELECT compress_chunk(:'chunk_to_compress_prep'); -- the output of the prepared plan would change before and after compress
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
+VACUUM ANALYZE mytab_prep;
 
 -- plan should be invalidated to return results from the uncompressed chunk also
 EXPLAIN (COSTS OFF) EXECUTE p1;
@@ -200,6 +201,7 @@ EXECUTE p1;
 
 -- check plan again after recompression
 SELECT compress_chunk(:'chunk_to_compress_prep');
+VACUUM ANALYZE mytab_prep;
 EXPLAIN (COSTS OFF) EXECUTE p1;
 EXECUTE p1;
 
@@ -229,6 +231,7 @@ FROM generate_series('2023-01-01'::timestamptz, '2023-01-02'::timestamptz, '1 ho
 CROSS JOIN generate_series(1, 10, 1) a;
 -- recompress will insert newly inserted tuples into compressed chunk along with inserting into the compressed chunk index
 SELECT compress_chunk(:'chunk_to_compress_mytab');
+VACUUM ANALYZE mytab;
 -- make sure we are hitting the index and that the index contains the tuples
 SET enable_seqscan TO off;
 EXPLAIN (COSTS OFF) SELECT count(*) FROM mytab where a = 2;

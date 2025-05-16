@@ -26,6 +26,8 @@ select * from test_chartab order by mac_id , ts limit 2;
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 select * from test_chartab order by mac_id , ts limit 2;
 
+VACUUM ANALYZE test_chartab;
+
 -- test constraintawareappend sort node handling
 SET enable_hashagg TO false;
 SET timescaledb.enable_chunkwise_aggregation TO false;

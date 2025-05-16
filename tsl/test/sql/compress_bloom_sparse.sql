@@ -388,6 +388,7 @@ $$ language sql immutable parallel safe strict;
 
 insert into byref select x, float8tomacaddr8(mix(x)) from generate_series(1, 10000) x;
 select count(compress_chunk(x)) from show_chunks('byref') x;
+vacuum analyze byref;
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from byref where x = float8tomacaddr8(mix(1));

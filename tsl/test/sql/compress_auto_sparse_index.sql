@@ -11,15 +11,19 @@ alter table sparse set (timescaledb.compress);
 -- have btree indexes.
 create index ii on sparse(value);
 select count(compress_chunk(x)) from show_chunks('sparse') x;
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
 
 
 -- Should be disabled with the GUC
 set timescaledb.auto_sparse_indexes to off;
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
+
 reset timescaledb.auto_sparse_indexes;
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
 
 
@@ -34,6 +38,7 @@ explain (costs off) select * from sparse where value = 1;
 drop index ii;
 create index ii on sparse((value + 1));
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
 
 
@@ -41,12 +46,14 @@ explain (costs off) select * from sparse where value = 1;
 drop index ii;
 create index ii on sparse using hash(value);
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
 
 
 -- When the chunk is recompressed without index, no sparse index is created.
 drop index ii;
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
 
 
@@ -61,6 +68,7 @@ from generate_series(1, 63) x
 \set ECHO queries
 
 select count(compress_chunk(x)) from show_chunks('sparse') x;
+vacuum analyze sparse;
 
 explain (costs off) select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
 

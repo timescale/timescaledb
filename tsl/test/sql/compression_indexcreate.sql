@@ -15,6 +15,7 @@ insert into segind values('2024-11-08 10:31:28.436014-07', 1, 1), ('2024-11-08 1
 -- compress chunk
 -- this should create an index using orderby columns
 select compress_chunk(show_chunks('segind'));
+vacuum analyze segind;
 
 -- query using orderby columns should use the index
 :PREFIX select * from segind where b = 1;
@@ -33,6 +34,7 @@ alter table segind set (timescaledb.compress, timescaledb.compress_segmentby='a'
 -- compress chunk
 -- this should create an index using segmentby and orderby columns
 select compress_chunk(show_chunks('segind'));
+vacuum analyze segind;
 
 -- queries using segmentby or orderby columns should use the index
 :PREFIX select * from segind where b = 1;
