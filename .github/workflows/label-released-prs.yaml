@@ -1,0 +1,30 @@
+# Apply "released" labels to the PRs that got into a particular release.
+name: Label Released
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [trigger/released-labels]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  label-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get latest release tag
+        run: |
+          echo "LATEST_TAG=$(gh release view --json tagName --jq '.tagName')" >> $GITHUB_ENV
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run label-released script
+        run: |
+          scripts/label-released.py --release "$LATEST_TAG"
