@@ -32,9 +32,6 @@ extern void _hypertable_cache_fini(void);
 extern void _cache_invalidate_init(void);
 extern void _cache_invalidate_fini(void);
 
-extern void _cache_init(void);
-extern void _cache_fini(void);
-
 extern void _planner_init(void);
 extern void _planner_fini(void);
 
