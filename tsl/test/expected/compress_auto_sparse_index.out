@@ -23,6 +23,7 @@ select count(compress_chunk(x)) from show_chunks('sparse') x;
      1
 (1 row)
 
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
@@ -55,6 +56,7 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
      1
 (1 row)
 
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
@@ -94,6 +96,7 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
      1
 (1 row)
 
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
                       QUERY PLAN                      
 ------------------------------------------------------
@@ -111,6 +114,7 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
      1
 (1 row)
 
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
@@ -128,6 +132,7 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
      1
 (1 row)
 
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
                       QUERY PLAN                      
 ------------------------------------------------------
@@ -150,6 +155,7 @@ select count(compress_chunk(x)) from show_chunks('sparse') x;
      1
 (1 row)
 
+vacuum analyze sparse;
 explain (costs off) select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
