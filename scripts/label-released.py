@@ -57,6 +57,23 @@ args = parser.parse_args()
 target_tag = args.release
 dry_run = args.dry_run
 
+# Create the label if needed
+gh = github.Github(TOKEN)
+repo = gh.get_repo(f"{OWNER}/{REPO}")
+label_name = f"released-{target_tag}"
+try:
+    pygithub_label = repo.get_label(label_name)
+    label_id = pygithub_label.raw_data["node_id"]
+except github.UnknownObjectException:
+    if not args.dry_run:
+        pygithub_label = repo.create_label(
+            label_name, "d3d3d3", f"Released in {target_tag}"
+        )
+        label_id = pygithub_label.raw_data["node_id"]
+    else:
+        label_id = "<dry run>"
+print(f"Label will be: {label_name}")
+
 # Make sure the branches are present in the repository
 git_check("fetch --depth=1000 origin main:refs/remotes/origin/main")
 git_check(f"fetch --depth=1000 origin tag {target_tag}")
@@ -76,21 +93,6 @@ git_check(f"fetch --depth=1000 origin tag {prev_tag}")
 print(f"Comparing tags: {prev_tag} → {target_tag}")
 if dry_run:
     print("[dry-run] no changes will be made")
-
-target_commit = git_output(f"rev-parse {target_tag}^0")
-print(f"Target release commit {git_output(f'log -1 --oneline {target_commit}')}")
-prev_commit = git_output(f"rev-parse {prev_tag}^0")
-print(f"Prev release commit {git_output(f'log -1 --oneline {prev_commit}')}")
-prev_release_fork_point = git_output(f"merge-base {target_commit} {prev_commit}")
-print(
-    f"Prev release fork point {git_output(f'log -1 --oneline {prev_release_fork_point}')}"
-)
-prev_release_fork_date = git_output(f"show -s --format=%cI {prev_release_fork_point}")
-print(f"Prev release fork date {prev_release_fork_date}")
-main_fork_point = git_output(f"merge-base {target_commit} origin/main")
-print(f"Main fork point {git_output(f'log -1 --oneline {main_fork_point}')}")
-main_fork_date = git_output(f"show -s --format=%cI {main_fork_point}")
-print(f"Main fork date {main_fork_date}")
 
 
 def fetch_commits_with_prs(starting_commit, cutoff_date):
@@ -144,21 +146,41 @@ def fetch_commits_with_prs(starting_commit, cutoff_date):
     return nodes
 
 
-# Create the label if needed
-gh = github.Github(TOKEN)
-repo = gh.get_repo(f"{OWNER}/{REPO}")
-label_name = f"released-{target_tag}"
-try:
-    pygithub_label = repo.get_label(label_name)
-except github.UnknownObjectException:
-    pygithub_label = repo.create_label(
-        label_name, "d3d3d3", f"Released in {target_tag}"
-    )
-label_id = pygithub_label.raw_data["node_id"]
-print(f"Label will be: {label_name}")
+target_release = git_output(f"rev-parse {target_tag}^0")
+print(f"Target release commit {git_output(f'log -1 --oneline {target_release}')}")
+prev_release = git_output(f"rev-parse {prev_tag}^0")
+print(f"Prev release commit {git_output(f'log -1 --oneline {prev_release}')}")
+prev_release_fork_sha = git_output(f"merge-base {target_release} {prev_release}")
+print(
+    f"Prev release fork point {git_output(f'log -1 --oneline {prev_release_fork_sha}')}"
+)
+prev_release_fork_date = git_output(f"show -s --format=%cI {prev_release_fork_sha}")
+print(f"Prev release fork date {prev_release_fork_date}")
+main_fork_sha = git_output(f"merge-base {target_release} origin/main")
+print(f"Main fork point {git_output(f'log -1 --oneline {main_fork_sha}')}")
+main_fork_date = git_output(f"show -s --format=%cI {main_fork_sha}")
+print(f"Main fork date {main_fork_date}")
 
 
-branch_commit_nodes = fetch_commits_with_prs(target_commit, prev_release_fork_date)
+# This is the relationship between the various refs we've built above:
+# For a patch release:
+# (current release branch)  -(backports)---prev_release_fork_sha---target_release--->
+#                          /  ^ ^ ^
+# (main) >----main_fork_sha---------------->
+#
+# For a minor release:
+# (prev release branch)        prev_release-->
+#                             /
+# (current release branch)   /                 -(backports)-target_release-->
+#                           /                 /  ^ ^ ^
+# (main) >-prev_release_fork_sha---main_fork_sha--------------->
+#
+# We can't use the commit SHAs for the commit lookups due to API limitations, so
+# we use the dates instead.
+# Now, perform the lookups for release branch commits and the potentially
+# backported main commits with the respective PRs.
+
+branch_commit_nodes = fetch_commits_with_prs(target_release, prev_release_fork_date)
 
 main_commit_nodes = fetch_commits_with_prs("main", main_fork_date)
 
