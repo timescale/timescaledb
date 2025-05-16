@@ -7,17 +7,12 @@ on:
   push:
     branches: [trigger/label-released-prs]
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-
 jobs:
   label-release:
     name: Label Released PRs
     runs-on: timescaledb-runner-arm64
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
