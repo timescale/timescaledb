@@ -96,6 +96,10 @@ if dry_run:
 
 
 def fetch_commits_with_prs(starting_commit, cutoff_date):
+    """
+    Fetch the commits starting from the given one until the cutoff
+    date, with the associated PRs, using paginated GraphQL request.
+    """
     GQL_COMMITS = """
     query CommitsWithPRs(
       $owner: String!, $repo: String!,
