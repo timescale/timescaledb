@@ -544,22 +544,21 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		/* Detect and emit warning if poor compression ratio is found */
 		float compression_ratio = ((float) before_size.total_size / after_size.total_size);
 		float POOR_COMPRESSION_THRESHOLD = 1.0;
-		ereport(ts_guc_enable_compression_ratio_warnings &&
-						compression_ratio < POOR_COMPRESSION_THRESHOLD ?
-					WARNING :
-					DEBUG1,
-				errcode(ERRCODE_WARNING),
-				errmsg("poor compression rate detected for chunk \"%s\"'",
-					   get_rel_name(chunk_relid)),
-				errdetail("Chunk \"%s\" has a poor compression ratio: %.2f. Size before "
-						  "compression: " INT64_FORMAT
-						  " bytes. Size after compression: " INT64_FORMAT " bytes",
-						  get_rel_name(chunk_relid),
-						  compression_ratio,
-						  before_size.total_size,
-						  after_size.total_size),
-				errhint("Changing compression settings for \"%s\" can improve compression rate",
-						get_rel_name(hypertable_relid)));
+		if (ts_guc_enable_compression_ratio_warnings &&
+			compression_ratio < POOR_COMPRESSION_THRESHOLD)
+			ereport(WARNING,
+					errcode(ERRCODE_WARNING),
+					errmsg("poor compression rate detected for chunk \"%s\"'",
+						   get_rel_name(chunk_relid)),
+					errdetail("Chunk \"%s\" has a poor compression ratio: %.2f. Size before "
+							  "compression: " INT64_FORMAT
+							  " bytes. Size after compression: " INT64_FORMAT " bytes",
+							  get_rel_name(chunk_relid),
+							  compression_ratio,
+							  before_size.total_size,
+							  after_size.total_size),
+					errhint("Changing compression settings for \"%s\" can improve compression rate",
+							get_rel_name(hypertable_relid)));
 	}
 	else
 	{
