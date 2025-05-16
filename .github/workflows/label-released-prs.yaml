@@ -16,6 +16,8 @@ jobs:
   label-release:
     name: Label Released PRs
     runs-on: timescaledb-runner-arm64
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +29,6 @@ jobs:
       - name: Get latest release tag
         run: |
           echo "LATEST_TAG=$(gh release view --json tagName --jq '.tagName')" >> $GITHUB_ENV
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run label-released script
         run: |
