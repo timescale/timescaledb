@@ -152,7 +152,7 @@ try:
     pygithub_label = repo.get_label(label_name)
 except github.UnknownObjectException:
     pygithub_label = repo.create_label(
-        label_name, "#d3d3d3", f"Released in {target_tag}"
+        label_name, "d3d3d3", f"Released in {target_tag}"
     )
 label_id = pygithub_label.raw_data["node_id"]
 print(f"Label will be: {label_name}")
