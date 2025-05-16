@@ -70,7 +70,7 @@ pg_size_pretty( after_compression_total_bytes)  after_total
 from chunk_compression_stats('conditions') where compression_status like 'Compressed' order by chunk_name;
     chunk_name    | before_total | after_total 
 ------------------+--------------+-------------
- _hyper_1_1_chunk | 32 kB        | 40 kB
+ _hyper_1_1_chunk | 32 kB        | 56 kB
 (1 row)
 
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
@@ -175,8 +175,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name    | before_compression_total_bytes | after_compression_total_bytes 
 ------------------+--------------------------------+-------------------------------
- _hyper_3_5_chunk |                          24576 |                         40960
- _hyper_3_6_chunk |                          24576 |                         40960
+ _hyper_3_5_chunk |                          24576 |                         49152
+ _hyper_3_6_chunk |                          24576 |                         49152
 (2 rows)
 
 --integer tests
@@ -215,8 +215,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_5_12_chunk |                          24576 |                         40960
- _hyper_5_13_chunk |                          24576 |                         40960
+ _hyper_5_12_chunk |                          24576 |                         49152
+ _hyper_5_13_chunk |                          24576 |                         49152
 (2 rows)
 
 --bigint test
@@ -255,8 +255,8 @@ WHERE compression_status LIKE 'Compressed'
 ORDER BY chunk_name;
     chunk_name     | before_compression_total_bytes | after_compression_total_bytes 
 -------------------+--------------------------------+-------------------------------
- _hyper_7_19_chunk |                          24576 |                         40960
- _hyper_7_20_chunk |                          24576 |                         40960
+ _hyper_7_19_chunk |                          24576 |                         49152
+ _hyper_7_20_chunk |                          24576 |                         49152
 (2 rows)
 
 --TEST 8
