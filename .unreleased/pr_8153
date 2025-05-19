@@ -1,0 +1,1 @@
+Fixes: #8153 Restoring a database having NULL compressed data
