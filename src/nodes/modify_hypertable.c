@@ -388,26 +388,15 @@ ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 								 RelOptInfo *rel)
 {
 	Path *path = &mtpath->path;
-	Path *subpath = NULL;
 	Cache *hcache = ts_hypertable_cache_pin();
 	ModifyHypertablePath *hmpath;
 	int i = 0;
-
-	/* PG14 only copies child rows and width if returningLists is not
-	 * empty. Since we do not know target chunks during planning we
-	 * do not have that information when postgres creates the path.
-	 */
-	if (mtpath->returningLists == NIL)
-	{
-		mtpath->path.rows = mtpath->subpath->rows;
-		mtpath->path.pathtarget->width = mtpath->subpath->pathtarget->width;
-	}
 
 	Index rti = mtpath->nominalRelation;
 
 	if (mtpath->operation == CMD_INSERT || mtpath->operation == CMD_MERGE)
 	{
-		subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
+		mtpath->subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
 	}
 
 	hmpath = palloc0(sizeof(ModifyHypertablePath));
@@ -419,8 +408,6 @@ ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	hmpath->cpath.custom_paths = list_make1(mtpath);
 	hmpath->cpath.methods = &modify_hypertable_path_methods;
 	path = &hmpath->cpath.path;
-	if (subpath)
-		mtpath->subpath = subpath;
 
 	ts_cache_release(&hcache);
 
