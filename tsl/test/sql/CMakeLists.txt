@@ -33,6 +33,7 @@ set(TEST_FILES
     compression_fks.sql
     compression_indexcreate.sql
     compression_insert.sql
+    compression_null_dump_restore.sql
     compression_nulls_and_defaults.sql
     compression_policy.sql
     compression_qualpushdown.sql

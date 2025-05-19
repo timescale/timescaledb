@@ -999,14 +999,8 @@ test_null()
 		TestAssertTrue(transmission.len > 0);
 		TestAssertTrue(transmission.data != NULL);
 
-		LOCAL_FCINFO(local_fcinfo, 1);
-		local_fcinfo->args[0] =
-			(NullableDatum){ .value = PointerGetDatum(&transmission), .isnull = false };
-
-		// Call the function directly
-		tsl_compressed_data_recv(local_fcinfo);
-
-		TestAssertTrue(local_fcinfo->isnull);
+		Datum res = DirectFunctionCall1(tsl_compressed_data_recv, PointerGetDatum(&transmission));
+		TestAssertTrue(DatumGetPointer(res) != NULL);
 	}
 	{
 		void *compressed = null_compressor_get_dummy_block();
