@@ -72,5 +72,15 @@ order by time_bucket('1 minute', time) limit 1;
 select * from ht_metrics_partially_compressed
 order by device, time_bucket('1 minute', time) limit 1;
 
+set max_parallel_workers_per_gather = 0;
+:PREFIX
+select time_bucket('1 minute', a.time) from ht_metrics_partially_compressed a
+join ht_metrics_partially_compressed b
+on a.time = b.time
+where b.time < '2020-01-07'
+group by 1
+;
+
 reset work_mem;
 reset enable_hashagg;
+reset max_parallel_workers_per_gather;

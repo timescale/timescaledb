@@ -381,5 +381,15 @@ order by device, time_bucket('1 minute', time) limit 1;
                ->  Seq Scan on _hyper_1_3_chunk (actual rows=339 loops=1)
 (33 rows)
 
-reset work_mem;
-reset enable_hashagg;
+set max_parallel_workers_per_gather = 0;
+:PREFIX
+select time_bucket('1 minute', a.time) from ht_metrics_partially_compressed a
+join ht_metrics_partially_compressed b
+on a.time = b.time
+where b.time < '2020-01-07'
+group by 1
+;
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+connection to server was lost
