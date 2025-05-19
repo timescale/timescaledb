@@ -389,7 +389,38 @@ on a.time = b.time
 where b.time < '2020-01-07'
 group by 1
 ;
-server closed the connection unexpectedly
-	This probably means the server terminated abnormally
-	before or while processing the request.
-connection to server was lost
+                                                                                QUERY PLAN                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Group (actual rows=480 loops=1)
+   Group Key: (time_bucket('@ 1 min'::interval, a_1."time"))
+   ->  Sort (actual rows=7560 loops=1)
+         Sort Key: (time_bucket('@ 1 min'::interval, a_1."time"))
+         Sort Method: quicksort 
+         ->  Hash Join (actual rows=7560 loops=1)
+               Hash Cond: (a_1."time" = b_1."time")
+               ->  Append (actual rows=1800 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk a_1 (actual rows=1080 loops=1)
+                           Filter: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+                           Rows Removed by Filter: 360
+                           ->  Sort (actual rows=3 loops=1)
+                                 Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1
+                                 Sort Method: quicksort 
+                                 ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+                                       Filter: (_ts_meta_min_1 < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+                     ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk a_1 (actual rows=720 loops=1)
+                           Index Cond: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+               ->  Hash (actual rows=1800 loops=1)
+                     Buckets: 4096  Batches: 1 
+                     ->  Append (actual rows=1800 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk b_1 (actual rows=1080 loops=1)
+                                 Vectorized Filter: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+                                 Rows Removed by Filter: 360
+                                 ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3 loops=1)
+                                       Filter: (_ts_meta_min_1 < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+                           ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk b_1 (actual rows=720 loops=1)
+                                 Index Cond: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
+(30 rows)
+
+reset work_mem;
+reset enable_hashagg;
+reset max_parallel_workers_per_gather;
