@@ -362,7 +362,7 @@ build_merge_join_clause(List *column_names)
 
 		appendStringInfoString(ret, "P.");
 		appendStringInfoString(ret, quote_identifier(column));
-		appendStringInfoString(ret, " = M.");
+		appendStringInfoString(ret, " IS NOT DISTINCT FROM M.");
 		appendStringInfoString(ret, quote_identifier(column));
 	}
 
