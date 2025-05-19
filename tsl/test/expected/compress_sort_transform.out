@@ -381,6 +381,8 @@ order by device, time_bucket('1 minute', time) limit 1;
                ->  Seq Scan on _hyper_1_3_chunk (actual rows=339 loops=1)
 (33 rows)
 
+-- Test incorrect transformation into a Pathkey on different relation through
+-- a join EquivalenceClass.
 set max_parallel_workers_per_gather = 0;
 :PREFIX
 select time_bucket('1 minute', a.time) from ht_metrics_partially_compressed a
@@ -421,6 +423,6 @@ group by 1
                                  Index Cond: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
 (30 rows)
 
+reset max_parallel_workers_per_gather;
 reset work_mem;
 reset enable_hashagg;
-reset max_parallel_workers_per_gather;
