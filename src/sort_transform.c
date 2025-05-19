@@ -428,13 +428,14 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	 * ours.
 	 */
 	int desired_ec_relid = rel->relid;
-	if (rel->parent != NULL)
+	if (rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
 		/*
 		 * The EC relids contain only inheritance parents, not individual
 		 * children.
 		 */
-		desired_ec_relid = rel->parent->relid;
+		AppendRelInfo *appinfo = root->append_rel_array[rel->relid];
+		desired_ec_relid = appinfo->parent_relid;
 	}
 
 	if (!bms_is_member(desired_ec_relid, last_pk->pk_eclass->ec_relids))
