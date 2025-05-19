@@ -418,6 +418,33 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	 * Using it for other ORDER BY clauses will result in wrong ordering.
 	 */
 	last_pk = llast(root->query_pathkeys);
+
+	/*
+	 * We can only transform the original pathkey if it references our hypertable.
+	 * If it references another one, we might be able to successfully transform
+	 * it to a join EC that references both hypertables, but when we replace it
+	 * back, we'll get into an incorrect state where the pathkey for the scan
+	 * references only a different hypertable and doesn't have an EC member for
+	 * ours.
+	 */
+	int desired_ec_relid = rel->relid;
+	if (rel->parent != NULL)
+	{
+		/*
+		 * The EC relids contain only inheritance parents, not individual
+		 * children.
+		 */
+		desired_ec_relid = rel->parent->relid;
+	}
+
+	if (!bms_is_member(desired_ec_relid, last_pk->pk_eclass->ec_relids))
+	{
+		return NIL;
+	}
+
+	/*
+	 * Try to apply the transformation.
+	 */
 	transformed = sort_transform_ec(root, last_pk->pk_eclass);
 
 	if (transformed == NULL)
