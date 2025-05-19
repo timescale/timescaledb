@@ -2015,14 +2015,7 @@ tsl_compressed_data_recv(PG_FUNCTION_ARGS)
 	if (header.compression_algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", header.compression_algorithm);
 
-	if (header.compression_algorithm == COMPRESSION_ALGORITHM_NULL)
-	{
-		PG_RETURN_NULL();
-	}
-	else
-	{
-		return definitions[header.compression_algorithm].compressed_data_recv(buf);
-	}
+	return definitions[header.compression_algorithm].compressed_data_recv(buf);
 }
 
 extern Datum
