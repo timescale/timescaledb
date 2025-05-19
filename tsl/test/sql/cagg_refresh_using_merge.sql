@@ -89,3 +89,45 @@ DELETE FROM conditions WHERE time >= '2018-11-02' AND time < '2018-11-03' AND lo
 -- Should not merge any bucket but delete one bucket (merged=0 and deleted=1)
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
+
+--
+-- A nullable conditions test
+--
+CREATE TABLE conditions_nullable (
+    time TIMESTAMPTZ NOT NULL,
+    location TEXT,
+    temperature DOUBLE PRECISION
+);
+
+SELECT FROM create_hypertable( 'conditions', 'time');
+
+INSERT INTO conditions
+VALUES
+    ('2018-01-01 09:20:00-08', 'SFO', 55),
+    ('2018-01-02 09:30:00-08', null, 100);
+
+CREATE MATERIALIZED VIEW conditions_nullable_daily
+WITH (timescaledb.continuous) AS
+SELECT
+   time_bucket(INTERVAL '1 day', time) AS bucket,
+   location,
+   AVG(temperature)
+FROM conditions
+GROUP BY bucket, location
+WITH NO DATA;
+
+-- First refresh using MERGE should fall back to INSERT
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
+SELECT * FROM conditions_nullable_daily ORDER BY 1, 2 NULLS LAST, 3 NULLS LAST;
+
+-- Inserting a new data should ensure we get correct results
+INSERT INTO conditions
+VALUES
+    ('2018-01-01 19:20:00-08', 'SFO', 65),
+    ('2018-01-02 19:30:00-08', null, 200);
+
+-- Second refresh *should* use the merge, and return correct results.
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
+SELECT * FROM conditions_nullable_daily ORDER BY 1, 2 NULLS LAST, 3 NULLS LAST;
