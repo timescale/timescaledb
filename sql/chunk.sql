@@ -72,3 +72,11 @@ RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_attach_osm_table_chunk' LANGUAGE 
 -- internal API used by OSM extension to drop an OSM chunk table from the hypertable
 CREATE OR REPLACE FUNCTION _timescaledb_functions.drop_osm_chunk(hypertable REGCLASS)
 RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_drop_osm_chunk' LANGUAGE C VOLATILE;
+
+CREATE OR REPLACE PROCEDURE @extschema@.detach_chunk(chunk REGCLASS)
+LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_detach_chunk';
+
+CREATE OR REPLACE PROCEDURE @extschema@.attach_chunk(hypertable REGCLASS,
+   chunk REGCLASS,
+   slices JSONB)
+LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_attach_chunk';

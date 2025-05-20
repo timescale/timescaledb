@@ -57,6 +57,7 @@
 #include "errors.h"
 #include "export.h"
 #include "extension.h"
+#include "foreign_key.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -592,7 +593,8 @@ chunk_add_constraints(const Chunk *chunk)
 	num_added += ts_chunk_constraints_add_inheritable_constraints(chunk->constraints,
 																  chunk->fd.id,
 																  chunk->relkind,
-																  chunk->hypertable_relid);
+																  chunk->hypertable_relid,
+																  chunk->table_id);
 
 	return num_added;
 }
@@ -1204,6 +1206,7 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 	 * and triggers if some of them already exist on the chunk table prior to
 	 * creating the chunk from it. */
 	chunk_add_constraints(chunk);
+	ts_chunk_constraint_check_violated(chunk, ht->space);
 	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_add_inheritance(chunk, ht);
 	chunk_create_table_constraints(ht, chunk);
@@ -2855,11 +2858,11 @@ typedef enum ChunkDeleteResult
  * of tuples to process.
  */
 static ChunkDeleteResult
-chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row,
+				   bool detach)
 {
 	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
-	ChunkConstraints *ccs = ts_chunk_constraints_alloc(2, ti->mctx);
 	ChunkDeleteResult res;
 	int i;
 
@@ -2871,7 +2874,15 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 	/* if only marking as deleted, keep the constraints and dimension info */
 	if (!preserve_chunk_catalog_row)
 	{
-		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
+		ChunkConstraints *ccs;
+
+		/*
+		 * Do not drop any constraint if detaching
+		 * We will still need to delete dimension slices for the chunk
+		 */
+		ccs = ts_chunk_constraints_alloc(2, ti->mctx);
+		ts_chunk_constraint_delete_dimensional_constraints(form.id, ccs, true, true);
+		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs, true, !detach);
 
 		/* Check for dimension slices that are orphaned by the chunk deletion */
 		for (i = 0; i < ccs->num_constraints; i++)
@@ -2932,7 +2943,15 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 		}
 	}
 
-	ts_chunk_index_delete_by_chunk_id(form.id, true);
+	/*
+	 * Even tough we keep foreign key constraints on the chunk, we still
+	 * need to drop the referencing foreign keys since such keys are possibly
+	 * intended to reference the hypertable, not the chunk.
+	 */
+	if (detach)
+		ts_chunk_drop_referencing_fk_by_chunk_id(form.id);
+	/* Do not drop any index if detaching */
+	ts_chunk_index_delete_by_chunk_id(form.id, !detach);
 	ts_compression_chunk_size_delete(form.id);
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
@@ -3025,7 +3044,7 @@ init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_nam
 
 static int
 chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior,
-			 bool preserve_chunk_catalog_row)
+			 bool preserve_chunk_catalog_row, bool detach)
 {
 	int count = 0;
 
@@ -3036,7 +3055,8 @@ chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior,
 		res = chunk_tuple_delete(ts_scan_iterator_tuple_info(iterator),
 								 relid,
 								 behavior,
-								 preserve_chunk_catalog_row);
+								 preserve_chunk_catalog_row,
+								 detach);
 
 		switch (res)
 		{
@@ -3061,7 +3081,7 @@ ts_chunk_delete_by_name_internal(const char *schema, const char *table, Oid reli
 	int count;
 
 	init_scan_by_qualified_table_name(&iterator, schema, table);
-	count = chunk_delete(&iterator, relid, behavior, preserve_chunk_catalog_row);
+	count = chunk_delete(&iterator, relid, behavior, preserve_chunk_catalog_row, false);
 
 	/* (schema,table) names and (hypertable_id) are unique so should only have
 	 * dropped one chunk or none (if not found) */
@@ -3109,7 +3129,7 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 
-	return chunk_delete(&iterator, InvalidOid, DROP_RESTRICT, false);
+	return chunk_delete(&iterator, InvalidOid, DROP_RESTRICT, false, false);
 }
 
 bool
@@ -5244,4 +5264,27 @@ ts_merge_two_chunks(PG_FUNCTION_ARGS)
 	ArrayType *chunk_array =
 		construct_array(chunks, 2, REGCLASSOID, sizeof(Oid), true, TYPALIGN_INT);
 	return DirectFunctionCall1(ts_cm_functions->merge_chunks, PointerGetDatum(chunk_array));
+}
+
+void
+ts_chunk_detach_by_relid(Oid relid)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
+	char *schema;
+	char *table;
+	int PG_USED_FOR_ASSERTS_ONLY count;
+
+	Assert(OidIsValid(relid));
+
+	schema = get_namespace_name(get_rel_namespace(relid));
+	table = get_rel_name(relid);
+
+	init_scan_by_qualified_table_name(&iterator, schema, table);
+	count = chunk_delete(&iterator, relid, DROP_RESTRICT, false, true);
+
+	/*
+	 * (schema,table) names and (hypertable_id) are unique so should only have
+	 * dropped one chunk
+	 */
+	Assert(count == 1);
 }

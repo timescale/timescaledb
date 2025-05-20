@@ -47,7 +47,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     # These tests are using markers for the isolation tests (to avoid race
     # conditions causing differing output), which were added after 13.3 and in
     # all later major versions.
-    deadlock_recompress_chunk.spec)
+    deadlock_recompress_chunk.spec
+    detach_chunk_isolation.spec
+    attach_chunk_isolation.spec)
 
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 

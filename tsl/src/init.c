@@ -210,6 +210,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.preprocess_query_tsl = tsl_preprocess_query,
 	.merge_chunks = chunk_merge_chunks,
 	.split_chunk = chunk_split_chunk,
+	.detach_chunk = chunk_detach,
+	.attach_chunk = chunk_attach,
 };
 
 static void
