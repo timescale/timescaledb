@@ -35,8 +35,15 @@ null_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 extern Datum
 null_compressed_recv(StringInfo buffer)
 {
-	elog(ERROR, "null compression doesn't implement recv");
-	PG_RETURN_VOID();
+	/* Sanity checks for invalid buffer */
+	if (buffer->len == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("compressed data is invalid to be a null compressed block")));
+	if (buffer->data == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("compressed data is NULL")));
+	PG_RETURN_POINTER(null_compressor_get_dummy_block());
 }
 
 extern Compressor *

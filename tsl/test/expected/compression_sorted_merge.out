@@ -1206,6 +1206,7 @@ SELECT compress_chunk(i) FROM show_chunks('sensor_data') i;
  _timescaledb_internal._hyper_7_13_chunk
 (6 rows)
 
+VACUUM ANALYZE sensor_data;
 -- Ensure the optimization is used for queries on this table
 :PREFIX
 SELECT * FROM sensor_data ORDER BY time DESC LIMIT 1;
