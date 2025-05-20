@@ -1,0 +1,2 @@
+Fixes: #7292 Intermittent "could not find pathkey item to sort" error when grouping or ordering by a time_bucket of an equality join variable.
+Thanks: @bobozaur, @kvc0, @ChadMoran, @PaddyKe for reporting the pathkey error.
