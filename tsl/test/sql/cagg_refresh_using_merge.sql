@@ -1,5 +1,4 @@
-tsl/test/sql/cagg_refresh_using_merge.sql
-tsl/test/sql/cagg_refresh_using_merge.sql-- This file and its contents are licensed under the Timescale License.
+-- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
@@ -101,7 +100,6 @@ CREATE TABLE conditions_nullable (
     location TEXT,
     temperature DOUBLE PRECISION
 );
-
 
 CREATE TABLE conditions (
     time TIMESTAMPTZ NOT NULL,
