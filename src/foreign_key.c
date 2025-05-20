@@ -21,6 +21,7 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
+#include "chunk_constraint.h"
 #include "foreign_key.h"
 #include "hypertable.h"
 
@@ -568,4 +569,18 @@ get_fk_index(Relation rel, int nkeys, AttrNumber *confkeys)
 	}
 
 	return indexoid;
+}
+
+void
+ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id)
+{
+	Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
+	List *fks = relation_get_referencing_fk(chunk->table_id);
+	ListCell *lc;
+
+	foreach (lc, fks)
+	{
+		HeapTuple fk_tuple = lfirst(lc);
+		ts_chunk_constraint_drop_from_tuple(fk_tuple);
+	}
 }

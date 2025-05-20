@@ -38,3 +38,6 @@ CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
     window_end               "any",
     force                    BOOLEAN = FALSE
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+DROP PROCEDURE IF EXISTS @extschema@.detach_chunk(REGCLASS);
+DROP PROCEDURE IF EXISTS @extschema@.attach_chunk(REGCLASS, REGCLASS, JSONB);

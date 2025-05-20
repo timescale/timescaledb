@@ -55,3 +55,13 @@ CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
     force                    BOOLEAN = FALSE,
     options                  JSONB = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+CREATE PROCEDURE @extschema@.detach_chunk(
+  chunk REGCLASS
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+CREATE PROCEDURE @extschema@.attach_chunk(
+  hypertable REGCLASS,
+  chunk_table REGCLASS,
+  slices JSONB
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
