@@ -776,6 +776,7 @@ select count(compress_chunk(x)) from show_chunks('byref') x;
      1
 (1 row)
 
+vacuum analyze byref;
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from byref where x = float8tomacaddr8(mix(1));
                                                                                                                        QUERY PLAN                                                                                                                        

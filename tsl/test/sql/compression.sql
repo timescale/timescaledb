@@ -232,6 +232,7 @@ SELECT tableoid::regclass AS "CHUNK_NAME" FROM plan_inval ORDER BY time LIMIT 1
 \gset
 
 SELECT compress_chunk(:'CHUNK_NAME');
+VACUUM ANALYZE plan_inval;
 
 EXECUTE prep_plan;
 EXPLAIN (COSTS OFF) EXECUTE prep_plan;
@@ -263,21 +264,7 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 
 --compress 2 chunks
 SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch LIMIT 2;
-
-CREATE OR REPLACE PROCEDURE reindex_compressed_hypertable(hypertable REGCLASS)
-AS $$
-DECLARE
-  hyper_id int;
-BEGIN
-  SELECT h.compressed_hypertable_id
-  INTO hyper_id
-  FROM _timescaledb_catalog.hypertable h
-  WHERE h.table_name = hypertable::name;
-  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
-    hyper_id);
-END $$ LANGUAGE plpgsql;
--- reindexing compressed hypertable to update statistics
-CALL reindex_compressed_hypertable('test_collation');
+VACUUM ANALYZE test_collation;
 
 --segment bys are pushed down correctly
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
@@ -792,8 +779,6 @@ ORDER BY
 ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id' ,timescaledb.compress_orderby = 'time DESC');
 
 SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
-CALL reindex_compressed_hypertable('f_sensor_data');
-
 VACUUM ANALYZE f_sensor_data;
 
 -- Encourage use of parallel plans
@@ -1054,6 +1039,7 @@ RESET timescaledb.enable_decompression_sorted_merge;
 -- Convert the last chunk into a partially compressed chunk
 INSERT INTO sensor_data_compressed (time, sensor_id, cpu, temperature)
    VALUES ('1980-01-02 01:00:00-00', 2, 4, 14.0);
+VACUUM ANALYZE sensor_data_compressed;
 
 -- Only the first chunks should be accessed (batch sorted merge is enabled)
 :PREFIX

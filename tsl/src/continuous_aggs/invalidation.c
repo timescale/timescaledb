@@ -12,6 +12,7 @@
 #include <nodes/memnodes.h>
 #include <storage/lockdefs.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/snapmgr.h>
@@ -29,6 +30,7 @@
 #include <utils.h>
 
 #include "continuous_aggs/materialize.h"
+#include "guc.h"
 #include "invalidation.h"
 #include "refresh.h"
 #include "ts_catalog/catalog.h"
@@ -1090,4 +1092,45 @@ invalidation_store_free(InvalidationStore *store)
 	FreeTupleDesc(store->tupdesc);
 	tuplestore_end(store->tupstore);
 	pfree(store);
+}
+
+/*
+ * Move all invalidations from the hypertable invalidation log to the
+ * materialization invalidation log.
+ */
+Datum
+continuous_agg_process_hypertable_invalidations(PG_FUNCTION_ARGS)
+{
+	ts_feature_flag_check(FEATURE_CAGG);
+
+	TS_PREVENT_IN_TRANSACTION_BLOCK(get_func_name(FC_FN_OID(fcinfo)));
+
+	Oid hypertable_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+
+	if (!OidIsValid(hypertable_relid))
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid relation")));
+
+	ts_hypertable_permissions_check(hypertable_relid, GetUserId());
+
+	int32 hypertable_id = ts_hypertable_relid_to_id(hypertable_relid);
+	const Hypertable *ht = ts_hypertable_get_by_id(hypertable_id);
+
+	if (!ht)
+		ereport(ERROR,
+				errcode(ERRCODE_UNDEFINED_TABLE),
+				errmsg("relation \"%s\" is not a hypertable", get_rel_name(hypertable_relid)));
+
+	const Dimension *dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	Ensure(dim != NULL,
+		   "partitioning dimension not found for hypertable \"%s\"",
+		   get_rel_name(hypertable_relid));
+
+	Oid dimtype = ts_dimension_get_partition_type(dim);
+
+	Assert(OidIsValid(dimtype));
+
+	invalidation_process_hypertable_log(hypertable_id, dimtype);
+
+	PG_RETURN_VOID();
 }

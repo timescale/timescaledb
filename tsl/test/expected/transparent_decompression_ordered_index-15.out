@@ -136,6 +136,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics_ordered_idx2') ch;
      1
 (1 row)
 
+VACUUM ANALYZE metrics_ordered_idx2;
 --all queries have only prefix of compress_orderby in ORDER BY clause
 -- should have ordered DecompressChunk path because segmentby columns have equality constraints
 :PREFIX SELECT * FROM metrics_ordered_idx2 WHERE device_id = 3 AND device_id_peer = 3 ORDER BY time DESC LIMIT 10;

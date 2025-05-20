@@ -1,1 +1,0 @@
-Implements: #8026 Allow WHERE conditions that use nonvolatile functions to be pushed down to the compressed scan level. For example, conditions like `time > now()`, where `time` is a columnstore orderby column, will evaluate `now()` and use the sparse index on `time` to filter out the entire compressed batches that cannot contain matching rows.

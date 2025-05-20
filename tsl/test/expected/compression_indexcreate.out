@@ -23,6 +23,7 @@ select compress_chunk(show_chunks('segind'));
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
+vacuum analyze segind;
 -- query using orderby columns should use the index
 :PREFIX select * from segind where b = 1;
                                                                  QUERY PLAN                                                                 
@@ -81,6 +82,7 @@ select compress_chunk(show_chunks('segind'));
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
+vacuum analyze segind;
 -- queries using segmentby or orderby columns should use the index
 :PREFIX select * from segind where b = 1;
                                                                  QUERY PLAN                                                                 

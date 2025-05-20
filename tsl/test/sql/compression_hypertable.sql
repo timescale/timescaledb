@@ -76,6 +76,7 @@ SELECT DISTINCT attname, attstattarget
 
 
 -- Test that the GUC to disable bulk decompression works.
+vacuum analyze test1;
 explain (analyze, verbose, timing off, costs off, summary off)
 select * from _timescaledb_internal._hyper_1_10_chunk;
 
