@@ -99,6 +99,15 @@ CREATE TABLE conditions_nullable (
     temperature DOUBLE PRECISION
 );
 
+DROP TABLE conditions CASCADE;
+
+CREATE TABLE conditions (
+    time TIMESTAMPTZ NOT NULL,
+    location TEXT,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION
+);
+
 SELECT FROM create_hypertable( 'conditions', 'time');
 
 INSERT INTO conditions
