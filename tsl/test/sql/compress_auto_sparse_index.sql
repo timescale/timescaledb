@@ -18,7 +18,9 @@ explain (costs off) select * from sparse where value = 1;
 -- Should be disabled with the GUC
 set timescaledb.auto_sparse_indexes to off;
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+vacuum analyze sparse;
 explain (costs off) select * from sparse where value = 1;
+
 reset timescaledb.auto_sparse_indexes;
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
 vacuum analyze sparse;

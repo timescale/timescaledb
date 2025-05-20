@@ -786,15 +786,19 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
  _timescaledb_internal._hyper_13_20_chunk
 (1 row)
 
+VACUUM ANALYZE test_ordering;
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-   ->  Index Scan Backward using compress_hyper_14_21_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_21_chunk
-(2 rows)
+   ->  Sort
+         Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+         ->  Seq Scan on compress_hyper_14_21_chunk
+(4 rows)
 
 INSERT INTO test_ordering SELECT 1;
+VACUUM ANALYZE test_ordering;
 -- should not be ordered append
 -- regression introduced by #5599:
 -- for the case of a single chunk, there is an additional redundant sort node below decompress chunk
@@ -803,35 +807,40 @@ INSERT INTO test_ordering SELECT 1;
 -- It was hard to include a path without pushed down sort for consideration, as `add_path` would reject
 -- the path with sort pushdown, which is desirable in most cases
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-               ->  Index Scan Backward using compress_hyper_14_21_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_21_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Sort
                Sort Key: _hyper_13_20_chunk."time"
                ->  Seq Scan on _hyper_13_20_chunk
-(9 rows)
+(11 rows)
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
+VACUUM ANALYZE test_ordering;
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-               ->  Index Scan Backward using compress_hyper_14_21_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_21_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Sort
                Sort Key: _hyper_13_20_chunk."time"
                ->  Seq Scan on _hyper_13_20_chunk
    ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
-(10 rows)
+(12 rows)
 
 --insert into compressed + uncompressed chunk
 INSERT INTO test_ordering VALUES (21), (22),(113);
@@ -871,17 +880,22 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
  _timescaledb_internal._hyper_13_22_chunk
 (2 rows)
 
+VACUUM ANALYZE test_ordering;
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-         ->  Index Scan Backward using compress_hyper_14_21_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_21_chunk
+         ->  Sort
+               Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+               ->  Seq Scan on compress_hyper_14_21_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
-         ->  Index Scan Backward using compress_hyper_14_23_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_23_chunk
-(6 rows)
+         ->  Sort
+               Sort Key: compress_hyper_14_23_chunk._ts_meta_min_1, compress_hyper_14_23_chunk._ts_meta_max_1
+               ->  Seq Scan on compress_hyper_14_23_chunk
+(10 rows)
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
 -- TEST cagg triggers with insert into compressed chunk
