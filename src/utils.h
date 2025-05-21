@@ -412,3 +412,4 @@ extern TSDLLEXPORT Oid ts_get_rel_am(Oid relid);
 extern TSDLLEXPORT void ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode);
 extern TSDLLEXPORT bool ts_is_hypercore_am(Oid amoid);
 extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);
+extern TSDLLEXPORT char *ts_get_attr_expr(Relation rel, AttrNumber attno);
