@@ -15,6 +15,40 @@
 
 typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
 typedef struct ChunkDispatchState ChunkDispatchState;
+typedef struct CompressionSettings CompressionSettings;
+typedef struct tuple_filtering_constraints tuple_filtering_constraints;
+
+/*
+ * Bundle the ScanKey and the attribute numbers together
+ * to be able to update the scankey by replacing the
+ * `sk_argument` field with the value from the actual slot.
+ */
+typedef struct ScanKeyWithAttnos
+{
+	int num_scankeys;
+	ScanKeyData *scankeys;
+	AttrNumber *attnos;
+} ScanKeyWithAttnos;
+
+/*
+ * Holds information to cache scan keys and other
+ * information needed for repeated calls of
+ * `decompress_batches_for_insert` on the same chunk.
+ */
+typedef struct CachedDecompressionState
+{
+	bool has_primary_or_unique_index;
+	CompressionSettings *compression_settings;
+	tuple_filtering_constraints *constraints;
+	/* Columns that needs to be checked manually because
+	 * heap scan doesn't support SK_SEARCHNULL:
+	 */
+	Bitmapset *columns_with_null_check;
+	ScanKeyWithAttnos heap_scankeys;
+	ScanKeyWithAttnos index_scankeys;
+	ScanKeyWithAttnos mem_scankeys;
+	Oid index_relid;
+} CachedDecompressionState;
 
 typedef struct ChunkInsertState
 {
@@ -54,6 +88,9 @@ typedef struct ChunkInsertState
 	/* for tracking compressed chunks */
 	bool chunk_compressed;
 	bool chunk_partial;
+
+	/* To speedup repeated calls of `decompress_batches_for_insert` */
+	CachedDecompressionState *cached_decompression_state;
 
 	/* Chunk uses our own table access method */
 	bool use_tam;
