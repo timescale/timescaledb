@@ -42,7 +42,7 @@ static const WithClauseDefinition alter_table_with_clause_def[] = {
 			 .type_id = TEXTOID,
 		},
 		[AlterTableFlagCompressChunkTimeInterval] = {
-			.arg_names = {"compress_chunk_time_interval", NULL},
+			.arg_names = {"compress_chunk_interval", "compress_chunk_time_interval", NULL},
 			 .type_id = INTERVALOID,
 		},
 };

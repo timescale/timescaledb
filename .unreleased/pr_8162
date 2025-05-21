@@ -1,0 +1,2 @@
+Fixes: #8162 Fix setting compress_chunk_interval on continuous aggregates
+Thanks: @jlordiales for reporting an issue with setting compress_chunk_interval for continuous aggregates
