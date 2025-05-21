@@ -115,8 +115,9 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 		return;
 	}
 
-	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(cis->rel));
+	CompressionSettings *settings = cis->compression_settings;
 	Assert(settings && OidIsValid(settings->fd.compress_relid));
+	Assert(settings->fd.relid == RelationGetRelid(out_rel));
 	Relation in_rel = relation_open(settings->fd.compress_relid, RowExclusiveLock);
 	Bitmapset *index_columns = NULL;
 	Bitmapset *null_columns = NULL;

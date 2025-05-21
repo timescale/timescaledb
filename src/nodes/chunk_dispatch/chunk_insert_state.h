@@ -15,6 +15,7 @@
 
 typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
 typedef struct ChunkDispatchState ChunkDispatchState;
+typedef struct CompressionSettings CompressionSettings;
 
 typedef struct ChunkInsertState
 {
@@ -54,6 +55,9 @@ typedef struct ChunkInsertState
 	/* for tracking compressed chunks */
 	bool chunk_compressed;
 	bool chunk_partial;
+
+	/* cache compressed settings */
+	CompressionSettings *compression_settings;
 
 	/* Chunk uses our own table access method */
 	bool use_tam;
