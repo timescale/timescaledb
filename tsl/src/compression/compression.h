@@ -340,6 +340,7 @@ extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorith
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot);
+extern void init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot);
 typedef struct ModifyHypertableState ModifyHypertableState;
 extern bool decompress_target_segments(ModifyHypertableState *ht_state);
 /* CompressSingleRowState methods */
