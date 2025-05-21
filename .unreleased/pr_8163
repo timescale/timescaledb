@@ -1,0 +1,2 @@
+Fixes: #8163 Fix gapfill crash with locf NULL values treated as missing
+Thanks: @svanharmelen, @cmdjulian, @etaMS20 for reporting time_bucket_gapfill with locf crash when NULL values are treated as missing 
