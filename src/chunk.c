@@ -1091,29 +1091,52 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 
 	Assert(OidIsValid(chunk_table_relid));
 	Assert(OidIsValid(current_chunk_schemaid));
+	Assert(OidIsValid(ht->main_table_relid));
+
+	Relation chunk_rel = table_open(chunk_table_relid, AccessShareLock);
+	Relation ht_rel = table_open(ht->main_table_relid, AccessShareLock);
+	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
+
+	for (int attno = 0; attno < tupdesc->natts; attno++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupdesc, attno);
+
+		/* Ignore dropped */
+		if (att->attisdropped)
+			continue;
+
+		/* Try to find the column in parent (matching on column name) */
+		if (get_attnum(ht->main_table_relid, NameStr(att->attname)) == InvalidAttrNumber)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("table \"%s\" contains column \"%s\" not found in parent \"%s\"",
+							RelationGetRelationName(chunk_rel),
+							NameStr(att->attname),
+							RelationGetRelationName(ht_rel)),
+					 errdetail("The new chunk can contain only the columns present in parent.")));
+	}
+	table_close(ht_rel, AccessShareLock);
 
 	/* Insert any new dimension slices into metadata */
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, get_next_chunk_id());
 	chunk->table_id = chunk_table_relid;
 	chunk->hypertable_relid = ht->main_table_relid;
-	Assert(OidIsValid(ht->main_table_relid));
 
 	new_chunk_schemaid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
 
 	if (current_chunk_schemaid != new_chunk_schemaid)
 	{
-		Relation chunk_rel = table_open(chunk_table_relid, AccessExclusiveLock);
 		ObjectAddresses *objects;
 
 		CheckSetNamespace(current_chunk_schemaid, new_chunk_schemaid);
 		objects = new_object_addresses();
 		AlterTableNamespaceInternal(chunk_rel, current_chunk_schemaid, new_chunk_schemaid, objects);
 		free_object_addresses(objects);
-		table_close(chunk_rel, NoLock);
 		/* Make changes visible */
 		CommandCounterIncrement();
 	}
+	table_close(chunk_rel, NoLock);
 
 	if (namestrcmp(&chunk->fd.table_name, get_rel_name(chunk_table_relid)) != 0)
 	{

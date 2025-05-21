@@ -115,4 +115,58 @@ SELECT * FROM chunkapi ORDER BY 1,2,3;
 -- primary key constraints are not inherited or auto-created.
 SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
 
+TRUNCATE chunkapi;
+
+-- Create a table with extra columns
+CREATE TABLE extra_col_chunk (time timestamptz NOT NULL, device int, temp float, extra int, CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+
+-- Addinng a new chunk with extra column should fail
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1514419200000000, 1515024000000000]}', NULL, NULL, 'extra_col_chunk');
+\set ON_ERROR_STOP 1
+
+-- It should succeed after dropping the extra column
+ALTER TABLE extra_col_chunk DROP COLUMN extra;
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1514419200000000, 1515024000000000]}', NULL, NULL, 'extra_col_chunk');
+
+-- Test creating a chunk with columns in different order
+CREATE TABLE reordered_chunk (device int, temp float, time timestamptz NOT NULL, CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515024000000000, 1515628800000000]}', NULL, NULL, 'reordered_chunk');
+
+-- Test creating a chunk with initially missing a column
+CREATE TABLE missing_col_chunk (time timestamptz NOT NULL, device int);
+ALTER TABLE missing_col_chunk ADD COLUMN temp float CONSTRAINT chunkapi_temp_check CHECK (temp > 0);
+
+-- This should succeed since all required columns are now present
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515628800000000, 1516233600000000]}', NULL, NULL, 'missing_col_chunk');
+
+-- Test creating a chunk with mismatched column types
+CREATE TABLE wrong_type_chunk (time timestamptz NOT NULL, device text, temp float CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+
+-- This should fail due to type mismatch
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1516233600000000, 1516838400000000]}', NULL, NULL, 'wrong_type_chunk');
+\set ON_ERROR_STOP 1
+
+-- Test creating a chunk with a generated column
+CREATE TABLE generated_col_chunk (time timestamptz NOT NULL, device int, temp float GENERATED ALWAYS AS (device::float) STORED CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+
+-- This should fail since generated columns are not allowed in chunks
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1516838400000000, 1517443200000000]}', NULL, NULL, 'generated_col_chunk');
+\set ON_ERROR_STOP 1
+
+-- Test data routing to the successfully created chunks. Each row should go to a different chunks
+INSERT INTO chunkapi VALUES
+    ('2018-01-01 05:00:00-8', 1, 23.4),
+    ('2018-01-08 05:00:00-8', 1, 24.5),
+    ('2018-01-15 05:00:00-8', 1, 25.6);
+
+-- Verify data was routed correctly
+SELECT
+    'SELECT count(*) FROM ' || chunk_schema || '.' || chunk_name
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'chunkapi'; \gexec
+
 DROP TABLE chunkapi;
