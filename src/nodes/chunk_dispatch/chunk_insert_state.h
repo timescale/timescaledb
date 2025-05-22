@@ -63,6 +63,16 @@ typedef struct ChunkInsertState
 		CompressionSettings *compression_settings;
 		tuple_filtering_constraints *constraints;
 		bool key_column_is_null;
+
+		Bitmapset *index_columns;
+		Bitmapset *null_columns;
+		int num_mem_scankeys;
+		ScanKeyData *mem_scankeys;
+		int num_index_scankeys;
+		ScanKeyData *index_scankeys;
+		Relation index_rel;
+		ScanKeyData *heap_scankeys;
+		int num_heap_scankeys;
 	} cached_decompression_state;
 
 	/* Chunk uses our own table access method */

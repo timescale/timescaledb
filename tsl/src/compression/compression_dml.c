@@ -97,25 +97,43 @@ void init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slo
 
 	if (cis->cached_decompression_state.has_primary_or_unique_index)
 	{
-		cis->cached_decompression_state.constraints =
+		tuple_filtering_constraints *constraints =
 			get_batch_keys_for_unique_constraints(cis, cis->rel);
-
+		cis->cached_decompression_state.constraints = constraints;
+	
 		cis->cached_decompression_state.key_column_is_null =
-			key_column_is_null(cis->cached_decompression_state.constraints,
+			key_column_is_null(constraints,
 							   cis->rel,
 							   cis->hypertable_relid,
 							   slot);
 
 		if (!cis->cached_decompression_state.key_column_is_null)
 		{
-			cis->cached_decompression_state.compression_settings =
+			CompressionSettings *compression_settings =
 				ts_compression_settings_get(RelationGetRelid(cis->rel));
+			cis->cached_decompression_state.compression_settings = compression_settings;
 
 			cis->cached_decompression_state.constraints->vectorized_filtering =
-				can_vectorize_constraint_checks(cis->cached_decompression_state.constraints,
-												cis->cached_decompression_state.compression_settings,
+				can_vectorize_constraint_checks(constraints,
+												compression_settings,
 												cis->rel,
 												cis->hypertable_relid);
+
+			if (ts_guc_enable_dml_decompression_tuple_filtering)
+			{
+				int num_mem_scankeys = 0;
+				ScanKeyData *mem_scankeys = NULL;
+
+				mem_scankeys = build_mem_scankeys_from_slot(cis->hypertable_relid,
+															compression_settings,
+															cis->rel,
+															constraints,
+															slot,
+															&num_mem_scankeys);
+
+				cis->cached_decompression_state.num_mem_scankeys = num_mem_scankeys;
+				cis->cached_decompression_state.mem_scankeys = mem_scankeys;
+			}
 		}
 	}
 	cis->cached_decompression_state.is_initialized = true;
@@ -166,8 +184,8 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	struct decompress_batches_stats stats;
 
 	/* the scan keys used for in memory tests of the decompressed tuples */
-	int num_mem_scankeys = 0;
-	ScanKeyData *mem_scankeys = NULL;
+	int num_mem_scankeys = cis->cached_decompression_state.num_mem_scankeys;
+	ScanKeyData *mem_scankeys = cis->cached_decompression_state.mem_scankeys;
 	int num_index_scankeys = 0;
 	ScanKeyData *index_scankeys = NULL;
 	Relation index_rel = NULL;
@@ -177,13 +195,6 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 
 	if (ts_guc_enable_dml_decompression_tuple_filtering)
 	{
-		mem_scankeys = build_mem_scankeys_from_slot(cis->hypertable_relid,
-													settings,
-													out_rel,
-													constraints,
-													slot,
-													&num_mem_scankeys);
-
 		index_scankeys = build_index_scankeys_using_slot(cis->hypertable_relid,
 														 in_rel,
 														 out_rel,
