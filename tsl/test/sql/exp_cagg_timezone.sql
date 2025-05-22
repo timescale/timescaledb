@@ -126,8 +126,8 @@ WHERE user_view_name = 'conditions_summary_tz'
 \gset
 
 -- Make sure the timezone is saved in the catalog table
-SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
-FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE mat_hypertable_id = :cagg_id_tz;
 
 -- Make sure that buckets with specified timezone are always treated as
@@ -153,8 +153,8 @@ WHERE user_view_name = 'conditions_summary_1w'
 \gset
 
 -- Make sure the timezone is saved in the catalog table
-SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
-FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE mat_hypertable_id = :cagg_id_1w;
 
 -- Check the invalidation threshold is -infinity

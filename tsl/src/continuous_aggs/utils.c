@@ -8,7 +8,6 @@
 #include <commands/view.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
-#include <utils/regproc.h>
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
 
@@ -290,88 +289,6 @@ get_replacement_timebucket_function(const ContinuousAgg *cagg, bool *need_parame
 	return funcid;
 }
 
-/*
- * Update the cagg bucket function catalog table. During the migration, we set a new bucket
- * function and a origin if the bucket function is time based.
- */
-static ScanTupleResult
-cagg_time_bucket_update(TupleInfo *ti, void *data)
-{
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	TupleDesc tupleDesc = ts_scanner_get_tupledesc(ti);
-	const ContinuousAgg *cagg = (ContinuousAgg *) data;
-
-	Datum values[Natts_continuous_aggs_bucket_function] = { 0 };
-	bool isnull[Natts_continuous_aggs_bucket_function] = { 0 };
-	bool doReplace[Natts_continuous_aggs_bucket_function] = { 0 };
-
-	/* Update the bucket function */
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
-		CStringGetTextDatum(format_procedure_qualified(cagg->bucket_function->bucket_function));
-	doReplace[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] = true;
-
-	/* Set new origin if not already present. Time_bucket and time_bucket_ng use different
-	 * origin values for time based values.
-	 */
-	if (cagg->bucket_function->bucket_time_based)
-	{
-		char *origin_value = DatumGetCString(
-			DirectFunctionCall1(timestamptz_out,
-								TimestampTzGetDatum(cagg->bucket_function->bucket_time_origin)));
-
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] =
-			CStringGetTextDatum(origin_value);
-
-		doReplace[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] =
-			true;
-	}
-
-	HeapTuple new_tuple = heap_modify_tuple(tuple, tupleDesc, values, isnull, doReplace);
-
-	ts_catalog_update(ti->scanrel, new_tuple);
-
-	heap_freetuple(new_tuple);
-
-	if (should_free)
-		heap_freetuple(tuple);
-
-	return SCAN_DONE;
-}
-
-/*
- * Search for the bucket function entry in the catalog and update the values.
- */
-static int
-replace_time_bucket_function_in_catalog(ContinuousAgg *cagg)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0],
-				Anum_continuous_aggs_bucket_function_pkey_mat_hypertable_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(cagg->data.mat_hypertable_id));
-
-	Catalog *catalog = ts_catalog_get();
-
-	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_BUCKET_FUNCTION),
-		.index = catalog_get_index(catalog,
-								   CONTINUOUS_AGGS_BUCKET_FUNCTION,
-								   CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX),
-		.nkeys = 1,
-		.scankey = scankey,
-		.data = cagg,
-		.limit = 1,
-		.tuple_found = cagg_time_bucket_update,
-		.lockmode = AccessShareLock,
-		.scandirection = ForwardScanDirection,
-	};
-
-	return ts_scanner_scan(&scanctx);
-}
-
 typedef struct TimeBucketInfoContext
 {
 	/* The updated cagg definition */
@@ -383,6 +300,7 @@ typedef struct TimeBucketInfoContext
 	/* Was the defined origin added during the migration and needs
 	 * to be added to the function parameters during rewrite? */
 	bool origin_added_during_migration;
+	TimestampTz bucket_time_origin_to_replace;
 
 	/* Do we need to flip the timezone and the origin parameter during migration? */
 	bool need_parameter_order_change;
@@ -399,19 +317,17 @@ build_const_value_for_origin(TimeBucketInfoContext *context, Oid origin_type)
 	switch (origin_type)
 	{
 		case TIMESTAMPTZOID:
-			const_datum = TimestampTzGetDatum(context->cagg->bucket_function->bucket_time_origin);
+			const_datum = TimestampTzGetDatum(context->bucket_time_origin_to_replace);
 			break;
 		case TIMESTAMPOID:
 			const_datum =
 				DirectFunctionCall1(timestamptz_timestamp,
-									TimestampTzGetDatum(
-										context->cagg->bucket_function->bucket_time_origin));
+									TimestampTzGetDatum(context->bucket_time_origin_to_replace));
 			break;
 		case DATEOID:
 			const_datum =
 				DirectFunctionCall1(timestamptz_date,
-									TimestampTzGetDatum(
-										context->cagg->bucket_function->bucket_time_origin));
+									TimestampTzGetDatum(context->bucket_time_origin_to_replace));
 			break;
 		default:
 			elog(ERROR,
@@ -510,7 +426,7 @@ cagg_user_query_mutator(Node *node, TimeBucketInfoContext *context)
  * Rewrite the given CAgg view and replace the bucket function
  */
 static void
-continuous_agg_rewrite_view(Oid view_oid, const ContinuousAgg *cagg, TimeBucketInfoContext *context)
+continuous_agg_rewrite_view(Oid view_oid, TimeBucketInfoContext *context)
 {
 	int sec_ctx;
 	Oid uid, saved_uid;
@@ -527,7 +443,7 @@ continuous_agg_rewrite_view(Oid view_oid, const ContinuousAgg *cagg, TimeBucketI
 	Query *updated_direct_query = (Query *) cagg_user_query_mutator((Node *) direct_query, context);
 
 	/* Store updated CAgg query */
-	SWITCH_TO_TS_USER(NameStr(cagg->data.user_view_schema), uid, saved_uid, sec_ctx);
+	SWITCH_TO_TS_USER(NameStr(context->cagg->data.user_view_schema), uid, saved_uid, sec_ctx);
 	StoreViewQuery(view_oid, updated_direct_query, true);
 	CommandCounterIncrement();
 	RESTORE_USER(uid, saved_uid, sec_ctx);
@@ -537,29 +453,32 @@ continuous_agg_rewrite_view(Oid view_oid, const ContinuousAgg *cagg, TimeBucketI
  * Replace the bucket function in the CAgg view definition
  */
 static void
-continuous_agg_replace_function(const ContinuousAgg *cagg, Oid function_to_replace,
+continuous_agg_replace_function(ContinuousAgg *cagg, Oid function_to_replace,
 								bool origin_added_during_migration,
+								TimestampTz bucket_time_origin_to_replace,
 								bool need_parameter_order_change)
 {
-	TimeBucketInfoContext context = { 0 };
-	context.cagg = cagg;
-	context.function_to_replace = function_to_replace;
-	context.origin_added_during_migration = origin_added_during_migration;
-	context.need_parameter_order_change = need_parameter_order_change;
+	TimeBucketInfoContext context = { .cagg = cagg,
+									  .function_to_replace = function_to_replace,
+									  .origin_added_during_migration =
+										  origin_added_during_migration,
+									  .bucket_time_origin_to_replace =
+										  bucket_time_origin_to_replace,
+									  .need_parameter_order_change = need_parameter_order_change };
 
 	/* Rewrite the direct_view */
 	Oid direct_view_oid = ts_get_relation_relid(NameStr(cagg->data.direct_view_schema),
 												NameStr(cagg->data.direct_view_name),
 												false);
 
-	continuous_agg_rewrite_view(direct_view_oid, cagg, &context);
+	continuous_agg_rewrite_view(direct_view_oid, &context);
 
 	/* Rewrite the partial_view */
 	Oid partial_view_oid = ts_get_relation_relid(NameStr(cagg->data.partial_view_schema),
 												 NameStr(cagg->data.partial_view_name),
 												 false);
 
-	continuous_agg_rewrite_view(partial_view_oid, cagg, &context);
+	continuous_agg_rewrite_view(partial_view_oid, &context);
 
 	/* Rewrite the user facing view if needed */
 	if (!cagg->data.materialized_only)
@@ -568,7 +487,7 @@ continuous_agg_replace_function(const ContinuousAgg *cagg, Oid function_to_repla
 												  NameStr(cagg->data.user_view_name),
 												  false);
 
-		continuous_agg_rewrite_view(user_view_oid, cagg, &context);
+		continuous_agg_rewrite_view(user_view_oid, &context);
 	}
 }
 
@@ -576,12 +495,12 @@ continuous_agg_replace_function(const ContinuousAgg *cagg, Oid function_to_repla
  * Get the default origin value for time_bucket to be compatible with
  * the default origin of time_bucket_ng.
  */
-static TimestampTz
-continuous_agg_get_default_origin(Oid new_bucket_function)
+TimestampTz
+continuous_agg_get_default_origin(Oid bucket_function)
 {
-	Assert(OidIsValid(new_bucket_function));
+	Assert(OidIsValid(bucket_function));
 
-	Oid bucket_function_rettype = get_func_rettype(new_bucket_function);
+	Oid bucket_function_rettype = get_func_rettype(bucket_function);
 	Assert(OidIsValid(bucket_function_rettype));
 
 	Datum origin;
@@ -682,13 +601,18 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 	if (cagg->bucket_function->bucket_time_based &&
 		TIMESTAMP_NOT_FINITE(cagg->bucket_function->bucket_time_origin))
 	{
-		cagg->bucket_function->bucket_time_origin =
-			continuous_agg_get_default_origin(new_bucket_function);
+		cagg->bucket_function->bucket_time_origin = continuous_agg_get_default_origin(new_bucket_function);;
 		origin_added_during_migration = true;
 	}
 
-	/* Update the catalog */
-	replace_time_bucket_function_in_catalog(cagg);
+	/* Modify the CAgg view definition */
+	continuous_agg_replace_function(cagg,
+									old_bucket_function,
+									origin_added_during_migration,
+									cagg->bucket_function->bucket_time_origin,
+									need_parameter_order_change);
+
+	CommandCounterIncrement();
 
 	/* Fetch new CAgg definition from catalog */
 	ContinuousAgg PG_USED_FOR_ASSERTS_ONLY *new_cagg_definition =
@@ -696,12 +620,6 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 	Assert(new_cagg_definition->bucket_function->bucket_function == new_bucket_function);
 	Assert(cagg->bucket_function->bucket_time_origin ==
 		   new_cagg_definition->bucket_function->bucket_time_origin);
-
-	/* Modify the CAgg view definition */
-	continuous_agg_replace_function(cagg,
-									old_bucket_function,
-									origin_added_during_migration,
-									need_parameter_order_change);
 
 	/* The migration is a procedure, no return value is expected */
 	PG_RETURN_VOID();
