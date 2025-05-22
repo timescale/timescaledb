@@ -146,6 +146,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_read_invalidation_record = ts_invalidation_read_record,
+	.continuous_agg_get_bucket_function_info_internal = ts_cagg_get_bucket_function_info,
 	.cagg_try_repair = tsl_cagg_try_repair,
 
 	/* Compression */

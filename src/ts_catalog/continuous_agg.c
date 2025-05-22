@@ -61,6 +61,8 @@ ts_invalidation_plugin_name(PG_FUNCTION_ARGS)
 	PG_RETURN_TEXT_P(cstring_to_text(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME));
 }
 
+static ObjectAddress get_and_lock_rel_by_name(const Name schema, const Name name, LOCKMODE mode);
+
 static void
 init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
 {
@@ -68,21 +70,6 @@ init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertabl
 
 	ts_scan_iterator_scan_key_init(iterator,
 								   Anum_continuous_agg_pkey_mat_hypertable_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(mat_hypertable_id));
-}
-
-static void
-init_scan_cagg_bucket_function_by_mat_hypertable_id(ScanIterator *iterator,
-													const int32 mat_hypertable_id)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(),
-											CONTINUOUS_AGGS_BUCKET_FUNCTION,
-											CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX);
-
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_continuous_aggs_bucket_function_pkey_mat_hypertable_id,
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(mat_hypertable_id));
@@ -168,22 +155,6 @@ invalidation_threshold_delete(int32 raw_hypertable_id)
 													CurrentMemoryContext);
 
 	init_invalidation_threshold_scan_by_hypertable_id(&iterator, raw_hypertable_id);
-
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-	}
-}
-
-static void
-cagg_bucket_function_delete(int32 mat_hypertable_id)
-{
-	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_BUCKET_FUNCTION,
-													RowExclusiveLock,
-													CurrentMemoryContext);
-
-	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -495,6 +466,12 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 
 	cagg->bucket_function = palloc0(sizeof(ContinuousAggBucketFunction));
 	continuous_agg_fill_bucket_function(cagg->data.mat_hypertable_id, cagg->bucket_function);
+	ObjectAddress partial_view =
+		get_and_lock_rel_by_name(&fd->partial_view_schema, &fd->partial_view_name, AccessShareLock);
+	Assert(OidIsValid(partial_view.objectId));
+
+	cagg->bucket_function =
+		ts_cm_functions->continuous_agg_get_bucket_function_info_internal(partial_view.objectId);
 }
 
 TSDLLEXPORT ContinuousAggInfo
@@ -922,8 +899,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		/* Delete watermark */
 		ts_cagg_watermark_delete_by_mat_hypertable_id(form.mat_hypertable_id);
 	}
-
-	cagg_bucket_function_delete(cadata->mat_hypertable_id);
 
 	/* Perform actual deletions now */
 	if (OidIsValid(user_view.objectId))

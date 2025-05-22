@@ -18,3 +18,4 @@
 extern Datum continuous_agg_validate_query(PG_FUNCTION_ARGS);
 extern Datum continuous_agg_get_bucket_function(PG_FUNCTION_ARGS);
 extern Datum continuous_agg_get_bucket_function_info(PG_FUNCTION_ARGS);
+extern TimestampTz continuous_agg_get_default_origin(Oid new_bucket_function);

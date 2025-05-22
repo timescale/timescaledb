@@ -152,3 +152,4 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 }
 
 ContinuousAggBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
+extern ContinuousAggBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);

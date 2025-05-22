@@ -65,3 +65,9 @@ DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts 
 DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ);
 
 DROP PROCEDURE _timescaledb_functions.cagg_migrate_to_time_bucket(cagg REGCLASS);
+
+-- Remove useless catalog metadata
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
+
+DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
