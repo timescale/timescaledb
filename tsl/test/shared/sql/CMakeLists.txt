@@ -12,6 +12,7 @@ set(TEST_FILES_SHARED
     decompress_join.sql
     decompress_placeholdervar.sql
     decompress_tracking.sql
+    gapfill_bug.sql
     generated_columns.sql
     memoize.sql
     security_barrier.sql
