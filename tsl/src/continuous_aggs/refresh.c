@@ -805,6 +805,17 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * prevent transaction blocks.  */
 	PreventInTransactionBlock(nonatomic, REFRESH_FUNCTION_NAME);
 
+	/*
+	 * We don't cagg refresh to fail because of decompression limit. So disable
+	 * the decompression limit for the duration of the refresh.
+	 */
+	const char *old_decompression_limit =
+		GetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction", false, false);
+	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
+					"0",
+					PGC_USERSET,
+					PGC_S_SESSION);
+
 	/* Connect to SPI manager due to the underlying SPI calls */
 	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
 	if (rc != SPI_OK_CONNECT)
@@ -919,6 +930,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
+
+	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
+					old_decompression_limit,
+					PGC_USERSET,
+					PGC_S_SESSION);
 
 	rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)
