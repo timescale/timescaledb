@@ -791,3 +791,103 @@ LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 N
  Fri Nov 02 17:00:00 2018 PDT | NYC      |     |     |    
 (9 rows)
 
+DROP TABLE conditions CASCADE;
+LOG:  statement: DROP TABLE conditions CASCADE;
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to 3 other objects
+--
+-- A nullable conditions test
+--
+CREATE TABLE conditions_nullable (
+    time TIMESTAMPTZ NOT NULL,
+    location TEXT,
+    temperature DOUBLE PRECISION
+);
+LOG:  statement: CREATE TABLE conditions_nullable (
+    time TIMESTAMPTZ NOT NULL,
+    location TEXT,
+    temperature DOUBLE PRECISION
+);
+CREATE TABLE conditions (
+    time TIMESTAMPTZ NOT NULL,
+    location TEXT,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION
+);
+LOG:  statement: CREATE TABLE conditions (
+    time TIMESTAMPTZ NOT NULL,
+    location TEXT,
+    temperature DOUBLE PRECISION,
+    humidity DOUBLE PRECISION
+);
+SELECT FROM create_hypertable( 'conditions', 'time');
+LOG:  statement: SELECT FROM create_hypertable( 'conditions', 'time');
+--
+(1 row)
+
+INSERT INTO conditions
+VALUES
+    ('2018-01-01 09:20:00-08', 'SFO', 55),
+    ('2018-01-02 09:30:00-08', null, 100);
+LOG:  statement: INSERT INTO conditions
+VALUES
+    ('2018-01-01 09:20:00-08', 'SFO', 55),
+    ('2018-01-02 09:30:00-08', null, 100);
+CREATE MATERIALIZED VIEW conditions_nullable_daily
+WITH (timescaledb.continuous) AS
+SELECT
+   time_bucket(INTERVAL '1 day', time) AS bucket,
+   location,
+   AVG(temperature)
+FROM conditions
+GROUP BY bucket, location
+WITH NO DATA;
+LOG:  statement: CREATE MATERIALIZED VIEW conditions_nullable_daily
+WITH (timescaledb.continuous) AS
+SELECT
+   time_bucket(INTERVAL '1 day', time) AS bucket,
+   location,
+   AVG(temperature)
+FROM conditions
+GROUP BY bucket, location
+WITH NO DATA;
+-- First refresh using MERGE should fall back to INSERT
+SET client_min_messages TO LOG;
+LOG:  statement: SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
+LOG:  statement: CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
+LOG:  inserted 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_18"
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT * FROM conditions_nullable_daily ORDER BY 1, 2 NULLS LAST, 3 NULLS LAST;
+            bucket            | location | avg 
+------------------------------+----------+-----
+ Sun Dec 31 16:00:00 2017 PST | SFO      |  55
+ Mon Jan 01 16:00:00 2018 PST |          | 100
+(2 rows)
+
+-- Inserting a new data should ensure we get correct results
+INSERT INTO conditions
+VALUES
+    ('2018-01-01 19:20:00-08', 'SFO', 65),
+    ('2018-01-02 19:30:00-08', null, 200);
+-- Second refresh *should* use the merge, and return correct results.
+SET client_min_messages TO LOG;
+CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
+LOG:  statement: CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
+LOG:  merged 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_18"
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_18"
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT * FROM conditions_nullable_daily ORDER BY 1, 2 NULLS LAST, 3 NULLS LAST;
+            bucket            | location | avg 
+------------------------------+----------+-----
+ Sun Dec 31 16:00:00 2017 PST | SFO      |  55
+ Mon Jan 01 16:00:00 2018 PST | SFO      |  65
+ Mon Jan 01 16:00:00 2018 PST |          | 100
+ Tue Jan 02 16:00:00 2018 PST |          | 200
+(4 rows)
+
+DROP MATERIALIZED VIEW conditions_nullable_daily;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_32_chunk
+DROP TABLE conditions CASCADE;
