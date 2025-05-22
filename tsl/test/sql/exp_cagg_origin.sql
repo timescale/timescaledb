@@ -526,9 +526,9 @@ SELECT mat_hypertable_id AS cagg_id
   WHERE user_view_name = 'conditions_summary_timestamptz'
 \gset
 
-SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
-  FROM _timescaledb_catalog.continuous_aggs_bucket_function
-  WHERE mat_hypertable_id = :cagg_id;
+SELECT bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
+WHERE mat_hypertable_id = :cagg_id;
 
 SELECT city, to_char(bucket at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS b, min, max
 FROM conditions_summary_timestamptz

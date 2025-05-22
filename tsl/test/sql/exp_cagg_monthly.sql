@@ -76,8 +76,8 @@ WHERE user_view_name = 'conditions_summary'
 \gset
 
 \pset null <NULL>
-SELECT *
-FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT mat_hypertable_id, bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE mat_hypertable_id = :cagg_id;
 \pset null ""
 
@@ -103,20 +103,6 @@ SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
 FROM conditions_summary
 ORDER by month, city;
 
--- Special check for "invalid or missing information about the bucketing
--- function" code path
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-CREATE TEMPORARY TABLE restore_table ( LIKE _timescaledb_catalog.continuous_aggs_bucket_function );
-INSERT INTO restore_table SELECT * FROM  _timescaledb_catalog.continuous_aggs_bucket_function;
-DELETE FROM _timescaledb_catalog.continuous_aggs_bucket_function;
-\set ON_ERROR_STOP 0
--- should fail with "invalid or missing information..."
-CALL refresh_continuous_aggregate('conditions_summary', '2021-06-01', '2021-07-01');
-\set ON_ERROR_STOP 1
-INSERT INTO _timescaledb_catalog.continuous_aggs_bucket_function SELECT * FROM restore_table;
-DROP TABLE restore_table;
--- should execute successfully
-CALL refresh_continuous_aggregate('conditions_summary', '2021-06-01', '2021-07-01');
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- Check the invalidation threshold
@@ -166,7 +152,8 @@ DROP MATERIALIZED VIEW conditions_summary;
 SELECT * FROM _timescaledb_catalog.continuous_agg
 WHERE mat_hypertable_id = :cagg_id;
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT mat_hypertable_id, bf.*
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE mat_hypertable_id = :cagg_id;
 
 -- Re-create cagg, this time WITH DATA
