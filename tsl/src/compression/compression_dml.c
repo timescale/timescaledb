@@ -66,7 +66,7 @@ static bool can_delete_without_decompression(ModifyHypertableState *ht_state,
 											 List *predicates);
 static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 											CompressionSettings *settings, Relation chunk_rel,
-											Oid ht_relid, TupleTableSlot *slot);
+											Oid ht_relid);
 
 static AttrNumber
 TupleDescGetAttrNumber(TupleDesc desc, const char *name)
@@ -80,6 +80,48 @@ TupleDescGetAttrNumber(TupleDesc desc, const char *name)
 	return InvalidAttrNumber;
 }
 
+void init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
+{
+	if (!cis->chunk_compressed || cis->cached_decompression_state.is_initialized)
+	{
+		/*
+		 * If the chunk is not compressed or the decompression state has
+		 * already been initialized, there is nothing to do here.
+		 */
+		return;
+	}
+
+	MemoryContext old_context = MemoryContextSwitchTo(cis->mctx);
+	cis->cached_decompression_state.has_primary_or_unique_index =
+		ts_indexing_relation_has_primary_or_unique_index(cis->rel);
+
+	if (cis->cached_decompression_state.has_primary_or_unique_index)
+	{
+		cis->cached_decompression_state.constraints =
+			get_batch_keys_for_unique_constraints(cis, cis->rel);
+
+		cis->cached_decompression_state.key_column_is_null =
+			key_column_is_null(cis->cached_decompression_state.constraints,
+							   cis->rel,
+							   cis->hypertable_relid,
+							   slot);
+
+		if (!cis->cached_decompression_state.key_column_is_null)
+		{
+			cis->cached_decompression_state.compression_settings =
+				ts_compression_settings_get(RelationGetRelid(cis->rel));
+
+			cis->cached_decompression_state.constraints->vectorized_filtering =
+				can_vectorize_constraint_checks(cis->cached_decompression_state.constraints,
+												cis->cached_decompression_state.compression_settings,
+												cis->rel,
+												cis->hypertable_relid);
+		}
+	}
+	cis->cached_decompression_state.is_initialized = true;
+	MemoryContextSwitchTo(old_context);
+}
+
 void
 decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 {
@@ -91,7 +133,7 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 
 	Relation out_rel = cis->rel;
 
-	if (!ts_indexing_relation_has_primary_or_unique_index(out_rel))
+	if (!cis->cached_decompression_state.has_primary_or_unique_index)
 	{
 		/*
 		 * If there are no unique constraints there is nothing to do here.
@@ -105,8 +147,8 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 				 errmsg("inserting into compressed chunk with unique constraints disabled"),
 				 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
-	tuple_filtering_constraints *constraints = get_batch_keys_for_unique_constraints(cis, out_rel);
-	if (key_column_is_null(constraints, out_rel, cis->hypertable_relid, slot))
+	tuple_filtering_constraints *constraints = cis->cached_decompression_state.constraints;
+	if (cis->cached_decompression_state.key_column_is_null)
 	{
 		/* When any key column is NULL and NULLs are distinct there is no
 		 * decompression to be done as the tuple will not conflict with any
@@ -115,19 +157,13 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 		return;
 	}
 
-	CompressionSettings *settings = cis->compression_settings;
+	CompressionSettings *settings = cis->cached_decompression_state.compression_settings;
 	Assert(settings && OidIsValid(settings->fd.compress_relid));
 	Assert(settings->fd.relid == RelationGetRelid(out_rel));
 	Relation in_rel = relation_open(settings->fd.compress_relid, RowExclusiveLock);
 	Bitmapset *index_columns = NULL;
 	Bitmapset *null_columns = NULL;
 	struct decompress_batches_stats stats;
-
-	constraints->vectorized_filtering = can_vectorize_constraint_checks(constraints,
-																		settings,
-																		out_rel,
-																		cis->hypertable_relid,
-																		slot);
 
 	/* the scan keys used for in memory tests of the decompressed tuples */
 	int num_mem_scankeys = 0;
@@ -1640,8 +1676,7 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 
 static bool
 can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
-								CompressionSettings *settings, Relation chunk_rel, Oid ht_relid,
-								TupleTableSlot *slot)
+								CompressionSettings *settings, Relation chunk_rel, Oid ht_relid)
 {
 	AttrNumber chunk_attno = -1;
 	Oid typoid, collid;

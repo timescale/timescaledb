@@ -16,6 +16,7 @@
 typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
 typedef struct ChunkDispatchState ChunkDispatchState;
 typedef struct CompressionSettings CompressionSettings;
+typedef struct tuple_filtering_constraints tuple_filtering_constraints;
 
 typedef struct ChunkInsertState
 {
@@ -56,8 +57,13 @@ typedef struct ChunkInsertState
 	bool chunk_compressed;
 	bool chunk_partial;
 
-	/* cache compressed settings */
-	CompressionSettings *compression_settings;
+	struct CachedDecompressionState {
+		bool is_initialized;
+		bool has_primary_or_unique_index;
+		CompressionSettings *compression_settings;
+		tuple_filtering_constraints *constraints;
+		bool key_column_is_null;
+	} cached_decompression_state;
 
 	/* Chunk uses our own table access method */
 	bool use_tam;

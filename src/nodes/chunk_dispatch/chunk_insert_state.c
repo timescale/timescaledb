@@ -33,7 +33,6 @@
 #include "errors.h"
 #include "indexing.h"
 #include "ts_catalog/continuous_agg.h"
-#include "ts_catalog/compression_settings.h"
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
 static inline ExprState *
@@ -632,7 +631,6 @@ ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk)
 	if (state->chunk_compressed)
 	{
 		state->chunk_partial = ts_chunk_is_partial(chunk);
-		state->compression_settings = ts_compression_settings_get(RelationGetRelid(state->rel));
 	}
 }
 
