@@ -67,7 +67,7 @@ static bool can_delete_without_decompression(ModifyHypertableState *ht_state,
 static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 											CompressionSettings *settings, Relation chunk_rel,
 											Oid ht_relid);
-static ScanKeyData *get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot);
+static ScanKeyData *get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags);
 
 static AttrNumber
 TupleDescGetAttrNumber(TupleDesc desc, const char *name)
@@ -188,7 +188,7 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 }
 
 static ScanKeyData *
-get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot)
+get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, int null_flags)
 {
 	if (scankeys->num_scankeys == 0)
 	{
@@ -203,7 +203,7 @@ get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot)
 		Datum value = slot_getattr(slot, scankeys->attnos[i], &isnull);
 		if (isnull)
 		{
-			updated_scankeys[i].sk_flags = SK_ISNULL | SK_SEARCHNULL;
+			updated_scankeys[i].sk_flags = null_flags;
 			updated_scankeys[i].sk_argument = (Datum) 0;
 		}
 		else
@@ -275,9 +275,9 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 			 cdst->mem_scankeys.num_scankeys);
 	}
 
-	ScanKeyData *index_scankeys = get_updated_scankeys(&cdst->index_scankeys, slot);
-	ScanKeyData *heap_scankeys = get_updated_scankeys(&cdst->heap_scankeys, slot);
-	ScanKeyData *mem_scankeys = get_updated_scankeys(&cdst->mem_scankeys, slot);
+	ScanKeyData *index_scankeys = get_updated_scankeys(&cdst->index_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
+	ScanKeyData *heap_scankeys = get_updated_scankeys(&cdst->heap_scankeys, slot, SK_ISNULL | SK_SEARCHNULL);
+	ScanKeyData *mem_scankeys = get_updated_scankeys(&cdst->mem_scankeys, slot, SK_ISNULL);
 
 	/*
 	 * Using latest snapshot to scan the heap since we are doing this to build
