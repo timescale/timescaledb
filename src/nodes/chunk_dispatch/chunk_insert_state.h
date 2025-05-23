@@ -18,6 +18,36 @@ typedef struct ChunkDispatchState ChunkDispatchState;
 typedef struct CompressionSettings CompressionSettings;
 typedef struct tuple_filtering_constraints tuple_filtering_constraints;
 
+/*
+ * Bundle the ScanKey and the attribute numbers together
+ * to be able to update the scankey by replacing the
+ * `sk_argument` field with the value from the actual slot.
+ */
+typedef struct ScanKeyWithAttnos
+{
+	int num_scankeys;
+	ScanKeyData *scankeys;
+	AttrNumber *attnos;
+} ScanKeyWithAttnos;
+
+/*
+ * Holds information to cache scan keys and other
+ * information needed for repeated calls of
+ * `decompress_batches_for_insert` on the same chunk.
+ */
+typedef struct CachedDecompressionState
+{
+	bool has_primary_or_unique_index;
+	CompressionSettings *compression_settings;
+	tuple_filtering_constraints *constraints;
+	bool key_column_is_null;
+	Bitmapset *null_columns;
+	ScanKeyWithAttnos heap_scankeys;
+	ScanKeyWithAttnos index_scankeys;
+	ScanKeyWithAttnos mem_scankeys;
+	Oid index_relid;
+} CachedDecompressionState;
+
 typedef struct ChunkInsertState
 {
 	Relation rel;
@@ -57,22 +87,8 @@ typedef struct ChunkInsertState
 	bool chunk_compressed;
 	bool chunk_partial;
 
-	struct CachedDecompressionState {
-		bool is_initialized;
-		bool has_primary_or_unique_index;
-		CompressionSettings *compression_settings;
-		tuple_filtering_constraints *constraints;
-		bool key_column_is_null;
-
-		Bitmapset *null_columns;
-		int num_mem_scankeys;
-		ScanKeyData *mem_scankeys;
-		int num_index_scankeys;
-		ScanKeyData *index_scankeys;
-		ScanKeyData *heap_scankeys;
-		int num_heap_scankeys;
-		Oid index_relid;
-	} cached_decompression_state;
+	/* To speedup repeated calls of `decompress_batches_for_insert` */
+	CachedDecompressionState *cached_decompression_state;
 
 	/* Chunk uses our own table access method */
 	bool use_tam;

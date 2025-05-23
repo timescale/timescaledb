@@ -67,6 +67,7 @@ static bool can_delete_without_decompression(ModifyHypertableState *ht_state,
 static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 											CompressionSettings *settings, Relation chunk_rel,
 											Oid ht_relid);
+static ScanKeyData *get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot);
 
 static AttrNumber
 TupleDescGetAttrNumber(TupleDesc desc, const char *name)
@@ -80,9 +81,10 @@ TupleDescGetAttrNumber(TupleDesc desc, const char *name)
 	return InvalidAttrNumber;
 }
 
-void init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
+void
+init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 {
-	if (!cis->chunk_compressed || cis->cached_decompression_state.is_initialized)
+	if (!cis->chunk_compressed || cis->cached_decompression_state != NULL)
 	{
 		/*
 		 * If the chunk is not compressed or the decompression state has
@@ -91,106 +93,126 @@ void init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slo
 		return;
 	}
 
-	MemoryContext old_context = MemoryContextSwitchTo(cis->mctx);
-	cis->cached_decompression_state.has_primary_or_unique_index =
-		ts_indexing_relation_has_primary_or_unique_index(cis->rel);
+	CachedDecompressionState *cdst = NULL;
 
-	if (cis->cached_decompression_state.has_primary_or_unique_index)
+	MemoryContext old_context = MemoryContextSwitchTo(cis->mctx);
+	cdst = palloc0(sizeof(CachedDecompressionState));
+
+	cdst->has_primary_or_unique_index = ts_indexing_relation_has_primary_or_unique_index(cis->rel);
+
+	if (cdst->has_primary_or_unique_index)
 	{
 		tuple_filtering_constraints *constraints =
 			get_batch_keys_for_unique_constraints(cis, cis->rel);
-		cis->cached_decompression_state.constraints = constraints;
-	
-		cis->cached_decompression_state.key_column_is_null =
-			key_column_is_null(constraints,
-							   cis->rel,
-							   cis->hypertable_relid,
-							   slot);
+		cdst->constraints = constraints;
 
-		if (!cis->cached_decompression_state.key_column_is_null)
+		cdst->key_column_is_null =
+			key_column_is_null(constraints, cis->rel, cis->hypertable_relid, slot);
+
+		if (!cdst->key_column_is_null)
 		{
 			CompressionSettings *compression_settings =
 				ts_compression_settings_get(RelationGetRelid(cis->rel));
-			cis->cached_decompression_state.compression_settings = compression_settings;
+			Assert(compression_settings && OidIsValid(compression_settings->fd.compress_relid));
+			cdst->compression_settings = compression_settings;
 
-			cis->cached_decompression_state.constraints->vectorized_filtering =
+			cdst->constraints->vectorized_filtering =
 				can_vectorize_constraint_checks(constraints,
 												compression_settings,
 												cis->rel,
 												cis->hypertable_relid);
 
-			Relation index_rel = NULL;
-			Relation in_rel = relation_open(compression_settings->fd.compress_relid, RowExclusiveLock);
-			int num_mem_scankeys = 0;
-			ScanKeyData *mem_scankeys = NULL;
-			int num_index_scankeys = 0;
-			ScanKeyData *index_scankeys = NULL;
-			ScanKeyData *heap_scankeys = NULL;
-			int num_heap_scankeys = 0;
+			Relation in_rel =
+				relation_open(compression_settings->fd.compress_relid, RowExclusiveLock);
+
 			Bitmapset *null_columns = NULL;
-			Bitmapset *key_columns = NULL;
+			Bitmapset *key_columns = constraints->key_columns;
 			Bitmapset *index_columns = NULL;
-	
+			Relation index_rel = NULL;
+
 			if (ts_guc_enable_dml_decompression_tuple_filtering)
 			{
-				mem_scankeys = build_mem_scankeys_from_slot(cis->hypertable_relid,
-															compression_settings,
-															cis->rel,
-															constraints,
-															slot,
-															&num_mem_scankeys);
+				cdst->mem_scankeys.scankeys =
+					build_mem_scankeys_from_slot(cis->hypertable_relid,
+												 compression_settings,
+												 cis->rel,
+												 constraints,
+												 slot,
+												 &cdst->mem_scankeys.num_scankeys,
+												 &cdst->mem_scankeys.attnos);
 
-				cis->cached_decompression_state.num_mem_scankeys = num_mem_scankeys;
-				cis->cached_decompression_state.mem_scankeys = mem_scankeys;
-
-				index_scankeys = build_index_scankeys_using_slot(cis->hypertable_relid,
-																in_rel,
-																cis->rel,
-																constraints->key_columns,
-																slot,
-																&index_rel,
-																&index_columns,
-																&num_index_scankeys);
-
-				cis->cached_decompression_state.num_index_scankeys = num_index_scankeys;
-				cis->cached_decompression_state.index_scankeys = index_scankeys;
-
-				if (index_rel)
-				{
-					/*
-					* Prepare the heap scan keys for all
-					* key columns not found in the index
-					*/
-					key_columns = bms_difference(constraints->key_columns, index_columns);
-				}
+				cdst->index_scankeys.scankeys =
+					build_index_scankeys_using_slot(cis->hypertable_relid,
+													in_rel,
+													cis->rel,
+													constraints->key_columns,
+													slot,
+													&index_rel,
+													&index_columns,
+													&cdst->index_scankeys.num_scankeys,
+													&cdst->index_scankeys.attnos);
 			}
-
-			heap_scankeys = build_heap_scankeys(cis->hypertable_relid,
-									in_rel,
-									cis->rel,
-									compression_settings,
-									key_columns,
-									&null_columns,
-									slot,
-									&num_heap_scankeys);
 
 			if (index_rel)
 			{
-				cis->cached_decompression_state.index_relid = RelationGetRelid(index_rel);
+				/*
+				 * Prepare the heap scan keys for all
+				 * key columns not found in the index
+				 */
+				key_columns = bms_difference(constraints->key_columns, index_columns);
+			}
+
+			cdst->heap_scankeys.scankeys = build_heap_scankeys(cis->hypertable_relid,
+															   in_rel,
+															   cis->rel,
+															   compression_settings,
+															   key_columns,
+															   &null_columns,
+															   slot,
+															   &cdst->heap_scankeys.num_scankeys,
+															   &cdst->heap_scankeys.attnos);
+
+			if (index_rel)
+			{
+				cdst->index_relid = RelationGetRelid(index_rel);
 				null_columns = NULL;
 				index_close(index_rel, AccessShareLock);
 			}
 
-			cis->cached_decompression_state.num_heap_scankeys = num_heap_scankeys;
-			cis->cached_decompression_state.heap_scankeys = heap_scankeys;
-			cis->cached_decompression_state.null_columns = null_columns;
-
-			// ??? CommandCounterIncrement();
+			cdst->null_columns = null_columns;
 			table_close(in_rel, NoLock);
 		}
 	}
-	cis->cached_decompression_state.is_initialized = true;
+	cis->cached_decompression_state = cdst;
 	MemoryContextSwitchTo(old_context);
+}
+
+static ScanKeyData *
+get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot)
+{
+	if (scankeys->num_scankeys == 0)
+	{
+		return NULL;
+	}
+
+	ScanKeyData *updated_scankeys = palloc0(sizeof(ScanKeyData) * scankeys->num_scankeys);
+	for (int i = 0; i < scankeys->num_scankeys; i++)
+	{
+		updated_scankeys[i] = scankeys->scankeys[i];
+		bool isnull = false;
+		Datum value = slot_getattr(slot, scankeys->attnos[i], &isnull);
+		if (isnull)
+		{
+			updated_scankeys[i].sk_flags = SK_ISNULL | SK_SEARCHNULL;
+			updated_scankeys[i].sk_argument = (Datum) 0;
+		}
+		else
+		{
+			updated_scankeys[i].sk_flags = 0;
+			updated_scankeys[i].sk_argument = value;
+		}
+	}
+	return updated_scankeys;
 }
 
 void
@@ -203,8 +225,10 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	Assert(!TTS_EMPTY(slot));
 
 	Relation out_rel = cis->rel;
+	CachedDecompressionState *cdst = cis->cached_decompression_state;
+	Assert(cdst != NULL);
 
-	if (!cis->cached_decompression_state.has_primary_or_unique_index)
+	if (!cdst->has_primary_or_unique_index)
 	{
 		/*
 		 * If there are no unique constraints there is nothing to do here.
@@ -218,8 +242,7 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 				 errmsg("inserting into compressed chunk with unique constraints disabled"),
 				 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
-	tuple_filtering_constraints *constraints = cis->cached_decompression_state.constraints;
-	if (cis->cached_decompression_state.key_column_is_null)
+	if (cdst->key_column_is_null)
 	{
 		/* When any key column is NULL and NULLs are distinct there is no
 		 * decompression to be done as the tuple will not conflict with any
@@ -228,27 +251,18 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 		return;
 	}
 
-	CompressionSettings *settings = cis->cached_decompression_state.compression_settings;
-	Assert(settings && OidIsValid(settings->fd.compress_relid));
-	Assert(settings->fd.relid == RelationGetRelid(out_rel));
-	Relation in_rel = relation_open(settings->fd.compress_relid, RowExclusiveLock);
+	Assert(cdst->compression_settings->fd.relid == RelationGetRelid(out_rel));
+	Relation in_rel =
+		relation_open(cdst->compression_settings->fd.compress_relid, RowExclusiveLock);
 
 	/* the scan keys used for in memory tests of the decompressed tuples */
-	int num_mem_scankeys = cis->cached_decompression_state.num_mem_scankeys;
-	ScanKeyData *mem_scankeys = cis->cached_decompression_state.mem_scankeys;
-	int num_index_scankeys = cis->cached_decompression_state.num_index_scankeys;
-	ScanKeyData *index_scankeys = cis->cached_decompression_state.index_scankeys;
 	bool skip_current_tuple = false;
-
-	ScanKeyData *heap_scankeys = cis->cached_decompression_state.heap_scankeys;
-	int num_heap_scankeys = cis->cached_decompression_state.num_heap_scankeys;
-	Bitmapset *null_columns = cis->cached_decompression_state.null_columns;
 	struct decompress_batches_stats stats;
 
 	Relation index_rel = NULL;
-	if (cis->cached_decompression_state.index_relid != InvalidOid)
+	if (OidIsValid(cdst->index_relid))
 	{
-		index_rel = index_open(cis->cached_decompression_state.index_relid, AccessShareLock);
+		index_rel = index_open(cdst->index_relid, AccessShareLock);
 	}
 
 	if (ts_guc_debug_compression_path_info)
@@ -256,10 +270,14 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 		elog(INFO,
 			 "Using %s scan with scan keys: index %d, heap %d, memory %d. ",
 			 index_rel ? "index" : "table",
-			 num_index_scankeys,
-			 num_heap_scankeys,
-			 num_mem_scankeys);
+			 cdst->index_scankeys.num_scankeys,
+			 cdst->heap_scankeys.num_scankeys,
+			 cdst->mem_scankeys.num_scankeys);
 	}
+
+	ScanKeyData *index_scankeys = get_updated_scankeys(&cdst->index_scankeys, slot);
+	ScanKeyData *heap_scankeys = get_updated_scankeys(&cdst->heap_scankeys, slot);
+	ScanKeyData *mem_scankeys = get_updated_scankeys(&cdst->mem_scankeys, slot);
 
 	/*
 	 * Using latest snapshot to scan the heap since we are doing this to build
@@ -271,16 +289,16 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 									index_rel,
 									GetLatestSnapshot(),
 									index_scankeys,
-									num_index_scankeys,
+									cdst->index_scankeys.num_scankeys,
 									heap_scankeys,
-									num_heap_scankeys,
+									cdst->heap_scankeys.num_scankeys,
 									mem_scankeys,
-									num_mem_scankeys,
-									constraints,
+									cdst->mem_scankeys.num_scankeys,
+									cdst->constraints,
 									&skip_current_tuple,
 									false,
-									null_columns, /* no null column check for non-segmentby
-											 columns */
+									cdst->null_columns, /* no null column check for non-segmentby
+														   columns */
 									NIL);
 	if (index_rel)
 		index_close(index_rel, AccessShareLock);

@@ -55,7 +55,7 @@ slot_key_test(TupleTableSlot *compressed_slot, ScanKey key)
 ScanKeyData *
 build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relation out_rel,
 							 tuple_filtering_constraints *constraints, TupleTableSlot *slot,
-							 int *num_scankeys)
+							 int *num_scankeys, AttrNumber **slot_attnos)
 {
 	ScanKeyData *scankeys = NULL;
 	int key_index = 0;
@@ -67,7 +67,9 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 		return scankeys;
 	}
 
-	scankeys = palloc(sizeof(ScanKeyData) * bms_num_members(constraints->key_columns));
+	int max_key_columns = bms_num_members(constraints->key_columns);
+	scankeys = palloc(sizeof(ScanKeyData) * max_key_columns);
+	*slot_attnos = palloc0(sizeof(AttrNumber) * max_key_columns);
 
 	AttrNumber attno = -1;
 	while ((attno = bms_next_member(constraints->key_columns, attno)) > 0)
@@ -91,6 +93,7 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 
 		AttrNumber ht_attno = get_attnum(ht_relid, attname);
 		Datum value = slot_getattr(slot, ht_attno, &isnull);
+		(*slot_attnos)[key_index] = ht_attno;
 
 		Oid atttypid = out_desc->attrs[AttrNumberGetAttrOffset(attno)].atttypid;
 		TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
@@ -141,14 +144,16 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 ScanKeyData *
 build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 					CompressionSettings *settings, Bitmapset *key_columns, Bitmapset **null_columns,
-					TupleTableSlot *slot, int *num_scankeys)
+					TupleTableSlot *slot, int *num_scankeys, AttrNumber **slot_attnos)
 {
 	int key_index = 0;
 	ScanKeyData *scankeys = NULL;
 
 	if (!bms_is_empty(key_columns))
 	{
-		scankeys = palloc0(bms_num_members(key_columns) * 2 * sizeof(ScanKeyData));
+		int max_key_columns = bms_num_members(key_columns) * 2;
+		scankeys = palloc0(max_key_columns * sizeof(ScanKeyData));
+		*slot_attnos = palloc0(max_key_columns * sizeof(AttrNumber));
 		AttrNumber attno = -1;
 		while ((attno = bms_next_member(key_columns, attno)) > 0)
 		{
@@ -187,17 +192,20 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 			 */
 			if (ts_array_is_member(settings->fd.segmentby, attname))
 			{
-				create_segment_filter_scankey(in_rel,
-											  attname,
-											  BTEqualStrategyNumber,
-											  InvalidOid,
-											  InvalidOid,
-											  scankeys,
-											  &key_index,
-											  null_columns,
-											  value,
-											  isnull,
-											  false);
+				if (create_segment_filter_scankey(in_rel,
+												  attname,
+												  BTEqualStrategyNumber,
+												  InvalidOid,
+												  InvalidOid,
+												  scankeys,
+												  &key_index,
+												  null_columns,
+												  value,
+												  isnull,
+												  false))
+				{
+					(*slot_attnos)[key_index - 1] = ht_attno;
+				}
 			}
 			if (ts_array_is_member(settings->fd.orderby, attname))
 			{
@@ -209,30 +217,37 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 
 				int16 index = ts_array_position(settings->fd.orderby, attname);
 
-				create_segment_filter_scankey(in_rel,
-											  column_segment_min_name(index),
-											  BTLessEqualStrategyNumber,
-											  InvalidOid,
-											  InvalidOid,
-											  scankeys,
-											  &key_index,
-											  null_columns,
-											  value,
-											  false,
-											  false /* is_null_check */
-				);
-				create_segment_filter_scankey(in_rel,
-											  column_segment_max_name(index),
-											  BTGreaterEqualStrategyNumber,
-											  InvalidOid,
-											  InvalidOid,
-											  scankeys,
-											  &key_index,
-											  null_columns,
-											  value,
-											  false,
-											  false /* is_null_check */
-				);
+				if (create_segment_filter_scankey(in_rel,
+												  column_segment_min_name(index),
+												  BTLessEqualStrategyNumber,
+												  InvalidOid,
+												  InvalidOid,
+												  scankeys,
+												  &key_index,
+												  null_columns,
+												  value,
+												  false,
+												  false /* is_null_check */
+												  ))
+				{
+					(*slot_attnos)[key_index - 1] = ht_attno;
+				}
+
+				if (create_segment_filter_scankey(in_rel,
+												  column_segment_max_name(index),
+												  BTGreaterEqualStrategyNumber,
+												  InvalidOid,
+												  InvalidOid,
+												  scankeys,
+												  &key_index,
+												  null_columns,
+												  value,
+												  false,
+												  false /* is_null_check */
+												  ))
+				{
+					(*slot_attnos)[key_index - 1] = ht_attno;
+				}
 			}
 		}
 	}
@@ -301,7 +316,7 @@ ScanKeyData *
 build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 								Bitmapset *key_columns, TupleTableSlot *slot,
 								Relation *result_index_rel, Bitmapset **index_columns,
-								int *num_scan_keys)
+								int *num_scan_keys, AttrNumber **slot_attnos)
 {
 	List *index_oids;
 	ListCell *lc;
@@ -340,6 +355,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 		}
 
 		scankeys = palloc0((index_rel->rd_index->indnatts) * sizeof(ScanKeyData));
+		*slot_attnos = palloc0((index_rel->rd_index->indnatts) * sizeof(AttrNumber));
 
 		/*
 		 * 	Using only key attributes to exclude covering columns
@@ -361,20 +377,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 			bool isnull;
 			AttrNumber ht_attno = get_attnum(hypertable_relid, NameStr(*attname));
 			Datum value = slot_getattr(slot, ht_attno, &isnull);
-
-			if (isnull)
-			{
-				*index_columns = bms_add_member(*index_columns, column_attno);
-				ScanKeyEntryInitialize(&scankeys[(*num_scan_keys)++],
-									   SK_ISNULL | SK_SEARCHNULL,
-									   idx_attnum,
-									   InvalidStrategy, /* no strategy */
-									   InvalidOid,		/* no strategy subtype */
-									   InvalidOid,		/* no collation */
-									   InvalidOid,		/* no reg proc for this */
-									   (Datum) 0);		/* constant */
-				continue;
-			}
+			(*slot_attnos)[*num_scan_keys] = ht_attno;
 
 			Oid atttypid = attnumTypeId(index_rel, idx_attnum);
 
@@ -407,13 +410,13 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 
 			*index_columns = bms_add_member(*index_columns, column_attno);
 			ScanKeyEntryInitialize(&scankeys[(*num_scan_keys)++],
-								   0, /* flags */
+								   isnull ? SK_ISNULL | SK_SEARCHNULL : 0, /* flags */
 								   idx_attnum,
 								   BTEqualStrategyNumber,
 								   InvalidOid, /* No strategy subtype. */
 								   attnumCollationId(index_rel, idx_attnum),
 								   opcode,
-								   value);
+								   isnull ? 0 : value);
 		}
 
 		if (*num_scan_keys > 0)
