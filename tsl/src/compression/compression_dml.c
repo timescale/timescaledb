@@ -314,6 +314,13 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	cis->cds->batches_decompressed += stats.batches_decompressed;
 	cis->cds->tuples_decompressed += stats.tuples_decompressed;
 
+	if (index_scankeys)
+		pfree(index_scankeys);
+	if (heap_scankeys)
+		pfree(heap_scankeys);
+	if (mem_scankeys)
+		pfree(mem_scankeys);
+
 	CommandCounterIncrement();
 	table_close(in_rel, NoLock);
 }
