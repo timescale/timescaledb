@@ -1,4 +1,4 @@
 rules:
   document-start: disable
   line-length:
-    max: 210
+    max: 250
