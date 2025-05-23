@@ -50,12 +50,14 @@ _timescaledb_functions.policy_compression_execute(
   maxchunks           INTEGER,
   verbose_log         BOOLEAN,
   recompress_enabled  BOOLEAN,
+  reindex_enabled     BOOLEAN,
   use_creation_time   BOOLEAN,
   useam               BOOLEAN = NULL)
 AS $$
 DECLARE
   htoid       REGCLASS;
   chunk_rec   RECORD;
+  idx_rec     RECORD;
   numchunks_compressed   INTEGER := 0;
   _message     text;
   _detail      text;
@@ -121,12 +123,39 @@ BEGIN
           _message = MESSAGE_TEXT,
           _detail = PG_EXCEPTION_DETAIL,
           _sqlstate = RETURNED_SQLSTATE;
-      RAISE WARNING 'converting chunk "%" to columnstore failed when columnstore policy is executed', chunk_rec.oid::regclass::text
+      RAISE WARNING 'converting chunk "%" to columnstore failed when recompress columnstore policy is executed', chunk_rec.oid::regclass::text
           USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
                 ERRCODE = _sqlstate;
       chunks_failure := chunks_failure + 1;
     END;
     COMMIT;
+
+    -- went through recompression successfully now reindex indexes
+    IF (chunk_rec.status & bit_compressed_partial = bit_compressed_partial) AND (reindex_enabled IS TRUE) THEN
+      FOR idx_rec IN
+        SELECT idx.schemaname, idx.indexname
+        FROM pg_indexes idx
+        JOIN _timescaledb_catalog.chunk ch ON ch.schema_name = idx.schemaname AND ch.table_name = idx.tablename
+        WHERE idx.schemaname = chunk_rec.schema_name
+          AND idx.tablename = chunk_rec.table_name
+          AND ch.status = status_fully_compressed
+      LOOP
+        BEGIN
+          EXECUTE format('REINDEX INDEX %I.%I;', idx_rec.schemaname, idx_rec.indexname);
+        EXCEPTION WHEN OTHERS THEN
+          GET STACKED DIAGNOSTICS
+              _message = MESSAGE_TEXT,
+              _detail = PG_EXCEPTION_DETAIL,
+              _sqlstate = RETURNED_SQLSTATE;
+          RAISE WARNING 'reindexing index "%.%" for chunk "%" to columnstore failed when columnstore policy is executed', idx_rec.schemaname, idx_rec.indexname, chunk_rec.oid::regclass::text
+              USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
+                    ERRCODE = _sqlstate;
+          chunks_failure := chunks_failure + 1;
+        END;
+        COMMIT;
+      END LOOP;
+    END IF;
+
     -- SET LOCAL is only active until end of transaction.
     -- While we could use SET at the start of the function we do not
     -- want to bleed out search_path to caller, so we do SET LOCAL
@@ -166,6 +195,7 @@ DECLARE
   maxchunks           INTEGER := 0;
   numchunks           INTEGER := 1;
   recompress_enabled  BOOL;
+  reindex_enabled     BOOL;
   use_creation_time   BOOL := FALSE;
   hypercore_use_access_method   BOOL;
 BEGIN
@@ -186,6 +216,7 @@ BEGIN
   verbose_log         := COALESCE(jsonb_object_field_text(config, 'verbose_log')::BOOLEAN, FALSE);
   maxchunks           := COALESCE(jsonb_object_field_text(config, 'maxchunks_to_compress')::INTEGER, 0);
   recompress_enabled  := COALESCE(jsonb_object_field_text(config, 'recompress')::BOOLEAN, TRUE);
+  reindex_enabled     := COALESCE(jsonb_object_field_text(config, 'reindex')::BOOLEAN, TRUE);
 
   -- find primary dimension type --
   SELECT dim.column_type INTO dimtype
@@ -213,13 +244,13 @@ BEGIN
   -- execute the properly type casts for the lag value
   CASE dimtype
     WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype, 'DATE'::regtype, 'INTERVAL' ::regtype  THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, hypercore_use_access_method);
     WHEN 'BIGINT'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::BIGINT, maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::BIGINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, hypercore_use_access_method);
     WHEN 'INTEGER'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTEGER, maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTEGER, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, hypercore_use_access_method);
     WHEN 'SMALLINT'::regtype THEN
-      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::SMALLINT, maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method);
+      CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::SMALLINT, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, hypercore_use_access_method);
   END CASE;
   COMMIT;
 END;
