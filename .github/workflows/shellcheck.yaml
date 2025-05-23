@@ -8,7 +8,7 @@ name: Shellcheck
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
     paths:
       - '**.sh'
       - .github/workflows/shellcheck.yaml
