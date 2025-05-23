@@ -48,6 +48,7 @@ AS $$
 DECLARE
   htoid       REGCLASS;
   chunk_rec   RECORD;
+  idx_rec     RECORD;
   numchunks_compressed   INTEGER := 0;
   _message     text;
   _detail      text;
@@ -106,6 +107,24 @@ BEGIN
     BEGIN
       IF chunk_rec.status = bit_compressed OR recompress_enabled IS TRUE THEN
         PERFORM @extschema@.compress_chunk(chunk_rec.oid, hypercore_use_access_method => useam);
+        -- went through recompression successfully now reindex indexes
+        IF chunk_rec.status = bit_compressed | bit_compressed_partial THEN
+          FOR idx_rec IN
+            SELECT schemaname, indexname
+            FROM pg_indexes
+            WHERE schemaname = chunk_rec.schema_name
+              AND tablename = chunk_rec.table_name
+              AND EXISTS (
+                SELECT 1
+                FROM _timescaledb_catalog.chunk ch
+                WHERE ch.schema_name = chunk_rec.schema_name
+                  AND ch.table_name = chunk_rec.table_name
+                  AND ch.status = status_fully_compressed
+              )
+          LOOP
+            EXECUTE format('REINDEX INDEX %I.%I;', idx_rec.schemaname, idx_rec.indexname);
+          END LOOP;
+        END IF;
         numchunks_compressed := numchunks_compressed + 1;
       END IF;
     EXCEPTION WHEN OTHERS THEN
