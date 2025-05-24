@@ -160,7 +160,7 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
 	ccstate = palloc(sizeof(CopyChunkState));
 	ccstate->rel = rel;
 	ccstate->estate = estate;
-	ccstate->dispatch = ts_chunk_dispatch_create(ht, estate, 0);
+	ccstate->dispatch = ts_chunk_dispatch_create(ht, estate);
 
 	/* In the copy path, no chunk dispatch node and no chunk dispatch state is available. Create an
 	 * empty state to be able to count decompressed tuples. */

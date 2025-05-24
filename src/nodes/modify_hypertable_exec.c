@@ -169,14 +169,13 @@ static bool ExecOnConflictUpdate(ModifyTableContext *context,
 								 TupleTableSlot *excludedSlot,
 								 bool canSetTag,
 								 TupleTableSlot **returning);
-/*
+
 static TupleTableSlot *ExecPrepareTupleRouting(ModifyTableState *mtstate,
 											   EState *estate,
-											   PartitionTupleRouting *proute,
+											   ChunkDispatchState *cds,
 											   ResultRelInfo *targetRelInfo,
 											   TupleTableSlot *slot,
 											   ResultRelInfo **partRelInfo);
-*/
 
 static TupleTableSlot *ExecMerge(ModifyTableContext *context,
 								 ResultRelInfo *resultRelInfo,
@@ -539,6 +538,33 @@ ExecGetInsertNewTuple(ResultRelInfo *relinfo,
 	return ExecProject(newProj);
 }
 
+/*
+ * ExecPrepareTupleRouting --- prepare for routing one tuple
+ *
+ * Determine the partition in which the tuple in slot is to be inserted,
+ * and return its ResultRelInfo in *partRelInfo.  The return value is
+ * a slot holding the tuple of the partition rowtype.
+ *
+ * This also sets the transition table information in mtstate based on the
+ * selected partition.
+ */
+static TupleTableSlot *
+ExecPrepareTupleRouting(ModifyTableState *mtstate,
+						EState *estate,
+						ChunkDispatchState *cds,
+						ResultRelInfo *targetRelInfo,
+						TupleTableSlot *slot,
+						ResultRelInfo **partRelInfo)
+{
+	ChunkInsertState *cis = cds->cis;
+	/* Convert the tuple to the chunk's rowtype, if necessary */
+	if (cis->hyper_to_chunk_map != NULL && cds->is_dropped_attr_exists == false)
+		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
+
+	*partRelInfo = cds->rri;
+	return slot;
+}
+
 /* ----------------------------------------------------------------
  *		ExecInsert
  *
@@ -580,34 +606,18 @@ ExecInsert(ModifyTableContext *context,
 	Assert(!mtstate->mt_partition_tuple_routing);
 
 	/*
-	 * Fetch the chunk dispatch state similar to how it is done in
-	 * nodeModifyTable.c. For us, this is stored in the chunk insert state,
-	 * which we add in to the chunk dispatch state in chunk_dispatch_exec().
-	 *
-	 * We can probably improve this code by removing ChunkDispatch. It is
-	 * currently the immediate child of ModifyTable and placed between
-	 * ModifyTable and the original subplan of ModifyTable. This was
-	 * previously necessary because we didn't have our own version of
-	 * ModifyTable, but since PG14 we have our own version of
-	 * ModifyTable. This means that we can move the logic to make a
-	 * partition/chunk lookup into a separate function similar to how
-	 * ExecPrepareTupleRouting() does it in nodeModifyTable.c.
-	 *
-	 *    if (proute)
-	 *    {
-	 *        ResultRelInfo *partRelInfo;
-	 *
-	 *        slot = ExecPrepareTupleRouting(mtstate, estate, proute,
-	 *                                       resultRelInfo, slot,
-	 *                                       &partRelInfo);
-	 *        resultRelInfo = partRelInfo;
-	 *  }
-	 *
-	 * The current approach is a quick fix to avoid changing too much code at
-	 * the same time and risk introducing a bug.
+	 * If the input result relation is a partitioned table, find the leaf
+	 * partition to insert the tuple into.
 	 */
-	slot = ts_chunk_dispatch_prepare_tuple_routing(cds, slot);
-	resultRelInfo = cds->rri;
+	if (cds)
+	{
+		ResultRelInfo *partRelInfo;
+
+		slot = ExecPrepareTupleRouting(mtstate, estate, cds,
+									   resultRelInfo, slot,
+									   &partRelInfo);
+		resultRelInfo = partRelInfo;
+	}
 
 	ExecMaterializeSlot(slot);
 

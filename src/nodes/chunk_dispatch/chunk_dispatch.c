@@ -30,13 +30,12 @@
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
 
 ChunkDispatch *
-ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags)
+ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 {
 	ChunkDispatch *cd = palloc0(sizeof(ChunkDispatch));
 
 	cd->hypertable = ht;
 	cd->estate = estate;
-	cd->eflags = eflags;
 	cd->hypertable_result_rel_info = NULL;
 	cd->cache =
 		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
@@ -276,12 +275,11 @@ static CustomPathMethods chunk_dispatch_path_methods = {
 };
 
 Path *
-ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index hypertable_rti,
-							  int subpath_index)
+ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 {
 	ChunkDispatchPath *path = (ChunkDispatchPath *) palloc0(sizeof(ChunkDispatchPath));
 	Path *subpath = mtpath->subpath;
-	RangeTblEntry *rte = planner_rt_fetch(hypertable_rti, root);
+	RangeTblEntry *rte = planner_rt_fetch(mtpath->nominalRelation, root);
 
 	memcpy(&path->cpath.path, subpath, sizeof(Path));
 	path->cpath.path.type = T_CustomPath;
@@ -289,7 +287,6 @@ ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index 
 	path->cpath.methods = &chunk_dispatch_path_methods;
 	path->cpath.custom_paths = list_make1(subpath);
 	path->mtpath = mtpath;
-	path->hypertable_rti = hypertable_rti;
 	path->hypertable_relid = rte->relid;
 
 	return &path->cpath.path;
@@ -308,7 +305,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 												 &hypertable_cache);
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
-	state->dispatch = ts_chunk_dispatch_create(ht, estate, eflags);
+	state->dispatch = ts_chunk_dispatch_create(ht, estate);
 	state->dispatch->dispatch_state = state;
 	node->custom_ps = list_make1(ps);
 }
@@ -454,18 +451,6 @@ chunk_dispatch_exec(CustomScanState *node)
 	 * hypertable_modify.c for more information.
 	 */
 	state->cis = cis;
-
-	return slot;
-}
-
-TupleTableSlot *
-ts_chunk_dispatch_prepare_tuple_routing(ChunkDispatchState *state, TupleTableSlot *slot)
-{
-	ChunkInsertState *cis = state->cis;
-
-	/* Convert the tuple to the chunk's rowtype, if necessary */
-	if (cis->hyper_to_chunk_map != NULL && state->is_dropped_attr_exists == false)
-		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
 
 	return slot;
 }

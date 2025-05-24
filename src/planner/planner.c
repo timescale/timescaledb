@@ -50,7 +50,6 @@
 #include "import/allpaths.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/modify_hypertable.h"
 #include "partitioning.h"
@@ -1544,10 +1543,6 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  * the chunk, sets the executor's resultRelation to the chunk table and finally
  * returns the tuple to the ModifyTable node.
  *
- * We also need to wrap the ModifyTable plan node with a HypertableInsert node
- * to give the ChunkDispatchState node access to the ModifyTableState node in
- * the execution phase.
- *
  * Conceptually, the plan modification looks like this:
  *
  * Original plan:
@@ -1592,33 +1587,38 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			ModifyTablePath *mt = castNode(ModifyTablePath, path);
 			RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 			Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
-			if (
-				/* We only route UPDATE/DELETE through our CustomNode for PG 14+ because
-				 * the codepath for earlier versions is different. */
-				mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE ||
-				mt->operation == CMD_INSERT)
+			if (ht)
 			{
-				if (ht)
+				switch (mt->operation)
 				{
-					path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
-				}
-			}
-			if (ht && mt->operation == CMD_MERGE)
-			{
-				List *firstMergeActionList = linitial(mt->mergeActionLists);
-				ListCell *l;
-				/*
-				 * Iterate over merge action to check if there is an INSERT sql.
-				 * If so, then add ChunkDispatch node.
-				 */
-				foreach (l, firstMergeActionList)
-				{
-					MergeAction *action = (MergeAction *) lfirst(l);
-					if (action->commandType == CMD_INSERT)
+					case CMD_INSERT:
+					case CMD_UPDATE:
+					case CMD_DELETE:
 					{
 						path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
 						break;
 					}
+					case CMD_MERGE:
+					{
+						List *firstMergeActionList = linitial(mt->mergeActionLists);
+						ListCell *l;
+						/*
+						 * Iterate over merge action to check if there is an INSERT sql.
+						 * If so, then add ModifyHypertable node.
+						 */
+						foreach (l, firstMergeActionList)
+						{
+							MergeAction *action = (MergeAction *) lfirst(l);
+							if (action->commandType == CMD_INSERT)
+							{
+								path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
+								break;
+							}
+						}
+						break;
+					}
+					default:
+						break;
 				}
 			}
 		}
