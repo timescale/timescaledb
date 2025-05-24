@@ -38,6 +38,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
+    cagg_concurrent_move.spec
     cagg_concurrent_invalidation.spec
     compression_chunk_race.spec
     compression_freeze.spec

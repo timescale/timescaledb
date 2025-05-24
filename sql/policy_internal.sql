@@ -34,6 +34,14 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_refresh_continuous_aggr
 RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_check'
 LANGUAGE C;
 
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.policy_process_hypertable_invalidations(job_id INTEGER, config JSONB)
+AS '@MODULE_PATHNAME@', 'ts_policy_process_hyper_inval_proc'
+LANGUAGE C;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_process_hypertable_invalidations_check(config JSONB)
+RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_process_hyper_inval_check'
+LANGUAGE C;
+
 CREATE OR REPLACE PROCEDURE
 _timescaledb_functions.policy_compression_execute(
   job_id              INTEGER,
