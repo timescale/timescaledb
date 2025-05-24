@@ -390,13 +390,10 @@ ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	Path *path = &mtpath->path;
 	Cache *hcache = ts_hypertable_cache_pin();
 	ModifyHypertablePath *hmpath;
-	int i = 0;
-
-	Index rti = mtpath->nominalRelation;
 
 	if (mtpath->operation == CMD_INSERT || mtpath->operation == CMD_MERGE)
 	{
-		mtpath->subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
+		mtpath->subpath = ts_chunk_dispatch_path_create(root, mtpath);
 	}
 
 	hmpath = palloc0(sizeof(ModifyHypertablePath));
