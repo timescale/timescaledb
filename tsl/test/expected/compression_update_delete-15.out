@@ -2733,14 +2733,14 @@ UPDATE test_limit SET id = 0;
 ERROR:  tuple decompression limit exceeded by operation
 DETAIL:  current limit: 5000, tuples decompressed: 30000
 HINT:  Consider increasing timescaledb.max_tuples_decompressed_per_dml_transaction or set to 0 (unlimited).
-DELETE FROM test_limit WHERE id > 0;
+DELETE FROM test_limit WHERE id = 1;
 ERROR:  tuple decompression limit exceeded by operation
 DETAIL:  current limit: 5000, tuples decompressed: 30000
 HINT:  Consider increasing timescaledb.max_tuples_decompressed_per_dml_transaction or set to 0 (unlimited).
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
 UPDATE test_limit SET id = 0;
-DELETE FROM test_limit WHERE id > 0;
+DELETE FROM test_limit WHERE id = 1;
 \set ON_ERROR_STOP 1
 DROP TABLE test_limit;
 -- check partial compression with DML
@@ -3091,13 +3091,12 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time = timestamptz('2020-01-01 0
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   Batches decompressed: 1
-   Tuples decompressed: 1
+   Batches deleted: 1
    ->  Delete on test_pushdown (actual rows=0 loops=1)
          Delete on _hyper_39_76_chunk test_pushdown_1
-         ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=1 loops=1)
+         ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0 loops=1)
                Filter: ("time" = 'Wed Jan 01 05:00:00 2020 PST'::timestamp with time zone)
-(7 rows)
+(6 rows)
 
 -- test sqlvaluefunction
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = substring(CURRENT_USER,length(CURRENT_USER)+1) || 'c'; ROLLBACK;
@@ -3338,6 +3337,61 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',current_query());
                      Rows Removed by Filter: 2
 (10 rows)
 
+-- test DELETE optimization without predicates
+-- should delete 3 complete batches without decompression
+BEGIN; :EXPLAIN DELETE FROM test_pushdown; ROLLBACK;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
+   Batches deleted: 3
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_76_chunk test_pushdown_1
+         ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0 loops=1)
+(5 rows)
+
+-- test DELETE optimization on non-segmentby columns
+-- this shows optimization can be applied if in-memory filtering is enabled
+\set QUIET off
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
+   Batches deleted: 3
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_76_chunk test_pushdown_1
+         ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=0 loops=1)
+               Filter: ("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
+(6 rows)
+
+ROLLBACK
+BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN
+DELETE 3
+ROLLBACK
+SET timescaledb.enable_dml_decompression_tuple_filtering TO OFF;
+SET
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
+   Batches decompressed: 3
+   Tuples decompressed: 3
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_76_chunk test_pushdown_1
+         ->  Seq Scan on _hyper_39_76_chunk test_pushdown_1 (actual rows=3 loops=1)
+               Filter: ("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
+(7 rows)
+
+ROLLBACK
+BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN
+DELETE 3
+ROLLBACK
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+RESET
+\set QUIET on
 -- github issue #6858
 -- check update triggers work correctly both on uncompressed and compressed chunks
 CREATE TABLE update_trigger_test (

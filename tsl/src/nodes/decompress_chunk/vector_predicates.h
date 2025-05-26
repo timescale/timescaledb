@@ -25,14 +25,14 @@ void vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict re
 void vector_booleantest(const ArrowArray *arrow, int test_type, uint64 *restrict result);
 void vector_booleq(const ArrowArray *arrow, Datum arg, uint64 *restrict result);
 
-typedef enum VectorQualSummary
+typedef enum BatchQualSummary
 {
 	AllRowsPass,
 	NoRowsPass,
 	SomeRowsPass
-} VectorQualSummary;
+} BatchQualSummary;
 
-static pg_attribute_always_inline VectorQualSummary
+static pg_attribute_always_inline BatchQualSummary
 get_vector_qual_summary(const uint64 *qual_result, size_t n_rows)
 {
 	bool any_rows_pass = false;
