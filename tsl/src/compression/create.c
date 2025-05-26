@@ -892,8 +892,8 @@ bool
 tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
-	bool compress_disable = !with_clause_options[AlterTableFlagCompress].is_default &&
-							!DatumGetBool(with_clause_options[AlterTableFlagCompress].parsed);
+	bool compress_disable = !with_clause_options[AlterTableFlagColumnstore].is_default &&
+							!DatumGetBool(with_clause_options[AlterTableFlagColumnstore].parsed);
 	CompressionSettings *settings;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
