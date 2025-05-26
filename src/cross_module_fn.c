@@ -185,6 +185,13 @@ process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_opt
 	pg_unreachable();
 }
 
+static void
+compression_enable_default(Hypertable *ht, WithClauseResult *with_clause_options)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 static Datum
 error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 {
@@ -434,7 +441,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.bool_compressor_finish = error_no_default_fn_pg_community,
 	.bloom1_contains = error_no_default_fn_pg_community,
 
-	.compression_enable = NULL,
+	.compression_enable = compression_enable_default,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,

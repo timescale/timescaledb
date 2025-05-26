@@ -14,6 +14,7 @@
 
 static const WithClauseDefinition create_table_with_clauses_def[] = {
 	[CreateTableFlagHypertable] = {.arg_names = {"hypertable", NULL}, .type_id = BOOLOID,},
+	[CreateTableFlagColumnstore] = {.arg_names = {"columnstore", "enable_columnstore", "compress", NULL}, .type_id = BOOLOID, .default_val = (Datum)true,},
 	[CreateTableFlagTimeColumn] = {.arg_names = {"partition_column", "partitioning_column", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagChunkTimeInterval] = {.arg_names = {"chunk_interval", NULL}, .type_id = TEXTOID,},
 	[CreateTableFlagCreateDefaultIndexes] = {.arg_names = {"create_default_indexes", NULL}, .type_id = BOOLOID, .default_val = (Datum) true,},

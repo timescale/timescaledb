@@ -12,6 +12,7 @@
 typedef enum CreateTableFlags
 {
 	CreateTableFlagHypertable = 0,
+	CreateTableFlagColumnstore,
 	CreateTableFlagTimeColumn,
 	CreateTableFlagChunkTimeInterval,
 	CreateTableFlagCreateDefaultIndexes,
