@@ -300,7 +300,7 @@ UPDATE public.table_to_compress SET value = 3;
 ERROR:  cannot modify frozen chunk status
 --touches only frozen chunk
 DELETE FROM public.table_to_compress WHERE time < '2020-01-02';
-ERROR:  cannot modify frozen chunk status
+ERROR:  cannot update/delete rows from chunk "_hyper_2_3_chunk" as it is frozen
 \set ON_ERROR_STOP 1
 --try to refreeze
 SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME');
