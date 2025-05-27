@@ -42,3 +42,4 @@ typedef struct
 extern chunk_insert_check_hook_type ts_get_osm_chunk_insert_hook(void);
 extern hypertable_drop_hook_type ts_get_osm_hypertable_drop_hook(void);
 extern hypertable_drop_chunks_hook_type ts_get_osm_hypertable_drop_chunks_hook(void);
+extern bool ts_try_load_osm(void);
