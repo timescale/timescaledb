@@ -15,6 +15,6 @@ extern int chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_tha
 									bool use_creation_time);
 extern Datum chunk_merge_chunks(PG_FUNCTION_ARGS);
 extern Datum chunk_split_chunk(PG_FUNCTION_ARGS);
-extern void update_relstats(Relation catrel, Relation rel, double ntuples);
+extern void update_relstats(Relation catrel, Oid relid, BlockNumber num_pages, double ntuples);
 extern void compute_rel_vacuum_cutoffs(Relation rel, struct VacuumCutoffs *cutoffs);
 extern void chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube);
