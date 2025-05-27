@@ -652,6 +652,7 @@ set timescaledb.enable_merge_multidim_chunks = true;
 -- Merge all chunks until only 1 remains.  Also check that metadata is
 -- merged.
 ---
+begin;
 select * from compression_size_fraction;
  chunk_id | compressed_chunk_id | uncompressed_heap_size_fraction | uncompressed_toast_size_fraction | uncompressed_index_size_fraction | compressed_heap_size_fraction | compressed_toast_size_fraction | compressed_index_size_fraction | numrows_pre_compression_fraction | numrows_post_compression_fraction | numrows_frozen_immediately_fraction 
 ----------+---------------------+---------------------------------+----------------------------------+----------------------------------+-------------------------------+--------------------------------+--------------------------------+----------------------------------+-----------------------------------+-------------------------------------
@@ -757,3 +758,63 @@ select * from chunk_info;
 ------------------+------+------------------------------------------------------------------------------------------------------------------------------------------------
  _hyper_1_1_chunk | heap | (("time" >= 'Sun Dec 31 16:00:00 2023 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 04 16:00:00 2024 PST'::timestamp with time zone))
 
+rollback;
+----------------------------
+-- Test concurrent merges --
+----------------------------
+create view chunks_being_merged as
+select
+    chunk_relid,
+    n as new_chunk_id,
+    (select count(indexrelid::regclass) from pg_index where indrelid=new_relid) as num_new_indexes
+from (select *, dense_rank() over (order by new_relid) as n from _timescaledb_catalog.chunk_rewrite) cr;
+-- Concurrent merge cannot run in a transaction block
+\set ON_ERROR_STOP 0
+begin;
+call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+ERROR:  merge_chunks cannot run inside a transaction block
+rollback;
+select debug_waitpoint_enable('merge_chunks_fail');
+ debug_waitpoint_enable 
+------------------------
+ 
+
+call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+ERROR:  error injected at debug point 'merge_chunks_fail'
+\set ON_ERROR_STOP 1
+select debug_waitpoint_release('merge_chunks_fail');
+ debug_waitpoint_release 
+-------------------------
+ 
+
+select * from chunks_being_merged;
+                   chunk_relid                   | new_chunk_id | num_new_indexes 
+-------------------------------------------------+--------------+-----------------
+ _timescaledb_internal._hyper_1_1_chunk          |            1 |               2
+ _timescaledb_internal._hyper_1_4_chunk          |            1 |               2
+ _timescaledb_internal._hyper_1_12_chunk         |            1 |               2
+ _timescaledb_internal._hyper_1_5_chunk          |            1 |               2
+ _timescaledb_internal.compress_hyper_2_17_chunk |            2 |               1
+
+create table pre_cleaned_chunks as select * from _timescaledb_catalog.chunk_rewrite;
+call _timescaledb_functions.chunk_rewrite_cleanup();
+NOTICE:  cleaned up 5 orphaned rewrite relations, skipped 0
+select * from chunks_being_merged;
+ chunk_relid | new_chunk_id | num_new_indexes 
+-------------+--------------+-----------------
+
+-- None of the pre-cleaned chunks should remain after cleanup. Check by joining
+-- the pre-cleaned relids with pg_class. The count should be zero if the
+-- relations no longer exist in pg_class.
+select count(*) from pre_cleaned_chunks;
+ count 
+-------
+     5
+
+select count(*) from pre_cleaned_chunks cc join pg_class c on (c.oid = cc.new_relid);
+ count 
+-------
+     0
+
+drop table pre_cleaned_chunks;
+drop view chunks_being_merged;
