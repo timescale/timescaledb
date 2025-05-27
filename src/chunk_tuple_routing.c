@@ -4,6 +4,8 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/tableam.h>
+#include <storage/lockdefs.h>
 #include <utils/rls.h>
 
 #include "chunk_insert_state.h"
@@ -12,7 +14,6 @@
 #include "debug_point.h"
 #include "guc.h"
 #include "hypercube.h"
-#include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
 ChunkTupleRouting *
@@ -61,6 +62,16 @@ destroy_chunk_insert_state(void *cis)
 	ts_chunk_insert_state_destroy((ChunkInsertState *) cis);
 }
 
+static void
+reinit_hypertable_cache(ChunkTupleRouting *ctr)
+{
+	Oid hyper_relid = ctr->hypertable->main_table_relid;
+	ts_cache_release(&ctr->hypertable_cache);
+	ctr->hypertable = ts_hypertable_cache_get_cache_and_entry(hyper_relid,
+															  CACHE_FLAG_NONE,
+															  &ctr->hypertable_cache);
+}
+
 extern ChunkInsertState *
 ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 {
@@ -78,6 +89,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 	{
 		bool chunk_created = false;
 		bool needs_partial = false;
+		LOCKMODE lockmode = RowExclusiveLock;
 
 		/*
 		 * Normally, for every row of the chunk except the first one, we expect
@@ -87,7 +99,8 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		 * locking the hypertable. This serves as a fast path for the usual case
 		 * where the chunk already exists.
 		 */
-		chunk = ts_hypertable_find_chunk_for_point(ctr->hypertable, point);
+		DEBUG_WAITPOINT("chunk_insert_before_lock");
+		chunk = ts_hypertable_find_chunk_for_point(ctr->hypertable, point, lockmode);
 
 		/*
 		 * Frozen chunks require at least PG14.
@@ -97,6 +110,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot INSERT into frozen chunk \"%s\"",
 							get_rel_name(chunk->table_id))));
+
 		if (chunk && IS_OSM_CHUNK(chunk))
 		{
 			const Dimension *time_dim = hyperspace_get_open_dimension(ctr->hypertable->space, 0);
@@ -104,7 +118,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
+					 errmsg("cannot insert into tiered chunk range of %s.%s - attempt to create "
 							"new chunk "
 							"with range  [%s %s] failed",
 							NameStr(ctr->hypertable->fd.schema_name),
@@ -119,23 +133,56 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 		if (!chunk)
 		{
-			chunk = ts_hypertable_create_chunk_for_point(ctr->hypertable, point);
+			chunk = ts_hypertable_create_chunk_for_point(ctr->hypertable, point, lockmode);
 			chunk_created = true;
 		}
 
 		Ensure(chunk, "no chunk found or created");
 
+#if USE_ASSERT_CHECKING
+		/* Ensure we always hold a lock on the chunk table at this point */
+		Relation chunk_rel = RelationIdGetRelation(chunk->table_id);
+		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
+		RelationClose(chunk_rel);
+#endif
 		if (ctr->create_compressed_chunk && !chunk->fd.compressed_chunk_id)
 		{
 			/*
-			 * When we try to create a compressed chunk, we need to grab a lock on the
-			 * chunk to synchronize with other concurrent insert operations trying to
-			 * create the same compressed chunk.
+			 * When creating a compressed chunk, the operation must be
+			 * synchronized with other operations. A RowExclusiveLock is
+			 * already held on the chunk table itself so it will conflict with
+			 * explicit compress calls like compress_chunk() or
+			 * convert_to_columnstore() that take at least
+			 * ExclusiveLock. However, it is also necessary to synchronize
+			 * with other concurrent inserts doing the same thing.
+			 *
+			 * We don't want to do a lock upgrade on the chunk table since
+			 * that could deadlock and it would also block concurrent inserts
+			 * on that table.
+			 *
+			 * Instead we synchronize around a tuple lock on the chunk
+			 * metadata row.
 			 */
-			LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
-			chunk = ts_chunk_get_by_id(chunk->fd.id, CACHE_FLAG_NONE);
+			int32 compressed_chunk_id = -1;
+			TM_Result lockres =
+				ts_chunk_lock_for_creating_compressed_chunk(chunk->fd.id, &compressed_chunk_id);
+
+			switch (lockres)
+			{
+				case TM_Updated:
+					/* Someone might have beaten us to it. Reread the chunk. */
+					reinit_hypertable_cache(ctr);
+					chunk = ts_chunk_get_by_id(chunk->fd.id, CACHE_FLAG_NONE);
+					compressed_chunk_id = chunk->fd.compressed_chunk_id;
+					break;
+				case TM_Ok:
+					break;
+				default:
+					elog(ERROR, "could not find compressed chunk status");
+			}
+
 			/* recheck whether compressed chunk exists after acquiring the lock */
-			if (!chunk->fd.compressed_chunk_id)
+			if (compressed_chunk_id == -1)
 			{
 				Hypertable *compressed_ht =
 					ts_hypertable_get_by_id(ctr->hypertable->fd.compressed_hypertable_id);

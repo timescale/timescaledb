@@ -36,6 +36,7 @@ extern TSDLLEXPORT DimensionSlice *ts_hypercube_add_slice(Hypercube *hc,
 extern Hypercube *ts_hypercube_from_constraints(const ChunkConstraints *constraints,
 												ScanIterator *slice_it);
 extern int ts_hypercube_find_existing_slices(const Hypercube *cube, const ScanTupLock *tuplock);
+extern bool ts_hypercube_lock_for_read(const Hypercube *cube);
 extern Hypercube *ts_hypercube_calculate_from_point(const Hyperspace *hs, const Point *p,
 													const ScanTupLock *tuplock);
 extern bool ts_hypercubes_collide(const Hypercube *cube1, const Hypercube *cube2);

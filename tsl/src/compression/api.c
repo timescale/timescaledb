@@ -298,7 +298,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		p->coordinates[p->num_coords++] = current_chunk->cube->slices[i]->fd.range_start;
 	}
 
-	previous_chunk = ts_hypertable_find_chunk_for_point(ht, p);
+	previous_chunk = ts_hypertable_find_chunk_for_point(ht, p, ExclusiveLock);
 
 	/* If there is no previous adjacent chunk along the time dimension or
 	 * if it hasn't been compressed yet, we can't merge.

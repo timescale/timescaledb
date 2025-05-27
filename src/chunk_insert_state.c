@@ -442,7 +442,6 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	 * operations as they should take higher-level locks (ShareLock and
 	 * above).
 	 */
-	DEBUG_WAITPOINT("chunk_insert_before_lock");
 	rel = table_open(chunk_relid, RowExclusiveLock);
 
 	/*
