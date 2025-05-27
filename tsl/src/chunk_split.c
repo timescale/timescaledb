@@ -13,6 +13,7 @@
 #include <catalog/pg_constraint.h>
 #include <commands/tablecmds.h>
 #include <storage/bufmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/acl.h>
 #include <utils/snapshot.h>
 #include <utils/syscache.h>
@@ -884,9 +885,13 @@ Datum
 chunk_split_chunk(PG_FUNCTION_ARGS)
 {
 	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	const Chunk *chunk;
 	Relation srcrel;
 
-	srcrel = table_open(relid, AccessExclusiveLock);
+	chunk = ts_chunk_get_by_relid_locked(relid, AccessExclusiveLock, true);
+
+	/* Chunk already locked, so use NoLock */
+	srcrel = table_open(relid, NoLock);
 
 	if (srcrel->rd_rel->relkind != RELKIND_RELATION)
 		ereport(ERROR,
@@ -915,8 +920,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	 * including open scans and pending AFTER trigger events.
 	 */
 	CheckTableNotInUse(srcrel, "split_chunk");
-
-	const Chunk *chunk = ts_chunk_get_by_relid(relid, true);
 
 	if (chunk->fd.osm_chunk)
 		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("cannot split OSM chunks")));
