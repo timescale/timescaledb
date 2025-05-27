@@ -946,17 +946,11 @@ merge_relinfos(RelationMergeInfo *relinfos, int nrelids, int mergeindex)
  * - all relations use same (or compatible) storage on disk
  * - all relations are chunks (and not, e.g., foreign/OSM chunks)
  *
- * A current limitation is that it is not possible to merge compressed chunks
- * since this requires additional functionality, such as:
- *
- * - Handling merge of compressed and non-compressed chunks
- *
- * - Merging chunks with different compression settings (e.g., different
- *   orderby or segmentby)
- *
- * - Merging partial chunks
- *
- * - Updating additional metadata of the internal compressed relations
+ * Compressed chunks can be merged, and in that case the non-compressed chunk
+ * and the (internal) compressed chunk are merged in separate
+ * steps. Currently, the merge does not move and recompress data across the
+ * two relations so whatever data was compressed or not compressed prior to
+ * the merge will remain in the same state after the merge.
  */
 Datum
 chunk_merge_chunks(PG_FUNCTION_ARGS)
