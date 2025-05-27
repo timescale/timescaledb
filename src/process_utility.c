@@ -29,6 +29,7 @@
 #include <commands/vacuum.h>
 #include <executor/spi.h>
 #include <miscadmin.h>
+#include <nodes/lockoptions.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
@@ -1393,14 +1394,22 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 	{
 		List *object = lfirst(lc);
 		RangeVar *relation = makeRangeVarFromNameList(object);
-		Oid relid;
+		ScanTupLock slice_lock = {
+			.lockmode = LockTupleExclusive,
+			.waitpolicy = LockWaitBlock,
+			.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+		};
 		Chunk *chunk;
 
 		if (NULL == relation)
 			continue;
 
-		relid = RangeVarGetRelid(relation, NoLock, true);
-		chunk = ts_chunk_get_by_relid(relid, false);
+		chunk = ts_chunk_get_by_name_with_memory_context(relation->schemaname,
+														 relation->relname,
+														 AccessExclusiveLock,
+														 &slice_lock,
+														 CurrentMemoryContext,
+														 false);
 
 		if (chunk != NULL)
 		{
@@ -1417,7 +1426,11 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			 *  it would be blocked if there are dependent objects */
 			if (stmt->behavior == DROP_CASCADE && chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 			{
-				Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+				Chunk *compressed_chunk =
+					ts_chunk_get_by_id_with_slice_lock(chunk->fd.compressed_chunk_id,
+													   AccessExclusiveLock,
+													   &slice_lock,
+													   false);
 				/* The chunk may have been delete by a CASCADE */
 				if (compressed_chunk != NULL)
 					ts_chunk_drop(compressed_chunk, stmt->behavior, DEBUG1);

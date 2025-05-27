@@ -142,7 +142,7 @@ ERROR:  no chunks to merge specified
 call merge_chunks(NULL, NULL);
 ERROR:  invalid relation
 call merge_chunks(999999,999991);
-ERROR:  relation does not exist
+ERROR:  chunk does not exist
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk']);
 ERROR:  must specify at least two chunks to merge
 call merge_chunks('_timescaledb_internal._hyper_1_1_chunk', NULL);

@@ -4,6 +4,8 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/tableam.h>
+#include <storage/lockdefs.h>
 #include <utils/rls.h>
 
 #include "chunk_insert_state.h"
@@ -12,7 +14,6 @@
 #include "debug_point.h"
 #include "guc.h"
 #include "hypercube.h"
-#include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
 ChunkTupleRouting *
@@ -97,6 +98,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 	{
 		bool chunk_created = false;
 		bool needs_partial = false;
+		const LOCKMODE lockmode = RowExclusiveLock;
 
 		/*
 		 * Normally, for every row of the chunk except the first one, we expect
@@ -106,7 +108,8 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		 * locking the hypertable. This serves as a fast path for the usual case
 		 * where the chunk already exists.
 		 */
-		chunk = ts_hypertable_find_chunk_for_point(ctr->hypertable, point);
+		DEBUG_WAITPOINT("chunk_insert_before_lock");
+		chunk = ts_hypertable_find_chunk_for_point(ctr->hypertable, point, lockmode);
 
 		/*
 		 * When inserting directly into a chunk, we should always find the chunk and
@@ -149,21 +152,51 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 		if (!chunk)
 		{
-			chunk = ts_hypertable_create_chunk_for_point(ctr->hypertable, point);
+			chunk = ts_hypertable_create_chunk_for_point(ctr->hypertable, point, lockmode);
 			chunk_created = true;
 		}
 
 		Ensure(chunk, "no chunk found or created");
 
+#ifdef USE_ASSERT_CHECKING
+		/* Ensure we always hold a lock on the chunk table at this point */
+		Relation chunk_rel = RelationIdGetRelation(chunk->table_id);
+		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
+		RelationClose(chunk_rel);
+#endif
 		if (ctr->create_compressed_chunk && !chunk->fd.compressed_chunk_id)
 		{
 			/*
-			 * When we try to create a compressed chunk, we need to grab a lock on the
-			 * chunk to synchronize with other concurrent insert operations trying to
-			 * create the same compressed chunk.
+			 * When creating a compressed chunk, the operation must be
+			 * synchronized with other operations. A RowExclusiveLock is
+			 * already held on the chunk table itself so it will conflict with
+			 * explicit compress calls like compress_chunk() or
+			 * convert_to_columnstore() that take at least
+			 * ExclusiveLock. However, it is also necessary to synchronize
+			 * with other concurrent inserts doing the same thing.
+			 *
+			 * We don't want to do a lock upgrade on the chunk table since
+			 * that increases the risk of deadlocks.
+			 *
+			 * Instead we synchronize around a tuple lock on the chunk
+			 * metadata row since this is the row getting updated with new
+			 * compression status.
 			 */
-			LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
-			chunk = ts_chunk_get_by_id(chunk->fd.id, CACHE_FLAG_NONE);
+			TM_Result lockres;
+
+			lockres = ts_chunk_lock_for_creating_compressed_chunk(chunk->fd.id,
+																  &chunk->fd.compressed_chunk_id);
+
+			/*
+			 * Since the locking function blocks and follows the update chain,
+			 * the only reasonable return value is TM_Ok. Everything else is
+			 * an error.
+			 */
+			Ensure(lockres == TM_Ok,
+				   "could not lock chunk row for creating "
+				   "compressed chunk. Lock result %d",
+				   lockres);
+
 			/* recheck whether compressed chunk exists after acquiring the lock */
 			if (!chunk->fd.compressed_chunk_id)
 			{
@@ -172,6 +205,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 				Chunk *compressed_chunk =
 					ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
 				ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
+				chunk->fd.compressed_chunk_id = compressed_chunk->fd.id;
 
 				/* mark chunk as partial unless completely new chunk */
 				if (!chunk_created)
