@@ -1,1 +1,0 @@
-Fixes: #8171 Disable decompression limit during continuous aggregate refresh
