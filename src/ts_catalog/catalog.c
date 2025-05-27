@@ -45,6 +45,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CHUNK_CONSTRAINT_TABLE_NAME,
 	},
+	[CHUNK_REWRITE] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CHUNK_REWRITE_TABLE_NAME,
+	},
 	[TABLESPACE] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = TABLESPACE_TABLE_NAME,
@@ -166,6 +170,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CHUNK_CONSTRAINT_DIMENSION_SLICE_ID_IDX] = "chunk_constraint_dimension_slice_id_idx",
 		},
 	},
+	[CHUNK_REWRITE] = {
+		.length = _MAX_CHUNK_REWRITE_INDEX,
+		.names = (char *[]) {
+			[CHUNK_REWRITE_IDX] = "chunk_rewrite_key",
+		},
+	},
 	[TABLESPACE] = {
 		.length = _MAX_TABLESPACE_INDEX,
 		.names = (char *[]) {
@@ -270,6 +280,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[DIMENSION_SLICE] = CATALOG_SCHEMA_NAME ".dimension_slice_id_seq",
 	[CHUNK] = CATALOG_SCHEMA_NAME ".chunk_id_seq",
 	[CHUNK_CONSTRAINT] = CATALOG_SCHEMA_NAME ".chunk_constraint_name",
+	[CHUNK_REWRITE] = NULL,
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
 	[BGW_JOB_STAT] = NULL,
