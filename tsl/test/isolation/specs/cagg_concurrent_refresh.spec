@@ -327,22 +327,20 @@ permutation "R3_refresh" "L2_read_lock_threshold_table" "R1_refresh" "L2_read_un
 #
 ##################################################################
 
-# Interleave two refreshes that are overlapping (one simulated). Since
-# we serialize refreshes, R1 should block until the lock is released
+# Interleave two refreshes that are overlapping (one simulated)
 permutation "L3_lock_cagg_table" "R1_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
-# R1 and R2 queued to refresh, both should serialize
+# R1 and R2 queued to refresh
 permutation "L3_lock_cagg_table" "R1_refresh" "R2_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
-# R1 and R3 don't have overlapping refresh windows, but should skip locks and process the materialization.
-# So after unlock the cagg table we process the R1 again because R2 cutted the materialization invalidation logs
-# to finally materialize all the necessary ranges
-#permutation "L3_lock_cagg_table" "R1_refresh" "R3_refresh" "L3_unlock_cagg_table" "R3_refresh" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
+# R1 and R3 don't have overlapping refresh windows, but should skip
+# locks and process the materialization.
 permutation "L3_lock_cagg_table" "R1_refresh" "R3_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
 # Concurrent refreshing across two different aggregates on same
 # hypertable does not block
 permutation "L3_lock_cagg_table" "R3_refresh" "R4_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
-# Concurrent refresh of caggs on different hypertables should not block each other
+# Concurrent refresh of caggs on different hypertables should not
+# block each other
 permutation "R1_refresh" "R12_refresh"
