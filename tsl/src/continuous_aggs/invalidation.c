@@ -31,6 +31,7 @@
 
 #include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
+#include "debug_point.h"
 #include "guc.h"
 #include "invalidation.h"
 #include "refresh.h"
@@ -944,6 +945,8 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 													  ti,
 													  state->cagg->partition_type,
 													  bucket_function);
+
+		DEBUG_WAITPOINT("clear_cagg_invalidations_for_refresh_lock");
 
 		/* If the tuple was not locked, we cannot process it. */
 		if (ti->lockresult != TM_Ok)

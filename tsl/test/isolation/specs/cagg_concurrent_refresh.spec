@@ -123,7 +123,6 @@ setup
 setup
 {
     CALL refresh_continuous_aggregate('cond_10', 0, 30);
-
 }
 
 # Generate some invalidations. Must be done in separate transcations
@@ -150,6 +149,17 @@ setup
 teardown {
     DROP TABLE conditions CASCADE;
     DROP TABLE conditions2 CASCADE;
+}
+
+# Waitpoint for cagg invalidation logs
+session "WP"
+step "WP_enable"
+{
+    SELECT debug_waitpoint_enable('clear_cagg_invalidations_for_refresh_lock');
+}
+step "WP_release"
+{
+    SELECT debug_waitpoint_release('clear_cagg_invalidations_for_refresh_lock');
 }
 
 # Session to refresh the cond_10 continuous aggregate
@@ -344,3 +354,7 @@ permutation "L3_lock_cagg_table" "R3_refresh" "R4_refresh" "L3_unlock_cagg_table
 # Concurrent refresh of caggs on different hypertables should not
 # block each other
 permutation "R1_refresh" "R12_refresh"
+
+# CAgg invalidation logs processing skipping locks due to
+# the concurrent execution
+permutation "WP_enable" "R1_refresh" "R3_refresh" "WP_release" "S1_select" "R3_refresh" "S1_select"
