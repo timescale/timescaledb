@@ -310,9 +310,10 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 		if (strncmp(NameStr(attr->attname),
 					COMPRESSION_COLUMN_METADATA_PREFIX,
 					strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
-			elog(ERROR,
-				 "cannot compress tables with reserved column prefix '%s'",
-				 COMPRESSION_COLUMN_METADATA_PREFIX);
+			ereport(ERROR,
+					(errcode(ERRCODE_RESERVED_NAME),
+					 errmsg("cannot convert tables with reserved column prefix '%s'",
+							COMPRESSION_COLUMN_METADATA_PREFIX)));
 
 		bool is_segmentby = ts_array_is_member(segmentby, NameStr(attr->attname));
 		if (is_segmentby)
@@ -466,9 +467,10 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
 	if (strncmp(colname,
 				COMPRESSION_COLUMN_METADATA_PREFIX,
 				strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
-		elog(ERROR,
-			 "cannot compress tables with reserved column prefix '%s'",
-			 COMPRESSION_COLUMN_METADATA_PREFIX);
+		ereport(ERROR,
+				(errcode(ERRCODE_RESERVED_NAME),
+				 errmsg("cannot convert tables with reserved column prefix '%s'",
+						COMPRESSION_COLUMN_METADATA_PREFIX)));
 
 	return makeColumnDef(colname, compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
 }
@@ -1006,9 +1008,10 @@ validate_hypertable_for_compression(Hypertable *ht)
 		if (strncmp(NameStr(attr->attname),
 					COMPRESSION_COLUMN_METADATA_PREFIX,
 					strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
-			elog(ERROR,
-				 "cannot convert tables with reserved column prefix '%s' to columnstore",
-				 COMPRESSION_COLUMN_METADATA_PREFIX);
+			ereport(ERROR,
+					(errcode(ERRCODE_RESERVED_NAME),
+					 errmsg("cannot convert tables with reserved column prefix '%s' to columnstore",
+							COMPRESSION_COLUMN_METADATA_PREFIX)));
 	}
 
 	if (row_size > MaxHeapTupleSize)
@@ -1430,9 +1433,10 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 	if (strncmp(stmt->newname,
 				COMPRESSION_COLUMN_METADATA_PREFIX,
 				strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
-		elog(ERROR,
-			 "cannot convert tables with reserved column prefix '%s' to columnstore",
-			 COMPRESSION_COLUMN_METADATA_PREFIX);
+		ereport(ERROR,
+				(errcode(ERRCODE_RESERVED_NAME),
+				 errmsg("cannot convert tables with reserved column prefix '%s' to columnstore",
+						COMPRESSION_COLUMN_METADATA_PREFIX)));
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
