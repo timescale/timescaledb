@@ -36,50 +36,28 @@ See [other installation options](https://docs.timescale.com/self-hosted/latest/i
 
 ## Create a hypertable
 
-You create a regular table and then convert it into a hypertable. A hypertable automatically partitions data into chunks to accelerate your queries.
+TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical query performance on your time-series and event data, while reducing data size by more than 90%. This keeps your analytics operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
 
 ```sql
--- Create timescaledb extension
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-
--- Create a regular SQL table
+-- Create a hypertable, with the columnstore from the hypercore engine
+-- "time" as partitioning column and a segment by on location
 CREATE TABLE conditions (
   time        TIMESTAMPTZ       NOT NULL,
   location    TEXT              NOT NULL,
   temperature DOUBLE PRECISION  NULL,
   humidity    DOUBLE PRECISION  NULL
+)
+WITH (
+  timescaledb.hypertable,
+  timescaledb.partition_column='time',
+  timescaledb.segmentby='location'
 );
-
--- Convert the table into a hypertable that is partitioned by time
-SELECT create_hypertable('conditions', by_range('time'));
 ```
 
 See more:
 
 - [About hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/)
 - [API reference](https://docs.timescale.com/api/latest/hypertable/)
-
-## Enable columnstore
-
-TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical query performance on your time-series and event data, while reducing data size by more than 90%. This keeps your analytics operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
-
-- Configure the columnstore on a hypertable:
-
-    ```sql
-    ALTER TABLE conditions SET (
-      timescaledb.compress,
-      timescaledb.compress_segmentby = 'location'
-    );
-    ```
-
-- Create a policy to automatically convert chunks in row format that are older than seven days to chunks in the columnar format:
-
-    ```sql
-    SELECT add_compression_policy('conditions', INTERVAL '7 days');
-    ```
-
-See more:
-
 - [About columnstore](https://docs.timescale.com/use-timescale/latest/compression/about-compression/)
 - [Enable columnstore manually](https://docs.timescale.com/use-timescale/latest/compression/manual-compression/)
 - [API reference](https://docs.timescale.com/api/latest/compression/)
