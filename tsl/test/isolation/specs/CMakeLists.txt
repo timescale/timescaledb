@@ -18,7 +18,6 @@ list(
   compression_conflicts_iso.spec
   cagg_insert.spec
   cagg_multi_iso.spec
-  cagg_concurrent_refresh.spec
   deadlock_drop_chunks_compress.spec
   deadlock_drop_index_vacuum.spec
   parallel_compression.spec
@@ -34,6 +33,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_FILES
     cagg_concurrent_move.spec
     cagg_concurrent_invalidation.spec
+    cagg_concurrent_refresh.spec
     compression_chunk_race.spec
     compression_freeze.spec
     compression_merge_race.spec

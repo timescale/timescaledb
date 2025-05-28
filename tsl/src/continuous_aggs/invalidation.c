@@ -31,6 +31,7 @@
 
 #include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
+#include "debug_point.h"
 #include "guc.h"
 #include "invalidation.h"
 #include "refresh.h"
@@ -94,9 +95,7 @@
  */
 typedef struct CAggInvalidationState
 {
-	int32 mat_hypertable_id;
-	Oid dimtype; /* The type of the underlying hypertable's time dimension
-				  * that is bucketed */
+	const ContinuousAgg *cagg;
 	MemoryContext per_tuple_mctx;
 	Relation cagg_log_rel;
 	Snapshot snapshot;
@@ -160,8 +159,7 @@ static Invalidation cut_cagg_invalidation_and_compute_remainder(
 static void clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 												 const InternalTimeRange *refresh_window,
 												 bool force);
-static void cagg_invalidation_state_init(CAggInvalidationState *state, const ContinuousAgg *cagg,
-										 Oid dimtype);
+static void cagg_invalidation_state_init(CAggInvalidationState *state, const ContinuousAgg *cagg);
 static void cagg_invalidation_state_cleanup(const CAggInvalidationState *state);
 
 static Relation
@@ -303,7 +301,7 @@ typedef enum InvalidationResult
 static bool
 save_invalidation_for_refresh(const CAggInvalidationState *state, const Invalidation *invalidation)
 {
-	int32 cagg_hyper_id = state->mat_hypertable_id;
+	int32 cagg_hyper_id = state->cagg->data.mat_hypertable_id;
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
 	HeapTuple refresh_tup;
 
@@ -349,7 +347,7 @@ cut_invalidation_along_refresh_window(const CAggInvalidationState *state,
 									  const InternalTimeRange *refresh_window,
 									  Invalidation *remainder)
 {
-	int32 cagg_hyper_id = state->mat_hypertable_id;
+	int32 cagg_hyper_id = state->cagg->data.mat_hypertable_id;
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
 	InvalidationResult result = INVAL_NOMATCH;
 	HeapTuple lower = NULL;
@@ -900,7 +898,7 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 									 const InternalTimeRange *refresh_window, bool force)
 {
 	ScanIterator iterator;
-	int32 cagg_hyper_id = state->mat_hypertable_id;
+	int32 cagg_hyper_id = state->cagg->data.mat_hypertable_id;
 	Invalidation mergedentry;
 	Invalidation remainder;
 
@@ -908,6 +906,14 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 	invalidation_entry_reset(&remainder);
 	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, RowExclusiveLock);
 	iterator.ctx.snapshot = state->snapshot;
+	/* Skip locked tuples */
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitSkip,
+		.lockmode = LockTupleExclusive,
+		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+	};
+	iterator.ctx.tuplock = &scantuplock;
+	iterator.ctx.flags = SCANNER_F_KEEPLOCK;
 
 	MemoryContextReset(state->per_tuple_mctx);
 
@@ -925,10 +931,13 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 		save_invalidation_for_refresh(state, &logentry);
 	}
 
+	DEBUG_WAITPOINT("clear_cagg_invalidations_for_refresh_lock");
+
 	/* Process all invalidations for the continuous aggregate */
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
 		MemoryContext oldmctx;
 		Invalidation logentry;
 		const ContinuousAggsBucketFunction *bucket_function = state->bucket_function;
@@ -936,8 +945,34 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 		oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
 		invalidation_entry_set_from_cagg_invalidation(&logentry,
 													  ti,
-													  state->dimtype,
+													  state->cagg->partition_type,
 													  bucket_function);
+
+		/* If the tuple was not locked, we cannot process it. */
+		if (ti->lockresult != TM_Ok)
+		{
+			Datum start_ts, end_ts;
+			Oid outfuncid = InvalidOid;
+			bool isvarlena;
+
+			start_ts = ts_internal_to_time_value(logentry.lowest_modified_value,
+												 state->cagg->partition_type);
+			end_ts = ts_internal_to_time_value((logentry.greatest_modified_value ==
+														CAGG_INVALIDATION_WRONG_GREATEST_VALUE ?
+													logentry.greatest_modified_value + 1 :
+													logentry.greatest_modified_value),
+											   state->cagg->partition_type);
+			getTypeOutputInfo(state->cagg->partition_type, &outfuncid, &isvarlena);
+			Assert(!isvarlena);
+
+			elog(DEBUG1,
+				 "cannot lock \"%s\" materialization invalidation log [ %s, %s ], skipping",
+				 NameStr(state->cagg->data.user_view_name),
+				 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
+				 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)));
+			MemoryContextSwitchTo(oldmctx);
+			continue;
+		}
 
 		if (!IS_VALID_INVALIDATION(&mergedentry))
 			mergedentry = logentry;
@@ -976,11 +1011,10 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 }
 
 static void
-cagg_invalidation_state_init(CAggInvalidationState *state, const ContinuousAgg *cagg, Oid dimtype)
+cagg_invalidation_state_init(CAggInvalidationState *state, const ContinuousAgg *cagg)
 {
-	state->mat_hypertable_id = cagg->data.mat_hypertable_id;
+	state->cagg = cagg;
 	state->bucket_function = cagg->bucket_function;
-	state->dimtype = dimtype;
 	state->cagg_log_rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
 	state->per_tuple_mctx = AllocSetContextCreate(CurrentMemoryContext,
 												  "Materialization invalidations",
@@ -1046,7 +1080,7 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 
 	*do_merged_refresh = false;
 
-	cagg_invalidation_state_init(&state, cagg, refresh_window->type);
+	cagg_invalidation_state_init(&state, cagg);
 	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
 	clear_cagg_invalidations_for_refresh(&state, refresh_window, force);
 	count = tuplestore_tuple_count(state.invalidations);
