@@ -433,14 +433,18 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 		elog(ERROR, "invalid number of arguments");
 
 	if (chunk_target_size_bytes < 0)
-		elog(ERROR, "chunk_target_size must be positive");
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("chunk_target_size must be positive")));
 
 	elog(DEBUG1, "[adaptive] chunk_target_size_bytes=" UINT64_FORMAT, chunk_target_size_bytes);
 
 	hypertable_id = ts_dimension_get_hypertable_id(dimension_id);
 
 	if (hypertable_id <= 0)
-		elog(ERROR, "could not find a matching hypertable for dimension %u", dimension_id);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("could not find a matching hypertable for dimension %u", dimension_id)));
 
 	ht = ts_hypertable_get_by_id(hypertable_id);
 
