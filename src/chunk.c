@@ -2162,7 +2162,9 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 				 errhint("The start of the time range must be before the end.")));
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-		elog(ERROR, "invalid operation on compressed hypertable");
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("invalid operation on compressed hypertable")));
 
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
@@ -3403,7 +3405,7 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to clear status %d , current status %x ",
 						   chunk->fd.id,
@@ -3438,7 +3440,7 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %x ",
 						   chunk->fd.id,
@@ -3457,7 +3459,7 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3490,7 +3492,7 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3510,7 +3512,7 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3540,7 +3542,7 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3560,7 +3562,7 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -4100,7 +4102,9 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (!time_dim)
-		elog(ERROR, "hypertable has no open partitioning dimension");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("hypertable has no open partitioning dimension")));
 
 	time_type = ts_dimension_get_partition_type(time_dim);
 
@@ -4371,10 +4375,11 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 
 			default:
 				if (throw_error)
-					elog(ERROR,
-						 "%s not permitted on tiered chunk \"%s\" ",
-						 get_chunk_operation_str(cmd),
-						 get_rel_name(chunk_relid));
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("%s not permitted on tiered chunk \"%s\" ",
+									get_chunk_operation_str(cmd),
+									get_rel_name(chunk_relid))));
 				return false;
 				break;
 		}
@@ -4394,10 +4399,11 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 			case CHUNK_DROP:
 			{
 				if (throw_error)
-					elog(ERROR,
-						 "%s not permitted on frozen chunk \"%s\" ",
-						 get_chunk_operation_str(cmd),
-						 get_rel_name(chunk_relid));
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("%s not permitted on frozen chunk \"%s\" ",
+									get_chunk_operation_str(cmd),
+									get_rel_name(chunk_relid))));
 				return false;
 				break;
 			}
@@ -4816,7 +4822,9 @@ ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
 		if (!name)
 			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
 		else
-			elog(ERROR, "\"%s\" is not a hypertable", name);
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+					 errmsg("\"%s\" is not a hypertable", name)));
 	}
 
 	if (get_rel_relkind(ftable_relid) == RELKIND_FOREIGN_TABLE)
