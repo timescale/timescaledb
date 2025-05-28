@@ -908,6 +908,14 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 	invalidation_entry_reset(&remainder);
 	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, RowExclusiveLock);
 	iterator.ctx.snapshot = state->snapshot;
+	/* Skip locked tuples */
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitSkip,
+		.lockmode = LockTupleExclusive,
+		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+	};
+	iterator.ctx.tuplock = &scantuplock;
+	iterator.ctx.flags = SCANNER_F_KEEPLOCK | SCANNER_F_NOEND_AND_NOCLOSE;
 
 	MemoryContextReset(state->per_tuple_mctx);
 
@@ -929,6 +937,11 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		/* If the tuple was not locked, we cannot process it. */
+		if (ti->lockresult != TM_Ok)
+			continue;
+
 		MemoryContext oldmctx;
 		Invalidation logentry;
 		const ContinuousAggsBucketFunction *bucket_function = state->bucket_function;

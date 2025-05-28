@@ -113,7 +113,7 @@ setup
       FROM _timescaledb_catalog.continuous_agg
       WHERE user_view_name = cagg
       INTO mattable;
-      EXECUTE format('LOCK table %s IN EXCLUSIVE MODE', mattable);
+      EXECUTE format('LOCK table %s IN ROW EXCLUSIVE MODE', mattable);
     END; $$ LANGUAGE plpgsql;
 }
 
@@ -334,8 +334,10 @@ permutation "L3_lock_cagg_table" "R1_refresh" "L3_unlock_cagg_table" "S1_select"
 # R1 and R2 queued to refresh, both should serialize
 permutation "L3_lock_cagg_table" "R1_refresh" "R2_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
-# R1 and R3 don't have overlapping refresh windows, but should serialize
-# anyway. This could potentially be optimized in the future.
+# R1 and R3 don't have overlapping refresh windows, but should skip locks and process the materialization.
+# So after unlock the cagg table we process the R1 again because R2 cutted the materialization invalidation logs
+# to finally materialize all the necessary ranges
+#permutation "L3_lock_cagg_table" "R1_refresh" "R3_refresh" "L3_unlock_cagg_table" "R3_refresh" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 permutation "L3_lock_cagg_table" "R1_refresh" "R3_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
 # Concurrent refreshing across two different aggregates on same
