@@ -737,7 +737,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * same continuous aggregate when they don't have overlapping refresh
 	 * windows.
 	 */
-	LockRelationOid(hyper_relid, ExclusiveLock);
+	LockRelationOid(hyper_relid, RowExclusiveLock);
 	invalidations = invalidation_process_cagg_log(cagg,
 												  refresh_window,
 												  ts_guc_cagg_max_individual_materializations,
