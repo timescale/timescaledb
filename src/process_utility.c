@@ -3816,7 +3816,7 @@ process_create_table_end(Node *parsetree)
 											   NULL, /* associated_table_prefix */
 										   csi))
 		{
-			if (ts_cm_functions->compression_enable)
+			if (DatumGetBool(create_table_info.with_clauses[CreateTableFlagColumnstore].parsed))
 			{
 				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
 				ts_cm_functions->compression_enable(ht, create_table_info.with_clauses);
@@ -4955,7 +4955,7 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		ts_dimension_set_chunk_interval(dim, chunk_interval);
 	}
 
-	if (!parse_results[AlterTableFlagCompress].is_default ||
+	if (!parse_results[AlterTableFlagColumnstore].is_default ||
 		!parse_results[AlterTableFlagOrderBy].is_default ||
 		!parse_results[AlterTableFlagSegmentBy].is_default ||
 		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default)

@@ -14,7 +14,7 @@ typedef enum CreateMaterializedViewFlags
 	CreateMaterializedViewFlagContinuous = 0,
 	CreateMaterializedViewFlagCreateGroupIndexes,
 	CreateMaterializedViewFlagMaterializedOnly,
-	CreateMaterializedViewFlagCompress,
+	CreateMaterializedViewFlagColumnstore,
 	CreateMaterializedViewFlagFinalized,
 	CreateMaterializedViewFlagChunkTimeInterval,
 	CreateMaterializedViewFlagSegmentBy,

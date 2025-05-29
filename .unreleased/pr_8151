@@ -1,1 +1,0 @@
-Fixes: #8151 Treat null equal to null for merged CAgg refresh

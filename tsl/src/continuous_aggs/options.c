@@ -129,7 +129,7 @@ cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_de
 	Assert(mat_ht != NULL);
 	WithClauseResult *with_clause_options = ts_alter_table_with_clause_parse(compress_defelems);
 
-	if (with_clause_options[AlterTableFlagCompress].parsed)
+	if (with_clause_options[AlterTableFlagColumnstore].parsed)
 	{
 		List *default_compress_defelems = cagg_get_compression_params(agg, mat_ht);
 		WithClauseResult *default_with_clause_options =
