@@ -759,7 +759,7 @@ compute_one_qual(VectorQualState *vqstate, TupleTableSlot *compressed_slot, Node
  * it means the entire batch is filtered out, and we use this for further
  * optimizations.
  */
-VectorQualSummary
+BatchQualSummary
 vector_qual_compute(VectorQualState *vqstate)
 {
 	/*
@@ -1014,7 +1014,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	};
 	VectorQualState *vqstate = &cbvqstate.vqstate;
 
-	VectorQualSummary vector_qual_summary =
+	BatchQualSummary vector_qual_summary =
 		vqstate->vectorized_quals_constified != NIL ? vector_qual_compute(vqstate) : AllRowsPass;
 
 	batch_state->vector_qual_result = vqstate->vector_qual_result;
