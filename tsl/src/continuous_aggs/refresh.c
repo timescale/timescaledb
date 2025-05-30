@@ -18,6 +18,8 @@
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 
+#include "bgw/job.h"
+#include "bgw_policy/process_hyper_inval_api.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "guc.h"
@@ -644,6 +646,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool force = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	bool move_hypertable_invalidations = force;
 	ContinuousAgg *cagg;
 	InternalTimeRange refresh_window = {
 		.type = InvalidOid,
@@ -653,6 +656,22 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 
 	cagg = cagg_get_by_relid_or_fail(cagg_relid);
 	refresh_window.type = cagg->partition_type;
+
+	/*
+	 * If we are forcing the refresh range, then we also force the
+	 * move. Otherwise, we check if there is a policy defined that moves the
+	 * invalidations to the materialization invalidation log.
+	 *
+	 * Right now it is not possible to just force the hypertable invalidations
+	 * to be moved and do a normal refresh.
+	 */
+	if (!force)
+	{
+		List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_PROCESS_HYPER_INVAL_PROC_NAME,
+															   FUNCTIONS_SCHEMA_NAME,
+															   cagg->data.raw_hypertable_id);
+		move_hypertable_invalidations = list_length(jobs) == 0;
+	}
 
 	if (!PG_ARGISNULL(1))
 		refresh_window.start = ts_time_value_from_arg(PG_GETARG_DATUM(1),
@@ -672,12 +691,14 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
 	CaggRefreshContext context = { .callctx = CAGG_REFRESH_WINDOW };
-	continuous_agg_refresh_internal(cagg,
-									&refresh_window,
-									context,
-									PG_ARGISNULL(1),
-									PG_ARGISNULL(2),
-									force);
+	continuous_agg_refresh_internal(
+		cagg,
+		&refresh_window,
+		context,
+		PG_ARGISNULL(1),
+		PG_ARGISNULL(2),
+		force,
+		move_hypertable_invalidations /* move_hypertable_invalidations */);
 
 	PG_RETURN_VOID();
 }
@@ -776,7 +797,8 @@ void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg,
 								const CaggRefreshContext context, const bool start_isnull,
-								const bool end_isnull, bool force)
+								const bool end_isnull, bool force,
+								bool move_hypertable_invalidations)
 {
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
@@ -885,11 +907,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * case.
 	 *
 	 * For variable width buckets we use a refresh_window.start value that is lower than the
-	 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in the
-	 * following if statement is not enough. If the invalidation_threshold returns the min_value for
-	 * the data type, we end up with [nobegin, min_value] which is an invalid time interval.
-	 * Therefore, we have also to check if the invalidation_threshold is defined. If not, no refresh
-	 * is needed.  */
+	 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in
+	 * the following if statement is not enough. If the invalidation_threshold returns the
+	 * min_value for the data type, we end up with [nobegin, min_value] which is an invalid time
+	 * interval. Therefore, we have also to check if the invalidation_threshold is defined. If
+	 * not, no refresh is needed.  */
 	if ((refresh_window.start >= refresh_window.end) ||
 		(IS_TIMESTAMP_TYPE(refresh_window.type) &&
 		 invalidation_threshold == ts_time_get_min(refresh_window.type)))
@@ -906,7 +928,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		return;
 	}
 
-	invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
+	if (move_hypertable_invalidations)
+		invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
 
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
@@ -986,8 +1009,8 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	/*
 	 * Cap the refresh window to the min and max time of the hypertable
 	 *
-	 * In order to don't produce unnecessary batches we need to check if the start and end of the
-	 * refresh window is NULL then get the min/max slice from the original hypertable
+	 * In order to don't produce unnecessary batches we need to check if the start and end of
+	 * the refresh window is NULL then get the min/max slice from the original hypertable
 	 *
 	 */
 	if (refresh_window.start_isnull)
@@ -1045,7 +1068,8 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			compute_inscribed_bucketed_refresh_window(cagg, &refresh_window, bucket_width);
 	}
 
-	/* Check if the refresh size is large enough to produce bathes, if not then return no batches */
+	/* Check if the refresh size is large enough to produce bathes, if not then return no
+	 * batches */
 	const int64 refresh_window_size = i64abs(refresh_window.end - refresh_window.start);
 	const int64 batch_size = (bucket_width * buckets_per_batch);
 
@@ -1062,7 +1086,8 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		fmgr_info(typoutputfunc, &typoutputinfo);
 
 		elog(LOG,
-			 "refresh window size (%s) is smaller than or equal to batch size (%s), falling back "
+			 "refresh window size (%s) is smaller than or equal to batch size (%s), falling "
+			 "back "
 			 "to single batch processing",
 			 OutputFunctionCall(&typoutputinfo, refresh_size_interval),
 			 OutputFunctionCall(&typoutputinfo, batch_size_interval));
@@ -1074,11 +1099,12 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	/*
 	 * Produce the batches to be processed
 	 *
-	 * The refresh window is split into multiple batches of size `batch_size` each. The batches are
-	 * produced in reverse order so that the first range produced is the last range to be processed.
+	 * The refresh window is split into multiple batches of size `batch_size` each. The batches
+	 * are produced in reverse order so that the first range produced is the last range to be
+	 * processed.
 	 *
-	 * The batches are produced in reverse order because the most recent data should be the first to
-	 * be processed and be visible for the users.
+	 * The batches are produced in reverse order because the most recent data should be the
+	 * first to be processed and be visible for the users.
 	 *
 	 * It takes in account the invalidation logs (hypertable and materialization hypertable) to
 	 * avoid producing wholes that have no data to be processed.
@@ -1087,11 +1113,13 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	 * 1. Get dimension slices from the original hypertables
 	 * 2. Get either hypertable and materialization hypertable invalidation logs
 	 * 3. Produce the batches in reverse order
-	 * 4. Check if the produced batch overlaps either with dimension slices #1 and invalidation logs
-	 * #2
+	 * 4. Check if the produced batch overlaps either with dimension slices #1 and invalidation
+	 * logs #2
 	 * 5. If the batch overlaps with both then it's a valid batch to be processed
-	 * 6. If the batch overlaps with only one of them then it's not a valid batch to be processed
-	 * 7. If the batch does not overlap with any of them then it's not a valid batch to be processed
+	 * 6. If the batch overlaps with only one of them then it's not a valid batch to be
+	 * processed
+	 * 7. If the batch does not overlap with any of them then it's not a valid batch to be
+	 * processed
 	 */
 	const char *query_str_template = " \
 		WITH dimension_slices AS ( \
@@ -1190,7 +1218,8 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	if (SPI_processed == 1)
 	{
 		elog(LOG,
-			 "only one batch produced for continuous aggregate \"%s.%s\", falling back to single "
+			 "only one batch produced for continuous aggregate \"%s.%s\", falling back to "
+			 "single "
 			 "batch processing",
 			 NameStr(cagg->data.user_view_schema),
 			 NameStr(cagg->data.user_view_name));
@@ -1239,8 +1268,8 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 		/*
 		 * To make sure that the last range (or first range in case of refreshing from oldest to
-		 * newest) is aligned with the start of the refresh window we need to set the start to the
-		 * maximum value of the time type if the original refresh window start is NULL.
+		 * newest) is aligned with the start of the refresh window we need to set the start to
+		 * the maximum value of the time type if the original refresh window start is NULL.
 		 */
 		if (((batch == (SPI_processed - 1) && refresh_newest_first) ||
 			 (batch == 0 && !refresh_newest_first)) &&
@@ -1266,7 +1295,8 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	if (refresh_window_list == NIL)
 	{
 		elog(LOG,
-			 "no valid batches produced for continuous aggregate \"%s.%s\", falling back to single "
+			 "no valid batches produced for continuous aggregate \"%s.%s\", falling back to "
+			 "single "
 			 "batch processing",
 			 NameStr(cagg->data.user_view_schema),
 			 NameStr(cagg->data.user_view_name));

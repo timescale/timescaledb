@@ -185,6 +185,32 @@ CALL _timescaledb_functions.policy_process_hypertable_invalidations(1, NULL);
 CALL _timescaledb_functions.policy_process_hypertable_invalidations(NULL, :'config');
 \set ON_ERROR_STOP 1
 
+-- Check that a refresh when a move policy is defined does not move
+-- the invalidations. This is the responsibility of the move policy.
+INSERT INTO measurements VALUES (40, 12, 12.3);
+INSERT INTO measurements VALUES (50, 13, 34.5);
+SELECT hypertable, lowest_modified_value, greatest_modified_value
+  FROM hypertable_invalidations;
+CALL refresh_continuous_aggregate('measure_10', NULL, NULL);
+SELECT hypertable, lowest_modified_value, greatest_modified_value
+  FROM hypertable_invalidations;
+
+-- Check that a force will move the invalidations.
+CALL refresh_continuous_aggregate('measure_10', NULL, NULL, force => true);
+SELECT hypertable, lowest_modified_value, greatest_modified_value
+  FROM hypertable_invalidations;
+
+-- Check that a refresh without a move invalidations policy does move
+-- the invalidations since there is nothing that does it for you now.
+INSERT INTO measurements VALUES (60, 16, 12.3);
+INSERT INTO measurements VALUES (70, 17, 34.5);
+SELECT hypertable, lowest_modified_value, greatest_modified_value
+  FROM hypertable_invalidations;
+CALL remove_process_hypertable_invalidations_policy('measurements');
+CALL refresh_continuous_aggregate('measure_10', NULL, NULL);
+SELECT hypertable, lowest_modified_value, greatest_modified_value
+  FROM hypertable_invalidations;
+
 -- Check permissions. Only owner should be able to remove policy.
 \set ON_ERROR_STOP 0
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
