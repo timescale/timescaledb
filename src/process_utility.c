@@ -4136,6 +4136,9 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 											DEFELEM_UNSPEC,
 											-1);
 
+		elog(WARNING,
+			 "the hypercore access method is marked as deprecated with the 2.21.0 release and will "
+			 "be fully removed in the 2.22.0 release.");
 		AlterTableCmd *cmd = makeNode(AlterTableCmd);
 		cmd->type = T_AlterTableCmd;
 		cmd->subtype = AT_SetRelOptions;
