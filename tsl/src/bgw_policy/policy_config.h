@@ -16,3 +16,6 @@
 #define POLICY_CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
 
 extern int32 policy_config_get_hypertable_id(const Jsonb *config);
+extern bool policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_label,
+														Oid partitioning_type, Oid lag_type,
+														Datum lag_datum, bool isnull);
