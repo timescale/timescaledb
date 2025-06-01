@@ -167,51 +167,39 @@ extern void
 ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkInsertState *cis,
 												TupleTableSlot *slot)
 {
-	if (cis->chunk_compressed)
+	if (!cis->chunk_compressed || (cis->cached_decompression_state &&
+								   !cis->cached_decompression_state->has_primary_or_unique_index))
+		return;
+
+	/*
+	 * If this is an INSERT into a compressed chunk with UNIQUE or
+	 * PRIMARY KEY constraints we need to make sure any batches that could
+	 * potentially lead to a conflict are in the decompressed chunk so
+	 * postgres can do proper constraint checking.
+	 */
+	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+
+	ts_cm_functions->init_decompress_state_for_insert(cis, slot);
+	ts_cm_functions->decompress_batches_for_insert(cis, slot);
+
+	/* mark rows visible */
+	if (onconflict_action == ONCONFLICT_UPDATE)
+		dispatch->estate->es_output_cid = GetCurrentCommandId(true);
+
+	if (ts_guc_max_tuples_decompressed_per_dml > 0)
 	{
-		/*
-		 * If this is an INSERT into a compressed chunk with UNIQUE or
-		 * PRIMARY KEY constraints we need to make sure any batches that could
-		 * potentially lead to a conflict are in the decompressed chunk so
-		 * postgres can do proper constraint checking.
-		 */
-		if (ts_cm_functions->decompress_batches_for_insert &&
-			ts_cm_functions->init_decompress_state_for_insert)
+		if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
 		{
-			OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
-
-			ts_cm_functions->init_decompress_state_for_insert(cis, slot);
-			ts_cm_functions->decompress_batches_for_insert(cis, slot);
-
-			/* mark rows visible */
-			if (onconflict_action == ONCONFLICT_UPDATE)
-				dispatch->estate->es_output_cid = GetCurrentCommandId(true);
-
-			if (ts_guc_max_tuples_decompressed_per_dml > 0)
-			{
-				if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-							 errmsg("tuple decompression limit exceeded by operation"),
-							 errdetail("current limit: %d, tuples decompressed: %lld",
-									   ts_guc_max_tuples_decompressed_per_dml,
-									   (long long int) cis->cds->tuples_decompressed),
-							 errhint(
-								 "Consider increasing "
-								 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
-								 "to 0 (unlimited).")));
-				}
-			}
-		}
-		else
 			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("functionality not supported under the current \"%s\" license. "
-							"Learn more at https://timescale.com/.",
-							ts_guc_license),
-					 errhint("To access all features and the best time-series "
-							 "experience, try out Timescale Cloud")));
+					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+					 errmsg("tuple decompression limit exceeded by operation"),
+					 errdetail("current limit: %d, tuples decompressed: %lld",
+							   ts_guc_max_tuples_decompressed_per_dml,
+							   (long long int) cis->cds->tuples_decompressed),
+					 errhint("Consider increasing "
+							 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
+							 "to 0 (unlimited).")));
+		}
 	}
 }
 

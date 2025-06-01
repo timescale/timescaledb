@@ -211,7 +211,7 @@ get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot, in
 }
 
 void
-decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
+decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 {
 	/*
 	 * This is supposed to be called with the actual tuple that is being
