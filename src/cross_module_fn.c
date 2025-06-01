@@ -205,6 +205,13 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
+static void
+error_no_default_fn_chunk_insert_state_community(ChunkInsertState *cis, TupleTableSlot *slot)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 /*
  * TSL library is not loaded by the replication worker for some reason,
  * so a call to `compressed_data_in` and `compressed_data_out` functions would
@@ -440,6 +447,9 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.bool_compressor_append = error_no_default_fn_pg_community,
 	.bool_compressor_finish = error_no_default_fn_pg_community,
 	.bloom1_contains = error_no_default_fn_pg_community,
+
+	.decompress_batches_for_insert = error_no_default_fn_chunk_insert_state_community,
+	.init_decompress_state_for_insert = error_no_default_fn_chunk_insert_state_community,
 
 	.compression_enable = compression_enable_default,
 

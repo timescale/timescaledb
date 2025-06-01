@@ -134,7 +134,7 @@ typedef struct CrossModuleFunctions
 	PGFunction create_compressed_chunk;
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
-	void (*decompress_batches_for_insert)(const ChunkInsertState *state, TupleTableSlot *slot);
+	void (*decompress_batches_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	void (*init_decompress_state_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
 	int (*hypercore_decompress_update_segment)(Relation relation, const ItemPointer ctid,
