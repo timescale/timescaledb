@@ -480,8 +480,6 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
  *
  * If table_id is InvalidOid, create a new table.
  *
- * Constraints and triggers are not created on the PG chunk table.
- * Caller is expected to do this explicitly.
  */
 Chunk *
 create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
@@ -494,16 +492,14 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 
 	Assert(compress_ht->space->num_dimensions == 0);
 
-	/* Create a new catalog entry for chunk based on the hypercube */
+	/* Create a new catalog entry for chunk based on uncompressed chunk */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	compress_chunk =
 		ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK), 0, RELKIND_RELATION);
 	ts_catalog_restore_user(&sec_ctx);
 
 	compress_chunk->fd.hypertable_id = compress_ht->fd.id;
-	compress_chunk->cube = src_chunk->cube;
 	compress_chunk->hypertable_relid = compress_ht->main_table_relid;
-	compress_chunk->constraints = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
 	namestrcpy(&compress_chunk->fd.schema_name, INTERNAL_SCHEMA_NAME);
 
 	if (OidIsValid(table_id))
@@ -533,14 +529,6 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 
 	/* Insert chunk */
 	ts_chunk_insert_lock(compress_chunk, RowExclusiveLock);
-
-	/* only add inheritable constraints. no dimension constraints */
-	ts_chunk_constraints_add_inheritable_constraints(compress_chunk->constraints,
-													 compress_chunk->fd.id,
-													 compress_chunk->relkind,
-													 compress_chunk->hypertable_relid);
-
-	ts_chunk_constraints_insert_metadata(compress_chunk->constraints);
 
 	/* Create the actual table relation for the chunk
 	 * Note that we have to pick the tablespace here as the compressed ht doesn't have dimensions
