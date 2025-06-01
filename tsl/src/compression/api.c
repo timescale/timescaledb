@@ -534,13 +534,6 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 											  cstat.rowcnt_post_compression,
 											  cstat.rowcnt_frozen);
 
-		/* Copy chunk constraints (including fkey) to compressed chunk.
-		 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
-		 * referenced table during compression.
-		 */
-		ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
-		ts_trigger_create_all_on_chunk(compress_ht_chunk);
-
 		/* Detect and emit warning if poor compression ratio is found */
 		float compression_ratio = ((float) before_size.total_size / after_size.total_size);
 		float POOR_COMPRESSION_THRESHOLD = 1.0;
@@ -754,10 +747,6 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	/* Create compressed chunk using existing table */
 	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
 	EventTriggerAlterTableEnd();
-
-	/* Copy chunk constraints (including fkey) to compressed chunk */
-	ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
-	ts_trigger_create_all_on_chunk(compress_ht_chunk);
 
 	/* Insert empty stats to compression_chunk_size */
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,

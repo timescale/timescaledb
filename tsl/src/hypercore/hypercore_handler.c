@@ -257,8 +257,6 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 
 		if (create_chunk_constraints)
 		{
-			ts_chunk_constraints_create(ht_compressed, c_chunk);
-			ts_trigger_create_all_on_chunk(c_chunk);
 			create_proxy_vacuum_index(rel, c_chunk->table_id);
 			RelationSize before_size = ts_relation_size_impl(RelationGetRelid(rel));
 			create_compression_relation_size_stats(chunk->fd.id,
