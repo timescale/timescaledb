@@ -22,12 +22,6 @@
 
 #include <postgres.h>
 
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <ctype.h>
-#include <netinet/in.h>
-#include <sys/stat.h>
-
 #include <access/heapam.h>
 #include <access/hio.h>
 #include <access/sysattr.h>
@@ -64,6 +58,18 @@
 #include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "subspace_store.h"
+
+/*
+ * Represents the insert method to be used during COPY FROM.
+ */
+typedef enum TSCopyInsertMethod
+{
+	TS_CIM_SINGLE,			  /* use table_tuple_insert or ExecForeignInsert */
+	TS_CIM_MULTI,			  /* always use table_multi_insert or
+							   * ExecForeignBatchInsert */
+	TS_CIM_MULTI_CONDITIONAL, /* use table_multi_insert or
+							   * ExecForeignBatchInsert only if valid */
+} TSCopyInsertMethod;
 
 /*
  * No more than this many tuples per TSCopyMultiInsertBuffer
@@ -690,8 +696,8 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		.arg = arg,
 	};
 	CommandId mycid = GetCurrentCommandId(true);
-	CopyInsertMethod insertMethod;				   /* The insert method for the table */
-	CopyInsertMethod currentTupleInsertMethod;	   /* The insert method of the current tuple */
+	TSCopyInsertMethod insertMethod;			   /* The insert method for the table */
+	TSCopyInsertMethod currentTupleInsertMethod;   /* The insert method of the current tuple */
 	TSCopyMultiInsertInfo multiInsertInfo = { 0 }; /* pacify compiler */
 	int ti_options = 0;							   /* start with default options for insert */
 	BulkInsertState bistate = NULL;
@@ -848,10 +854,10 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	}
 
 	/*
-	 * Multi-insert buffers (CIM_MULTI_CONDITIONAL) can only be used if no triggers are
+	 * Multi-insert buffers (TS_CIM_MULTI_CONDITIONAL) can only be used if no triggers are
 	 * defined on the target table. Otherwise, the tuples may be inserted in an out-of-order
 	 * manner, which might violate the semantics of the triggers. So, they are inserted
-	 * tuple-per-tuple (CIM_SINGLE). However, the ts_block trigger on the hypertable can
+	 * tuple-per-tuple (TS_CIM_SINGLE). However, the ts_block trigger on the hypertable can
 	 * be ignored.
 	 */
 
@@ -869,16 +875,17 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	if (has_after_insert_statement_trig || has_before_insert_row_trig ||
 		has_instead_insert_row_trig)
 	{
-		insertMethod = CIM_SINGLE;
+		insertMethod = TS_CIM_SINGLE;
 		ereport(DEBUG1,
-				(errmsg("Using normal unbuffered copy operation (CIM_SINGLE) "
+				(errmsg("Using normal unbuffered copy operation (TS_CIM_SINGLE) "
 						"because triggers are defined on the destination table.")));
 	}
 	else
 	{
-		insertMethod = CIM_MULTI_CONDITIONAL;
+		insertMethod = TS_CIM_MULTI_CONDITIONAL;
 		ereport(DEBUG1,
-				(errmsg("Using optimized multi-buffer copy operation (CIM_MULTI_CONDITIONAL).")));
+				(errmsg(
+					"Using optimized multi-buffer copy operation (TS_CIM_MULTI_CONDITIONAL).")));
 		TSCopyMultiInsertInfoInit(&multiInsertInfo,
 								  resultRelInfo,
 								  ccstate,
@@ -950,14 +957,14 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 			 * Flush pending inserts if this partition can't use
 			 * batching, so rows are visible to triggers etc.
 			 */
-			if (insertMethod == CIM_MULTI_CONDITIONAL)
+			if (insertMethod == TS_CIM_MULTI_CONDITIONAL)
 				TSCopyMultiInsertInfoFlush(&multiInsertInfo, cis);
 
-			currentTupleInsertMethod = CIM_SINGLE;
+			currentTupleInsertMethod = TS_CIM_SINGLE;
 		}
 
 		/* Convert the tuple to match the chunk's rowtype */
-		if (currentTupleInsertMethod == CIM_SINGLE)
+		if (currentTupleInsertMethod == TS_CIM_SINGLE)
 		{
 			if (NULL != cis->hyper_to_chunk_map)
 				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
@@ -1043,7 +1050,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 				ExecConstraints(resultRelInfo, myslot, estate);
 			}
 
-			if (currentTupleInsertMethod == CIM_SINGLE)
+			if (currentTupleInsertMethod == TS_CIM_SINGLE)
 			{
 				/* OK, store the tuple and create index entries for it */
 				table_tuple_insert(resultRelInfo->ri_RelationDesc,
@@ -1115,7 +1122,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	}
 
 	/* Flush any remaining buffered tuples */
-	if (insertMethod != CIM_SINGLE)
+	if (insertMethod != TS_CIM_SINGLE)
 		TSCopyMultiInsertInfoFlushAndCleanup(&multiInsertInfo);
 
 	/* Done, clean up */
