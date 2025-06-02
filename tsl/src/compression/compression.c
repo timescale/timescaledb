@@ -39,6 +39,8 @@
 #include "debug_point.h"
 #include "guc.h"
 #include "hypercore/hypercore_handler.h"
+#include "nodes/chunk_dispatch/chunk_insert_state.h"
+#include "nodes/modify_hypertable.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
@@ -878,6 +880,39 @@ check_for_limited_size_compressors(PerColumn *pcolumns, int16 natts)
 	return false;
 }
 
+void
+tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, TupleTableSlot *slot)
+{
+	row_compressor_process_ordered_slot(compressor, slot, bulk_writer);
+}
+
+void
+tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
+{
+	if (compressor->rows_compressed_into_current_value > 0)
+		row_compressor_flush(compressor, bulk_writer, false);
+}
+
+void
+tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
+{
+	tsl_compressor_flush(compressor, bulk_writer);
+	row_compressor_close(compressor);
+	bulk_writer_close(bulk_writer);
+	table_close(bulk_writer->out_rel, NoLock);
+}
+
+RowCompressor *
+tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer)
+{
+	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
+	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
+	Relation out_rel = table_open(settings->fd.compress_relid, RowExclusiveLock);
+	*bulk_writer = bulk_writer_alloc(out_rel, 0);
+	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+	return compressor;
+}
+
 /********************
  ** row_compressor **
  ********************/
@@ -1248,7 +1283,7 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 
 	heap_freetuple(compressed_tuple);
 
-	if (NULL != row_compressor->on_flush)
+	if (row_compressor->on_flush)
 		row_compressor->on_flush(row_compressor,
 								 row_compressor->rows_compressed_into_current_value);
 
@@ -1420,6 +1455,20 @@ bulk_writer_build(Relation out_rel, int insert_options)
 		.estate = CreateExecutorState(),
 		.insert_options = insert_options,
 	};
+
+	return writer;
+}
+
+BulkWriter *
+bulk_writer_alloc(Relation out_rel, int insert_options)
+{
+	BulkWriter *writer = palloc(sizeof(BulkWriter));
+	writer->out_rel = out_rel;
+	writer->indexstate = CatalogOpenIndexes(out_rel);
+	writer->mycid = GetCurrentCommandId(true);
+	writer->bistate = GetBulkInsertState();
+	writer->estate = CreateExecutorState();
+	writer->insert_options = insert_options;
 
 	return writer;
 }

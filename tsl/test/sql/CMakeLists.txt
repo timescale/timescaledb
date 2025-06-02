@@ -99,6 +99,10 @@ if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
 endif()
 
+if(NOT APPLE)
+  list(APPEND TEST_FILES compressed_copy.sql)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND

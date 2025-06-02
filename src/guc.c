@@ -125,6 +125,8 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ NULL, 0, false }
 };
 
+bool ts_guc_enable_compressed_copy = false;
+bool ts_guc_enable_compressed_copy_presorted = false;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -475,6 +477,29 @@ ts_guc_default_orderby_fn_oid()
 void
 _guc_init(void)
 {
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_copy"),
+							 "Enable on-the-fly compression during COPY",
+							 NULL,
+							 &ts_guc_enable_compressed_copy,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_copy_presorted"),
+							 "Enable on-the-fly compression during COPY with ordered data, "
+							 "ordering is responsibility of the user",
+							 NULL,
+							 &ts_guc_enable_compressed_copy_presorted,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deprecation_warnings"),
 							 "Enable warnings when using deprecated functionality",
 							 NULL,

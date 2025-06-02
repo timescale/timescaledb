@@ -1082,3 +1082,10 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 
 	return index_oid;
 }
+
+Chunk *
+tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk)
+{
+	/* Create a new compressed chunk */
+	return create_compress_chunk(compressed_ht, src_chunk, InvalidOid);
+}

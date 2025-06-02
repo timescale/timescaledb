@@ -55,6 +55,7 @@
 #include "cross_module_fn.h"
 #include "dimension.h"
 #include "hypertable.h"
+#include "indexing.h"
 #include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "subspace_store.h"
@@ -65,10 +66,9 @@
 typedef enum TSCopyInsertMethod
 {
 	TS_CIM_SINGLE,			  /* use table_tuple_insert or ExecForeignInsert */
-	TS_CIM_MULTI,			  /* always use table_multi_insert or
-							   * ExecForeignBatchInsert */
 	TS_CIM_MULTI_CONDITIONAL, /* use table_multi_insert or
 							   * ExecForeignBatchInsert only if valid */
+	TS_CIM_COMPRESSION,		  /* use compression for the insert */
 } TSCopyInsertMethod;
 
 /*
@@ -94,6 +94,8 @@ typedef enum TSCopyInsertMethod
 /* Stores multi-insert data related to a single relation in CopyFrom. */
 typedef struct TSCopyMultiInsertBuffer
 {
+	TSCopyInsertMethod method; /* The insert method to use */
+
 	/*
 	 * Tuple description for inserted tuple slots. We use a copy of the result
 	 * relation tupdesc to disable reference counting for this tupdesc. It is
@@ -106,6 +108,10 @@ typedef struct TSCopyMultiInsertBuffer
 	int nused;									/* number of 'slots' containing tuples */
 	uint64 linenos[MAX_BUFFERED_TUPLES];		/* Line # of tuple in copy
 												 * stream */
+
+	RowCompressor *compressor; /* compressor for the chunk */
+	BulkWriter *bulk_writer;   /* BulkWriter for the compressed chunk */
+
 } TSCopyMultiInsertBuffer;
 
 /*
@@ -185,28 +191,43 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
  * ResultRelInfo.
  */
 static TSCopyMultiInsertBuffer *
-TSCopyMultiInsertBufferInit(ChunkInsertState *cis, Point *point)
+TSCopyMultiInsertBufferInit(ChunkInsertState *cis, Point *point, TSCopyInsertMethod method)
 {
 	TSCopyMultiInsertBuffer *buffer;
 
-	buffer = (TSCopyMultiInsertBuffer *) palloc(sizeof(TSCopyMultiInsertBuffer));
-	memset((void *) buffer->slots, 0, sizeof(TupleTableSlot *) * MAX_BUFFERED_TUPLES);
-	buffer->bistate = GetBulkInsertState();
-	buffer->nused = 0;
+	buffer = (TSCopyMultiInsertBuffer *) palloc0(sizeof(TSCopyMultiInsertBuffer));
+	buffer->method = method;
 
 	buffer->point = palloc(POINT_SIZE(point->num_coords));
 	memcpy(buffer->point, point, POINT_SIZE(point->num_coords));
 
-	/*
-	 * Make a non-refcounted copy of tupdesc to avoid spending CPU in
-	 * ResourceOwner when creating a big number of table slots. This happens
-	 * because each new slot pins its tuple descriptor using PinTupleDesc, and
-	 * for reference-counting tuples this involves adding a new reference to
-	 * ResourceOwner, which is not very efficient for a large number of
-	 * references.
-	 */
-	buffer->tupdesc = CreateTupleDescCopyConstr(cis->rel->rd_att);
-	Assert(buffer->tupdesc->tdrefcount == -1);
+	switch (method)
+	{
+		case TS_CIM_SINGLE:
+			break;
+		case TS_CIM_MULTI_CONDITIONAL:
+			buffer->bistate = GetBulkInsertState();
+			/*
+			 * Make a non-refcounted copy of tupdesc to avoid spending CPU in
+			 * ResourceOwner when creating a big number of table slots. This happens
+			 * because each new slot pins its tuple descriptor using PinTupleDesc, and
+			 * for reference-counting tuples this involves adding a new reference to
+			 * ResourceOwner, which is not very efficient for a large number of
+			 * references.
+			 */
+			buffer->tupdesc = CreateTupleDescCopyConstr(cis->rel->rd_att);
+			Assert(buffer->tupdesc->tdrefcount == -1);
+			break;
+		case TS_CIM_COMPRESSION:
+			buffer->compressor = ts_cm_functions->compressor_init(cis->rel, &buffer->bulk_writer);
+			if (!ts_guc_enable_compressed_copy_presorted)
+			{
+				Chunk *chunk = ts_chunk_get_by_id(cis->chunk_id, true);
+				if (!ts_chunk_is_unordered(chunk))
+					ts_chunk_set_unordered(chunk);
+			}
+			break;
+	}
 
 	return buffer;
 }
@@ -216,7 +237,7 @@ TSCopyMultiInsertBufferInit(ChunkInsertState *cis, Point *point)
  */
 static inline TSCopyMultiInsertBuffer *
 TSCopyMultiInsertInfoGetOrSetupBuffer(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis,
-									  Point *point)
+									  Point *point, TSCopyInsertMethod method)
 {
 	bool found;
 	int32 chunk_id;
@@ -232,8 +253,10 @@ TSCopyMultiInsertInfoGetOrSetupBuffer(TSCopyMultiInsertInfo *miinfo, ChunkInsert
 	/* No insert buffer for this chunk exists, create a new one */
 	if (!found)
 	{
-		entry->buffer = TSCopyMultiInsertBufferInit(cis, point);
+		entry->buffer = TSCopyMultiInsertBufferInit(cis, point, method);
 	}
+
+	Assert(entry->buffer->method == method);
 
 	return entry->buffer;
 }
@@ -301,6 +324,11 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	int ti_options = miinfo->ti_options;
 	int nused = buffer->nused;
 	TupleTableSlot **slots = buffer->slots;
+
+	if (buffer->method == TS_CIM_COMPRESSION)
+	{
+		ts_cm_functions->compressor_flush(buffer->compressor, buffer->bulk_writer);
+	}
 
 	/*
 	 * table_multi_insert and reinitialization of the chunk insert state may
@@ -432,14 +460,25 @@ TSCopyMultiInsertBufferCleanup(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertB
 	/* Ensure buffer was flushed */
 	Assert(buffer->nused == 0);
 
-	FreeBulkInsertState(buffer->bistate);
+	switch (buffer->method)
+	{
+		case TS_CIM_SINGLE:
+			break;
+		case TS_CIM_MULTI_CONDITIONAL:
+			FreeBulkInsertState(buffer->bistate);
 
-	/* Since we only create slots on demand, just drop the non-null ones. */
-	for (i = 0; i < MAX_BUFFERED_TUPLES && buffer->slots[i] != NULL; i++)
-		ExecDropSingleTupleTableSlot(buffer->slots[i]);
+			/* Since we only create slots on demand, just drop the non-null ones. */
+			for (i = 0; i < MAX_BUFFERED_TUPLES && buffer->slots[i] != NULL; i++)
+				ExecDropSingleTupleTableSlot(buffer->slots[i]);
+
+			FreeTupleDesc(buffer->tupdesc);
+			break;
+		case TS_CIM_COMPRESSION:
+			ts_cm_functions->compressor_free(buffer->compressor, buffer->bulk_writer);
+			break;
+	}
 
 	pfree(buffer->point);
-	FreeTupleDesc(buffer->tupdesc);
 	pfree(buffer);
 }
 
@@ -880,6 +919,21 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 				(errmsg("Using normal unbuffered copy operation (TS_CIM_SINGLE) "
 						"because triggers are defined on the destination table.")));
 	}
+	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) &&
+			 !ts_indexing_relation_has_primary_or_unique_index(ccstate->rel) &&
+			 ts_guc_enable_compressed_copy)
+	{
+		insertMethod = TS_CIM_COMPRESSION;
+		ccstate->dispatch->create_compressed_chunk = true;
+		ereport(DEBUG1, (errmsg("Using compressed copy operation (TS_CIM_COMPRESSION).")));
+		TSCopyMultiInsertInfoInit(&multiInsertInfo,
+								  resultRelInfo,
+								  ccstate,
+								  estate,
+								  mycid,
+								  ti_options,
+								  ht);
+	}
 	else
 	{
 		insertMethod = TS_CIM_MULTI_CONDITIONAL;
@@ -895,13 +949,13 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 								  ht);
 	}
 
+	TSCopyMultiInsertBuffer *buffer = NULL;
 	for (;;)
 	{
 		TupleTableSlot *myslot = NULL;
 		bool skip_tuple;
 		Point *point = NULL;
 		ChunkInsertState *cis = NULL;
-		TSCopyMultiInsertBuffer *buffer = NULL;
 
 		CHECK_FOR_INTERRUPTS();
 
@@ -969,12 +1023,25 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 			if (NULL != cis->hyper_to_chunk_map)
 				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
 		}
+		else if (currentTupleInsertMethod == TS_CIM_COMPRESSION)
+		{
+			buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo,
+														   cis,
+														   point,
+														   currentTupleInsertMethod);
+
+			if (NULL != cis->hyper_to_chunk_map)
+				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
+		}
 		else
 		{
 			/*
 			 * Get the multi-insert buffer for the chunk.
 			 */
-			buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo, cis, point);
+			buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo,
+														   cis,
+														   point,
+														   currentTupleInsertMethod);
 
 			/*
 			 * Prepare to queue up tuple for later batch insert into
@@ -1077,6 +1144,12 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 										 myslot,
 										 recheckIndexes,
 										 ccstate->cstate->transition_capture);
+			}
+			else if (currentTupleInsertMethod == TS_CIM_COMPRESSION)
+			{
+				ts_cm_functions->compressor_add_slot(buffer->compressor,
+													 buffer->bulk_writer,
+													 myslot);
 			}
 			else
 			{

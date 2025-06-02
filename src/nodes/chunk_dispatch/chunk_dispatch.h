@@ -39,6 +39,7 @@ typedef struct ChunkDispatch
 	ResultRelInfo *hypertable_result_rel_info;
 	ChunkInsertState *prev_cis;
 	Oid prev_cis_oid;
+	bool create_compressed_chunk;
 } ChunkDispatch;
 
 typedef struct ChunkDispatchPath

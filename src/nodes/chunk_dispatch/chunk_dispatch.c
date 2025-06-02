@@ -143,6 +143,15 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		if (!chunk)
 			elog(ERROR, "no chunk found or created");
 
+		if (dispatch->create_compressed_chunk && !chunk->fd.compressed_chunk_id)
+		{
+			Hypertable *compressed_ht =
+				ts_hypertable_get_by_id(dispatch->hypertable->fd.compressed_hypertable_id);
+			Chunk *compressed_chunk =
+				ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
+			ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
+		}
+
 		cis = ts_chunk_insert_state_create(chunk->table_id, dispatch);
 		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
 	}
