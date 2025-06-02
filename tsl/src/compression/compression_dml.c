@@ -706,7 +706,7 @@ apply_validity_bitmap(const ArrowArray *arrow, uint64 *restrict result)
  * If we fail this check, it means the whole batch passed so we can bail immediately.
  */
 static inline bool
-check_default_value_match(const uint64 *result)
+check_single_value_match(const uint64 *result)
 {
 	return result[0] & 1;
 }
@@ -722,19 +722,19 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 		MemoryContextAlloc(decompressor->per_compressed_row_ctx, bitmap_bytes);
 	uint64 dict_result[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
 	memset(result, 0xFF, bitmap_bytes);
-	bool default_value = false;
+	bool single_value = false;
 	bool batch_failed = false;
 
 	for (int sk = 0; sk < num_scankeys; sk++)
 	{
 		ArrowArray *arrow =
-			decompress_single_column(decompressor, scankeys[sk].sk_attno, &default_value);
+			decompress_single_column(decompressor, scankeys[sk].sk_attno, &single_value);
 
 		/* Handle null check */
 		if (scankeys[sk].sk_flags & SK_ISNULL)
 		{
 			vector_nulltest(arrow, IS_NULL, result);
-			if (default_value && !check_default_value_match(result))
+			if (single_value && !check_single_value_match(result))
 			{
 				batch_failed = true;
 				break;
@@ -762,7 +762,7 @@ batch_matches_vectorized(RowDecompressor *decompressor, ScanKeyData *scankeys, i
 
 		apply_validity_bitmap(arrow, result);
 
-		if (default_value && !check_default_value_match(result))
+		if (single_value && !check_single_value_match(result))
 		{
 			batch_failed = true;
 			break;

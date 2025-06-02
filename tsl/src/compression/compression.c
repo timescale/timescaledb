@@ -1766,7 +1766,7 @@ decompress_batch_next_row(RowDecompressor *decompressor, AttrNumber *attnos, int
 
 /* Decompress single column using vectorized decompression */
 ArrowArray *
-decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *default_value)
+decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *single_value)
 {
 	int16 target_col = -1;
 	PerCompressedColumn *column_info = NULL;
@@ -1792,14 +1792,14 @@ decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *
 		 * be handled specially because of the assumption that the whole row has
 		 * this default value.
 		 */
-		*default_value = true;
+		*single_value = true;
 		bool isnull;
 		Datum default_datum = getmissingattr(decompressor->out_desc, attno, &isnull);
 
 		return make_single_value_arrow(column_info->decompressed_type, default_datum, isnull);
 	}
 
-	*default_value = false;
+	*single_value = false;
 
 	Datum compressed_datum = PointerGetDatum(
 		detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(
@@ -1807,6 +1807,13 @@ decompress_single_column(RowDecompressor *decompressor, AttrNumber attno, bool *
 									&decompressor->detoaster,
 									CurrentMemoryContext));
 	CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
+
+	/* Handle NULL compression algorithm */
+	if (header->compression_algorithm == COMPRESSION_ALGORITHM_NULL)
+	{
+		*single_value = true;
+		return make_single_value_arrow(column_info->decompressed_type, (Datum) NULL, true);
+	}
 
 	DecompressAllFunction decompress_all =
 		tsl_get_decompress_all_function(header->compression_algorithm,
