@@ -7,15 +7,6 @@ name: Process issue workflows
     types: [created, edited]
 
 jobs:
-  show-event-info:
-    name: Show issue workflow event information
-    steps:
-      - name: Show github event
-        run: >-
-          cat <<END_OF_TEXT
-          ${{ toJSON(github.event) }}
-          END_OF_TEXT
-
   add-to-project:
     name: Add issue to projects
     # issue_comment is triggered when commenting on both issues and
