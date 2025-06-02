@@ -885,8 +885,7 @@ test_bool_compressor_extended()
 	/* adding a null value should reinitialize the compressor */
 	compressor->append_null(compressor);
 	finished = compressor->finish(compressor);
-	TestAssertTrue(finished != NULL &&
-				   "having only nulls should return compressed data because of fake values");
+	TestAssertTrue(finished == NULL);
 
 	/* finishing a finished compressor should return NULL */
 	finished = compressor->finish(compressor);
