@@ -1354,3 +1354,43 @@ INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1,
 ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
 \set ON_ERROR_STOP 1
 DROP TABLE unique_all;
+-- test NULL compression algorithm
+CREATE TABLE unique_null(
+	time timestamptz NOT NULL,
+	device_id int,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_nulls ON unique_null(time, device_id, tag, tag2) NULLS NOT DISTINCT;
+SELECT table_name FROM create_hypertable('unique_null', 'time');
+ table_name  
+-------------
+ unique_null
+(1 row)
+
+ALTER TABLE unique_null SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+WARNING:  column "tag" should be used for segmenting or ordering
+WARNING:  column "tag2" should be used for segmenting or ordering
+INSERT INTO unique_null VALUES
+('2024-01-01 00:00', 1, NULL, '1', 1),
+('2024-01-01 00:00', 1, NULL, '2', 2),
+('2024-01-01 00:00', 1, NULL, '3', 3);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1);
+ERROR:  duplicate key value violates unique constraint "_hyper_32_83_chunk_unique_nulls"
+\set ON_ERROR_STOP 1
+ALTER TABLE unique_null ADD COLUMN tag3 text DEFAULT 'default value';
+DROP INDEX unique_nulls;
+CREATE UNIQUE INDEX unique_nulls ON unique_null(time, device_id, tag, tag2, tag3) NULLS NOT DISTINCT;
+\set ON_ERROR_STOP 0
+INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1, 'default value');
+ERROR:  duplicate key value violates unique constraint "_hyper_32_83_chunk_unique_nulls"
+\set ON_ERROR_STOP 1
+DROP TABLE unique_null;
