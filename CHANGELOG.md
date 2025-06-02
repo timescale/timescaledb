@@ -4,6 +4,34 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.20.2 (2025-06-02)
+
+This release contains bug fixes since the 2.20.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#8200](https://github.com/timescale/timescaledb/pull/8202) Fix `NULL` compression handling for vectorized constraint checking
+
+## 2.20.1 (2025-05-27)
+
+This release contains performance improvements and bug fixes since the 2.20.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Features**
+* [#8145](https://github.com/timescale/timescaledb/pull/8145) Log only if compression ratio warnings are enabled
+
+**Bugfixes**
+* [#7292](https://github.com/timescale/timescaledb/pull/7292) Intermittent "could not find pathkey item to sort" error when grouping or ordering by a time_bucket of an equality join variable.
+* [#8126](https://github.com/timescale/timescaledb/pull/8126) Allow setting bgw_log_level to FATAL and ERROR
+* [#8151](https://github.com/timescale/timescaledb/pull/8151) Treat null equal to null for merged CAgg refresh
+* [#8153](https://github.com/timescale/timescaledb/pull/8153) Restoring a database having NULL compressed data
+* [#8162](https://github.com/timescale/timescaledb/pull/8162) Fix setting compress_chunk_interval on continuous aggregates
+* [#8163](https://github.com/timescale/timescaledb/pull/8163) Fix gapfill crash with locf NULL values treated as missing
+* [#8171](https://github.com/timescale/timescaledb/pull/8171) Disable decompression limit during continuous aggregate refresh
+
+**Thanks**
+* @bobozaur, @kvc0, @ChadMoran, @PaddyKe for reporting the pathkey error.
+* @jlordiales for reporting an issue with setting compress_chunk_interval for continuous aggregates
+* @svanharmelen, @cmdjulian, @etaMS20 for reporting time_bucket_gapfill with locf crash when NULL values are treated as missing 
+
 ## 2.20.0 (2025-05-15)
 
 This release contains performance improvements and bug fixes since the 2.19.3 release. We recommend that you upgrade at the next available opportunity.
