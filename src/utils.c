@@ -1972,3 +1972,24 @@ ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name)
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	return JsonbValueToJsonb(result);
 }
+
+char *
+ts_get_attr_expr(Relation rel, AttrNumber attno)
+{
+	TupleConstr *constr = rel->rd_att->constr;
+	char *expr = NULL;
+
+	for (int i = 0; i < constr->num_defval; i++)
+	{
+		if (constr->defval[i].adnum == attno)
+		{
+			expr = TextDatumGetCString(
+				DirectFunctionCall2(pg_get_expr,
+									CStringGetTextDatum(constr->defval[i].adbin),
+									ObjectIdGetDatum(RelationGetRelid(rel))));
+			break;
+		}
+	}
+
+	return expr;
+}
