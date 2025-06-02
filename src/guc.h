@@ -52,6 +52,8 @@ extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
+extern bool ts_guc_enable_compressed_copy;
+extern bool ts_guc_enable_compressed_copy_presorted;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT int ts_guc_enable_transparent_decompression;

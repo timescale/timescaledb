@@ -366,6 +366,14 @@ extern Tuplesortstate *compression_create_tuplesort_state(CompressionSettings *s
 extern void row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *settings,
 								const TupleDesc noncompressed_tupdesc,
 								const TupleDesc compressed_tupdesc);
+
+RowCompressor *row_compressor_alloc(void);
+extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer);
+extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
+									TupleTableSlot *slot);
+extern void tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer);
+extern void tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer);
+
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern HeapTuple row_compressor_build_tuple(RowCompressor *row_compressor);
@@ -379,6 +387,7 @@ extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
 extern BulkWriter bulk_writer_build(Relation out_rel, int insert_options);
+extern BulkWriter *bulk_writer_alloc(Relation out_rel, int insert_options);
 extern void bulk_writer_close(BulkWriter *writer);
 extern RowDecompressor build_decompressor(const TupleDesc in_desc, const TupleDesc out_desc);
 
