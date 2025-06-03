@@ -64,10 +64,8 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 const CompressionInfo *compression_info,
 										 const SortInfo *sort_info);
 
-static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root,
-														 const CompressionInfo *info,
-														 int parallel_workers,
-														 Path *compressed_path);
+static DecompressChunkPath *
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
 
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 											 const Chunk *chunk, RelOptInfo *chunk_rel,
@@ -362,6 +360,8 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 DecompressChunkPath *
 copy_decompress_chunk_path(DecompressChunkPath *src)
 {
+	Assert(ts_is_decompress_chunk_path(&src->custom_path.path));
+
 	DecompressChunkPath *dst = palloc(sizeof(DecompressChunkPath));
 	memcpy(dst, src, sizeof(DecompressChunkPath));
 
@@ -960,8 +960,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 				continue;
 		}
 
+		Assert(compressed_path->parallel_workers == 0);
 		Path *chunk_path =
-			(Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
+			(Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+		Assert(chunk_path->parallel_workers == 0);
 
 		/*
 		 * Create a path for the batch sorted merge optimization. This optimization performs a
@@ -1144,10 +1146,11 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			 * If this is a partially compressed chunk we have to combine data
 			 * from compressed and uncompressed chunk.
 			 */
-			path = (Path *) decompress_chunk_path_create(root,
-														 compression_info,
-														 compressed_path->parallel_workers,
-														 compressed_path);
+			Assert(compressed_path->parallel_workers > 0);
+			Assert(compressed_path->parallel_safe);
+			path = (Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+			Assert(path->parallel_workers > 0);
+			Assert(path->parallel_safe);
 
 			if (consider_partial)
 			{
@@ -1883,8 +1886,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 }
 
 static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, int parallel_workers,
-							 Path *compressed_path)
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
 {
 	DecompressChunkPath *path;
 
@@ -1919,13 +1921,16 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, int
 	path->custom_path.methods = &decompress_chunk_path_methods;
 	path->batch_sorted_merge = false;
 
-	/* To prevent a non-parallel path with this node appearing
-	 * in a parallel plan we only set parallel_safe to true
-	 * when parallel_workers is greater than 0 which is only
-	 * the case when creating partial paths. */
-	path->custom_path.path.parallel_safe = parallel_workers > 0;
-	path->custom_path.path.parallel_workers = parallel_workers;
+	/*
+	 * DecompressChunk doesn't manage any parallelism itself.
+	 */
 	path->custom_path.path.parallel_aware = false;
+
+	/*
+	 * It can be applied per parallel worker, if its underlying scan is parallel.
+	 */
+	path->custom_path.path.parallel_safe = compressed_path->parallel_safe;
+	path->custom_path.path.parallel_workers = compressed_path->parallel_workers;
 
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
