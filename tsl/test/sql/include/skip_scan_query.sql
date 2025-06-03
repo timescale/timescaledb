@@ -48,6 +48,17 @@ CREATE INDEX skip_scan_expr_idx ON :TABLE((dev % 3));
 DROP INDEX skip_scan_expr_idx;
 
 CREATE INDEX ON :TABLE(dev_name);
+
+-- Tests for #8107: accounting for scanning most of the input due to non-index quals
+-- Non-index qual, no tuples match: SeqScan preferred
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE val < 0 ORDER BY 1;
+-- Highly selective non-index qual, have to scan many tuples to match: SeqScan preferred
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE time = 100 ORDER BY 1;
+-- Same but a combo of non-index quals
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE time = 100 and dev = 1 ORDER BY 1;
+-- Highly selective index qual: less tuples to scan for low-selective non-index qual, can choose SkipScan
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev_name IS NULL and dev = 1 ORDER BY 1;
+
 CREATE INDEX ON :TABLE(dev);
 CREATE INDEX ON :TABLE(dev, time);
 CREATE INDEX ON :TABLE(time,dev);
