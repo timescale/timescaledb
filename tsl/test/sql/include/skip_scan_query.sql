@@ -263,3 +263,14 @@ TRUNCATE skip_scan_insert;
 -- no tuples in resultset
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls WHERE time IS NOT NULL;
 
+-- Test for SDC issue #2976
+-- We should use index "btree ("time", dev, dev_name)" where "dev_name" index key is #3 but we have 2 index quals including SkipScan qual
+-- We should not drop qual on "dev_name"
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev,dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+DROP INDEX skip_scan_idx_time_dev_dname;
+-- "dev_name" is not a key column: it's not in the index quals and should be a filter
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev) INCLUDE(dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+DROP INDEX skip_scan_idx_time_dev_dname;
+
