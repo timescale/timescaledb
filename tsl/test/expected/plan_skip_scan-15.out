@@ -1452,6 +1452,33 @@ TRUNCATE skip_scan_insert;
                Index Cond: (("time" > NULL::integer) AND ("time" IS NOT NULL))
 (5 rows)
 
+-- Test for SDC issue #2976
+-- We should use index "btree ("time", dev, dev_name)" where "dev_name" index key is #3 but we have 2 index quals including SkipScan qual
+-- We should not drop qual on "dev_name"
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev,dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Unique (actual rows=20 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=20 loops=1)
+         ->  Index Only Scan using skip_scan_idx_time_dev_dname on skip_scan (actual rows=20 loops=1)
+               Index Cond: (("time" > NULL::integer) AND (dev_name IS NULL))
+(5 rows)
+
+DROP INDEX skip_scan_idx_time_dev_dname;
+-- "dev_name" is not a key column: it's not in the index quals and should be a filter
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev) INCLUDE(dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Unique (actual rows=20 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=20 loops=1)
+         ->  Index Scan using skip_scan_time_dev_idx on skip_scan (actual rows=20 loops=1)
+               Filter: (dev_name IS NULL)
+               Rows Removed by Filter: 10002
+(5 rows)
+
+DROP INDEX skip_scan_idx_time_dev_dname;
 \set TABLE skip_scan_ht
 \ir include/skip_scan_query.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -3863,6 +3890,58 @@ TRUNCATE skip_scan_insert;
                Index Cond: (("time" > NULL::integer) AND ("time" IS NOT NULL))
 (5 rows)
 
+-- Test for SDC issue #2976
+-- We should use index "btree ("time", dev, dev_name)" where "dev_name" index key is #3 but we have 2 index quals including SkipScan qual
+-- We should not drop qual on "dev_name"
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev,dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+                                                            QUERY PLAN                                                             
+-----------------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=20 loops=1)
+   ->  Custom Scan (ChunkAppend) on skip_scan_ht (actual rows=20 loops=1)
+         Order: skip_scan_ht."time"
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_time_dev_dname on _hyper_1_1_chunk (actual rows=5 loops=1)
+                     Index Cond: (("time" > NULL::integer) AND (dev_name IS NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=5 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_idx_time_dev_dname on _hyper_1_2_chunk (actual rows=5 loops=1)
+                     Index Cond: (("time" > NULL::integer) AND (dev_name IS NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=5 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_idx_time_dev_dname on _hyper_1_3_chunk (actual rows=5 loops=1)
+                     Index Cond: (("time" > NULL::integer) AND (dev_name IS NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=5 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_idx_time_dev_dname on _hyper_1_4_chunk (actual rows=5 loops=1)
+                     Index Cond: (("time" > NULL::integer) AND (dev_name IS NULL))
+(19 rows)
+
+DROP INDEX skip_scan_idx_time_dev_dname;
+-- "dev_name" is not a key column: it's not in the index quals and should be a filter
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev) INCLUDE(dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Unique (actual rows=20 loops=1)
+   ->  Custom Scan (ChunkAppend) on skip_scan_ht (actual rows=20 loops=1)
+         Order: skip_scan_ht."time"
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
+                     Filter: (dev_name IS NULL)
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=5 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_time_dev_idx on _hyper_1_2_chunk (actual rows=5 loops=1)
+                     Filter: (dev_name IS NULL)
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=5 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_time_dev_idx on _hyper_1_3_chunk (actual rows=5 loops=1)
+                     Filter: (dev_name IS NULL)
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=5 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_time_dev_idx on _hyper_1_4_chunk (actual rows=5 loops=1)
+                     Filter: (dev_name IS NULL)
+                     Rows Removed by Filter: 2500
+(19 rows)
+
+DROP INDEX skip_scan_idx_time_dev_dname;
 \ir include/skip_scan_query_ht.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
