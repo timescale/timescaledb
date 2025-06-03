@@ -1,0 +1,2 @@
+Fixes: #8107 Adjust skipscan cost for quals needing full scan of indexed data
+Thanks: @ikaakkola for reporting that SkipScan is slow when non-index quals do not match any tuples

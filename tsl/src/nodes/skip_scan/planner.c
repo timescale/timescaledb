@@ -780,11 +780,47 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	if (ndistinct > 1)
 	{
 		List *dist_exprs = list_make1(dvar);
-		ndistinct =
-			Min(ndistinct,
-				Max(1, floor(estimate_num_groups(root, dist_exprs, child_path->rows, NULL, NULL))));
+		ndistinct = Max(1, floor(estimate_num_groups(root, dist_exprs, ndistinct, NULL, NULL)));
 	}
 	skip_scan_path->cpath.path.rows = ndistinct;
+
+	/* Addressing #8107: filters on the indexed data which are not index quals
+	 * will require sequential scanning of indexed tuples until finding a tuple passing the filter.
+	 * For some highly selective filters it may mean scanning a lot of tuples, sometimes the entire
+	 * input. SeqScan may perform better than IndexScan for such filters. We need to account for
+	 * such filters in the cost model i.e. cost the number of tuples to scan before passing the
+	 * filter.
+	 */
+	List *clauses_needing_scan = NULL;
+	/* If a filter is not pushed down into compessed indexed data, it's a filter for which we will
+	 * need to scan and decompress until filter is passed */
+	if ((Path *) index_path != child_path)
+		clauses_needing_scan = child_path->parent->baserestrictinfo;
+	else
+	{
+		/* For uncompressed index data we need a finer check for which filters on the indexed data
+		 * are index quals or not */
+		ListCell *lc;
+		foreach (lc, index_path->indexinfo->indrestrictinfo)
+		{
+			RestrictInfo *ri = (RestrictInfo *) lfirst(lc);
+			bool match_found = false;
+			ListCell *l;
+			foreach (l, index_path->indexclauses)
+			{
+				IndexClause *ic = (IndexClause *) lfirst(l);
+				if (ri == ic->rinfo)
+				{
+					match_found = true;
+					break;
+				}
+			}
+			/* This is a filter which is not an index qual: will have to scan indexed data until
+			 * this filter is passed */
+			if (!match_found)
+				clauses_needing_scan = lappend(clauses_needing_scan, ri);
+		}
+	}
 
 	/* We calculate SkipScan cost as ndistinct * startup_cost + (ndistinct/rows) * total_cost
 	 * ndistinct * startup_cost is to account for the rescans we have to do and since startup
@@ -798,7 +834,7 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	 *
 	 * This is the cost of (SkipScan <- IndexScan) scenario
 	 */
-	if ((Path *) index_path == child_path)
+	if (clauses_needing_scan == NULL && (Path *) index_path == child_path)
 	{
 		skip_scan_path->cpath.path.startup_cost = startup;
 		if (indexscan_rows > 1)
@@ -817,14 +853,10 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	else
 	{
 		int64 offset_until_qual_pass = 0;
-		if (child_path->parent->baserestrictinfo != NULL)
+		if (clauses_needing_scan != NULL)
 		{
 			Selectivity qual_selectivity =
-				clauselist_selectivity(root,
-									   child_path->parent->baserestrictinfo,
-									   0,
-									   JOIN_INNER,
-									   NULL);
+				clauselist_selectivity(root, clauses_needing_scan, 0, JOIN_INNER, NULL);
 			offset_until_qual_pass = Max(0, floor(1 / qual_selectivity - 1));
 		}
 		adjust_limit_rows_costs(&rows, &startup, &total, offset_until_qual_pass, 1);
