@@ -230,7 +230,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '
 CREATE TABLE _timescaledb_catalog.chunk_column_stats (
   id serial NOT NULL,
   hypertable_id integer NOT NULL,
-  chunk_id integer NOT NULL,
+  chunk_id integer NULL,
   column_name name NOT NULL,
   range_start bigint NOT NULL,
   range_end bigint NOT NULL,
