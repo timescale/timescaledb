@@ -40,3 +40,8 @@ BEGIN
   -- empty body
 END;
 $$ LANGUAGE PLPGSQL;
+
+-- Drop the chunk_column_stats constraint since it doesn't work with
+-- "special" entries that have chunk_id 0. Such entries are used to
+-- mark columns for which chunk column stats can be computed.
+ALTER TABLE _timescaledb_catalog.chunk_column_stats DROP CONSTRAINT chunk_column_stats_chunk_id_fkey;

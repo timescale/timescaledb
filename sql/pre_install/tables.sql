@@ -239,8 +239,8 @@ CREATE TABLE _timescaledb_catalog.chunk_column_stats (
   CONSTRAINT chunk_column_stats_pkey PRIMARY KEY (id),
   CONSTRAINT chunk_column_stats_ht_id_chunk_id_colname_key UNIQUE (hypertable_id, chunk_id, column_name),
   CONSTRAINT chunk_column_stats_range_check CHECK (range_start <= range_end),
-  CONSTRAINT chunk_column_stats_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id),
-  CONSTRAINT chunk_column_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id)
+  -- No FK for chunk_id since we allow entries with Invalid chunk ID (0)
+  CONSTRAINT chunk_column_stats_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_column_stats', '');
