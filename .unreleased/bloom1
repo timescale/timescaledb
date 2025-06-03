@@ -1,1 +1,0 @@
-Implements: #7638 Bloom filter sparse indexes for compressed columns. Can be disabled with the GUC timescaledb.enable_sparse_index_bloom.

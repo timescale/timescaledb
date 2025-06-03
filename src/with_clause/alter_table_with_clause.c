@@ -28,7 +28,7 @@ static const WithClauseDefinition alter_table_with_clause_def[] = {
 			.arg_names = {"chunk_interval", NULL},
 			 .type_id = TEXTOID,
 		},
-		[AlterTableFlagCompress] = {
+		[AlterTableFlagColumnstore] = {
 			.arg_names = {"compress", "columnstore", "enable_columnstore", NULL},
 			.type_id = BOOLOID,
 			.default_val = (Datum)false,
@@ -42,7 +42,7 @@ static const WithClauseDefinition alter_table_with_clause_def[] = {
 			 .type_id = TEXTOID,
 		},
 		[AlterTableFlagCompressChunkTimeInterval] = {
-			.arg_names = {"compress_chunk_time_interval", NULL},
+			.arg_names = {"compress_chunk_interval", "compress_chunk_time_interval", NULL},
 			 .type_id = INTERVALOID,
 		},
 };

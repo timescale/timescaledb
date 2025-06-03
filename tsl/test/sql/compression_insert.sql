@@ -537,10 +537,12 @@ INSERT INTO test_ordering VALUES (5),(4),(3);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
+VACUUM ANALYZE test_ordering;
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 INSERT INTO test_ordering SELECT 1;
+VACUUM ANALYZE test_ordering;
 
 -- should not be ordered append
 -- regression introduced by #5599:
@@ -552,6 +554,8 @@ INSERT INTO test_ordering SELECT 1;
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
+VACUUM ANALYZE test_ordering;
+
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 
@@ -564,6 +568,7 @@ INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING *;
 INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING tableoid::regclass, *;
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
+VACUUM ANALYZE test_ordering;
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
@@ -880,3 +885,83 @@ INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1,
 \set ON_ERROR_STOP 1
 
 DROP TABLE unique_all;
+
+-- test NULL compression algorithm
+
+CREATE TABLE unique_null(
+	time timestamptz NOT NULL,
+	device_id int,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_nulls ON unique_null(time, device_id, tag, tag2) NULLS NOT DISTINCT;
+SELECT table_name FROM create_hypertable('unique_null', 'time');
+ALTER TABLE unique_null SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+INSERT INTO unique_null VALUES
+('2024-01-01 00:00', 1, NULL, '1', 1),
+('2024-01-01 00:00', 1, NULL, '2', 2),
+('2024-01-01 00:00', 1, NULL, '3', 3);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1);
+\set ON_ERROR_STOP 1
+
+ALTER TABLE unique_null ADD COLUMN tag3 text DEFAULT 'default value';
+DROP INDEX unique_nulls;
+CREATE UNIQUE INDEX unique_nulls ON unique_null(time, device_id, tag, tag2, tag3) NULLS NOT DISTINCT;
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1, 'default value');
+\set ON_ERROR_STOP 1
+
+INSERT INTO unique_null VALUES
+	('2024-01-01 00:01', 1, NULL, '1', 1, 'default value'),
+	('2024-01-01 00:00', 2, NULL, '1', 1, 'default value');
+
+DROP TABLE unique_null;
+
+-- test NUMERIC data type
+
+CREATE TABLE unique_numeric(
+	time timestamptz NOT NULL,
+	device_id numeric(6,2) NOT NULL,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_numeric_idx ON unique_numeric(time, device_id, tag, tag2);
+SELECT table_name FROM create_hypertable('unique_numeric', 'time');
+ALTER TABLE unique_numeric SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+INSERT INTO unique_numeric VALUES
+('2024-01-01 00:00', 1.1, NULL, '1', 1),
+('2024-01-01 00:00', 1.2, NULL, '2', 2),
+('2024-01-01 00:00', 1.3, NULL, '3', 3);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_numeric') c;
+INSERT INTO unique_numeric VALUES ('2024-01-01 00:00', 1.4, NULL, '1', 1);
+
+DROP TABLE unique_numeric;
+
+-- test UUID data type
+
+CREATE TABLE unique_uuid(
+	time timestamptz NOT NULL,
+	device_id UUID NOT NULL,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_uuid_idx ON unique_uuid(time, device_id, tag, tag2);
+SELECT table_name FROM create_hypertable('unique_uuid', 'time');
+ALTER TABLE unique_uuid SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+INSERT INTO unique_uuid VALUES
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000000', NULL, '1', 1),
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000000', NULL, '1', 2),
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000001', NULL, '1', 1),
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000001', NULL, '1', 2);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_uuid') c;
+INSERT INTO unique_uuid VALUES ('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000001', NULL, '1', 3);
+
+DROP TABLE unique_uuid;
+

@@ -501,7 +501,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	 * always read from latest snapshot.
 	 */
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Assert(chunk->relkind == RELKIND_RELATION || chunk->relkind == RELKIND_FOREIGN_TABLE);
+	Assert(chunk->relkind == RELKIND_RELATION);
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
@@ -577,46 +577,6 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 #else
 		state->user_id = ExecGetResultRelCheckAsUser(relinfo, state->estate);
 #endif
-	}
-
-	if (dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify)
-	{
-		/* If the hypertable is setup for direct modify, we do not really use
-		 * the FDW. Instead exploit the FdwPrivate pointer to pass on the
-		 * chunk insert state to DataNodeDispatch so that it knows which data nodes
-		 * to insert into. */
-		relinfo->ri_FdwState = state;
-	}
-	else if (relinfo->ri_FdwRoutine && !relinfo->ri_usesFdwDirectModify &&
-			 relinfo->ri_FdwRoutine->BeginForeignModify)
-	{
-		/*
-		 * If this is a chunk located one or more data nodes, setup the
-		 * foreign data wrapper state for the chunk. The private fdw data was
-		 * created at the planning stage and contains, among other things, a
-		 * deparsed insert statement for the hypertable.
-		 */
-		ModifyTableState *mtstate = dispatch->dispatch_state->mtstate;
-		ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
-		List *fdwprivate = linitial_node(List, mt->fdwPrivLists);
-
-		Assert(NIL != fdwprivate);
-		/*
-		 * Since the fdwprivate data is part of the plan it must only
-		 * consist of Node objects that can be copied. Therefore, we
-		 * cannot directly append the non-Node ChunkInsertState to the
-		 * private data. Instead, we make a copy of the private data
-		 * before passing it on to the FDW handler function. In the
-		 * FDW, the ChunkInsertState will be at the offset defined by
-		 * the FdwModifyPrivateChunkInsertState (see
-		 * tsl/src/fdw/timescaledb_fdw.c).
-		 */
-		fdwprivate = lappend(list_copy(fdwprivate), state);
-		relinfo->ri_FdwRoutine->BeginForeignModify(mtstate,
-												   relinfo,
-												   fdwprivate,
-												   0,
-												   dispatch->eflags);
 	}
 
 	MemoryContextSwitchTo(old_mcxt);

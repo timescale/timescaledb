@@ -58,7 +58,7 @@ static enum Batch_match_result match_tuple_batch(TupleTableSlot *compressed_slot
 static bool check_changed_group(CompressedSegmentInfo *current_segment, TupleTableSlot *slot,
 								int nsegmentby_cols);
 static void recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel,
-							   RowCompressor *row_compressor);
+							   RowCompressor *row_compressor, BulkWriter *writer);
 static void try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel);
 
 /*
@@ -251,27 +251,30 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	/******************** row decompressor **************/
 
-	RowDecompressor decompressor = build_decompressor(compressed_chunk_rel, uncompressed_chunk_rel);
+	RowDecompressor decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
+													  RelationGetDescr(uncompressed_chunk_rel));
+
 	/********** row compressor *******************/
 	RowCompressor row_compressor;
-	row_compressor_init(settings,
-						&row_compressor,
-						uncompressed_chunk_rel,
-						compressed_chunk_rel,
-						compressed_rel_tupdesc->natts,
-						true /*need_bistate*/,
-						0 /*insert options*/);
+	Assert(settings->fd.compress_relid == RelationGetRelid(compressed_chunk_rel));
+	row_compressor_init(&row_compressor,
+						settings,
+						RelationGetDescr(uncompressed_chunk_rel),
+						RelationGetDescr(compressed_chunk_rel));
+
+	BulkWriter writer = bulk_writer_build(compressed_chunk_rel, 0);
+	Oid index_oid = get_compressed_chunk_index(writer.indexstate, settings);
 
 	/* For chunks with no segmentby settings, we can still do segmentwise recompression
 	 * The entire chunk is treated as a single segment
 	 */
 	elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
 		 "Using index \"%s\" for recompression",
-		 get_rel_name(row_compressor.index_oid));
+		 get_rel_name(index_oid));
 
 	LOCKMODE index_lockmode =
 		ts_guc_enable_exclusive_locking_recompression ? ExclusiveLock : RowExclusiveLock;
-	Relation index_rel = index_open(row_compressor.index_oid, index_lockmode);
+	Relation index_rel = index_open(index_oid, index_lockmode);
 	ereport(DEBUG1,
 			(errmsg("locks acquired for recompression: \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
@@ -413,7 +416,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 				tuples_for_recompression = false;
 				recompress_segment(recompress_tuplesortstate,
 								   uncompressed_chunk_rel,
-								   &row_compressor);
+								   &row_compressor,
+								   &writer);
 				break;
 			}
 
@@ -460,7 +464,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 				tuples_for_recompression = false;
 				recompress_segment(recompress_tuplesortstate,
 								   uncompressed_chunk_rel,
-								   &row_compressor);
+								   &row_compressor,
+								   &writer);
 			}
 		}
 
@@ -494,7 +499,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 				tuples_for_recompression = false;
 				recompress_segment(recompress_tuplesortstate,
 								   uncompressed_chunk_rel,
-								   &row_compressor);
+								   &row_compressor,
+								   &writer);
 				break;
 			}
 
@@ -503,12 +509,16 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 		if (tuples_for_recompression)
 		{
-			recompress_segment(recompress_tuplesortstate, uncompressed_chunk_rel, &row_compressor);
+			recompress_segment(recompress_tuplesortstate,
+							   uncompressed_chunk_rel,
+							   &row_compressor,
+							   &writer);
 		}
 	}
 
 finish:
 	row_compressor_close(&row_compressor);
+	bulk_writer_close(&writer);
 	ExecDropSingleTupleTableSlot(uncompressed_slot);
 	ExecDropSingleTupleTableSlot(compressed_slot);
 	index_endscan(index_scan);
@@ -702,14 +712,15 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 /* Sort the tuples and recompress them */
 static void
 recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel,
-				   RowCompressor *row_compressor)
+				   RowCompressor *row_compressor, BulkWriter *writer)
 {
 	tuplesort_performsort(tuplesortstate);
 	row_compressor_reset(row_compressor);
 	row_compressor_append_sorted_rows(row_compressor,
 									  tuplesortstate,
 									  RelationGetDescr(compressed_chunk_rel),
-									  compressed_chunk_rel);
+									  compressed_chunk_rel,
+									  writer);
 	tuplesort_reset(tuplesortstate);
 	CommandCounterIncrement();
 }

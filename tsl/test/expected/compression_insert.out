@@ -786,15 +786,19 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
  _timescaledb_internal._hyper_13_20_chunk
 (1 row)
 
+VACUUM ANALYZE test_ordering;
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-   ->  Index Scan Backward using compress_hyper_14_21_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_21_chunk
-(2 rows)
+   ->  Sort
+         Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+         ->  Seq Scan on compress_hyper_14_21_chunk
+(4 rows)
 
 INSERT INTO test_ordering SELECT 1;
+VACUUM ANALYZE test_ordering;
 -- should not be ordered append
 -- regression introduced by #5599:
 -- for the case of a single chunk, there is an additional redundant sort node below decompress chunk
@@ -803,35 +807,40 @@ INSERT INTO test_ordering SELECT 1;
 -- It was hard to include a path without pushed down sort for consideration, as `add_path` would reject
 -- the path with sort pushdown, which is desirable in most cases
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-               ->  Index Scan Backward using compress_hyper_14_21_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_21_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Sort
                Sort Key: _hyper_13_20_chunk."time"
                ->  Seq Scan on _hyper_13_20_chunk
-(9 rows)
+(11 rows)
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
+VACUUM ANALYZE test_ordering;
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-               ->  Index Scan Backward using compress_hyper_14_21_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_21_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+                     ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Sort
                Sort Key: _hyper_13_20_chunk."time"
                ->  Seq Scan on _hyper_13_20_chunk
    ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
-(10 rows)
+(12 rows)
 
 --insert into compressed + uncompressed chunk
 INSERT INTO test_ordering VALUES (21), (22),(113);
@@ -871,17 +880,22 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
  _timescaledb_internal._hyper_13_22_chunk
 (2 rows)
 
+VACUUM ANALYZE test_ordering;
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-         ->  Index Scan Backward using compress_hyper_14_21_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_21_chunk
+         ->  Sort
+               Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
+               ->  Seq Scan on compress_hyper_14_21_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
-         ->  Index Scan Backward using compress_hyper_14_23_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_14_23_chunk
-(6 rows)
+         ->  Sort
+               Sort Key: compress_hyper_14_23_chunk._ts_meta_min_1, compress_hyper_14_23_chunk._ts_meta_max_1
+               ->  Seq Scan on compress_hyper_14_23_chunk
+(10 rows)
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
 -- TEST cagg triggers with insert into compressed chunk
@@ -1340,3 +1354,107 @@ INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1,
 ERROR:  duplicate key value violates unique constraint "_hyper_30_79_chunk_ultimate_unique"
 \set ON_ERROR_STOP 1
 DROP TABLE unique_all;
+-- test NULL compression algorithm
+CREATE TABLE unique_null(
+	time timestamptz NOT NULL,
+	device_id int,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_nulls ON unique_null(time, device_id, tag, tag2) NULLS NOT DISTINCT;
+SELECT table_name FROM create_hypertable('unique_null', 'time');
+ table_name  
+-------------
+ unique_null
+(1 row)
+
+ALTER TABLE unique_null SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+WARNING:  column "tag" should be used for segmenting or ordering
+WARNING:  column "tag2" should be used for segmenting or ordering
+INSERT INTO unique_null VALUES
+('2024-01-01 00:00', 1, NULL, '1', 1),
+('2024-01-01 00:00', 1, NULL, '2', 2),
+('2024-01-01 00:00', 1, NULL, '3', 3);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1);
+ERROR:  duplicate key value violates unique constraint "_hyper_32_83_chunk_unique_nulls"
+\set ON_ERROR_STOP 1
+ALTER TABLE unique_null ADD COLUMN tag3 text DEFAULT 'default value';
+DROP INDEX unique_nulls;
+CREATE UNIQUE INDEX unique_nulls ON unique_null(time, device_id, tag, tag2, tag3) NULLS NOT DISTINCT;
+\set ON_ERROR_STOP 0
+INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1, 'default value');
+ERROR:  duplicate key value violates unique constraint "_hyper_32_83_chunk_unique_nulls"
+\set ON_ERROR_STOP 1
+INSERT INTO unique_null VALUES
+	('2024-01-01 00:01', 1, NULL, '1', 1, 'default value'),
+	('2024-01-01 00:00', 2, NULL, '1', 1, 'default value');
+DROP TABLE unique_null;
+-- test NUMERIC data type
+CREATE TABLE unique_numeric(
+	time timestamptz NOT NULL,
+	device_id numeric(6,2) NOT NULL,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_numeric_idx ON unique_numeric(time, device_id, tag, tag2);
+SELECT table_name FROM create_hypertable('unique_numeric', 'time');
+   table_name   
+----------------
+ unique_numeric
+(1 row)
+
+ALTER TABLE unique_numeric SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+WARNING:  column "tag" should be used for segmenting or ordering
+WARNING:  column "tag2" should be used for segmenting or ordering
+INSERT INTO unique_numeric VALUES
+('2024-01-01 00:00', 1.1, NULL, '1', 1),
+('2024-01-01 00:00', 1.2, NULL, '2', 2),
+('2024-01-01 00:00', 1.3, NULL, '3', 3);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_numeric') c;
+ count 
+-------
+     1
+(1 row)
+
+INSERT INTO unique_numeric VALUES ('2024-01-01 00:00', 1.4, NULL, '1', 1);
+DROP TABLE unique_numeric;
+-- test UUID data type
+CREATE TABLE unique_uuid(
+	time timestamptz NOT NULL,
+	device_id UUID NOT NULL,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_uuid_idx ON unique_uuid(time, device_id, tag, tag2);
+SELECT table_name FROM create_hypertable('unique_uuid', 'time');
+ table_name  
+-------------
+ unique_uuid
+(1 row)
+
+ALTER TABLE unique_uuid SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+WARNING:  column "tag" should be used for segmenting or ordering
+WARNING:  column "tag2" should be used for segmenting or ordering
+INSERT INTO unique_uuid VALUES
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000000', NULL, '1', 1),
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000000', NULL, '1', 2),
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000001', NULL, '1', 1),
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000001', NULL, '1', 2);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_uuid') c;
+ count 
+-------
+     1
+(1 row)
+
+INSERT INTO unique_uuid VALUES ('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000001', NULL, '1', 3);
+DROP TABLE unique_uuid;

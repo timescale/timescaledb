@@ -14,8 +14,11 @@
 
 #include <postgres.h>
 #include <fmgr.h>
+#include <utils/memutils.h>
 
 #include "compression/compression.h"
+
+#define MAX_ARRAY_COMPRESSOR_SIZE_BYTES MaxAllocSize
 
 typedef struct StringInfoData StringInfoData;
 typedef StringInfoData *StringInfo;

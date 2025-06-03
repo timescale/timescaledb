@@ -274,6 +274,7 @@ INSERT INTO test4 SELECT '2025-01-02', NULL, 0.1;
 INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
 SELECT count(compress_chunk(ch)) FROM show_chunks('test4') ch;
 INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
+VACUUM ANALYZE test4;
 
 set enable_hashagg TO false;
 SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;

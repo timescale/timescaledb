@@ -257,8 +257,6 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 
 		if (create_chunk_constraints)
 		{
-			ts_chunk_constraints_create(ht_compressed, c_chunk);
-			ts_trigger_create_all_on_chunk(c_chunk);
 			create_proxy_vacuum_index(rel, c_chunk->table_id);
 			RelationSize before_size = ts_relation_size_impl(RelationGetRelid(rel));
 			create_compression_relation_size_stats(chunk->fd.id,
@@ -1928,6 +1926,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 	int n_batch_rows = 0;
 	uint16 tuple_index;
 	bool should_free;
+	CommandId cid = GetCurrentCommandId(true);
 
 	/* Nothing to do if this is not a compressed segment */
 	if (!is_compressed_tid(ctid))
@@ -1942,7 +1941,10 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 	cslot = arrow_slot_get_compressed_slot(slot, NULL);
 	HeapTuple tuple = ExecFetchSlotHeapTuple(cslot, false, &should_free);
 
-	RowDecompressor decompressor = build_decompressor(crel, relation);
+	RowDecompressor decompressor =
+		build_decompressor(RelationGetDescr(crel), RelationGetDescr(relation));
+	BulkWriter writer = bulk_writer_build(relation, 0);
+
 	heap_deform_tuple(tuple,
 					  RelationGetDescr(crel),
 					  decompressor.compressed_datums,
@@ -1950,9 +1952,9 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 
 	/* Must delete the segment before calling the decompression function below
 	 * or otherwise index updates will lead to conflicts */
-	result = table_tuple_delete(decompressor.in_rel,
+	result = table_tuple_delete(crel,
 								&cslot->tts_tid,
-								decompressor.mycid,
+								cid,
 								snapshot,
 								InvalidSnapshot,
 								true,
@@ -1961,7 +1963,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 
 	Ensure(result == TM_Ok, "could not delete compressed segment, result: %u", result);
 
-	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor);
+	n_batch_rows = row_decompressor_decompress_row_to_table(&decompressor, &writer);
 	/* Return the TID of the decompressed conflicting tuple. Tuple index is
 	 * 1-indexed, so subtract 1. */
 	slot = decompressor.decompressed_slots[tuple_index - 1];
@@ -1970,6 +1972,7 @@ hypercore_decompress_update_segment(Relation relation, const ItemPointer ctid, T
 	/* Need to make decompressed (and deleted segment) visible */
 	CommandCounterIncrement();
 	row_decompressor_close(&decompressor);
+	bulk_writer_close(&writer);
 	table_close(crel, NoLock);
 
 	return n_batch_rows;
@@ -2180,23 +2183,28 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
 											 AccessExclusiveLock);
 	Relation new_compressed_rel = table_open(new_compressed_relid, AccessExclusiveLock);
 	RowCompressor row_compressor;
+	BulkWriter writer;
 	double reltuples;
 	int32 relpages;
 
 	/* Initialize the compressor. */
-	row_compressor_init(settings,
-						&row_compressor,
-						rel,
-						new_compressed_rel,
-						RelationGetDescr(old_compressed_rel)->natts,
-						true /*need_bistate*/,
-						HEAP_INSERT_FROZEN);
+	Assert(settings->fd.relid == RelationGetRelid(rel));
+	row_compressor_init(&row_compressor,
+						settings,
+						RelationGetDescr(rel),
+						RelationGetDescr(new_compressed_rel));
 
+	writer = bulk_writer_build(new_compressed_rel, HEAP_INSERT_FROZEN);
 	row_compressor.on_flush = on_compression_progress;
-	row_compressor_append_sorted_rows(&row_compressor, tuplesort, tupdesc, old_compressed_rel);
+	row_compressor_append_sorted_rows(&row_compressor,
+									  tuplesort,
+									  tupdesc,
+									  old_compressed_rel,
+									  &writer);
 	reltuples = row_compressor.num_compressed_rows;
 	relpages = RelationGetNumberOfBlocks(new_compressed_rel);
 	row_compressor_close(&row_compressor);
+	bulk_writer_close(&writer);
 
 	table_close(new_compressed_rel, NoLock);
 	table_close(old_compressed_rel, NoLock);
@@ -3756,11 +3764,7 @@ convert_to_hypercore_finish(Oid relid)
 	 * relcache invalidations. Previously there was sometimes a crash here
 	 * because the tuple sort state had a reference to a tuple descriptor in
 	 * the relcache. */
-#if (PG_VERSION_NUM >= 140001)
 	RelationCacheInvalidate(false);
-#else
-	RelationCacheInvalidate();
-#endif
 #endif
 
 	Chunk *chunk = ts_chunk_get_by_relid(conversionstate->relid, true);
@@ -3783,20 +3787,23 @@ convert_to_hypercore_finish(Oid relid)
 	const CompressionSettings *settings = ts_compression_settings_get(conversionstate->relid);
 	RowCompressor row_compressor;
 
-	row_compressor_init(settings,
-						&row_compressor,
-						relation,
-						compressed_rel,
-						RelationGetDescr(compressed_rel)->natts,
-						true /*need_bistate*/,
-						HEAP_INSERT_FROZEN);
+	Assert(settings->fd.relid == RelationGetRelid(relation));
+	Assert(settings->fd.compress_relid == RelationGetRelid(compressed_rel));
+
+	row_compressor_init(&row_compressor,
+						settings,
+						RelationGetDescr(relation),
+						RelationGetDescr(compressed_rel));
+	BulkWriter writer = bulk_writer_build(compressed_rel, HEAP_INSERT_FROZEN);
 
 	row_compressor_append_sorted_rows(&row_compressor,
 									  conversionstate->tuplesortstate,
 									  tupdesc,
-									  compressed_rel);
+									  compressed_rel,
+									  &writer);
 
 	row_compressor_close(&row_compressor);
+	bulk_writer_close(&writer);
 	tuplesort_end(conversionstate->tuplesortstate);
 	conversionstate->tuplesortstate = NULL;
 

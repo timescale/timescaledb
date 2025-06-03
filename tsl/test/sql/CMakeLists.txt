@@ -12,6 +12,7 @@ set(TEST_FILES
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_policy.sql
+    cagg_policy_move.sql
     cagg_refresh.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
@@ -25,6 +26,7 @@ set(TEST_FILES
     compressed_collation.sql
     compressed_detoaster.sql
     compress_float8_corrupt.sql
+    compression_allocation.sql
     compression_conflicts.sql
     compression_constraints.sql
     compression_create_compressed_table.sql
@@ -32,6 +34,7 @@ set(TEST_FILES
     compression_fks.sql
     compression_indexcreate.sql
     compression_insert.sql
+    compression_null_dump_restore.sql
     compression_nulls_and_defaults.sql
     compression_policy.sql
     compression_qualpushdown.sql

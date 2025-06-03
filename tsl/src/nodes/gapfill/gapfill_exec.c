@@ -368,7 +368,7 @@ align_with_time_bucket(GapFillState *state, Expr *expr)
 	{
 		time_bucket->args = list_make2(linitial(time_bucket->args), expr);
 	}
-	value = gapfill_exec_expr(state, (Expr *) time_bucket, &isnull);
+	value = gapfill_exec_expr(state, state->scanslot, (Expr *) time_bucket, &isnull);
 
 	/* start expression must not evaluate to NULL */
 	if (isnull)
@@ -401,7 +401,7 @@ get_boundary_expr_value(GapFillState *state, GapFillBoundary boundary, Expr *exp
 									 0);
 	}
 
-	arg_value = gapfill_exec_expr(state, expr, &isnull);
+	arg_value = gapfill_exec_expr(state, state->scanslot, expr, &isnull);
 
 	if (isnull)
 		ereport(ERROR,
@@ -662,7 +662,8 @@ gapfill_advance_timestamp(GapFillState *state)
 			{
 				bool isnull;
 				/* TODO: optimize by constifying and caching the datum if possible */
-				Datum tzname = gapfill_exec_expr(state, get_timezone_arg(state), &isnull);
+				Datum tzname =
+					gapfill_exec_expr(state, state->scanslot, get_timezone_arg(state), &isnull);
 				Assert(!isnull);
 
 				/* Convert to local timestamp */
@@ -733,7 +734,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 				 errmsg("invalid time_bucket_gapfill argument: bucket_width must be a simple "
 						"expression")));
 
-	arg_value = gapfill_exec_expr(state, linitial(state->args), &isnull);
+	arg_value = gapfill_exec_expr(state, NULL, linitial(state->args), &isnull);
 	if (isnull)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -786,7 +787,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid time_bucket_gapfill argument: finish must be a simple "
 							"expression")));
-		arg_value = gapfill_exec_expr(state, get_finish_arg(state), &isnull);
+		arg_value = gapfill_exec_expr(state, NULL, get_finish_arg(state), &isnull);
 
 		/*
 		 * the default value for finish is NULL but this is checked above,
@@ -1022,8 +1023,10 @@ gapfill_state_gaptuple_create(GapFillState *state, int64 time)
 		switch (column.base->ctype)
 		{
 			case LOCF_COLUMN:
+				/* We may execute lookup expression over a generated tuple which fills the gap */
 				gapfill_locf_calculate(column.locf,
 									   state,
+									   slot,
 									   time,
 									   &slot->tts_values[i],
 									   &slot->tts_isnull[i]);
@@ -1105,9 +1108,14 @@ gapfill_state_return_subplan_slot(GapFillState *state)
 		{
 			case LOCF_COLUMN:
 				value = slot_getattr(state->subslot, AttrOffsetGetAttrNumber(i), &isnull);
+				/* We may execute lookup expression over an input tuple from the subplan to override
+				 * NULL value when NULLs are treated as missing. Use the correct tuple for the
+				 * purpose.
+				 */
 				if (isnull && column.locf->treat_null_as_missing)
 					gapfill_locf_calculate(column.locf,
 										   state,
+										   state->subslot,
 										   state->subslot_time,
 										   &state->subslot->tts_values[i],
 										   &state->subslot->tts_isnull[i]);
@@ -1375,12 +1383,12 @@ gapfill_aggref_mutator(Node *node, void *context)
  * Execute expression and return result of expression
  */
 Datum
-gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull)
+gapfill_exec_expr(GapFillState *state, TupleTableSlot *ecxt_slot, Expr *expr, bool *isnull)
 {
 	ExprState *exprstate = ExecInitExpr(expr, &state->csstate.ss.ps);
 	ExprContext *exprcontext = GetPerTupleExprContext(state->csstate.ss.ps.state);
 
-	exprcontext->ecxt_scantuple = state->scanslot;
+	exprcontext->ecxt_scantuple = ecxt_slot;
 
 	return ExecEvalExprSwitchContext(exprstate, exprcontext, isnull);
 }

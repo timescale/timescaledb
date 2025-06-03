@@ -51,6 +51,7 @@ alter table hystable set access method hypercore, set (
       timescaledb.compress_orderby = 'time',
       timescaledb.compress_segmentby = 'location'
 );
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 select ch chunk, amname access_method
 from show_chunks('hystable') ch
 inner join pg_class cl on (cl.oid = ch)
@@ -391,6 +392,7 @@ NOTICE:  adding not-null constraint to column "time"
 alter table hystable set access method hypercore, set (
       timescaledb.compress_orderby = 'time'
 );
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 -- vacuum on empty table
 vacuum (index_cleanup on) hystable;
 insert into hystable select * from regtable;
@@ -443,6 +445,7 @@ alter table readings
       set access method hypercore,
       set (timescaledb.compress_orderby = 'time',
       	   timescaledb.compress_segmentby = 'device');
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 -- Save frozenxid to test that it advances on hypertable root when
 -- root is using Hypercore TAM.
 select relfrozenxid as old_relfrozenxid

@@ -114,6 +114,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
 -- Set the hypercore access method on the hypertable for transition
 -- tables to work properly.
 alter table :hypertable set access method hypercore;
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 create table saved_rows (like :chunk1, new_row bool not null, kind text);
 create table count_stmt (inserts int, updates int, deletes int);
 create function save_row() returns trigger as $$

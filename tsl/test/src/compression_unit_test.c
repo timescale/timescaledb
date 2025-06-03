@@ -885,8 +885,7 @@ test_bool_compressor_extended()
 	/* adding a null value should reinitialize the compressor */
 	compressor->append_null(compressor);
 	finished = compressor->finish(compressor);
-	TestAssertTrue(finished != NULL &&
-				   "having only nulls should return compressed data because of fake values");
+	TestAssertTrue(finished == NULL);
 
 	/* finishing a finished compressor should return NULL */
 	finished = compressor->finish(compressor);
@@ -999,14 +998,8 @@ test_null()
 		TestAssertTrue(transmission.len > 0);
 		TestAssertTrue(transmission.data != NULL);
 
-		LOCAL_FCINFO(local_fcinfo, 1);
-		local_fcinfo->args[0] =
-			(NullableDatum){ .value = PointerGetDatum(&transmission), .isnull = false };
-
-		// Call the function directly
-		tsl_compressed_data_recv(local_fcinfo);
-
-		TestAssertTrue(local_fcinfo->isnull);
+		Datum res = DirectFunctionCall1(tsl_compressed_data_recv, PointerGetDatum(&transmission));
+		TestAssertTrue(DatumGetPointer(res) != NULL);
 	}
 	{
 		void *compressed = null_compressor_get_dummy_block();

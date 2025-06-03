@@ -141,6 +141,26 @@ array_compressor_append_null_value(Compressor *compressor)
 	array_compressor_append_null(extended->internal);
 }
 
+static bool
+array_compressor_is_full(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = array_compressor_alloc(extended->element_type);
+
+	Size datum_size_and_align;
+	ArrayCompressor *array_comp = (ArrayCompressor *) extended->internal;
+	if (datum_serializer_value_may_be_toasted(array_comp->serializer))
+		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+
+	datum_size_and_align =
+		datum_get_bytes_size(array_comp->serializer, array_comp->data.num_elements, val) -
+		array_comp->data.num_elements;
+
+	/* If we can't fit new datum in the max size, we are full */
+	return (datum_size_and_align + array_comp->data.num_elements) > MAX_ARRAY_COMPRESSOR_SIZE_BYTES;
+}
+
 static void *
 array_compressor_finish_and_reset(Compressor *compressor)
 {
@@ -154,6 +174,7 @@ array_compressor_finish_and_reset(Compressor *compressor)
 const Compressor array_compressor = {
 	.append_val = array_compressor_append_datum,
 	.append_null = array_compressor_append_null_value,
+	.is_full = array_compressor_is_full,
 	.finish = array_compressor_finish_and_reset,
 };
 

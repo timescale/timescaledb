@@ -12,6 +12,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
+#include "bgw_policy/process_hyper_inval_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "chunk.h"
@@ -97,6 +98,10 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_refresh_cagg_proc = policy_refresh_cagg_proc,
 	.policy_refresh_cagg_check = policy_refresh_cagg_check,
 	.policy_refresh_cagg_remove = policy_refresh_cagg_remove,
+	.policy_process_hyper_inval_add = policy_process_hyper_inval_add,
+	.policy_process_hyper_inval_proc = policy_process_hyper_inval_proc,
+	.policy_process_hyper_inval_check = policy_process_hyper_inval_check,
+	.policy_process_hyper_inval_remove = policy_process_hyper_inval_remove,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_check = policy_reorder_check,
@@ -143,6 +148,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
 	.continuous_agg_call_invalidation_trigger = execute_cagg_trigger,
 	.continuous_agg_refresh = continuous_agg_refresh,
+	.continuous_agg_process_hypertable_invalidations =
+		continuous_agg_process_hypertable_invalidations,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,
@@ -178,6 +185,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
+	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
 	.hypercore_handler = hypercore_handler,
 	.hypercore_proxy_handler = hypercore_proxy_handler,

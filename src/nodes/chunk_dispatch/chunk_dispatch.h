@@ -31,7 +31,6 @@ typedef struct ChunkDispatch
 	Hypertable *hypertable;
 	SubspaceStore *cache;
 	EState *estate;
-	int eflags;
 
 	/*
 	 * Keep a pointer to the original (hypertable's) ResultRelInfo since we
@@ -46,7 +45,6 @@ typedef struct ChunkDispatchPath
 {
 	CustomPath cpath;
 	ModifyTablePath *mtpath;
-	Index hypertable_rti;
 	Oid hypertable_relid;
 } ChunkDispatchPath;
 
@@ -98,7 +96,7 @@ typedef struct Point Point;
 
 typedef void (*on_chunk_changed_func)(ChunkInsertState *state, void *data);
 
-extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags);
+extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);
 extern void ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch);
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
@@ -106,8 +104,5 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
 extern void ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch,
 															ChunkInsertState *cis,
 															TupleTableSlot *slot);
-extern TupleTableSlot *ts_chunk_dispatch_prepare_tuple_routing(ChunkDispatchState *state,
-															   TupleTableSlot *slot);
 
-extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
-													   Index hypertable_rti, int subpath_index);
+extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath);

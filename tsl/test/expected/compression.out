@@ -569,6 +569,7 @@ SELECT compress_chunk(:'CHUNK_NAME');
  _timescaledb_internal._hyper_7_16_chunk
 (1 row)
 
+VACUUM ANALYZE plan_inval;
 EXECUTE prep_plan;
  count 
 -------
@@ -622,31 +623,18 @@ SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch LIMIT 2;
  _timescaledb_internal._hyper_9_20_chunk
 (2 rows)
 
-CREATE OR REPLACE PROCEDURE reindex_compressed_hypertable(hypertable REGCLASS)
-AS $$
-DECLARE
-  hyper_id int;
-BEGIN
-  SELECT h.compressed_hypertable_id
-  INTO hyper_id
-  FROM _timescaledb_catalog.hypertable h
-  WHERE h.table_name = hypertable::name;
-  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
-    hyper_id);
-END $$ LANGUAGE plpgsql;
--- reindexing compressed hypertable to update statistics
-CALL reindex_compressed_hypertable('test_collation');
+VACUUM ANALYZE test_collation;
 --segment bys are pushed down correctly
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+                        QUERY PLAN                        
+----------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
-         ->  Index Scan using compress_hyper_10_29_chunk_device_id_device_id_2__ts_meta_m_idx on compress_hyper_10_29_chunk
-               Index Cond: (device_id < 'a'::text)
+         ->  Seq Scan on compress_hyper_10_29_chunk
+               Filter: (device_id < 'a'::text)
    ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
-         ->  Index Scan using compress_hyper_10_30_chunk_device_id_device_id_2__ts_meta_m_idx on compress_hyper_10_30_chunk
-               Index Cond: (device_id < 'a'::text)
+         ->  Seq Scan on compress_hyper_10_30_chunk
+               Filter: (device_id < 'a'::text)
    ->  Seq Scan on _hyper_9_21_chunk
          Filter: (device_id < 'a'::text)
    ->  Seq Scan on _hyper_9_22_chunk
@@ -1765,7 +1753,6 @@ SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
  _timescaledb_internal._hyper_37_73_chunk
 (1 row)
 
-CALL reindex_compressed_hypertable('f_sensor_data');
 VACUUM ANALYZE f_sensor_data;
 -- Encourage use of parallel plans
 SET max_parallel_workers_per_gather = 4;
@@ -1832,26 +1819,23 @@ ORDER BY
 VACUUM ANALYZE f_sensor_data;
 :explain
 SELECT sum(cpu) FROM f_sensor_data;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                     QUERY PLAN                                                                                                                                                     
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
    Output: sum(_hyper_37_73_chunk.cpu)
-   ->  Gather
-         Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
-         Workers Planned: 4
-         ->  Parallel Append
-               ->  Custom Scan (VectorAgg)
-                     Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
-                     Grouping Policy: all compressed batches
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
-                           Output: _hyper_37_73_chunk.cpu
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
-                                 Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
-               ->  Partial Aggregate
-                     Output: PARTIAL sum(_hyper_37_73_chunk.cpu)
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_37_73_chunk
-                           Output: _hyper_37_73_chunk.cpu
-(17 rows)
+   ->  Append
+         ->  Custom Scan (VectorAgg)
+               Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
+               Grouping Policy: all compressed batches
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
+                     Output: _hyper_37_73_chunk.cpu
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
+                           Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_37_73_chunk.cpu)
+               ->  Seq Scan on _timescaledb_internal._hyper_37_73_chunk
+                     Output: _hyper_37_73_chunk.cpu
+(14 rows)
 
 :explain
 SELECT * FROM f_sensor_data WHERE sensor_id > 1000;
@@ -1886,6 +1870,7 @@ INSERT INTO ts_device_table SELECT generate_series(0,999,1), 1, 100, 20;
 ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='time');
 WARNING:  column "device" should be used for segmenting or ordering
 SELECT compress_chunk(i) AS chunk_name FROM show_chunks('ts_device_table') i \gset
+VACUUM ANALYZE ts_device_table;
 SELECT count(*) FROM ts_device_table;
  count 
 -------
@@ -1948,6 +1933,7 @@ SELECT compress_chunk(c) FROM show_chunks('ht_metrics_partially_compressed') c;
 (2 rows)
 
 INSERT INTO ht_metrics_partially_compressed VALUES ('2020-01-01'::timestamptz, 1, 0.1);
+VACUUM ANALYZE ht_metrics_partially_compressed;
 :explain
 SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1;
                                                                                                                                    QUERY PLAN                                                                                                                                    
@@ -2043,6 +2029,7 @@ SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('i6069') i;
  _timescaledb_internal._hyper_43_83_chunk
 (3 rows)
 
+VACUUM ANALYZE i6069;
 SET enable_indexscan = ON;
 SET enable_seqscan = OFF;
 :explain
@@ -2156,7 +2143,7 @@ SELECT compress_chunk(ch) FROM show_chunks('sensor_data_compressed') ch LIMIT 3;
  _timescaledb_internal._hyper_45_89_chunk
 (3 rows)
 
-ANALYZE sensor_data_compressed;
+VACUUM ANALYZE sensor_data_compressed;
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
              time             | sensor_id | cpu | temperature 
 ------------------------------+-----------+-----+-------------
@@ -2280,6 +2267,7 @@ NOTICE:  chunk "_hyper_45_89_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_45_93_chunk
 (7 rows)
 
+VACUUM ANALYZE sensor_data_compressed;
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
              time             | sensor_id | cpu | temperature 
 ------------------------------+-----------+-----+-------------
@@ -2448,6 +2436,7 @@ RESET timescaledb.enable_decompression_sorted_merge;
 -- Convert the last chunk into a partially compressed chunk
 INSERT INTO sensor_data_compressed (time, sensor_id, cpu, temperature)
    VALUES ('1980-01-02 01:00:00-00', 2, 4, 14.0);
+VACUUM ANALYZE sensor_data_compressed;
 -- Only the first chunks should be accessed (batch sorted merge is enabled)
 :PREFIX
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
@@ -2613,7 +2602,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 RESET timescaledb.enable_decompression_sorted_merge;
 -- create another chunk
 INSERT INTO stattest SELECT '2021/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(125,140) v;
-ANALYZE stattest;
+VACUUM ANALYZE stattest;
 SELECT count(*) from show_chunks('stattest');
  count 
 -------
@@ -2979,26 +2968,3 @@ HINT:  Changing compression settings for "badly_compressed_ht" can improve compr
 
 \set VERBOSITY terse
 RESET timescaledb.enable_compression_ratio_warnings;
--- Test vector overallocation error
-CREATE TABLE hyper_86 (time timestamptz, device int8, value text);
-SELECT create_hypertable('hyper_86', 'time', create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "time"
-   create_hypertable    
-------------------------
- (59,public,hyper_86,t)
-(1 row)
-
--- This will try to create an array of chars over 1GB allocation limit
-INSERT INTO hyper_86
-VALUES
-	('2025-01-01 00:00:00', 1, repeat(md5(random()::text), 32*1024*200)), --200 MB value
-	('2025-01-01 00:00:01', 1, repeat(md5(random()::text), 32*1024*200)),
-	('2025-01-01 00:00:02', 1, repeat(md5(random()::text), 32*1024*200)),
-	('2025-01-01 00:00:03', 1, repeat(md5(random()::text), 32*1024*200)),
-	('2025-01-01 00:00:04', 1, repeat(md5(random()::text), 32*1024*200)),
-	('2025-01-01 00:00:05', 1, repeat(md5(random()::text), 32*1024*200));
-ALTER TABLE hyper_86 SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
-\set ON_ERROR_STOP 0
-SELECT compress_chunk(ch) FROM show_chunks('hyper_86') ch;
-ERROR:  vector allocation overflow when trying to allocate 1258291224 bytes
-\set ON_ERROR_STOP 1

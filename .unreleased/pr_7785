@@ -1,1 +1,0 @@
-Implements: #7785 Do DELETE instead of TRUNCATE when locks aren't acquired

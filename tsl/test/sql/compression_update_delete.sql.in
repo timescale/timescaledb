@@ -1466,6 +1466,7 @@ VALUES -- chunk1
 -- enable compression, compress all chunks
 ALTER TABLE test_partials SET (timescaledb.compress);
 SELECT compress_chunk(show_chunks('test_partials'));
+VACUUM ANALYZE test_partials;
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
@@ -1474,11 +1475,13 @@ SELECT * FROM test_partials ORDER BY time;
 -- data gets shifted to the uncompressed parts
 EXPLAIN (costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
 DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
+VACUUM ANALYZE test_partials;
 -- All 3 chunks will now become partially compressed chunks
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
 SELECT compress_chunk(show_chunks('test_partials'));
+VACUUM ANALYZE test_partials;
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 DROP TABLE test_partials;

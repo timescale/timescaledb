@@ -3650,5 +3650,149 @@ select * from bool_table where b is not null order by 1;
  101 | f
 (2 rows)
 
+-- Verify that NULL compression with bools is vectorized
+set timescaledb.debug_require_vector_qual to 'require';
+update bool_table set b = NULL;
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+ count 
+-------
+     1
+(1 row)
+
+select * from bool_table where b is null order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+(2 rows)
+
+select * from bool_table where b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+(2 rows)
+
+select * from bool_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from bool_table where b is not true order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+(2 rows)
+
+select * from bool_table where b is not false order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+(2 rows)
+
+select * from bool_table where b is unknown order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+(2 rows)
+
+select * from bool_table where b is not unknown order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+-- Verify that NULL compression with ints is vectorized
+create table int_table(ts int, b int);
+select create_hypertable('int_table', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+    create_hypertable    
+-------------------------
+ (15,public,int_table,t)
+(1 row)
+
+alter table int_table set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "int_table" is set to ""
+NOTICE:  default order by for hypertable "int_table" is set to "ts DESC"
+insert into int_table values (100, NULL), (101, NULL), (102, NULL);
+select count(compress_chunk(x, true)) from show_chunks('int_table') x;
+ count 
+-------
+     1
+(1 row)
+
+select * from int_table where b is null order by 1;
+ ts  | b 
+-----+---
+ 100 |  
+ 101 |  
+ 102 |  
+(3 rows)
+
+select * from int_table where b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+select * from int_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 |  
+ 101 |  
+ 102 |  
+(3 rows)
+
+select * from int_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+(0 rows)
+
+-- check the compression algorithm for the compressed chunks
+set timescaledb.enable_transparent_decompression='off';
+DO $$
+DECLARE
+	comp_regclass REGCLASS;
+	rec RECORD;
+BEGIN
+	FOR comp_regclass IN
+		SELECT
+			format('%I.%I', comp.schema_name, comp.table_name)::regclass as comp_regclass
+		FROM
+			_timescaledb_catalog.chunk uncomp,
+			_timescaledb_catalog.chunk comp,
+			(SELECT show_chunks('bool_table') as c UNION SELECT show_chunks('int_table') as c) as x
+		WHERE
+			uncomp.dropped IS FALSE AND uncomp.compressed_chunk_id IS NOT NULL AND
+			comp.id = uncomp.compressed_chunk_id AND
+			x.c = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass
+	LOOP
+		FOR rec IN
+			EXECUTE format('SELECT b, _timescaledb_functions.compressed_data_info(b) FROM %s', comp_regclass)
+		LOOP
+			RAISE NOTICE 'Compressed info results: %', rec;
+		END LOOP;
+
+		FOR rec IN
+			EXECUTE format('SELECT b, _timescaledb_functions.compressed_data_has_nulls(b) FROM %s', comp_regclass)
+		LOOP
+			RAISE NOTICE 'Has nulls results: %', rec;
+		END LOOP;
+
+	END LOOP;
+END;
+$$;
+NOTICE:  Compressed info results: (Bg==,"(NULL,t)")
+NOTICE:  Has nulls results: (Bg==,t)
+NOTICE:  Compressed info results: (Bg==,"(NULL,t)")
+NOTICE:  Has nulls results: (Bg==,t)
+reset timescaledb.enable_transparent_decompression;
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;

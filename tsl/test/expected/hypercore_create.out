@@ -135,6 +135,7 @@ select create_hypertable('test2', 'created_at');
 alter table test2
 	  set access method hypercore,
 	  set (compress_segmentby = 'location_id');
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure device_id is not a unique column and appropriate for a segment by
 NOTICE:  default segment by for hypertable "test2" is set to "device_id"
 NOTICE:  default order by for hypertable "test2" is set to "created_at DESC"
@@ -143,16 +144,19 @@ ERROR:  unrecognized parameter "compress_segmentby"
 alter table test2
 	  set access method hypercore,
 	  set (timescaledb.compress_segmentby = 'location_id');
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 NOTICE:  default order by for hypertable "test2" is set to "created_at DESC, device_id"
 -- Test altering hypertable to hypercore again. It should be allowed
 -- and be a no-op.
 alter table test2 set access method hypercore;
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 \set ON_ERROR_STOP 0
 -- This shows an error but the error is weird, we should probably get
 -- a better one.
 alter table test2
 	  set access method hypercore,
 	  set (compress_segmentby = 'location_id');
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 ERROR:  unrecognized parameter "compress_segmentby"
 \set ON_ERROR_STOP 1
 -- Create view for hypercore rels
@@ -336,6 +340,7 @@ select * from amrels where relparent='test3'::regclass;
 
 -- Set hypercore on hypertable
 alter table test3 set access method hypercore;
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 -- Create a third chunk
 insert into test3 values ('2022-10-01', 1, 1.0);
 -- The third chunk should be a hypercore chunk
@@ -1122,6 +1127,7 @@ alter table conditions set (
 -- Set hypercore access method on the hypertable
 -------------------------------------------------------------------------------
 alter table conditions set access method hypercore;
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 -----------------------
 -- Create a new user
 -----------------------

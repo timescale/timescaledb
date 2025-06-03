@@ -772,13 +772,118 @@ LIMIT 1;
 (1 row)
 
 --TEST 8
+--reindexing in recompression policy
+CREATE TABLE metrics2(time DATE NOT NULL);
+CREATE INDEX metrics2_index ON metrics2(time DESC);
+SELECT hypertable_id AS "HYPERTABLE_ID", schema_name, table_name, created FROM create_hypertable('metrics2','time') \gset
+ALTER TABLE metrics2 SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "metrics2" is set to ""
+NOTICE:  default order by for hypertable "metrics2" is set to ""time" DESC"
+INSERT INTO metrics2 SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval);
+SELECT add_job('_timescaledb_functions.policy_compression','1w',('{"hypertable_id": '||:'HYPERTABLE_ID'||', "compress_after": "@ 7 days"}')::jsonb, initial_start => '2000-01-01 00:00:00+00'::timestamptz) AS "JOB_COMPRESS" \gset
+-- first call should compress
+CALL run_job(:JOB_COMPRESS);
+-- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics2';
+ chunk_status 
+--------------
+            1
+            1
+            1
+            1
+            1
+(5 rows)
+
+-- disable reindex in compress job
+SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','false'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
+                                                                                                       alter_job                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1009,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""reindex"": false, ""hypertable_id"": 20, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",,t,"Fri Dec 31 16:00:00 1999 PST",,"User-Defined Action [1009]")
+(1 row)
+
+-- do an INSERT so recompress has something to do
+INSERT INTO metrics2 SELECT '2000-01-01' FROM generate_series(1,3000);
+SELECT chunk_schema, chunk_name FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics2' AND chunk_status = 9 LIMIT 1; \gset
+     chunk_schema      |     chunk_name      
+-----------------------+---------------------
+ _timescaledb_internal | _hyper_20_131_chunk
+(1 row)
+
+SELECT format('%I.%I', :'chunk_schema', :'chunk_name') AS "RECOMPRESS_CHUNK_NAME"; \gset
+           RECOMPRESS_CHUNK_NAME           
+-------------------------------------------
+ _timescaledb_internal._hyper_20_131_chunk
+(1 row)
+
+-- get size of the chunk that needs recompression
+VACUUM ANALYZE metrics2;
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') AS "SIZE_BEFORE_REINDEX"; \gset
+ SIZE_BEFORE_REINDEX 
+---------------------
+               40960
+(1 row)
+
+CALL run_job(:JOB_COMPRESS);
+-- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+ chunk_status 
+--------------
+            1
+(1 row)
+
+-- index size should not have decreased
+VACUUM ANALYZE metrics2;
+SELECT
+pg_size_pretty(pg_table_size(:'RECOMPRESS_CHUNK_NAME')) AS table_only,
+pg_size_pretty(pg_indexes_size(:'RECOMPRESS_CHUNK_NAME')) AS indexes,
+pg_size_pretty(pg_total_relation_size(:'RECOMPRESS_CHUNK_NAME')) AS total;
+ table_only | indexes | total 
+------------+---------+-------
+ 16 kB      | 40 kB   | 56 kB
+(1 row)
+
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') = :SIZE_BEFORE_REINDEX as size_unchanged;
+ size_unchanged 
+----------------
+ t
+(1 row)
+
+-- enable reindex in compress job
+SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','true'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
+                                                                                                       alter_job                                                                                                       
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1009,"@ 7 days","@ 0",-1,"@ 5 mins",t,"{""reindex"": true, ""hypertable_id"": 20, ""compress_after"": ""@ 7 days""}","Fri Dec 31 16:00:00 1999 PST",,t,"Fri Dec 31 16:00:00 1999 PST",,"User-Defined Action [1009]")
+(1 row)
+
+-- do an INSERT so recompress has something to do
+INSERT INTO metrics2 SELECT '2000-01-01';
+---- status should be 3
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+ chunk_status 
+--------------
+            9
+(1 row)
+
+-- should recompress
+CALL run_job(:JOB_COMPRESS);
+-- index size should decrease due to reindexing (8kB or 16kB)
+VACUUM ANALYZE metrics2;
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384 as size_empty;
+ size_empty 
+------------
+ t
+(1 row)
+
+DROP TABLE metrics2;
+--TEST 8
 --compression policy errors
 CREATE TABLE test_compression_policy_errors(time TIMESTAMPTZ, val SMALLINT);
 SELECT create_hypertable('test_compression_policy_errors', 'time', chunk_time_interval => '1 day'::interval);
 NOTICE:  adding not-null constraint to column "time"
               create_hypertable               
 ----------------------------------------------
- (20,public,test_compression_policy_errors,t)
+ (22,public,test_compression_policy_errors,t)
 (1 row)
 
 ALTER TABLE test_compression_policy_errors SET (timescaledb.compress, timescaledb.compress_segmentby = 'val', timescaledb.compress_orderby = 'time');
@@ -843,9 +948,9 @@ SET client_min_messages TO ERROR;
 CALL run_job(:compressjob_id);
 ERROR:  columnstore policy failure
 DETAIL:  Failed to convert '20' chunks to columnstore. Successfully converted '11' chunks.
-CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean,boolean) line 90 at RAISE
-SQL statement "CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, use_creation_time, hypercore_use_access_method)"
-PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 63 at CALL
+CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean,boolean,boolean) line 118 at RAISE
+SQL statement "CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, hypercore_use_access_method)"
+PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 65 at CALL
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 -- 31 uncompressed chunks (0 - uncompressed, 1 - compressed)

@@ -80,7 +80,8 @@ static const struct config_enum_entry loglevel_options[] = {
 	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
 	{ "debug2", DEBUG2, false }, { "debug1", DEBUG1, false }, { "debug", DEBUG2, true },
 	{ "info", INFO, false },	 { "notice", NOTICE, false }, { "warning", WARNING, false },
-	{ "log", LOG, false },		 { NULL, 0, false }
+	{ "log", LOG, false },		 { "error", ERROR, false },	  { "fatal", FATAL, false },
+	{ NULL, 0, false }
 };
 
 /*
@@ -164,6 +165,7 @@ TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
+TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 bool ts_guc_enable_event_triggers = false;
 
@@ -863,6 +865,19 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressor_batch_limit"),
+							 "Enable compressor batch limit",
+							 "Enable compressor batch limit for compressors which "
+							 "can go over the allocation limit (1 GB). This feature will"
+							 "limit those compressors by reducing the size of the batch and thus "
+							 "avoid hitting the limit.",
+							 &ts_guc_compression_enable_compressor_batch_limit,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_event_triggers"),
 							 "Enable event triggers for chunks creation",
 							 "Enable event triggers for chunks creation",
