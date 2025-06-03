@@ -1,0 +1,1 @@
+Fixes: #8216 Fix dropped quals bug in SkipScan

@@ -855,9 +855,11 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 		int64 offset_until_qual_pass = 0;
 		if (clauses_needing_scan != NULL)
 		{
+			/* Avoid division by qual_selectivity = 0.0 */
 			Selectivity qual_selectivity =
-				clauselist_selectivity(root, clauses_needing_scan, 0, JOIN_INNER, NULL);
-			offset_until_qual_pass = Max(0, floor(1 / qual_selectivity - 1));
+				Max(1.0 / (rows + 1),
+					clauselist_selectivity(root, clauses_needing_scan, 0, JOIN_INNER, NULL));
+			offset_until_qual_pass = Max(0, floor(1 / qual_selectivity));
 		}
 		adjust_limit_rows_costs(&rows, &startup, &total, offset_until_qual_pass, 1);
 
@@ -1137,7 +1139,6 @@ sort_indexquals(IndexOptInfo *indexinfo, List *quals)
 {
 	List *indexclauses[INDEX_MAX_KEYS] = { 0 };
 	List *ordered_list = NIL;
-	int quals_len = list_length(quals);
 	ListCell *lc;
 	int i;
 
@@ -1151,7 +1152,7 @@ sort_indexquals(IndexOptInfo *indexinfo, List *quals)
 		indexclauses[i] = lappend(indexclauses[i], lfirst(lc));
 	}
 
-	for (i = 0; i < quals_len; i++)
+	for (i = 0; i < indexinfo->nkeycolumns; i++)
 	{
 		if (indexclauses[i] != NIL)
 			ordered_list = list_concat(ordered_list, indexclauses[i]);
