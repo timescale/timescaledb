@@ -696,6 +696,67 @@ select * from bool_table where b is null or b is not null order by 1;
 select * from bool_table where b is null and b is not null order by 1;
 select * from bool_table where b is not null order by 1;
 
+-- Verify that NULL compression with bools is vectorized
+set timescaledb.debug_require_vector_qual to 'require';
+update bool_table set b = NULL;
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+select * from bool_table where b is null order by 1;
+select * from bool_table where b is not null order by 1;
+select * from bool_table where b is null or b is not null order by 1;
+select * from bool_table where b is null and b is not null order by 1;
+select * from bool_table where b is not true order by 1;
+select * from bool_table where b is not false order by 1;
+select * from bool_table where b is unknown order by 1;
+select * from bool_table where b is not unknown order by 1;
+
+-- Verify that NULL compression with ints is vectorized
+create table int_table(ts int, b int);
+select create_hypertable('int_table', 'ts');
+alter table int_table set (timescaledb.compress);
+insert into int_table values (100, NULL), (101, NULL), (102, NULL);
+
+select count(compress_chunk(x, true)) from show_chunks('int_table') x;
+select * from int_table where b is null order by 1;
+select * from int_table where b is not null order by 1;
+select * from int_table where b is null or b is not null order by 1;
+select * from int_table where b is null and b is not null order by 1;
+
+-- check the compression algorithm for the compressed chunks
+set timescaledb.enable_transparent_decompression='off';
+DO $$
+DECLARE
+	comp_regclass REGCLASS;
+	rec RECORD;
+BEGIN
+	FOR comp_regclass IN
+		SELECT
+			format('%I.%I', comp.schema_name, comp.table_name)::regclass as comp_regclass
+		FROM
+			_timescaledb_catalog.chunk uncomp,
+			_timescaledb_catalog.chunk comp,
+			(SELECT show_chunks('bool_table') as c UNION SELECT show_chunks('int_table') as c) as x
+		WHERE
+			uncomp.dropped IS FALSE AND uncomp.compressed_chunk_id IS NOT NULL AND
+			comp.id = uncomp.compressed_chunk_id AND
+			x.c = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass
+	LOOP
+		FOR rec IN
+			EXECUTE format('SELECT b, _timescaledb_functions.compressed_data_info(b) FROM %s', comp_regclass)
+		LOOP
+			RAISE NOTICE 'Compressed info results: %', rec;
+		END LOOP;
+
+		FOR rec IN
+			EXECUTE format('SELECT b, _timescaledb_functions.compressed_data_has_nulls(b) FROM %s', comp_regclass)
+		LOOP
+			RAISE NOTICE 'Has nulls results: %', rec;
+		END LOOP;
+
+	END LOOP;
+END;
+$$;
+
+reset timescaledb.enable_transparent_decompression;
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;
 

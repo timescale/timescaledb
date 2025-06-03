@@ -71,7 +71,7 @@ with col as (
 select
     round(
         sum(pg_column_size(cc))::numeric / (sum(pg_column_size(f))
-            + sum(pg_column_size(cc)) filter (where _timescaledb_functions.bloom1_contains(f, 'match'::text))),
+            + sum(pg_column_size(cc)) filter (where _timescaledb_functions.bloom1_contains(f, '0.4067781441845'::text))),
         2)
 from col;
 

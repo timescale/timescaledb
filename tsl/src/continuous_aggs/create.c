@@ -882,7 +882,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		}
 	}
 
-	if (!with_clause_options[CreateMaterializedViewFlagCompress].is_default)
+	if (!with_clause_options[CreateMaterializedViewFlagColumnstore].is_default)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

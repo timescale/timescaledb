@@ -1,0 +1,59 @@
+Parsed test spec with 4 sessions
+
+starting permutation: s4_show_thresholds s4_before s1_refresh s2_refresh s3_process s4_release s4_after
+step s4_show_thresholds: 
+    SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
+           _timescaledb_functions.to_timestamp(watermark) AS watermark
+      FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+      JOIN _timescaledb_catalog.hypertable ht
+	ON hypertable_id = ht.id
+    ORDER BY 1;
+
+hypertable |watermark                   
+-----------+----------------------------
+temperature|Wed Jan 01 00:00:00 2025 PST
+(1 row)
+
+step s4_before: 
+    START TRANSACTION;
+    SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
+	   _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_modified_value,
+	   _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest_modified_value
+      FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+      JOIN _timescaledb_catalog.hypertable ht
+	ON hypertable_id = ht.id
+    ORDER BY 1, 2, 3 FOR UPDATE;
+
+hypertable |lowest_modified_value       |greatest_modified_value     
+-----------+----------------------------+----------------------------
+temperature|Sat Dec 31 16:00:00 2022 PST|Sun Jan 01 15:59:00 2023 PST
+(1 row)
+
+step s1_refresh: 
+   CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00', '2025-01-01 00:00:00');
+ <waiting ...>
+step s2_refresh: 
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-01 00:00:00', '2025-01-01 00:00:00');
+ <waiting ...>
+step s3_process: 
+   CALL _timescaledb_functions.process_hypertable_invalidations('temperature');
+ <waiting ...>
+step s4_release: 
+    ROLLBACK;
+
+step s1_refresh: <... completed>
+step s2_refresh: <... completed>
+step s3_process: <... completed>
+step s4_after: 
+    SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
+	   _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest_modified_value,
+	   _timescaledb_functions.to_timestamp(greatest_modified_value) AS greatest_modified_value
+      FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+      JOIN _timescaledb_catalog.hypertable ht
+	ON hypertable_id = ht.id
+    ORDER BY 1, 2, 3;
+
+hypertable|lowest_modified_value|greatest_modified_value
+----------+---------------------+-----------------------
+(0 rows)
+

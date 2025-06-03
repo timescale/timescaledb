@@ -33,6 +33,7 @@ typedef struct BoolCompressor
 	Simple8bRleCompressor validity_bitmap;
 	bool has_nulls;
 	bool last_value;
+	uint32 num_nulls;
 } BoolCompressor;
 
 typedef struct ExtendedCompressor
@@ -88,6 +89,7 @@ bool_compressor_append_null(BoolCompressor *compressor)
 	compressor->has_nulls = true;
 	simple8brle_compressor_append(&compressor->values, compressor->last_value);
 	simple8brle_compressor_append(&compressor->validity_bitmap, 0);
+	compressor->num_nulls++;
 }
 
 extern void
@@ -106,6 +108,9 @@ bool_compressor_finish(BoolCompressor *compressor)
 
 	Simple8bRleSerialized *values = simple8brle_compressor_finish(&compressor->values);
 	if (values == NULL)
+		return NULL;
+
+	if (compressor->num_nulls == compressor->values.num_elements)
 		return NULL;
 
 	Simple8bRleSerialized *validity_bitmap =

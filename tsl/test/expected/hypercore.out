@@ -811,6 +811,7 @@ from generate_series('2022-06-01'::timestamptz, '2022-06-10'::timestamptz, '1h')
 alter table crossmodule_test
       set access method hypercore,
       set (timescaledb.compress_orderby = 'time');
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 select count(*) from crossmodule_test;
  count 

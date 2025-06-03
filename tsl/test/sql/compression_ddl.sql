@@ -870,6 +870,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 
 -- test P, F, F
 INSERT INTO test_partials VALUES ('2020-01-01 00:03', 1, 2);
+vacuum analyze test_partials;
 -- Chunks must be different size for plan stability
 select count(*) from test_partials group by tableoid order by count(*) desc;
 
@@ -881,6 +882,7 @@ SELECT * FROM test_partials ORDER BY time;
 -- make second chunk partially compressed
 -- P, P, F
 INSERT INTO test_partials VALUES ('2021-01-01 00:03', 1, 2);
+VACUUM ANALYZE test_partials;
 -- Chunks must be different size for plan stability
 select count(*) from test_partials group by tableoid order by count(*) desc;
 
@@ -894,6 +896,7 @@ SELECT * FROM test_partials ORDER BY time;
 INSERT INTO test_partials VALUES ('2022-01-01 00:03', 1, 2);
 INSERT INTO test_partials VALUES ('2023-01-01 00:03', 1, 2);
 INSERT INTO test_partials VALUES ('2023-01-01 00:05', 3, 1);
+VACUUM ANALYZE test_partials;
 -- Chunks must be different size for plan stability
 select count(*) from test_partials group by tableoid order by count(*) desc;
 
@@ -975,6 +978,7 @@ INSERT INTO space_part VALUES
 ('2022-01-01 00:00', 2, 1, 1),
 ('2022-01-01 00:03', 1, 1, 1),
 ('2022-01-01 00:03', 2, 1, 1);
+VACUUM ANALYZE space_part;
 -- plan still ok
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 -- compress them
@@ -986,10 +990,12 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 insert into space_part values
 ('2022-01-01 00:02', 2, 1, 1),
 ('2022-01-01 00:02', 2, 1, 1);
+VACUUM ANALYZE space_part;
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 -- make other one partial too
 INSERT INTO space_part VALUES
 ('2022-01-01 00:02', 1, 1, 1);
+VACUUM ANALYZE space_part;
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 
 -- test creation of unique expression index does not interfere with enabling compression

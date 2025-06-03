@@ -330,6 +330,7 @@ insert into test2 select t, 'second'::text, 120, 1 from generate_series(11, 15) 
 alter table test2
       set access method hypercore,
       set (timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'c, itime desc');
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 select compress_chunk(show_chunks('test2'));
              compress_chunk              
 -----------------------------------------

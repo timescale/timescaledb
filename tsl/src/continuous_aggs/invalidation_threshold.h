@@ -11,6 +11,7 @@ typedef struct InternalTimeRange InternalTimeRange;
 typedef struct ContinuousAgg ContinuousAgg;
 typedef struct Hypertable Hypertable;
 
+extern int64 invalidation_threshold_get(int32 hypertable_id, Oid dimtype);
 extern int64 invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window);
 extern int64 invalidation_threshold_compute(const ContinuousAgg *cagg,

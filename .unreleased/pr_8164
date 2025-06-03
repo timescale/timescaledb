@@ -1,0 +1,1 @@
+Fixes: #8164 Check columns when creating new chunk from table

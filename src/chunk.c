@@ -1091,29 +1091,90 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 
 	Assert(OidIsValid(chunk_table_relid));
 	Assert(OidIsValid(current_chunk_schemaid));
+	Assert(OidIsValid(ht->main_table_relid));
+
+	Relation ht_rel = table_open(ht->main_table_relid, AccessShareLock);
+	Relation chunk_rel = table_open(chunk_table_relid, AccessShareLock);
+	TupleDesc tupdesc = RelationGetDescr(chunk_rel);
+
+	for (int attno = 0; attno < tupdesc->natts; attno++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupdesc, attno);
+		AttrNumber ht_attnum = InvalidAttrNumber;
+
+		/* Ignore dropped */
+		if (att->attisdropped)
+			continue;
+
+		ht_attnum = get_attnum(ht->main_table_relid, NameStr(att->attname));
+		/* Try to find the column in parent (matching on column name) */
+		if (ht_attnum == InvalidAttrNumber)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("table \"%s\" contains column \"%s\" not found in parent \"%s\"",
+							RelationGetRelationName(chunk_rel),
+							NameStr(att->attname),
+							RelationGetRelationName(ht_rel)),
+					 errdetail("The new chunk can contain only the columns present in parent.")));
+
+		/*
+		 * PG16 and later does not allow generated columns on child tables if the parent
+		 * column is not generated. This is a change from PG15 and earlier, where the
+		 * child column could be generated even if the parent was not.
+		 * We check if a generated column is also generated in the parent here to disallow
+		 * this behavior in PG15 too.
+		 *
+		 * The case when the parent column is generated and the child column is not is handled
+		 * by Postgres code, which will throw an error.
+		 *
+		 * This check can be removed once we drop support for PG15.
+		 */
+		if (att->attgenerated && !get_attgenerated(ht->main_table_relid, ht_attnum))
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATATYPE_MISMATCH),
+					 errmsg("column \"%s\" in chunk table must not be a generated column",
+							NameStr(att->attname)),
+					 errdetail("Chunk column must be generated if and only if parent column is "
+							   "also generated")));
+		}
+
+		/* Check that the chunk column has the same expression as the hypertable column */
+		if (att->attgenerated && get_attgenerated(ht->main_table_relid, ht_attnum))
+		{
+			char *chunk_expr = ts_get_attr_expr(chunk_rel, attno + 1);
+			char *ht_expr = ts_get_attr_expr(ht_rel, ht_attnum);
+
+			if (strcmp(chunk_expr, ht_expr) != 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("chunk column \"%s\" must have the same expression as the "
+								"hypertable column.",
+								NameStr(att->attname))));
+		}
+	}
+	table_close(ht_rel, NoLock);
 
 	/* Insert any new dimension slices into metadata */
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, get_next_chunk_id());
 	chunk->table_id = chunk_table_relid;
 	chunk->hypertable_relid = ht->main_table_relid;
-	Assert(OidIsValid(ht->main_table_relid));
 
 	new_chunk_schemaid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
 
 	if (current_chunk_schemaid != new_chunk_schemaid)
 	{
-		Relation chunk_rel = table_open(chunk_table_relid, AccessExclusiveLock);
 		ObjectAddresses *objects;
 
 		CheckSetNamespace(current_chunk_schemaid, new_chunk_schemaid);
 		objects = new_object_addresses();
 		AlterTableNamespaceInternal(chunk_rel, current_chunk_schemaid, new_chunk_schemaid, objects);
 		free_object_addresses(objects);
-		table_close(chunk_rel, NoLock);
 		/* Make changes visible */
 		CommandCounterIncrement();
 	}
+	table_close(chunk_rel, NoLock);
 
 	if (namestrcmp(&chunk->fd.table_name, get_rel_name(chunk_table_relid)) != 0)
 	{
@@ -2162,7 +2223,9 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 				 errhint("The start of the time range must be before the end.")));
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-		elog(ERROR, "invalid operation on compressed hypertable");
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("invalid operation on compressed hypertable")));
 
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
@@ -3403,7 +3466,7 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to clear status %d , current status %x ",
 						   chunk->fd.id,
@@ -3438,7 +3501,7 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %x ",
 						   chunk->fd.id,
@@ -3457,7 +3520,7 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3490,7 +3553,7 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3510,7 +3573,7 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3540,7 +3603,7 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -3560,7 +3623,7 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 	{
 		/* chunk in frozen state cannot be modified */
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 				 errmsg("cannot modify frozen chunk status"),
 				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
 						   chunk->fd.id,
@@ -4100,7 +4163,9 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
 	if (!time_dim)
-		elog(ERROR, "hypertable has no open partitioning dimension");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("hypertable has no open partitioning dimension")));
 
 	time_type = ts_dimension_get_partition_type(time_dim);
 
@@ -4371,10 +4436,11 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 
 			default:
 				if (throw_error)
-					elog(ERROR,
-						 "%s not permitted on tiered chunk \"%s\" ",
-						 get_chunk_operation_str(cmd),
-						 get_rel_name(chunk_relid));
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("%s not permitted on tiered chunk \"%s\" ",
+									get_chunk_operation_str(cmd),
+									get_rel_name(chunk_relid))));
 				return false;
 				break;
 		}
@@ -4394,10 +4460,11 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 			case CHUNK_DROP:
 			{
 				if (throw_error)
-					elog(ERROR,
-						 "%s not permitted on frozen chunk \"%s\" ",
-						 get_chunk_operation_str(cmd),
-						 get_rel_name(chunk_relid));
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("%s not permitted on frozen chunk \"%s\" ",
+									get_chunk_operation_str(cmd),
+									get_rel_name(chunk_relid))));
 				return false;
 				break;
 			}
@@ -4816,7 +4883,9 @@ ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
 		if (!name)
 			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
 		else
-			elog(ERROR, "\"%s\" is not a hypertable", name);
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+					 errmsg("\"%s\" is not a hypertable", name)));
 	}
 
 	if (get_rel_relkind(ftable_relid) == RELKIND_FOREIGN_TABLE)

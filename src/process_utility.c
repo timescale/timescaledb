@@ -3816,7 +3816,7 @@ process_create_table_end(Node *parsetree)
 											   NULL, /* associated_table_prefix */
 										   csi))
 		{
-			if (ts_cm_functions->compression_enable)
+			if (DatumGetBool(create_table_info.with_clauses[CreateTableFlagColumnstore].parsed))
 			{
 				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
 				ts_cm_functions->compression_enable(ht, create_table_info.with_clauses);
@@ -4136,6 +4136,9 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 											DEFELEM_UNSPEC,
 											-1);
 
+		elog(WARNING,
+			 "the hypercore access method is marked as deprecated with the 2.21.0 release and will "
+			 "be fully removed in the 2.22.0 release.");
 		AlterTableCmd *cmd = makeNode(AlterTableCmd);
 		cmd->type = T_AlterTableCmd;
 		cmd->subtype = AT_SetRelOptions;
@@ -4955,7 +4958,7 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		ts_dimension_set_chunk_interval(dim, chunk_interval);
 	}
 
-	if (!parse_results[AlterTableFlagCompress].is_default ||
+	if (!parse_results[AlterTableFlagColumnstore].is_default ||
 		!parse_results[AlterTableFlagOrderBy].is_default ||
 		!parse_results[AlterTableFlagSegmentBy].is_default ||
 		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default)
@@ -5570,6 +5573,12 @@ extern void
 ts_process_utility_set_expect_chunk_modification(bool expect)
 {
 	expect_chunk_modification = expect;
+}
+
+bool
+ts_process_utility_is_top_level(void)
+{
+	return last_process_utility_context == PROCESS_UTILITY_TOPLEVEL;
 }
 
 bool

@@ -16,7 +16,7 @@
 typedef enum AlterTableFlags
 {
 	AlterTableFlagChunkTimeInterval = 0,
-	AlterTableFlagCompress,
+	AlterTableFlagColumnstore,
 	AlterTableFlagSegmentBy,
 	AlterTableFlagOrderBy,
 	AlterTableFlagCompressChunkTimeInterval,

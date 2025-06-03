@@ -189,3 +189,30 @@ BEGIN;
 CREATE TABLE t18(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.compress_segmentby='device', tsdb.compress_orderby='time,value');
 SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
+
+-- test columnstore option
+BEGIN;
+CREATE TABLE t19(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t20(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t21(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=true);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t22(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=false);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t23(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.compress=false);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
+ROLLBACK;
+BEGIN;
+CREATE TABLE t24(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.enable_columnstore=false);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
+ROLLBACK;
+
