@@ -1922,7 +1922,7 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Pat
 	path->batch_sorted_merge = false;
 
 	/*
-	 * DecompressChunk doesn't manage any paralellism itself.
+	 * DecompressChunk doesn't manage any parallelism itself.
 	 */
 	path->custom_path.path.parallel_aware = false;
 
