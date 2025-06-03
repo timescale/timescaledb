@@ -187,7 +187,7 @@ dictionary_compressor_alloc(Oid type)
 	compressor->typbyval = tentry->typbyval;
 	compressor->typalign = tentry->typalign;
 
-	compressor->dictionary_items = dictionary_hash_alloc(tentry);
+	compressor->dictionary_items = dictionary_hash_alloc(tentry, 1000);
 	compressor->serializer = create_datum_serializer(type);
 
 	simple8brle_compressor_init(&compressor->dictionary_indexes, SIMPLE8B_UNLIMITED_BIT_LIMIT);
