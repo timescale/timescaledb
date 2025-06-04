@@ -113,8 +113,8 @@ VACUUM ANALYZE ht_metrics_compressed;
 (33 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time desc limit 10;
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=10 loops=1)
          Order: ht_metrics_compressed."time" DESC
@@ -125,33 +125,26 @@ VACUUM ANALYZE ht_metrics_compressed;
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=30 loops=1)
                            ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-               ->  Sort (actual rows=4 loops=1)
-                     Sort Key: _hyper_1_3_chunk."time" DESC
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=18 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=4 loops=1)
          ->  Merge Append (never executed)
                Sort Key: _hyper_1_2_chunk."time" DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_1_2_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
                            ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_1_2_chunk."time" DESC
-                     ->  Seq Scan on _hyper_1_2_chunk (never executed)
+               ->  Index Scan using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (never executed)
          ->  Merge Append (never executed)
                Sort Key: _hyper_1_1_chunk."time" DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_1_1_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
                            ->  Seq Scan on compress_hyper_2_4_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_1_1_chunk."time" DESC
-                     ->  Seq Scan on _hyper_1_1_chunk (never executed)
-(32 rows)
+               ->  Index Scan using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (never executed)
+(25 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('2d',time) DESC LIMIT 1;
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: time_bucket('@ 2 days'::interval, ht_metrics_compressed."time") DESC
@@ -163,10 +156,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      ->  Result (actual rows=30 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=30 loops=1)
                                  ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_3_chunk."time")) DESC
-                     Sort Method: top-N heapsort 
-                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=18 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
          ->  Merge Append (never executed)
                Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_2_chunk."time")) DESC
                ->  Sort (never executed)
@@ -174,9 +164,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      ->  Result (never executed)
                            ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
                                  ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_2_chunk."time")) DESC
-                     ->  Seq Scan on _hyper_1_2_chunk (never executed)
+               ->  Index Scan using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (never executed)
          ->  Merge Append (never executed)
                Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_1_chunk."time")) DESC
                ->  Sort (never executed)
@@ -184,14 +172,12 @@ VACUUM ANALYZE ht_metrics_compressed;
                      ->  Result (never executed)
                            ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
                                  ->  Seq Scan on compress_hyper_2_4_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_1_chunk."time")) DESC
-                     ->  Seq Scan on _hyper_1_1_chunk (never executed)
-(35 rows)
+               ->  Index Scan using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (never executed)
+(28 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time DESC LIMIT 1;
-                                             QUERY PLAN                                             
-----------------------------------------------------------------------------------------------------
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time" DESC
@@ -204,11 +190,8 @@ VACUUM ANALYZE ht_metrics_compressed;
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
                            ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
                                  Filter: (device = ANY ('{1,2,3}'::integer[]))
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: _hyper_1_3_chunk."time" DESC
-                     Sort Method: top-N heapsort 
-                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=18 loops=1)
-                           Filter: (device = ANY ('{1,2,3}'::integer[]))
+               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                     Filter: (device = ANY ('{1,2,3}'::integer[]))
          ->  Merge Append (never executed)
                Sort Key: _hyper_1_2_chunk."time" DESC
                ->  Sort (never executed)
@@ -217,10 +200,8 @@ VACUUM ANALYZE ht_metrics_compressed;
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
                            ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
                                  Filter: (device = ANY ('{1,2,3}'::integer[]))
-               ->  Sort (never executed)
-                     Sort Key: _hyper_1_2_chunk."time" DESC
-                     ->  Seq Scan on _hyper_1_2_chunk (never executed)
-                           Filter: (device = ANY ('{1,2,3}'::integer[]))
+               ->  Index Scan using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (never executed)
+                     Filter: (device = ANY ('{1,2,3}'::integer[]))
          ->  Merge Append (never executed)
                Sort Key: _hyper_1_1_chunk."time" DESC
                ->  Sort (never executed)
@@ -229,11 +210,9 @@ VACUUM ANALYZE ht_metrics_compressed;
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
                            ->  Seq Scan on compress_hyper_2_4_chunk (never executed)
                                  Filter: (device = ANY ('{1,2,3}'::integer[]))
-               ->  Sort (never executed)
-                     Sort Key: _hyper_1_1_chunk."time" DESC
-                     ->  Seq Scan on _hyper_1_1_chunk (never executed)
-                           Filter: (device = ANY ('{1,2,3}'::integer[]))
-(41 rows)
+               ->  Index Scan using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (never executed)
+                     Filter: (device = ANY ('{1,2,3}'::integer[]))
+(34 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time, device DESC LIMIT 1;
                                              QUERY PLAN                                             
@@ -298,12 +277,9 @@ VACUUM ANALYZE ht_metrics_compressed;
                            ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1 loops=1)
                                  Filter: (device = 3)
                                  Rows Removed by Filter: 2
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: _hyper_1_3_chunk."time" DESC
-                     Sort Method: top-N heapsort 
-                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=6 loops=1)
-                           Filter: (device = 3)
-                           Rows Removed by Filter: 12
+               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                     Filter: (device = 3)
+                     Rows Removed by Filter: 2
          ->  Merge Append (never executed)
                Sort Key: _hyper_1_2_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
@@ -312,10 +288,8 @@ VACUUM ANALYZE ht_metrics_compressed;
                            Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
                            ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
                                  Filter: (device = 3)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_1_2_chunk."time" DESC
-                     ->  Seq Scan on _hyper_1_2_chunk (never executed)
-                           Filter: (device = 3)
+               ->  Index Scan using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (never executed)
+                     Filter: (device = 3)
          ->  Merge Append (never executed)
                Sort Key: _hyper_1_1_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
@@ -324,11 +298,9 @@ VACUUM ANALYZE ht_metrics_compressed;
                            Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
                            ->  Seq Scan on compress_hyper_2_4_chunk (never executed)
                                  Filter: (device = 3)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_1_1_chunk."time" DESC
-                     ->  Seq Scan on _hyper_1_1_chunk (never executed)
-                           Filter: (device = 3)
-(43 rows)
+               ->  Index Scan using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (never executed)
+                     Filter: (device = 3)
+(36 rows)
 
 SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
              time             | device | value 
@@ -350,12 +322,9 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
                      ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1 loops=1)
                            Filter: (device = 3)
                            Rows Removed by Filter: 2
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_1_1_chunk."time" DESC
-               Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=18 loops=1)
-                     Filter: (device = 3)
-                     Rows Removed by Filter: 36
+         ->  Index Scan using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+               Filter: (device = 3)
+               Rows Removed by Filter: 2
          ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=1 loops=1)
                Filter: (device = 3)
                ->  Sort (actual rows=1 loops=1)
@@ -364,12 +333,9 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
                      ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=1 loops=1)
                            Filter: (device = 3)
                            Rows Removed by Filter: 2
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_1_2_chunk."time" DESC
-               Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=19 loops=1)
-                     Filter: (device = 3)
-                     Rows Removed by Filter: 38
+         ->  Index Scan using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+               Filter: (device = 3)
+               Rows Removed by Filter: 2
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=1 loops=1)
                Filter: (device = 3)
                ->  Sort (actual rows=1 loops=1)
@@ -378,13 +344,10 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1 loops=1)
                            Filter: (device = 3)
                            Rows Removed by Filter: 2
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_1_3_chunk."time" DESC
-               Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=6 loops=1)
-                     Filter: (device = 3)
-                     Rows Removed by Filter: 12
-(45 rows)
+         ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+               Filter: (device = 3)
+               Rows Removed by Filter: 2
+(36 rows)
 
 SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC LIMIT 1;
              time             | device | value 
@@ -393,8 +356,8 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
 (1 row)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC LIMIT 1; -- this also uses the index and does not do sort on top
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time"
@@ -408,12 +371,8 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                            ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1 loops=1)
                                  Filter: (device = 3)
                                  Rows Removed by Filter: 2
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: _hyper_1_1_chunk."time"
-                     Sort Method: top-N heapsort 
-                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=18 loops=1)
-                           Filter: (device = 3)
-                           Rows Removed by Filter: 36
+               ->  Index Scan Backward using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+                     Filter: (device = 3)
          ->  Merge Append (never executed)
                Sort Key: _hyper_1_2_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
@@ -422,10 +381,8 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                            Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1
                            ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
                                  Filter: (device = 3)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_1_2_chunk."time"
-                     ->  Seq Scan on _hyper_1_2_chunk (never executed)
-                           Filter: (device = 3)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (never executed)
+                     Filter: (device = 3)
          ->  Merge Append (never executed)
                Sort Key: _hyper_1_3_chunk."time"
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
@@ -434,11 +391,9 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                            Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1
                            ->  Seq Scan on compress_hyper_2_6_chunk (never executed)
                                  Filter: (device = 3)
-               ->  Sort (never executed)
-                     Sort Key: _hyper_1_3_chunk."time"
-                     ->  Seq Scan on _hyper_1_3_chunk (never executed)
-                           Filter: (device = 3)
-(43 rows)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (never executed)
+                     Filter: (device = 3)
+(35 rows)
 
 SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC LIMIT 1;
              time             | device | value 

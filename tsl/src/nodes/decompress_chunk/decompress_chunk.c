@@ -1111,12 +1111,35 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * compressed and uncompressed chunk.
 	 */
 	List *combined_paths = NIL;
+
+	/*
+	 * All decompressed paths we've built have the same parameterization since
+	 * we're building on a single compressed path. We only inherit the
+	 * parameterization from it and don't add our own.
+	 */
 	Bitmapset *req_outer = PATH_REQ_OUTER(chunk_path_no_sort);
-	Path *uncompressed_path = get_cheapest_path_for_pathkeys(uncompressed_table_pathlist,
-															 NIL,
-															 req_outer,
-															 TOTAL_COST,
-															 false);
+
+	/*
+	 * Look up the uncompressed chunk paths. We might need an unordered path
+	 * (SeqScan) and an ordered path (e.g. IndexScan).
+	 */
+	Path *unordered_uncompressed_path = get_cheapest_path_for_pathkeys(uncompressed_table_pathlist,
+																	   NIL,
+																	   req_outer,
+																	   TOTAL_COST,
+																	   false);
+	Ensure(unordered_uncompressed_path != NULL,
+		   "couldn't find a scan path for uncompressed chunk table");
+
+	Path *ordered_uncompressed_path = NULL;
+	if (root->query_pathkeys != NIL)
+	{
+		ordered_uncompressed_path = get_cheapest_path_for_pathkeys(uncompressed_table_pathlist,
+																   root->query_pathkeys,
+																   req_outer,
+																   TOTAL_COST,
+																   false);
+	}
 
 	/*
 	 * All children of an append path are required to have the same parameterization
@@ -1124,16 +1147,32 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	 * we need. Reparameterization should always succeed here since uncompressed_path
 	 * should always be a scan.
 	 */
-	if (!bms_equal(req_outer, PATH_REQ_OUTER(uncompressed_path)))
+	if (!bms_equal(req_outer, PATH_REQ_OUTER(unordered_uncompressed_path)))
 	{
-		uncompressed_path = reparameterize_path(root, uncompressed_path, req_outer, 1.0);
-		if (!uncompressed_path)
-			return NIL;
+		unordered_uncompressed_path =
+			reparameterize_path(root, unordered_uncompressed_path, req_outer, 1.0);
+		Ensure(unordered_uncompressed_path != NULL,
+			   "couldn't reparameterize a scan path for uncompressed chunk table");
+	}
+	if (ordered_uncompressed_path != NULL &&
+		!bms_equal(req_outer, PATH_REQ_OUTER(ordered_uncompressed_path)))
+	{
+		ordered_uncompressed_path =
+			reparameterize_path(root, ordered_uncompressed_path, req_outer, 1.0);
 	}
 
 	ListCell *lc;
 	foreach (lc, decompressed_paths)
 	{
+		Path *decompression_path = lfirst(lc);
+		List *pathkeys = decompression_path->pathkeys;
+
+		/*
+		 * All of the paths we generated in this function are supposed to have
+		 * the same parameterization inherited from the compressed path.
+		 */
+		Assert(bms_equal(req_outer, PATH_REQ_OUTER(decompression_path)));
+
 		/*
 		 * Combine decompressed path with uncompressed part of the chunk,
 		 * using either MergeAppend or plain Append, depending on
@@ -1148,10 +1187,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		 * ordered chunk paths.
 		 */
 		Path *combined_path = NULL;
-		Path *decompression_path = lfirst(lc);
-		const int workers =
-			Max(decompression_path->parallel_workers, uncompressed_path->parallel_workers);
-		if (decompression_path->pathkeys == NIL || workers > 0)
+		const int workers = Max(decompression_path->parallel_workers,
+								unordered_uncompressed_path->parallel_workers);
+		if (pathkeys == NIL || workers > 0)
 		{
 			/*
 			 * Append distinguishes paths that are parallel and not, and uses
@@ -1170,34 +1208,57 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 				sequential_paths = lappend(sequential_paths, decompression_path);
 			}
 
-			if (uncompressed_path->parallel_workers > 0)
+			if (unordered_uncompressed_path->parallel_workers > 0)
 			{
-				parallel_paths = lappend(parallel_paths, uncompressed_path);
+				parallel_paths = lappend(parallel_paths, unordered_uncompressed_path);
 			}
 			else
 			{
-				sequential_paths = lappend(sequential_paths, uncompressed_path);
+				sequential_paths = lappend(sequential_paths, unordered_uncompressed_path);
 			}
 
-			combined_path =
-				(Path *) create_append_path(root,
-											chunk_rel,
-											sequential_paths,
-											parallel_paths,
-											/* pathkeys = */ NIL,
-											req_outer,
-											workers,
-											workers > 0,
-											decompression_path->rows + uncompressed_path->rows);
+			combined_path = (Path *) create_append_path(root,
+														chunk_rel,
+														sequential_paths,
+														parallel_paths,
+														/* pathkeys = */ NIL,
+														req_outer,
+														workers,
+														workers > 0,
+														decompression_path->rows +
+															unordered_uncompressed_path->rows);
 		}
 		else
 		{
-			combined_path =
-				(Path *) create_merge_append_path(root,
-												  chunk_rel,
-												  list_make2(decompression_path, uncompressed_path),
-												  decompression_path->pathkeys,
-												  req_outer);
+			/*
+			 * We might have a path with explicit Sort on top of decompression.
+			 * We shouldn't use it for MergeAppend, because the MergeAppend
+			 * sorts its children anyway, and having a Sort under it just leads
+			 * to the plan creation having to call prepare_sort_from_pathkeys()
+			 * twice, which is a noticeable planning time regression. Use the
+			 * underlying decompression path instead.
+			 */
+			Path *decompress_chunk_path = decompression_path;
+			if (IsA(decompression_path, SortPath))
+			{
+				decompress_chunk_path = castNode(SortPath, decompression_path)->subpath;
+			}
+
+			/*
+			 * Same logic as above for the uncompressed chunk part.
+			 */
+			Path *uncompressed_path = ordered_uncompressed_path;
+			if (uncompressed_path == NULL || IsA(uncompressed_path, SortPath))
+			{
+				uncompressed_path = unordered_uncompressed_path;
+			}
+
+			combined_path = (Path *) create_merge_append_path(root,
+															  chunk_rel,
+															  list_make2(decompress_chunk_path,
+																		 uncompressed_path),
+															  pathkeys,
+															  req_outer);
 		}
 
 		combined_paths = lappend(combined_paths, combined_path);

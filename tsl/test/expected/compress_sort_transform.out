@@ -94,8 +94,8 @@ group by 1, 2 order by 1, 2 limit 1;
 select time_bucket('1 minute', time), count(*)
 from ht_metrics_partially_compressed
 group by 1 order by 1 limit 1;
-                                               QUERY PLAN                                                
----------------------------------------------------------------------------------------------------------
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Finalize GroupAggregate (actual rows=1 loops=1)
          Group Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
@@ -111,11 +111,8 @@ group by 1 order by 1 limit 1;
                                        Sort Method: quicksort 
                                        ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
                      ->  Partial GroupAggregate (actual rows=2 loops=1)
-                           Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-                           ->  Sort (actual rows=7 loops=1)
-                                 Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on _hyper_1_1_chunk (actual rows=960 loops=1)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=7 loops=1)
                ->  Merge Append (never executed)
                      Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
                      ->  Partial GroupAggregate (never executed)
@@ -125,10 +122,8 @@ group by 1 order by 1 limit 1;
                                        Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1
                                        ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
                      ->  Partial GroupAggregate (never executed)
-                           Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
-                           ->  Sort (never executed)
-                                 Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
-                                 ->  Seq Scan on _hyper_1_2_chunk (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (never executed)
                ->  Merge Append (never executed)
                      Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
                      ->  Partial GroupAggregate (never executed)
@@ -138,19 +133,17 @@ group by 1 order by 1 limit 1;
                                        Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1
                                        ->  Seq Scan on compress_hyper_2_6_chunk (never executed)
                      ->  Partial GroupAggregate (never executed)
-                           Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
-                           ->  Sort (never executed)
-                                 Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
-                                 ->  Seq Scan on _hyper_1_3_chunk (never executed)
-(46 rows)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (never executed)
+(42 rows)
 
 -- Batch sorted merge with different order in SELECT list.
 :PREFIX
 select count(*), time_bucket('1 minute', time)
 from ht_metrics_partially_compressed
 group by 2 order by 2 limit 1;
-                                               QUERY PLAN                                                
----------------------------------------------------------------------------------------------------------
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Finalize GroupAggregate (actual rows=1 loops=1)
          Group Key: (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
@@ -166,11 +159,8 @@ group by 2 order by 2 limit 1;
                                        Sort Method: quicksort 
                                        ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
                      ->  Partial GroupAggregate (actual rows=2 loops=1)
-                           Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-                           ->  Sort (actual rows=7 loops=1)
-                                 Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on _hyper_1_1_chunk (actual rows=960 loops=1)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=7 loops=1)
                ->  Merge Append (never executed)
                      Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
                      ->  Partial GroupAggregate (never executed)
@@ -180,10 +170,8 @@ group by 2 order by 2 limit 1;
                                        Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1
                                        ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
                      ->  Partial GroupAggregate (never executed)
-                           Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
-                           ->  Sort (never executed)
-                                 Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
-                                 ->  Seq Scan on _hyper_1_2_chunk (never executed)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (never executed)
                ->  Merge Append (never executed)
                      Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
                      ->  Partial GroupAggregate (never executed)
@@ -193,19 +181,17 @@ group by 2 order by 2 limit 1;
                                        Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1
                                        ->  Seq Scan on compress_hyper_2_6_chunk (never executed)
                      ->  Partial GroupAggregate (never executed)
-                           Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
-                           ->  Sort (never executed)
-                                 Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
-                                 ->  Seq Scan on _hyper_1_3_chunk (never executed)
-(46 rows)
+                           Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                           ->  Index Only Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (never executed)
+(42 rows)
 
 -- Batch sorted merge with grouping column not in SELECT list.
 :PREFIX
 select count(*)
 from ht_metrics_partially_compressed
 group by time_bucket('1 minute', time) limit 1;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Finalize GroupAggregate (actual rows=1 loops=1)
          Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
@@ -219,11 +205,8 @@ group by time_bucket('1 minute', time) limit 1;
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
                ->  Partial GroupAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-                     ->  Sort (actual rows=7 loops=1)
-                           Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_1_1_chunk (actual rows=960 loops=1)
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
+                     ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=7 loops=1)
                ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
                      ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=4 loops=1)
@@ -232,11 +215,8 @@ group by time_bucket('1 minute', time) limit 1;
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3 loops=1)
                ->  Partial GroupAggregate (actual rows=1 loops=1)
-                     Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
-                     ->  Sort (actual rows=4 loops=1)
-                           Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_1_2_chunk (actual rows=1008 loops=1)
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
+                     ->  Index Only Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (actual rows=4 loops=1)
                ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=4 loops=1)
@@ -245,20 +225,17 @@ group by time_bucket('1 minute', time) limit 1;
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
                ->  Partial GroupAggregate (actual rows=1 loops=1)
-                     Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
-                     ->  Sort (actual rows=4 loops=1)
-                           Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_1_3_chunk (actual rows=339 loops=1)
-(44 rows)
+                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
+                     ->  Index Only Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (actual rows=4 loops=1)
+(38 rows)
 
 -- Ordering by time_bucket.
 :PREFIX
 select time_bucket('1 minute', time), *
 from ht_metrics_partially_compressed
 order by 1 limit 1;
-                                               QUERY PLAN                                                
----------------------------------------------------------------------------------------------------------
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Result (actual rows=1 loops=1)
          ->  Custom Scan (ChunkAppend) on ht_metrics_partially_compressed (actual rows=1 loops=1)
@@ -271,10 +248,7 @@ order by 1 limit 1;
                                        Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1
                                        Sort Method: quicksort 
                                        ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-                           Sort Method: top-N heapsort 
-                           ->  Seq Scan on _hyper_1_1_chunk (actual rows=960 loops=1)
+                     ->  Index Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                ->  Merge Append (never executed)
                      Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
                      ->  Result (never executed)
@@ -282,9 +256,7 @@ order by 1 limit 1;
                                  ->  Sort (never executed)
                                        Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1
                                        ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
-                           ->  Seq Scan on _hyper_1_2_chunk (never executed)
+                     ->  Index Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (never executed)
                ->  Merge Append (never executed)
                      Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
                      ->  Result (never executed)
@@ -292,17 +264,15 @@ order by 1 limit 1;
                                  ->  Sort (never executed)
                                        Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1
                                        ->  Seq Scan on compress_hyper_2_6_chunk (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
-                           ->  Seq Scan on _hyper_1_3_chunk (never executed)
-(36 rows)
+                     ->  Index Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (never executed)
+(29 rows)
 
 -- Ordering by time_bucket, but it's not in the SELECT list.
 :PREFIX
 select * from ht_metrics_partially_compressed
 order by time_bucket('1 minute', time) limit 1;
-                                            QUERY PLAN                                             
----------------------------------------------------------------------------------------------------
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on ht_metrics_partially_compressed (actual rows=1 loops=1)
          Order: time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time")
@@ -314,10 +284,7 @@ order by time_bucket('1 minute', time) limit 1;
                                  Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-                     Sort Method: top-N heapsort 
-                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=960 loops=1)
+               ->  Index Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
          ->  Merge Append (never executed)
                Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
                ->  Result (never executed)
@@ -325,9 +292,7 @@ order by time_bucket('1 minute', time) limit 1;
                            ->  Sort (never executed)
                                  Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1
                                  ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
-                     ->  Seq Scan on _hyper_1_2_chunk (never executed)
+               ->  Index Scan Backward using _hyper_1_2_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_2_chunk (never executed)
          ->  Merge Append (never executed)
                Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
                ->  Result (never executed)
@@ -335,10 +300,8 @@ order by time_bucket('1 minute', time) limit 1;
                            ->  Sort (never executed)
                                  Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1
                                  ->  Seq Scan on compress_hyper_2_6_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
-                     ->  Seq Scan on _hyper_1_3_chunk (never executed)
-(35 rows)
+               ->  Index Scan Backward using _hyper_1_3_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_3_chunk (never executed)
+(28 rows)
 
 -- Ordering in compressed data order.
 :PREFIX
