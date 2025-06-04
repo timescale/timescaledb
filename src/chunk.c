@@ -5233,3 +5233,21 @@ ts_merge_two_chunks(PG_FUNCTION_ARGS)
 		construct_array(chunks, 2, REGCLASSOID, sizeof(Oid), true, TYPALIGN_INT);
 	return DirectFunctionCall1(ts_cm_functions->merge_chunks, PointerGetDatum(chunk_array));
 }
+
+CompressionSettings *ts_chunk_get_cached_compression_settings(Chunk *chunk)
+{
+	if (chunk->compression_settings == NULL)
+	{
+		chunk->compression_settings = ts_compression_settings_get(chunk->table_id);
+	}
+	return chunk->compression_settings;
+}
+
+CompressionSettings *ts_chunk_get_cached_hypertable_compression_settings(Chunk *chunk)
+{
+	if (chunk->ht_compression_settings == NULL)
+	{
+		chunk->ht_compression_settings = ts_compression_settings_get(chunk->hypertable_relid);
+	}
+	return chunk->ht_compression_settings;
+}

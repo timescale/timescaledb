@@ -536,7 +536,7 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	 * for now.
 	 */
 	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
-	CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
+	CompressionSettings *settings = ts_chunk_get_cached_hypertable_compression_settings(src_chunk);
 
 	/*
 	 * On hypertables created with CREATE TABLE ... WITH we enable compression
@@ -901,7 +901,7 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 		return disable_compression(ht, with_clause_options);
 	}
 
-	settings = ts_compression_settings_get(ht->main_table_relid);
+	settings = ts_hypertable_get_cached_compression_settings(ht);
 	if (!settings)
 	{
 		settings = ts_compression_settings_create(ht->main_table_relid,
@@ -1371,7 +1371,7 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
+	CompressionSettings *settings = ts_hypertable_get_cached_compression_settings(ht);
 
 	if (settings && (ts_array_is_member(settings->fd.segmentby, name) ||
 					 ts_array_is_member(settings->fd.orderby, name)))

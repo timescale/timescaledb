@@ -51,6 +51,7 @@ typedef struct Hypercube Hypercube;
 typedef struct Point Point;
 typedef struct Hyperspace Hyperspace;
 typedef struct Hypertable Hypertable;
+typedef struct CompressionSettings CompressionSettings;
 
 /*
  * A chunk represents a table that stores data, part of a partitioned
@@ -75,6 +76,8 @@ typedef struct Chunk
 	 */
 	Hypercube *cube;
 	ChunkConstraints *constraints;
+	CompressionSettings *compression_settings;
+	CompressionSettings *ht_compression_settings;
 
 } Chunk;
 
@@ -229,6 +232,8 @@ extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_chunk_get_by_hypertable_id(int32 hypertable_id);
+extern TSDLLEXPORT CompressionSettings *ts_chunk_get_cached_compression_settings(Chunk *chunk);
+extern TSDLLEXPORT CompressionSettings *ts_chunk_get_cached_hypertable_compression_settings(Chunk *chunk);
 
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
 

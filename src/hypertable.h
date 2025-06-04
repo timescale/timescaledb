@@ -27,6 +27,7 @@ typedef struct SubspaceStore SubspaceStore;
 typedef struct Chunk Chunk;
 typedef struct Hypercube Hypercube;
 typedef struct ChunkRangeSpace ChunkRangeSpace;
+typedef struct CompressionSettings CompressionSettings;
 
 enum
 {
@@ -51,6 +52,7 @@ typedef struct Hypertable
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
 	ChunkRangeSpace *range_space;
+	CompressionSettings *compression_settings;
 } Hypertable;
 
 /* create_hypertable record attribute numbers */
@@ -146,6 +148,7 @@ extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *
 
 extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
+extern TSDLLEXPORT CompressionSettings *ts_hypertable_get_cached_compression_settings(Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

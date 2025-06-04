@@ -2653,3 +2653,12 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	PG_RETURN_BOOL(overlap);
 }
+
+CompressionSettings *ts_hypertable_get_cached_compression_settings(Hypertable *ht)
+{
+	if (ht->compression_settings == NULL)
+	{
+		ht->compression_settings = ts_compression_settings_get(ht->main_table_relid);
+	}
+	return ht->compression_settings;
+}
