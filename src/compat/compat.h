@@ -699,3 +699,15 @@ pg_cmp_u32(uint32 a, uint32 b)
 #define make_range_compat(typcache, lower, upper, empty, escontext)                                \
 	make_range(typcache, lower, upper, empty, escontext)
 #endif
+
+/* Copied from PG17. We can remove it once we deprecate older versions. */
+#if PG17_LT
+static inline void
+initReadOnlyStringInfo(StringInfo str, char *data, int len)
+{
+	str->data = data;
+	str->len = len;
+	str->maxlen = 0; /* read-only */
+	str->cursor = 0;
+}
+#endif
