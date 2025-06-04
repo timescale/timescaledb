@@ -5,7 +5,12 @@
  */
 #include "osm_callbacks.h"
 
+#include <commands/extension.h>
 #include <fmgr.h>
+
+#include "export.h"
+#include "extension_constants.h"
+#include "loader/loader.h"
 
 #define OSM_CALLBACKS "osm_callbacks"
 #define OSM_CALLBACKS_VAR_NAME "osm_callbacks_versioned"
@@ -73,4 +78,49 @@ ts_get_osm_hypertable_drop_chunks_hook()
 	if (ptr && ptr->version_num == 1)
 		return ptr->hypertable_drop_chunks_hook;
 	return NULL;
+}
+
+TSDLLEXPORT bool
+ts_try_load_osm(void) {
+	bool res = false;
+	Oid osm_extension_oid = get_extension_oid(OSM_EXTENSION_NAME, true);
+
+	if (OidIsValid(osm_extension_oid))
+	{
+		MemoryContext old_mcxt = CurrentMemoryContext;
+
+		PG_TRY();
+		{
+			char version[MAX_VERSION_LEN];
+			char soname[MAX_SO_NAME_LEN];
+
+			// Form library path
+			strlcpy(version, ts_osm_extension_version(), MAX_VERSION_LEN);
+			snprintf(soname, MAX_SO_NAME_LEN, "%s%s-%s",
+				TS_LIBDIR,
+				OSM_EXTENSION_NAME,
+				version);
+
+			// Load library
+			load_external_function(soname, "pfdw_handler_wrapper", false, NULL);
+			res = true;
+		}
+		PG_CATCH();
+		{
+			ErrorData *error;
+
+			/* Switch to the original context & copy edata */
+			MemoryContextSwitchTo(old_mcxt);
+			error = CopyErrorData();
+			FlushErrorState();
+
+			elog(LOG, "failed to load OSM extension: %s", error->message);
+
+			/* Finally, free error data */
+			FreeErrorData(error);
+		}
+		PG_END_TRY();
+	}
+
+	return res;
 }
