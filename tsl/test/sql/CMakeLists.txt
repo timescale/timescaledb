@@ -13,6 +13,7 @@ set(TEST_FILES
     cagg_invalidation.sql
     cagg_policy.sql
     cagg_policy_move.sql
+    cagg_plugin.sql
     cagg_refresh.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
