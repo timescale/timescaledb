@@ -78,7 +78,6 @@ set(TEST_TEMPLATES
     partitionwise.sql.in
     plan_expand_hypertable.sql.in
     plan_ordered_append.sql.in
-    timestamp.sql.in
     ts_merge.sql.in)
 
 # Loader test must distinguish between Apache and TSL builds so we parametrize
