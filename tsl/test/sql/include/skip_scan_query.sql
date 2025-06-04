@@ -48,6 +48,17 @@ CREATE INDEX skip_scan_expr_idx ON :TABLE((dev % 3));
 DROP INDEX skip_scan_expr_idx;
 
 CREATE INDEX ON :TABLE(dev_name);
+
+-- Tests for #8107: accounting for scanning most of the input due to non-index quals
+-- Non-index qual, no tuples match: SeqScan preferred
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE val < 0 ORDER BY 1;
+-- Highly selective non-index qual, have to scan many tuples to match: SeqScan preferred
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE time = 100 ORDER BY 1;
+-- Same but a combo of non-index quals
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE time = 100 and dev = 1 ORDER BY 1;
+-- Highly selective index qual: less tuples to scan for low-selective non-index qual, can choose SkipScan
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev_name IS NULL and dev = 1 ORDER BY 1;
+
 CREATE INDEX ON :TABLE(dev);
 CREATE INDEX ON :TABLE(dev, time);
 CREATE INDEX ON :TABLE(time,dev);
@@ -251,4 +262,15 @@ TRUNCATE skip_scan_insert;
 
 -- no tuples in resultset
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls WHERE time IS NOT NULL;
+
+-- Test for SDC issue #2976
+-- We should use index "btree ("time", dev, dev_name)" where "dev_name" index key is #3 but we have 2 index quals including SkipScan qual
+-- We should not drop qual on "dev_name"
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev,dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+DROP INDEX skip_scan_idx_time_dev_dname;
+-- "dev_name" is not a key column: it's not in the index quals and should be a filter
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev) INCLUDE(dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+DROP INDEX skip_scan_idx_time_dev_dname;
 
