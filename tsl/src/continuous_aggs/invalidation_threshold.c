@@ -204,7 +204,7 @@ invalidation_threshold_get(int32 hypertable_id, Oid type)
 		.scankey = scankey,
 		.data = &data,
 		.tuple_found = invalidation_threshold_scan_get,
-		.lockmode = RowExclusiveLock,
+		.lockmode = RowShareLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = CurrentMemoryContext,
 		.tuplock = &scantuplock,
