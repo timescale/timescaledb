@@ -380,7 +380,12 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 	info->settings = ts_chunk_get_compression_settings(chunk);
-	Assert(info->settings != NULL);
+	// TODO dbeck : decide what is best here
+	// Assert(info->settings != NULL);
+	if (info->settings == NULL)
+	{
+		elog(ERROR, "chunk %d has no compression settings", chunk_rel->relid);
+	}
 
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{

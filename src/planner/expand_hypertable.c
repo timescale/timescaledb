@@ -1172,6 +1172,8 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		if (!IS_OSM_CHUNK(chunk))
 		{
 			Assert(chunk->table_id == root->simple_rte_array[child_rtindex]->relid);
+			ts_chunk_get_and_cache_compression_settings(chunk);
+			ts_chunk_get_and_cache_hypertable_compression_settings(chunk);
 			ts_get_private_reloptinfo(child_rel)->cached_chunk_struct = chunk;
 		}
 	}

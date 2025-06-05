@@ -2530,8 +2530,8 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 
 	if (chunk)
 	{
-		chunk->compression_settings = ts_chunk_get_and_cache_compression_settings(chunk);
-		chunk->ht_compression_settings = ts_chunk_get_and_cache_hypertable_compression_settings(chunk);
+		ts_chunk_get_and_cache_compression_settings(chunk);
+		ts_chunk_get_and_cache_hypertable_compression_settings(chunk);
 	}
 	return chunk;
 }
