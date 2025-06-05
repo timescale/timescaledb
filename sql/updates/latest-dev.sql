@@ -40,3 +40,9 @@ BEGIN
   -- empty body
 END;
 $$ LANGUAGE PLPGSQL;
+
+-- Remove useless catalog metadata
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
+
+DROP TABLE _timescaledb_catalog.continuous_aggs_bucket_function;
