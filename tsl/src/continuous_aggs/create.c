@@ -810,14 +810,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		}
 	}
 
-	create_bucket_function_catalog_entry(materialize_hypertable_id,
-										 bucket_info->bf->bucket_function,
-										 bucket_width,
-										 bucket_origin,
-										 bucket_offset,
-										 bucket_info->bf->bucket_time_timezone,
-										 bucket_info->bf->bucket_fixed_interval);
-
 	/* Step 5: Finalize slot creation if using wal based invalidation. */
 	if (ts_guc_enable_cagg_wal_based_invalidation && slot_prepared)
 		cagg_add_logical_decoding_slot_finalize();
