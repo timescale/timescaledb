@@ -1,12 +1,15 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+
 -- TEST SETUP --
 \set ON_ERROR_STOP 0
 SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
 SET timezone TO PST8PDT;
+
 -- START OF USAGE TEST --
+
 --First create your hypertable
 CREATE TABLE device_readings (
       observation_time  TIMESTAMPTZ       NOT NULL,
@@ -15,10 +18,6 @@ CREATE TABLE device_readings (
       PRIMARY KEY(observation_time, device_id)
 );
 SELECT table_name FROM create_hypertable('device_readings', 'observation_time');
-   table_name    
------------------
- device_readings
-(1 row)
 
 --Next, create your continuous aggregate view
 CREATE MATERIALIZED VIEW device_summary
@@ -32,86 +31,47 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id WITH NO DATA; --We have to group by the bucket column, but can also add other group-by columns
-SELECT add_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
- add_continuous_aggregate_policy 
----------------------------------
-                            1000
-(1 row)
 
+SELECT add_continuous_aggregate_policy('device_summary', NULL, '2 h'::interval, '2 h'::interval);
 --Next, insert some data into the raw hypertable
 INSERT INTO device_readings
 SELECT ts, 'device_1', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '30 minutes') ts;
 INSERT INTO device_readings
 SELECT ts, 'device_2', (EXTRACT(EPOCH FROM ts)) from generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '30 minutes') ts;
+
 --Initially, it will be empty.
 SELECT * FROM device_summary;
- bucket | device_id | metric_avg | metric_spread 
---------+-----------+------------+---------------
-(0 rows)
 
 -- Simulate a policy that refreshes with lag, i.e., it doesn't refresh
 -- the entire data set. In this case up to the given date.
 CALL refresh_continuous_aggregate('device_summary', NULL, '2018-12-30 22:00');
+
 --Now you can run selects over your view as normal
 SELECT * FROM device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC, device_id LIMIT 10;
-            bucket            | device_id | metric_avg | metric_spread 
-------------------------------+-----------+------------+---------------
- Sun Dec 30 21:00:00 2018 PST | device_1  | 1546204500 |          1800
- Sun Dec 30 21:00:00 2018 PST | device_2  | 1546204500 |          1800
- Sun Dec 30 20:00:00 2018 PST | device_1  | 1546200900 |          1800
- Sun Dec 30 20:00:00 2018 PST | device_2  | 1546200900 |          1800
- Sun Dec 30 19:00:00 2018 PST | device_1  | 1546197300 |          1800
- Sun Dec 30 19:00:00 2018 PST | device_2  | 1546197300 |          1800
- Sun Dec 30 18:00:00 2018 PST | device_1  | 1546193700 |          1800
- Sun Dec 30 18:00:00 2018 PST | device_2  | 1546193700 |          1800
- Sun Dec 30 17:00:00 2018 PST | device_1  | 1546190100 |          1800
- Sun Dec 30 17:00:00 2018 PST | device_2  | 1546190100 |          1800
-(10 rows)
 
---You can view informaton about your continuous aggregates. The meaning of these fields will be explained further down.
+-- You can view informaton about your continuous aggregates. The
+-- meaning of these fields will be explained further down. We don't
+-- show the view definition since that will be different between PG
+-- versions.
 \x
-SELECT * FROM timescaledb_information.continuous_aggregates;
--[ RECORD 1 ]---------------------+-----------------------------------------------------------------------------
-hypertable_schema                 | public
-hypertable_name                   | device_readings
-view_schema                       | public
-view_name                         | device_summary
-view_owner                        | default_perm_user
-materialized_only                 | t
-compression_enabled               | f
-materialization_hypertable_schema | _timescaledb_internal
-materialization_hypertable_name   | _materialized_hypertable_2
-view_definition                   |  SELECT time_bucket('@ 1 hour'::interval, observation_time) AS bucket,      +
-                                  |     device_id,                                                              +
-                                  |     avg(metric) AS metric_avg,                                              +
-                                  |     (max(metric) - min(metric)) AS metric_spread                            +
-                                  |    FROM device_readings                                                     +
-                                  |   GROUP BY (time_bucket('@ 1 hour'::interval, observation_time)), device_id;
-finalized                         | t
+SELECT hypertable_schema, hypertable_name,
+       view_schema, view_name,
+       view_owner, materialized_only, compression_enabled,
+       materialization_hypertable_schema, materialization_hypertable_name,
+       finalized
+  FROM timescaledb_information.continuous_aggregates;
+\x
 
-\x
 -- Refresh interval
 --
 -- The refresh interval determines how often the background worker
 -- for automatic materialization will run. The default is (2 x bucket_width)
 SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
- schedule_interval 
--------------------
- @ 2 hours
-(1 row)
 
 -- You can change this setting with ALTER VIEW (equivalently, specify in WITH clause of CREATE VIEW)
 SELECT alter_job(1000, schedule_interval := '1h');
-                                                                                                                        alter_job                                                                                                                         
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1000,"@ 1 hour","@ 0",-1,"@ 2 hours",t,"{""end_offset"": ""@ 2 hours"", ""start_offset"": null, ""mat_hypertable_id"": 2}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1000]")
-(1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
- schedule_interval 
--------------------
- @ 1 hour
-(1 row)
 
 --
 -- Refresh with lag
@@ -120,64 +80,60 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job WHERE id = 1000;
 -- means the materialization will not contain the most up-to-date
 -- data.
 SELECT max(observation_time) FROM device_readings;
-             max              
-------------------------------
- Mon Dec 31 00:00:00 2018 PST
-(1 row)
-
 SELECT max(bucket) FROM device_summary;
-             max              
-------------------------------
- Sun Dec 30 21:00:00 2018 PST
-(1 row)
-
 CALL refresh_continuous_aggregate('device_summary', NULL, '2018-12-31 01:00');
 SELECT max(observation_time) FROM device_readings;
-             max              
-------------------------------
- Mon Dec 31 00:00:00 2018 PST
-(1 row)
-
 SELECT max(bucket) FROM device_summary;
-             max              
-------------------------------
- Mon Dec 31 00:00:00 2018 PST
-(1 row)
 
 --
 -- Invalidations
 --
+
 --Changes to the raw table, for values that have already been materialized are propagated asynchronously, after the materialization next runs.
 --Before update:
 SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 30 13:00:00 2018 PST';
-            bucket            | device_id | metric_avg | metric_spread 
-------------------------------+-----------+------------+---------------
- Sun Dec 30 13:00:00 2018 PST | device_1  | 1546175700 |          1800
-(1 row)
 
 INSERT INTO device_readings VALUES ('Sun Dec 30 13:01:00 2018 PST', 'device_1', 1.0);
+
 --Change not reflected before materializer runs.
 SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 30 13:00:00 2018 PST';
-            bucket            | device_id | metric_avg | metric_spread 
-------------------------------+-----------+------------+---------------
- Sun Dec 30 13:00:00 2018 PST | device_1  | 1546175700 |          1800
-(1 row)
-
 CALL refresh_continuous_aggregate('device_summary', NULL, NULL);
 --But is reflected after.
 SELECT * FROM device_summary WHERE device_id = 'device_1' and bucket = 'Sun Dec 30 13:00:00 2018 PST';
-            bucket            | device_id |    metric_avg    | metric_spread 
-------------------------------+-----------+------------------+---------------
- Sun Dec 30 13:00:00 2018 PST | device_1  | 1030783800.33333 |    1546176599
-(1 row)
+
+-- Test refresh without processing hypertable invalidations. Insert
+-- into the hypertable and save away a range we're going to modify.
+INSERT INTO device_readings VALUES ('Sun Dec 30 14:02:00 2018 PST', 'device_2', 2.0);
+SELECT * INTO device_saved FROM device_summary
+ WHERE bucket BETWEEN 'Sun Dec 30 12:00:00 2018 PST' AND 'Sun Dec 30 18:00:00 2018 PST';
+
+-- This should not show a difference since invalidations are not processed.
+CALL refresh_continuous_aggregate('device_summary', NULL, NULL, options => '{"process_hypertable_invalidations": false }');
+SELECT * FROM device_summary FULL JOIN device_saved ON row(device_summary.*) = row(device_saved.*)
+ WHERE (device_summary.bucket IS NULL OR device_saved.bucket IS NULL)
+   AND device_summary.device_id = 'device_2'
+   AND device_summary.bucket BETWEEN 'Sun Dec 30 12:00:00 2018 PST' AND 'Sun Dec 30 15:00:00 2018 PST';
+
+-- Refreshing with processing should now show a difference.
+CALL refresh_continuous_aggregate('device_summary', NULL, NULL, options => '{"process_hypertable_invalidations": true }');
+SELECT * FROM device_summary FULL JOIN device_saved ON row(device_summary.*) = row(device_saved.*)
+ WHERE (device_summary.bucket IS NULL OR device_saved.bucket IS NULL)
+   AND device_summary.device_id = 'device_2'
+   AND device_summary.bucket BETWEEN 'Sun Dec 30 12:00:00 2018 PST' AND 'Sun Dec 30 15:00:00 2018 PST';
+
+-- Checking some cases that should generate an error.
+\set ON_ERROR_STOP 0
+CALL refresh_continuous_aggregate('device_summary', NULL, NULL, options => '{"process_hypertable_invalidations": "magic" }');
+CALL refresh_continuous_aggregate('device_summary', NULL, NULL, options => '{"process_hypertable_invalidations": 12 }');
+\set ON_ERROR_STOP 1
 
 --
 -- Dealing with timezones
 --
 -- You have three options:
 -- Option 1: be explicit in your timezone:
+
 DROP MATERIALIZED VIEW device_summary;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_6_chunk
 CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
@@ -191,10 +147,11 @@ FROM
   device_readings
 GROUP BY bucket, device_id WITH NO DATA;
 DROP MATERIALIZED VIEW device_summary;
+
 -- Option 2: Keep things as TIMESTAMPTZ in the view and convert to local time when
 -- querying from the view
+
 DROP MATERIALIZED VIEW device_summary;
-ERROR:  materialized view "device_summary" does not exist
 CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
@@ -207,18 +164,13 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id WITH DATA;
-NOTICE:  refreshing continuous aggregate "device_summary"
+
 SELECT min(min_time)::timestamp FROM device_summary;
-           min            
---------------------------
- Sat Dec 01 00:00:00 2018
-(1 row)
 
 -- Option 3: use stable expressions in the cagg definition
 -- in this case it is up to the user to ensure cagg refreshes
 -- run with consistent values
 DROP MATERIALIZED VIEW device_summary;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_4_7_chunk
 CREATE MATERIALIZED VIEW device_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
@@ -231,98 +183,58 @@ SELECT
 FROM
   device_readings
 GROUP BY bucket, device_id WITH NO DATA;
-WARNING:  using non-immutable functions in continuous aggregate view may lead to inconsistent results on rematerialization
+
 --
 -- test just in time aggregate / materialization only view
 --
+
 -- hardcoding now to 50 will lead to 30 watermark
 CREATE OR REPLACE FUNCTION device_readings_int_now()
   RETURNS INT LANGUAGE SQL STABLE AS
 $BODY$
   SELECT 50;
 $BODY$;
+
 CREATE TABLE device_readings_int(time int, value float);
 SELECT create_hypertable('device_readings_int','time',chunk_time_interval:=10);
-NOTICE:  adding not-null constraint to column "time"
-        create_hypertable         
-----------------------------------
- (6,public,device_readings_int,t)
-(1 row)
 
 SELECT set_integer_now_func('device_readings_int','device_readings_int_now');
- set_integer_now_func 
-----------------------
- 
-(1 row)
 
 CREATE MATERIALIZED VIEW device_readings_mat_only
   WITH (timescaledb.continuous, timescaledb.materialized_only=true)
 AS
   SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1 WITH NO DATA;
+
 CREATE MATERIALIZED VIEW device_readings_jit
   WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
   SELECT time_bucket(10,time), avg(value) FROM device_readings_int GROUP BY 1 WITH NO DATA;
+
 INSERT INTO device_readings_int SELECT i, i*10 FROM generate_series(10,40,10) AS g(i);
+
 -- materialization only should have 0 rows
 SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
- time_bucket | avg 
--------------+-----
-(0 rows)
 
 -- jit aggregate should have 4 rows
 SELECT * FROM device_readings_jit ORDER BY time_bucket;
- time_bucket | avg 
--------------+-----
-          10 | 100
-          20 | 200
-          30 | 300
-          40 | 400
-(4 rows)
 
 -- simulate a refresh policy with lag, i.e., one that doesn't refresh
 -- up to the latest data. Max value is 40.
 CALL refresh_continuous_aggregate('device_readings_mat_only', NULL, 30);
 CALL refresh_continuous_aggregate('device_readings_jit', NULL, 30);
+
 -- materialization only should have 2 rows
 SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
- time_bucket | avg 
--------------+-----
-          10 | 100
-          20 | 200
-(2 rows)
-
 -- jit aggregate should have 4 rows
 SELECT * FROM device_readings_jit ORDER BY time_bucket;
- time_bucket | avg 
--------------+-----
-          10 | 100
-          20 | 200
-          30 | 300
-          40 | 400
-(4 rows)
 
 -- add 2 more rows
 INSERT INTO device_readings_int SELECT i, i*10 FROM generate_series(50,60,10) AS g(i);
+
 -- materialization only should have 2 rows
 SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
- time_bucket | avg 
--------------+-----
-          10 | 100
-          20 | 200
-(2 rows)
-
 -- jit aggregate should have 6 rows
 SELECT * FROM device_readings_jit ORDER BY time_bucket;
- time_bucket | avg 
--------------+-----
-          10 | 100
-          20 | 200
-          30 | 300
-          40 | 400
-          50 | 500
-          60 | 600
-(6 rows)
 
 -- hardcoding now to 100 will lead to 80 watermark
 CREATE OR REPLACE FUNCTION device_readings_int_now()
@@ -330,46 +242,27 @@ CREATE OR REPLACE FUNCTION device_readings_int_now()
 $BODY$
   SELECT 100;
 $BODY$;
+
 -- refresh should materialize all now
 CALL refresh_continuous_aggregate('device_readings_mat_only', NULL, NULL);
 CALL refresh_continuous_aggregate('device_readings_jit', NULL, NULL);
+
 -- materialization only should have 6 rows
 SELECT * FROM device_readings_mat_only ORDER BY time_bucket;
- time_bucket | avg 
--------------+-----
-          10 | 100
-          20 | 200
-          30 | 300
-          40 | 400
-          50 | 500
-          60 | 600
-(6 rows)
-
 -- jit aggregate should have 6 rows
 SELECT * FROM device_readings_jit ORDER BY time_bucket;
- time_bucket | avg 
--------------+-----
-          10 | 100
-          20 | 200
-          30 | 300
-          40 | 400
-          50 | 500
-          60 | 600
-(6 rows)
 
 -- START OF BASIC USAGE TESTS --
+
 -- Check that continuous aggregate and materialized table is dropped
 -- together.
+
 CREATE TABLE whatever(time TIMESTAMPTZ NOT NULL, metric INTEGER);
 SELECT * FROM create_hypertable('whatever', 'time');
- hypertable_id | schema_name | table_name | created 
----------------+-------------+------------+---------
-             9 | public      | whatever   | t
-(1 row)
-
 CREATE MATERIALIZED VIEW whatever_summary WITH (timescaledb.continuous) AS
 SELECT time_bucket('1 hour', time) AS bucket, avg(metric)
   FROM whatever GROUP BY bucket WITH NO DATA;
+
 SELECT (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
           FROM _timescaledb_catalog.hypertable
      WHERE id = raw_hypertable_id) AS raw_table
@@ -379,109 +272,74 @@ SELECT (SELECT format('%1$I.%2$I', schema_name, table_name)::regclass::oid
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'whatever_summary' \gset
 SELECT relname FROM pg_class WHERE oid = :mat_table;
-           relname           
------------------------------
- _materialized_hypertable_10
-(1 row)
 
 ----------------------------------------------------------------
 -- Should generate an error since the cagg is dependent on the table.
 DROP TABLE whatever;
-ERROR:  cannot drop table whatever because other objects depend on it
+
 ----------------------------------------------------------------
 -- Checking that a cagg cannot be dropped if there is a dependent
 -- object on it.
 CREATE VIEW whatever_summary_dependency AS SELECT * FROM whatever_summary;
+
 -- Should generate an error
 DROP MATERIALIZED VIEW whatever_summary;
-ERROR:  cannot drop view whatever_summary because other objects depend on it
+
 -- Dropping the dependent view so that we can do a proper drop below.
 DROP VIEW whatever_summary_dependency;
+
 ----------------------------------------------------------------
 -- Dropping the cagg should also remove the materialized table
 DROP MATERIALIZED VIEW whatever_summary;
 SELECT relname FROM pg_class WHERE oid = :mat_table;
- relname 
----------
-(0 rows)
 
 ----------------------------------------------------------------
 -- Cleanup
 DROP TABLE whatever;
+
 -- Check that continuous_agg_invalidation_trigger() handles no arguments properly
 SELECT _timescaledb_functions.continuous_agg_invalidation_trigger();
-ERROR:  must supply hypertable id
+
 -- Check that continuous_agg_invalidation_trigger() not crashes when an invalid ht id is used
 CREATE TABLE sensor_data (
 time timestamptz NOT NULL,
 sensor_id integer NOT NULL,
 cpu double precision NULL,
 temperature double precision NULL);
-SELECT FROM create_hypertable('sensor_data','time');
---
-(1 row)
 
+SELECT FROM create_hypertable('sensor_data','time');
 CREATE TRIGGER ts_cagg_invalidation_trigger AFTER INSERT OR DELETE OR UPDATE ON sensor_data FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger(999999);
 INSERT INTO sensor_data values('1980-01-01 00:00:00-00', 1, 1, 1);
-ERROR:  unable to determine relid for hypertable 999999
 DROP TABLE sensor_data;
+
 -- END OF BASIC USAGE TESTS --
+
 CREATE TABLE metrics(time timestamptz, device TEXT, value float);
 SELECT table_name FROM create_hypertable('metrics','time');
-NOTICE:  adding not-null constraint to column "time"
- table_name 
-------------
- metrics
-(1 row)
-
 INSERT INTO metrics SELECT generate_series('1999-12-20'::timestamptz,'2000-02-01'::timestamptz,'12 day'::interval), 'dev1', 0.25;
+
 CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
 SELECT time_bucket('1 day', time, 'PST8PDT') FROM metrics GROUP BY 1;
-NOTICE:  refreshing continuous aggregate "cagg1"
 SELECT * FROM cagg1;
-         time_bucket          
-------------------------------
- Mon Dec 20 00:00:00 1999 PST
- Sat Jan 01 00:00:00 2000 PST
- Thu Jan 13 00:00:00 2000 PST
- Tue Jan 25 00:00:00 2000 PST
-(4 rows)
 
 CREATE MATERIALIZED VIEW cagg2 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
 SELECT time_bucket('1 month', time, 'PST8PDT') FROM metrics GROUP BY 1;
-NOTICE:  refreshing continuous aggregate "cagg2"
 SELECT * FROM cagg2;
-         time_bucket          
-------------------------------
- Wed Dec 01 00:00:00 1999 PST
- Sat Jan 01 00:00:00 2000 PST
-(2 rows)
 
 -- custom origin with variable size
 CREATE MATERIALIZED VIEW cagg3 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
 SELECT time_bucket('1 month', time, 'PST8PDT', '2000-01-01'::timestamptz) FROM metrics GROUP BY 1;
-NOTICE:  refreshing continuous aggregate "cagg3"
 SELECT * FROM cagg3;
-         time_bucket          
-------------------------------
- Wed Dec 01 00:00:00 1999 PST
- Sat Jan 01 00:00:00 2000 PST
-(2 rows)
 
 -- offset with variable size
 CREATE MATERIALIZED VIEW cagg4 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
 SELECT time_bucket('1 month', time, 'PST8PDT', "offset":= INTERVAL '15 day') FROM metrics GROUP BY 1;
-NOTICE:  refreshing continuous aggregate "cagg4"
 SELECT * FROM cagg4;
-         time_bucket          
-------------------------------
- Thu Dec 16 00:00:00 1999 PST
- Sun Jan 16 00:00:00 2000 PST
-(2 rows)
 
 --
 -- drop chunks tests
 --
+
 -- should return 4 chunks
 SELECT
    c.table_name as chunk_name,
@@ -489,30 +347,12 @@ SELECT
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
-     chunk_name     | chunk_status | dropped | comp_id 
---------------------+--------------+---------+---------
- _hyper_12_17_chunk |            0 | f       |        
- _hyper_12_18_chunk |            0 | f       |        
- _hyper_12_19_chunk |            0 | f       |        
- _hyper_12_20_chunk |            0 | f       |        
-(4 rows)
 
 -- all caggs in the new format (finalized=true)
 SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
- user_view_name | finalized 
-----------------+-----------
- cagg1          | t
- cagg2          | t
- cagg3          | t
- cagg4          | t
-(4 rows)
 
 -- dropping chunk should also remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestamptz);
-               drop_chunks                
-------------------------------------------
- _timescaledb_internal._hyper_12_17_chunk
-(1 row)
 
 -- should return 3 chunks
 SELECT
@@ -521,34 +361,18 @@ SELECT
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id AND h.table_name = 'metrics'
 ORDER BY 1;
-     chunk_name     | chunk_status | dropped | comp_id 
---------------------+--------------+---------+---------
- _hyper_12_18_chunk |            0 | f       |        
- _hyper_12_19_chunk |            0 | f       |        
- _hyper_12_20_chunk |            0 | f       |        
-(3 rows)
 
 -- let's update the catalog to fake an old format cagg (finalized=false)
 \c :TEST_DBNAME :ROLE_SUPERUSER
 UPDATE _timescaledb_catalog.continuous_agg SET finalized=FALSE WHERE user_view_name = 'cagg1';
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
 -- cagg1 now is a fake old format (finalized=false)
 SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
- user_view_name | finalized 
-----------------+-----------
- cagg1          | f
- cagg2          | t
- cagg3          | t
- cagg4          | t
-(4 rows)
 
 -- cagg1 now is in the old format (finalized=false)
 -- dropping chunk should NOT remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-13 00:00:00-02'::timestamptz);
-               drop_chunks                
-------------------------------------------
- _timescaledb_internal._hyper_12_18_chunk
-(1 row)
 
 -- should return 3 chunks and one of them should be marked as dropped
 SELECT
@@ -557,31 +381,15 @@ SELECT
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
-     chunk_name     | chunk_status | dropped | comp_id 
---------------------+--------------+---------+---------
- _hyper_12_18_chunk |            0 | t       |        
- _hyper_12_19_chunk |            0 | f       |        
- _hyper_12_20_chunk |            0 | f       |        
-(3 rows)
 
 -- remove the fake old format cagg
 DROP MATERIALIZED VIEW cagg1;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_21_chunk
+
 -- no more old format caggs (finalized=false)
 SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
- user_view_name | finalized 
-----------------+-----------
- cagg2          | t
- cagg3          | t
- cagg4          | t
-(3 rows)
 
 -- dropping chunk should remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestamptz);
-               drop_chunks                
-------------------------------------------
- _timescaledb_internal._hyper_12_19_chunk
-(1 row)
 
 -- should return 2 chunks and one of them should be marked as dropped
 -- because we dropped chunk before when an old format cagg exists
@@ -591,9 +399,3 @@ SELECT
 FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
 WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
-     chunk_name     | chunk_status | dropped | comp_id 
---------------------+--------------+---------+---------
- _hyper_12_18_chunk |            0 | t       |        
- _hyper_12_20_chunk |            0 | f       |        
-(2 rows)
-
