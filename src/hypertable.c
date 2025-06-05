@@ -2110,6 +2110,19 @@ ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)
 	return false;
 }
 
+bool
+ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name)
+{
+	uint16 i;
+
+	for (i = 0; i < ht->space->num_dimensions; i++)
+	{
+		if (namestrcmp(&ht->space->dimensions[i].fd.column_name, NameStr(column_name)) == 0)
+			return true;
+	}
+	return false;
+}
+
 static void
 integer_now_func_validate(Oid now_func_oid, Oid open_dim_type)
 {
