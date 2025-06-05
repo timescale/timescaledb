@@ -109,6 +109,9 @@ typedef struct TSCopyMultiInsertBuffer
 	uint64 linenos[MAX_BUFFERED_TUPLES];		/* Line # of tuple in copy
 												 * stream */
 
+	bool can_skip_constraints; /* Whether we can skip constraint
+								* checks for this relation */
+
 	RowCompressor *compressor; /* compressor for the chunk */
 	BulkWriter *bulk_writer;   /* BulkWriter for the compressed chunk */
 
@@ -191,7 +194,8 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
  * ResultRelInfo.
  */
 static TSCopyMultiInsertBuffer *
-TSCopyMultiInsertBufferInit(ChunkInsertState *cis, Point *point, TSCopyInsertMethod method)
+TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis, Point *point,
+							TSCopyInsertMethod method)
 {
 	TSCopyMultiInsertBuffer *buffer;
 
@@ -200,6 +204,46 @@ TSCopyMultiInsertBufferInit(ChunkInsertState *cis, Point *point, TSCopyInsertMet
 
 	buffer->point = palloc(POINT_SIZE(point->num_coords));
 	memcpy(buffer->point, point, POINT_SIZE(point->num_coords));
+
+	/*
+	 * Determine whether we can skip constraints checks for this relation.
+	 * We will skip constraints checks if:
+	 * 1. The relation has CHECK constraints that match the number of dimensions
+	 * 2. The relation has no NOT NULL constraints on non-partitioning columns
+	 */
+
+	/*
+	 * When the number of constraints does not match the number of dimensions then there are
+	 * additional constraints that we need to check during COPY. Partitioning constraints would
+	 * have already been checked by tuple routing.
+	 */
+	Assert(cis->rel->rd_att->constr->num_check >= miinfo->ht->space->num_dimensions);
+	if (cis->rel->rd_att->constr &&
+		cis->rel->rd_att->constr->num_check == miinfo->ht->space->num_dimensions)
+	{
+		buffer->can_skip_constraints = true;
+
+		for (int i = 0; i < cis->rel->rd_att->natts; i++)
+		{
+			Form_pg_attribute att = TupleDescAttr(cis->rel->rd_att, i);
+
+			if (att->attisdropped)
+				continue;
+
+			/*
+			 * If we have NOT NULL constraints on non-partitioning columns, we cannot skip
+			 * constraints and have to check them.
+			 */
+			if (att->attnotnull)
+			{
+				if (ts_is_partitioning_column_name(miinfo->ht, att->attname))
+					continue;
+
+				buffer->can_skip_constraints = false;
+				break;
+			}
+		}
+	}
 
 	switch (method)
 	{
@@ -253,7 +297,7 @@ TSCopyMultiInsertInfoGetOrSetupBuffer(TSCopyMultiInsertInfo *miinfo, ChunkInsert
 	/* No insert buffer for this chunk exists, create a new one */
 	if (!found)
 	{
-		entry->buffer = TSCopyMultiInsertBufferInit(cis, point, method);
+		entry->buffer = TSCopyMultiInsertBufferInit(miinfo, cis, point, method);
 	}
 
 	Assert(entry->buffer->method == method);
@@ -926,13 +970,6 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		insertMethod = TS_CIM_COMPRESSION;
 		ccstate->dispatch->create_compressed_chunk = true;
 		ereport(DEBUG1, (errmsg("Using compressed copy operation (TS_CIM_COMPRESSION).")));
-		TSCopyMultiInsertInfoInit(&multiInsertInfo,
-								  resultRelInfo,
-								  ccstate,
-								  estate,
-								  mycid,
-								  ti_options,
-								  ht);
 	}
 	else
 	{
@@ -940,14 +977,14 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		ereport(DEBUG1,
 				(errmsg(
 					"Using optimized multi-buffer copy operation (TS_CIM_MULTI_CONDITIONAL).")));
-		TSCopyMultiInsertInfoInit(&multiInsertInfo,
-								  resultRelInfo,
-								  ccstate,
-								  estate,
-								  mycid,
-								  ti_options,
-								  ht);
 	}
+	TSCopyMultiInsertInfoInit(&multiInsertInfo,
+							  resultRelInfo,
+							  ccstate,
+							  estate,
+							  mycid,
+							  ti_options,
+							  ht);
 
 	TSCopyMultiInsertBuffer *buffer = NULL;
 	for (;;)
@@ -1017,6 +1054,11 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 			currentTupleInsertMethod = TS_CIM_SINGLE;
 		}
 
+		buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo,
+													   cis,
+													   point,
+													   currentTupleInsertMethod);
+
 		/* Convert the tuple to match the chunk's rowtype */
 		if (currentTupleInsertMethod == TS_CIM_SINGLE)
 		{
@@ -1025,24 +1067,11 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		}
 		else if (currentTupleInsertMethod == TS_CIM_COMPRESSION)
 		{
-			buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo,
-														   cis,
-														   point,
-														   currentTupleInsertMethod);
-
 			if (NULL != cis->hyper_to_chunk_map)
 				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
 		}
 		else
 		{
-			/*
-			 * Get the multi-insert buffer for the chunk.
-			 */
-			buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo,
-														   cis,
-														   point,
-														   currentTupleInsertMethod);
-
 			/*
 			 * Prepare to queue up tuple for later batch insert into
 			 * current chunk.
@@ -1108,10 +1137,11 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 			/*
 			 * If the target is a plain table, check the constraints of
-			 * the tuple.
+			 * the tuple. Since we check the constraints during tuple routing
+			 * we only need to check if we have additional constraints beyond
+			 * partitioning constraints.
 			 */
-			if (resultRelInfo->ri_FdwRoutine == NULL &&
-				resultRelInfo->ri_RelationDesc->rd_att->constr)
+			if (!buffer->can_skip_constraints)
 			{
 				Assert(resultRelInfo->ri_RangeTableIndex > 0 && estate->es_range_table);
 				ExecConstraints(resultRelInfo, myslot, estate);
