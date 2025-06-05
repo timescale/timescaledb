@@ -379,7 +379,8 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-	info->settings = ts_compression_settings_get(chunk->table_id);
+	info->settings = ts_chunk_get_compression_settings(chunk);
+	Assert(info->settings != NULL);
 
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{

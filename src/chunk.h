@@ -232,8 +232,10 @@ extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_chunk_get_by_hypertable_id(int32 hypertable_id);
-extern TSDLLEXPORT CompressionSettings *ts_chunk_get_cached_compression_settings(Chunk *chunk);
-extern TSDLLEXPORT CompressionSettings *ts_chunk_get_cached_hypertable_compression_settings(Chunk *chunk);
+extern TSDLLEXPORT CompressionSettings *ts_chunk_get_and_cache_compression_settings(Chunk *chunk);
+extern TSDLLEXPORT CompressionSettings *ts_chunk_get_and_cache_hypertable_compression_settings(Chunk *chunk);
+extern TSDLLEXPORT CompressionSettings *ts_chunk_get_compression_settings(const Chunk *chunk);
+extern TSDLLEXPORT CompressionSettings *ts_chunk_get_hypertable_compression_settings(const Chunk *chunk);
 
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
 

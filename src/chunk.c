@@ -2482,6 +2482,7 @@ Chunk *
 ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *table_name,
 										 MemoryContext mctx, bool fail_if_not_found)
 {
+	Chunk *chunk;
 	NameData schema, table;
 	ScanKeyData scankey[2];
 	static const DisplayKeyData displaykey[2] = {
@@ -2520,12 +2521,19 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 				F_NAMEEQ,
 				NameGetDatum(&table));
 
-	return chunk_scan_find(CHUNK_SCHEMA_NAME_INDEX,
+	chunk = chunk_scan_find(CHUNK_SCHEMA_NAME_INDEX,
 						   scankey,
 						   2,
 						   mctx,
 						   fail_if_not_found,
 						   displaykey);
+
+	if (chunk)
+	{
+		chunk->compression_settings = ts_chunk_get_and_cache_compression_settings(chunk);
+		chunk->ht_compression_settings = ts_chunk_get_and_cache_hypertable_compression_settings(chunk);
+	}
+	return chunk;
 }
 
 Chunk *
@@ -5234,7 +5242,7 @@ ts_merge_two_chunks(PG_FUNCTION_ARGS)
 	return DirectFunctionCall1(ts_cm_functions->merge_chunks, PointerGetDatum(chunk_array));
 }
 
-CompressionSettings *ts_chunk_get_cached_compression_settings(Chunk *chunk)
+CompressionSettings *ts_chunk_get_and_cache_compression_settings(Chunk *chunk)
 {
 	if (chunk->compression_settings == NULL)
 	{
@@ -5243,11 +5251,21 @@ CompressionSettings *ts_chunk_get_cached_compression_settings(Chunk *chunk)
 	return chunk->compression_settings;
 }
 
-CompressionSettings *ts_chunk_get_cached_hypertable_compression_settings(Chunk *chunk)
+CompressionSettings *ts_chunk_get_and_cache_hypertable_compression_settings(Chunk *chunk)
 {
 	if (chunk->ht_compression_settings == NULL)
 	{
 		chunk->ht_compression_settings = ts_compression_settings_get(chunk->hypertable_relid);
 	}
+	return chunk->ht_compression_settings;
+}
+
+CompressionSettings *ts_chunk_get_compression_settings(const Chunk *chunk)
+{
+	return chunk->compression_settings;
+}
+
+CompressionSettings *ts_chunk_get_hypertable_compression_settings(const Chunk *chunk)
+{
 	return chunk->ht_compression_settings;
 }

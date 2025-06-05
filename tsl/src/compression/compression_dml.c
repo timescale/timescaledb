@@ -356,7 +356,7 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	int num_mem_scankeys = 0;
 	ScanKeyData *mem_scankeys = NULL;
 
-	CompressionSettings *settings = ts_chunk_get_cached_compression_settings(chunk);
+	CompressionSettings *settings = ts_chunk_get_and_cache_compression_settings(chunk);
 	bool delete_only = ht_state->mt->operation == CMD_DELETE && !has_joins &&
 					   can_delete_without_decompression(ht_state, settings, chunk, predicates);
 

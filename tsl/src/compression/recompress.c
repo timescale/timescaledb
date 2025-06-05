@@ -134,7 +134,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	/* need it to find the segby cols from the catalog */
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-	CompressionSettings *settings = ts_chunk_get_cached_compression_settings(uncompressed_chunk);
+	CompressionSettings *settings = ts_chunk_get_and_cache_compression_settings(uncompressed_chunk);
 
 	/* We should not do segment-wise recompression with empty orderby, see #7748
 	 */

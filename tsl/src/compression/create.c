@@ -536,7 +536,7 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	 * for now.
 	 */
 	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
-	CompressionSettings *settings = ts_chunk_get_cached_hypertable_compression_settings(src_chunk);
+	CompressionSettings *settings = ts_chunk_get_and_cache_hypertable_compression_settings(src_chunk);
 
 	/*
 	 * On hypertables created with CREATE TABLE ... WITH we enable compression
