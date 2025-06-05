@@ -19,9 +19,8 @@ set(TEST_FILES_SHARED
     space_constraint.sql
     subtract_integer_from_now.sql)
 
-set(TEST_TEMPLATES_SHARED
-    gapfill.sql.in ordered_append.sql.in ordered_append_join.sql.in
-    transparent_decompress_chunk.sql.in)
+set(TEST_TEMPLATES_SHARED gapfill.sql.in ordered_append_join.sql.in
+                          transparent_decompress_chunk.sql.in)
 
 set(SOLO_TESTS merge_dml.sql)
 
