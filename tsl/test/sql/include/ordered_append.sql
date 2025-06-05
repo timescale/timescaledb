@@ -11,6 +11,8 @@
 
 SET timescaledb.enable_decompression_sorted_merge = 0;
 
+vacuum analyze :TEST_TABLE;
+
 -- test ASC for ordered chunks
 :PREFIX
 SELECT time
@@ -70,6 +72,7 @@ ORDER BY device_id
 LIMIT 1;
 
 -- time column must be primary sort order
+SET enable_seqscan TO false;
 :PREFIX
 SELECT time,
   device_id
@@ -78,10 +81,12 @@ WHERE device_id IN (1, 2)
 ORDER BY device_id,
   time
 LIMIT 1;
+RESET enable_seqscan;
 
 -- test equality constraint on ORDER BY prefix
 -- currently not optimized
 SET enable_seqscan TO false;
+SET enable_indexonlyscan TO false;
 :PREFIX
 SELECT time,
   device_id
@@ -91,19 +96,22 @@ ORDER BY device_id,
   time
 LIMIT 10;
 RESET enable_seqscan;
+RESET enable_indexonlyscan;
 
 -- queries without LIMIT should use ordered append
 :PREFIX
 SELECT time
 FROM :TEST_TABLE
-WHERE device_id IN (1, 2)
+WHERE device_id IN (1, 2) OR time > '2000-01-06'
 ORDER BY time ASC;
 
 -- queries without ORDER BY shouldnt use ordered append
+SET enable_seqscan TO false;
 :PREFIX
 SELECT pg_typeof(time)
 FROM :TEST_TABLE
 LIMIT 1;
+RESET enable_seqscan;
 
 -- test interaction with constraint exclusion
 :PREFIX
@@ -247,6 +255,7 @@ FROM i;
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
+SET enable_seqscan TO false;
 :PREFIX WITH cte AS (
   SELECT time
   FROM :TEST_TABLE
@@ -256,6 +265,7 @@ FROM i;
 SELECT *
 FROM cte
 WHERE time < '2000-02-01'::timestamptz;
+RESET enable_seqscan;
 
 -- test subquery
 -- not ChunkAppend so no chunk exclusion
