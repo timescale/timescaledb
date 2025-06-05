@@ -601,7 +601,9 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 	if (cagg->bucket_function->bucket_time_based &&
 		TIMESTAMP_NOT_FINITE(cagg->bucket_function->bucket_time_origin))
 	{
-		cagg->bucket_function->bucket_time_origin = continuous_agg_get_default_origin(new_bucket_function);;
+		cagg->bucket_function->bucket_time_origin =
+			continuous_agg_get_default_origin(new_bucket_function);
+		;
 		origin_added_during_migration = true;
 	}
 
