@@ -987,6 +987,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 							  ht);
 
 	TSCopyMultiInsertBuffer *buffer = NULL;
+	int reset_count = 0; /* Reset the per-tuple exprcontext every 100 tuples */
 	for (;;)
 	{
 		TupleTableSlot *myslot = NULL;
@@ -1000,7 +1001,13 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		 * Reset the per-tuple exprcontext. We do this after every tuple, to
 		 * clean-up after expression evaluations etc.
 		 */
-		ResetPerTupleExprContext(estate);
+		if (reset_count == 100)
+		{
+			ResetPerTupleExprContext(estate);
+			reset_count = 0;
+		}
+		else
+			reset_count++;
 
 		myslot = singleslot;
 		Assert(myslot != NULL);
