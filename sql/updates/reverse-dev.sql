@@ -24,9 +24,11 @@ BEGIN
 END;
 $$ LANGUAGE PLPGSQL;
 
--- Add back the chunk_column_stats FK constraint. But first delete all
--- entries with chunk_id 0. It effectively means that collecting
--- column stats for those columns will be disabled. It can be enabled
--- again after downgrade.
-DELETE FROM _timescaledb_catalog.chunk_column_stats WHERE chunk_id = 0;
-ALTER TABLE _timescaledb_catalog.chunk_column_stats ADD CONSTRAINT chunk_column_stats_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id);
+-- Add back the chunk_column_stats NOT NULL constraint. But first
+-- delete all entries with with NULL since they will no longer be
+-- allowed. Note that it is not possible to revert chunk_id back to 0
+-- because it will violate the FK constraint. Removing the entries
+-- effectively means that collecting column stats for those columns
+-- will be disabled. It can be enabled again after downgrade.
+DELETE FROM _timescaledb_catalog.chunk_column_stats WHERE chunk_id IS NULL;
+ALTER TABLE _timescaledb_catalog.chunk_column_stats ALTER COLUMN chunk_id SET NOT NULL;
