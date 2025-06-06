@@ -12,7 +12,7 @@ FROM_VERSION=${FROM_VERSION:-$(grep '^previous_version ' version.config | awk '{
 TO_VERSION=${TO_VERSION:-$(grep '^version ' version.config | awk '{ print $3 }')}
 
 TEST_REPAIR=${TEST_REPAIR:-false}
-TEST_VERSION=${TEST_VERSION:-v8}
+TEST_VERSION=${TEST_VERSION:-v9}
 
 OUTPUT_DIR=${OUTPUT_DIR:-update_test/${FROM_VERSION}_to_${TO_VERSION}}
 PGDATA="${OUTPUT_DIR}/data"
@@ -135,5 +135,3 @@ if [ -f "${OUTPUT_DIR}/baseline_vs_updated.diff" ] || [ -f "${OUTPUT_DIR}/baseli
   echo "Update test for ${FROM_VERSION} -> ${TO_VERSION} failed"
   exit 1
 fi
-
-
