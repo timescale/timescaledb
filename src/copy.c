@@ -190,6 +190,47 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
 }
 
 /*
+ * Determine whether we can skip constraints checks for this relation.
+ * We will skip constraints checks if:
+ * 1. The relation has CHECK constraints that match the number of dimensions
+ * 2. The relation has no NOT NULL constraints on non-partitioning columns
+ */
+static bool
+can_skip_constraint_check(Hypertable *ht, TupleDesc tupledesc)
+{
+	/*
+	 * When the number of constraints does not match the number of dimensions then there are
+	 * additional constraints that we need to check during COPY. Partitioning constraints would
+	 * have already been checked by tuple routing.
+	 */
+	Assert(tupledesc->constr->num_check >= ht->space->num_dimensions);
+	if (tupledesc->constr && tupledesc->constr->num_check != ht->space->num_dimensions)
+		return false;
+
+	for (int i = 0; i < tupledesc->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupledesc, i);
+
+		if (att->attisdropped)
+			continue;
+
+		/*
+		 * If we have NOT NULL constraints on non-partitioning columns, we cannot skip
+		 * constraints and have to check them.
+		 */
+		if (att->attnotnull)
+		{
+			if (ts_is_partitioning_column_name(ht, att->attname))
+				continue;
+
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/*
  * Allocate memory and initialize a new TSCopyMultiInsertBuffer for this
  * ResultRelInfo.
  */
@@ -205,45 +246,7 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 	buffer->point = palloc(POINT_SIZE(point->num_coords));
 	memcpy(buffer->point, point, POINT_SIZE(point->num_coords));
 
-	/*
-	 * Determine whether we can skip constraints checks for this relation.
-	 * We will skip constraints checks if:
-	 * 1. The relation has CHECK constraints that match the number of dimensions
-	 * 2. The relation has no NOT NULL constraints on non-partitioning columns
-	 */
-
-	/*
-	 * When the number of constraints does not match the number of dimensions then there are
-	 * additional constraints that we need to check during COPY. Partitioning constraints would
-	 * have already been checked by tuple routing.
-	 */
-	Assert(cis->rel->rd_att->constr->num_check >= miinfo->ht->space->num_dimensions);
-	if (cis->rel->rd_att->constr &&
-		cis->rel->rd_att->constr->num_check == miinfo->ht->space->num_dimensions)
-	{
-		buffer->can_skip_constraints = true;
-
-		for (int i = 0; i < cis->rel->rd_att->natts; i++)
-		{
-			Form_pg_attribute att = TupleDescAttr(cis->rel->rd_att, i);
-
-			if (att->attisdropped)
-				continue;
-
-			/*
-			 * If we have NOT NULL constraints on non-partitioning columns, we cannot skip
-			 * constraints and have to check them.
-			 */
-			if (att->attnotnull)
-			{
-				if (ts_is_partitioning_column_name(miinfo->ht, att->attname))
-					continue;
-
-				buffer->can_skip_constraints = false;
-				break;
-			}
-		}
-	}
+	buffer->can_skip_constraints = can_skip_constraint_check(miinfo->ht, cis->rel->rd_att);
 
 	switch (method)
 	{
