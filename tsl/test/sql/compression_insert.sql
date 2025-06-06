@@ -965,3 +965,47 @@ INSERT INTO unique_uuid VALUES ('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000
 
 DROP TABLE unique_uuid;
 
+-- regression test for SDC 3006
+
+CREATE TABLE t_1sec(
+	"timestamp"                         timestamp with time zone NOT NULL,
+	device_id                           text,
+	speed                               double precision,
+	derived                             boolean
+);
+
+ALTER TABLE t_1sec ADD CONSTRAINT unique_device_timestamp_sensor_derived
+	UNIQUE (device_id, "timestamp", derived);
+
+CREATE INDEX t_1sec_timestamp_idx
+	ON t_1sec
+	USING btree ("timestamp" DESC);
+
+SELECT create_hypertable(
+	relation => 't_1sec',
+	time_column_name => 'timestamp',
+	chunk_time_interval => interval '06:00:00',
+	create_default_indexes => false
+);
+
+ALTER TABLE t_1sec SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = 'device_id',
+	timescaledb.compress_orderby='"timestamp"'
+);
+
+insert into t_1sec ( "timestamp", device_id, speed, derived) values
+( '2025-06-06 10:00:00', 'device_id_1', 100, true),
+( '2025-06-06 10:01:00', 'device_id_2', 100, true),
+( '2025-06-06 10:02:00', 'device_id_3', 100, true);
+
+SELECT compress_chunk(show_chunks('t_1sec'));
+
+insert into t_1sec ( "timestamp", device_id, speed, derived) values
+( '2025-06-06 10:03:00', 'device_id_1', 100, true),
+( '2025-06-06 10:00:00', 'device_id_1', 110, true),
+( '2025-06-06 10:00:00', 'device_id_1', 110, false)
+ON CONFLICT DO NOTHING;
+
+DROP TABLE t_1sec;
+

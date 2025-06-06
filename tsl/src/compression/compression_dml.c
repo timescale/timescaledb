@@ -66,7 +66,7 @@ static bool can_delete_without_decompression(ModifyHypertableState *ht_state,
 											 List *predicates);
 static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 											CompressionSettings *settings, Relation chunk_rel,
-											Oid ht_relid);
+											Oid ht_relid, ScanKeyWithAttnos *mem_scankeys);
 static ScanKeyData *get_updated_scankeys(const ScanKeyWithAttnos *scankeys, TupleTableSlot *slot,
 										 int null_flags);
 
@@ -112,12 +112,6 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 		Assert(compression_settings && OidIsValid(compression_settings->fd.compress_relid));
 		cdst->compression_settings = compression_settings;
 
-		cdst->constraints->vectorized_filtering =
-			can_vectorize_constraint_checks(constraints,
-											compression_settings,
-											cis->rel,
-											cis->hypertable_relid);
-
 		Relation in_rel = relation_open(compression_settings->fd.compress_relid, RowExclusiveLock);
 
 		Bitmapset *columns_with_null_check = NULL;
@@ -135,6 +129,13 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 											 slot,
 											 &cdst->mem_scankeys.num_scankeys,
 											 &cdst->mem_scankeys.attnos);
+
+			cdst->constraints->vectorized_filtering =
+				can_vectorize_constraint_checks(constraints,
+												compression_settings,
+												cis->rel,
+												cis->hypertable_relid,
+												&cdst->mem_scankeys);
 
 			cdst->index_scankeys.scankeys =
 				build_index_scankeys_using_slot(cis->hypertable_relid,
@@ -1732,11 +1733,34 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 
 static bool
 can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
-								CompressionSettings *settings, Relation chunk_rel, Oid ht_relid)
+								CompressionSettings *settings, Relation chunk_rel, Oid ht_relid,
+								ScanKeyWithAttnos *mem_scankeys)
 {
 	AttrNumber chunk_attno = -1;
 	Oid typoid, collid;
 	int32 typmod;
+
+	if (mem_scankeys == NULL || mem_scankeys->num_scankeys == 0)
+		return false;
+
+	/* We can only vectorize if a vectorized check is available for all scankeys */
+	for (int sk = 0; sk < mem_scankeys->num_scankeys; sk++)
+	{
+		/*
+		 * Here we cannot check for NULL flags even if that is
+		 * handled separately, because this code is called from
+		 * the `init_decompress_state_for_insert` which sets the
+		 * flag based on the first record to be inserted and the
+		 * value may change for the subsequent records.
+		 *
+		 * The `fn_oid` doesn't get updated so it is valid to check
+		 * it here.
+		 */
+		ScanKeyData *scankey = &mem_scankeys->scankeys[sk];
+		if (get_vector_const_predicate(scankey->sk_func.fn_oid) == NULL)
+			return false;
+	}
+
 	while ((chunk_attno = bms_next_member(constraints->key_columns, chunk_attno)) > 0)
 	{
 		/*
