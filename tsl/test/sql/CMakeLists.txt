@@ -91,6 +91,7 @@ set(TEST_TEMPLATES
     cagg_union_view.sql.in
     cagg_permissions.sql.in
     compression_permissions.sql.in
+    ordered_append.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
