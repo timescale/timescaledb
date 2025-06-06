@@ -118,7 +118,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_scheduler_restart.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
-    cagg_refresh_policy_incremental.sql
+    cagg_policy_incremental.sql
     compress_bgw_reorder_drop_chunks.sql
     chunk_api.sql
     chunk_merge.sql
@@ -225,7 +225,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
-    cagg_refresh_policy_incremental
+    cagg_policy_incremental
     hypercore
     move
     reorder
