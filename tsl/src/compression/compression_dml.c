@@ -68,7 +68,8 @@ static bool can_delete_without_decompression(ModifyHypertableState *ht_state,
 											 List *predicates);
 static bool can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 											CompressionSettings *settings, Relation chunk_rel,
-											Oid ht_relid, TupleTableSlot *slot);
+											Oid ht_relid, ScanKeyData *mem_scankeys,
+											int num_mem_scankeys);
 
 static AttrNumber
 TupleDescGetAttrNumber(TupleDesc desc, const char *name)
@@ -123,12 +124,6 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	Bitmapset *null_columns = NULL;
 	struct decompress_batches_stats stats;
 
-	constraints->vectorized_filtering = can_vectorize_constraint_checks(constraints,
-																		settings,
-																		out_rel,
-																		cis->hypertable_relid,
-																		slot);
-
 	/* the scan keys used for in memory tests of the decompressed tuples */
 	int num_mem_scankeys = 0;
 	ScanKeyData *mem_scankeys = NULL;
@@ -147,6 +142,13 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 													constraints,
 													slot,
 													&num_mem_scankeys);
+
+		constraints->vectorized_filtering = can_vectorize_constraint_checks(constraints,
+																			settings,
+																			out_rel,
+																			cis->hypertable_relid,
+																			mem_scankeys,
+																			num_mem_scankeys);
 
 		index_scankeys = build_index_scankeys_using_slot(cis->hypertable_relid,
 														 in_rel,
@@ -1643,11 +1645,23 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 static bool
 can_vectorize_constraint_checks(tuple_filtering_constraints *constraints,
 								CompressionSettings *settings, Relation chunk_rel, Oid ht_relid,
-								TupleTableSlot *slot)
+								ScanKeyData *mem_scankeys, int num_mem_scankeys)
 {
 	AttrNumber chunk_attno = -1;
 	Oid typoid, collid;
 	int32 typmod;
+
+	if (mem_scankeys == NULL || num_mem_scankeys == 0)
+		return false;
+
+	/* We can only vectorize if a vectorized check is available for all scankeys */
+	for (int sk = 0; sk < num_mem_scankeys; sk++)
+	{
+		ScanKeyData *scankey = &mem_scankeys[sk];
+		if (get_vector_const_predicate(scankey->sk_func.fn_oid) == NULL)
+			return false;
+	}
+
 	while ((chunk_attno = bms_next_member(constraints->key_columns, chunk_attno)) > 0)
 	{
 		/*
