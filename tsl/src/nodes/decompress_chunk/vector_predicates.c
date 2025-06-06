@@ -49,6 +49,9 @@ get_vector_const_predicate(Oid pg_predicate)
 		case F_TEXTNE:
 			return vector_const_textne;
 
+		case F_BOOLEQ:
+			return vector_booleq;
+
 		default:
 			/*
 			 * More checks below, this branch is to placate the static analyzers.
@@ -94,6 +97,20 @@ vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
 		{
 			result[i] &= validity_word;
 		}
+	}
+}
+
+void
+vector_booleq(const ArrowArray *arrow, Datum arg, uint64 *restrict result)
+{
+	bool check_val = DatumGetBool(arg);
+	if (check_val)
+	{
+		vector_booleantest(arrow, IS_TRUE, result);
+	}
+	else
+	{
+		vector_booleantest(arrow, IS_FALSE, result);
 	}
 }
 
