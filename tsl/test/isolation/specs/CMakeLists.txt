@@ -18,6 +18,7 @@ list(
   compression_conflicts_iso.spec
   cagg_insert.spec
   cagg_multi_iso.spec
+  compressed_copy.spec
   deadlock_drop_chunks_compress.spec
   deadlock_drop_index_vacuum.spec
   parallel_compression.spec

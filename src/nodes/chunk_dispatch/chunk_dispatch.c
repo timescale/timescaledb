@@ -145,6 +145,13 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 		if (dispatch->create_compressed_chunk && !chunk->fd.compressed_chunk_id)
 		{
+			/*
+			 * When we try to create a compressed chunk, we need to grab a lock on the
+			 * chunk to synchronize with other concurrent insert operations trying to
+			 * create the same compressed chunk.
+			 */
+			LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
+			chunk = ts_chunk_get_by_id(chunk->fd.id, CACHE_FLAG_NONE);
 			Hypertable *compressed_ht =
 				ts_hypertable_get_by_id(dispatch->hypertable->fd.compressed_hypertable_id);
 			Chunk *compressed_chunk =
