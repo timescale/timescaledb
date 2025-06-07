@@ -56,6 +56,9 @@
 
 static const char *sparse_index_types[] = { "min", "max", "bloom1" };
 
+/* PostgreSQL index column limit */
+#define INDEX_MAX_KEYS 32
+
 #ifdef USE_ASSERT_CHECKING
 static bool
 is_sparse_index_type(const char *type)
@@ -866,6 +869,32 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
 }
 
 /*
+ * Validate that the compression settings won't exceed PostgreSQL's index column limit.
+ * For each orderby column, we add two metadata columns (min and max) to the index.
+ * The total number of index columns is: number of segmentby columns + 2 * number of orderby columns.
+ */
+static void
+validate_compression_column_count(ArrayType *segmentby, ArrayType *orderby)
+{
+	int num_segmentby_columns = segmentby ? ts_array_length(segmentby) : 0;
+	int num_orderby_columns = orderby ? ts_array_length(orderby) : 0;
+	int total_index_columns = num_segmentby_columns + (2 * num_orderby_columns);
+
+	if (total_index_columns > INDEX_MAX_KEYS)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_TOO_MANY_COLUMNS),
+				 errmsg("compression settings would create an index with too many columns"),
+				 errdetail("The total number of index columns (%d) exceeds the PostgreSQL "
+						   "maximum of %d columns",
+						   total_index_columns, INDEX_MAX_KEYS),
+				 errhint("Reduce the number of segmentby columns (%d) and/or orderby columns (%d). "
+						 "Each orderby column requires 2 index columns.",
+						 num_segmentby_columns, num_orderby_columns)));
+	}
+}
+
+/*
  * enables compression for the passed in table by
  * creating a compression hypertable with special properties
  * Note: caller should check security permissions
@@ -1325,6 +1354,9 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
 	}
 
+	/* Validate that we won't exceed the PostgreSQL index column limit */
+	validate_compression_column_count(settings->fd.segmentby, settings->fd.orderby);
+
 	ts_compression_settings_update(settings);
 }
 
@@ -1506,6 +1538,9 @@ tsl_compression_enable(Hypertable *ht, WithClauseResult *with_clause_options)
 			settings->fd.orderby_desc = obs.orderby_desc;
 			settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
 		}
+
+		/* Validate that we won't exceed the PostgreSQL index column limit */
+		validate_compression_column_count(settings->fd.segmentby, settings->fd.orderby);
 
 		ts_compression_settings_update(settings);
 	}
