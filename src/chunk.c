@@ -2843,11 +2843,12 @@ typedef enum ChunkDeleteResult
  * of tuples to process.
  */
 static ChunkDeleteResult
-chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row,
+				   bool detach)
 {
 	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
-	ChunkConstraints *ccs = ts_chunk_constraints_alloc(2, ti->mctx);
+	ChunkConstraints *ccs;
 	ChunkDeleteResult res;
 	int i;
 
@@ -2859,7 +2860,17 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 	/* if only marking as deleted, keep the constraints and dimension info */
 	if (!preserve_chunk_catalog_row)
 	{
-		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
+		/*
+		 * Do not drop any constraint if detaching
+		 * We will still need to delete dimension slices for the chunk
+		 */
+		if (!detach)
+		{
+			ccs = ts_chunk_constraints_alloc(2, ti->mctx);
+			ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
+		}
+		else
+			ccs = ts_chunk_constraint_scan_by_chunk_id(form.id, 2, ti->mctx);
 
 		/* Check for dimension slices that are orphaned by the chunk deletion */
 		for (i = 0; i < ccs->num_constraints; i++)
@@ -2916,11 +2927,18 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 																		NULL,
 																		CurrentMemoryContext) == 0)
 					ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+				else if (detach)
+				{
+					/* If detaching, constraint is not dropped. But we should delete its metadata and slice */
+					ts_chunk_constraint_delete_metadata_by_dimension_slice_id(cc->fd.dimension_slice_id);
+					ts_dimension_slice_delete_by_id(cc->fd.dimension_slice_id, false);
+				}
 			}
 		}
 	}
 
-	ts_chunk_index_delete_by_chunk_id(form.id, true);
+	/* Do not drop any index if detaching */
+	ts_chunk_index_delete_by_chunk_id(form.id, !detach);
 	ts_compression_chunk_size_delete(form.id);
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
@@ -3013,7 +3031,7 @@ init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_nam
 
 static int
 chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior,
-			 bool preserve_chunk_catalog_row)
+			 bool preserve_chunk_catalog_row, bool detach)
 {
 	int count = 0;
 
@@ -3024,7 +3042,8 @@ chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior,
 		res = chunk_tuple_delete(ts_scan_iterator_tuple_info(iterator),
 								 relid,
 								 behavior,
-								 preserve_chunk_catalog_row);
+								 preserve_chunk_catalog_row,
+								 detach);
 
 		switch (res)
 		{
@@ -3049,7 +3068,7 @@ ts_chunk_delete_by_name_internal(const char *schema, const char *table, Oid reli
 	int count;
 
 	init_scan_by_qualified_table_name(&iterator, schema, table);
-	count = chunk_delete(&iterator, relid, behavior, preserve_chunk_catalog_row);
+	count = chunk_delete(&iterator, relid, behavior, preserve_chunk_catalog_row, false);
 
 	/* (schema,table) names and (hypertable_id) are unique so should only have
 	 * dropped one chunk or none (if not found) */
@@ -3097,7 +3116,7 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 
-	return chunk_delete(&iterator, InvalidOid, DROP_RESTRICT, false);
+	return chunk_delete(&iterator, InvalidOid, DROP_RESTRICT, false, false);
 }
 
 bool
@@ -5232,4 +5251,28 @@ ts_merge_two_chunks(PG_FUNCTION_ARGS)
 	ArrayType *chunk_array =
 		construct_array(chunks, 2, REGCLASSOID, sizeof(Oid), true, TYPALIGN_INT);
 	return DirectFunctionCall1(ts_cm_functions->merge_chunks, PointerGetDatum(chunk_array));
+}
+
+int
+ts_chunk_detach_by_relid(Oid relid)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
+	char *schema;
+	char *table;
+	int count;
+
+	if (!OidIsValid(relid))
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
+
+	schema = get_namespace_name(get_rel_namespace(relid));
+	table = get_rel_name(relid);
+
+	init_scan_by_qualified_table_name(&iterator, schema, table);
+	count = chunk_delete(&iterator, relid, DROP_RESTRICT, false, true);
+
+	/* (schema,table) names and (hypertable_id) are unique so should only have
+	 * dropped one chunk or none (if not found) */
+	Assert(count == 1 || count == 0);
+
+	return count;
 }
