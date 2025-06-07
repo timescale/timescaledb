@@ -248,7 +248,31 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 
 	buffer->can_skip_constraints = can_skip_constraint_check(miinfo->ht, cis->rel->rd_att);
 
-	switch (method)
+	/*
+	 * Downgrade the insert method when triggers are present.
+	 */
+	if (method != TS_CIM_SINGLE && cis->result_relation_info->ri_TrigDesc)
+	{
+		/* If there are BEFORE INSERT row triggers, we cannot use
+		 * multi-insert, as the tuples may be inserted in an out-of-order manner,
+		 * which might violate the semantics of the triggers.
+		 *
+		 * For compressed inserts we fall back to TS_CIM_SINGLE when any triggers are present.
+		 * This is a safety measure. We might actually safely allow some of these in the future.
+		 */
+		if (method == TS_CIM_MULTI_CONDITIONAL &&
+			(cis->result_relation_info->ri_TrigDesc->trig_insert_before_row ||
+			 cis->result_relation_info->ri_TrigDesc->trig_insert_instead_row))
+		{
+			buffer->method = TS_CIM_SINGLE;
+		}
+		else if (method == TS_CIM_COMPRESSION)
+		{
+			buffer->method = TS_CIM_SINGLE;
+		}
+	}
+
+	switch (buffer->method)
 	{
 		case TS_CIM_SINGLE:
 			break;
@@ -302,8 +326,6 @@ TSCopyMultiInsertInfoGetOrSetupBuffer(TSCopyMultiInsertInfo *miinfo, ChunkInsert
 	{
 		entry->buffer = TSCopyMultiInsertBufferInit(miinfo, cis, point, method);
 	}
-
-	Assert(entry->buffer->method == method);
 
 	return entry->buffer;
 }
@@ -783,7 +805,6 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	};
 	CommandId mycid = GetCurrentCommandId(true);
 	TSCopyInsertMethod insertMethod;			   /* The insert method for the table */
-	TSCopyInsertMethod currentTupleInsertMethod;   /* The insert method of the current tuple */
 	TSCopyMultiInsertInfo multiInsertInfo = { 0 }; /* pacify compiler */
 	int ti_options = 0;							   /* start with default options for insert */
 	BulkInsertState bistate = NULL;
@@ -1041,41 +1062,23 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		/* Triggers and stuff need to be invoked in query context. */
 		MemoryContextSwitchTo(oldcontext);
 
-		currentTupleInsertMethod = insertMethod;
+		buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo, cis, point, insertMethod);
 
-		/* Determine which triggers exist on this chunk */
-		has_before_insert_row_trig =
-			(cis->result_relation_info->ri_TrigDesc &&
-			 cis->result_relation_info->ri_TrigDesc->trig_insert_before_row);
-
-		has_instead_insert_row_trig =
-			(cis->result_relation_info->ri_TrigDesc &&
-			 cis->result_relation_info->ri_TrigDesc->trig_insert_instead_row);
-
-		if (has_before_insert_row_trig || has_instead_insert_row_trig)
-		{
-			/*
-			 * Flush pending inserts if this partition can't use
-			 * batching, so rows are visible to triggers etc.
-			 */
-			if (insertMethod == TS_CIM_MULTI_CONDITIONAL)
-				TSCopyMultiInsertInfoFlush(&multiInsertInfo, cis);
-
-			currentTupleInsertMethod = TS_CIM_SINGLE;
-		}
-
-		buffer = TSCopyMultiInsertInfoGetOrSetupBuffer(&multiInsertInfo,
-													   cis,
-													   point,
-													   currentTupleInsertMethod);
+		/*
+		 * If the insert method has changed, we need to flush the
+		 * multi-insert info to ensure that the tuples are
+		 * visible to the triggers.
+		 */
+		if (insertMethod != buffer->method)
+			TSCopyMultiInsertInfoFlush(&multiInsertInfo, cis);
 
 		/* Convert the tuple to match the chunk's rowtype */
-		if (currentTupleInsertMethod == TS_CIM_SINGLE)
+		if (buffer->method == TS_CIM_SINGLE)
 		{
 			if (NULL != cis->hyper_to_chunk_map)
 				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
 		}
-		else if (currentTupleInsertMethod == TS_CIM_COMPRESSION)
+		else if (buffer->method == TS_CIM_COMPRESSION)
 		{
 			if (NULL != cis->hyper_to_chunk_map)
 				myslot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, myslot, cis->slot);
@@ -1157,7 +1160,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 				ExecConstraints(resultRelInfo, myslot, estate);
 			}
 
-			if (currentTupleInsertMethod == TS_CIM_SINGLE)
+			if (buffer->method == TS_CIM_SINGLE)
 			{
 				/* OK, store the tuple and create index entries for it */
 				table_tuple_insert(resultRelInfo->ri_RelationDesc,
@@ -1185,7 +1188,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 										 recheckIndexes,
 										 ccstate->cstate->transition_capture);
 			}
-			else if (currentTupleInsertMethod == TS_CIM_COMPRESSION)
+			else if (buffer->method == TS_CIM_COMPRESSION)
 			{
 				ts_cm_functions->compressor_add_slot(buffer->compressor,
 													 buffer->bulk_writer,
