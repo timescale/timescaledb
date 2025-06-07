@@ -117,7 +117,7 @@ vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 		 * compressed batch size of 1000 rows, so we can check for early exit
 		 * after every row.
 		 */
-		VectorQualSummary summary = get_vector_qual_summary(array_result, n_rows);
+		BatchQualSummary summary = get_vector_qual_summary(array_result, n_rows);
 		if (summary == (is_or ? AllRowsPass : NoRowsPass))
 		{
 			return;
