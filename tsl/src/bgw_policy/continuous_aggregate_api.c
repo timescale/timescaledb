@@ -26,6 +26,7 @@
 #include "dimension.h"
 #include "guc.h"
 #include "hypertable_cache.h"
+#include "policy_config.h"
 #include "policy_utils.h"
 #include "time_utils.h"
 #include "ts_catalog/continuous_agg.h"
