@@ -358,6 +358,7 @@ chunk_create(PG_FUNCTION_ARGS)
 												 schema_name,
 												 table_name,
 												 chunk_table_relid,
+												 InvalidOid,
 												 &created);
 	Assert(NULL != chunk);
 
