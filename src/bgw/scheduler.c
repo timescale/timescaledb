@@ -308,6 +308,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			Assert(!sjob->reserved_worker);
 
 			StartTransactionCommand();
+			PushActiveSnapshot(GetTransactionSnapshot());
 
 			if (!ts_bgw_job_get_share_lock(sjob->job.fd.id, CurrentMemoryContext))
 			{
@@ -330,6 +331,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 					 NameStr(sjob->job.fd.application_name));
 				sjob->consecutive_failed_launches++;
 				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+				PopActiveSnapshot();
 				CommitTransactionCommand();
 				MemoryContextSwitchTo(scratch_mctx);
 				return;
@@ -346,6 +348,7 @@ scheduled_bgw_job_transition_state_to(ScheduledBgwJob *sjob, JobState new_state)
 			else
 				sjob->timeout_at = DT_NOEND;
 
+			PopActiveSnapshot();
 			CommitTransactionCommand();
 			MemoryContextSwitchTo(scratch_mctx);
 
@@ -380,6 +383,8 @@ static void
 on_failure_to_start_job(ScheduledBgwJob *sjob)
 {
 	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
+
 	if (!ts_bgw_job_get_share_lock(sjob->job.fd.id, CurrentMemoryContext))
 	{
 		elog(WARNING,
@@ -400,6 +405,7 @@ on_failure_to_start_job(ScheduledBgwJob *sjob)
 											  &sjob->job.fd.proc_name));
 	}
 	scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+	PopActiveSnapshot();
 	CommitTransactionCommand();
 	MemoryContextSwitchTo(scratch_mctx);
 }
@@ -755,7 +761,9 @@ check_for_stopped_and_timed_out_jobs()
 				break;
 			case BGWH_STOPPED:
 				StartTransactionCommand();
+				PushActiveSnapshot(GetTransactionSnapshot());
 				scheduled_bgw_job_transition_state_to(sjob, JOB_STATE_SCHEDULED);
+				PopActiveSnapshot();
 				CommitTransactionCommand();
 				MemoryContextSwitchTo(scratch_mctx);
 				Assert(sjob->state != JOB_STATE_STARTED);
@@ -806,7 +814,9 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 
 	/* txn to read the list of jobs from the DB */
 	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 	scheduled_jobs = ts_update_scheduled_jobs_list(scheduled_jobs, scheduler_mctx);
+	PopActiveSnapshot();
 	CommitTransactionCommand();
 	MemoryContextSwitchTo(scratch_mctx);
 
