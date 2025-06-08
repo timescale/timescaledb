@@ -1,0 +1,1 @@
+Fixes: #8236 Fix snapshot handling in background workers
