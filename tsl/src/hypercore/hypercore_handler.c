@@ -214,6 +214,8 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 {
 	Assert(OidIsValid(rel->rd_id) && (!ts_extension_is_loaded() || !ts_is_hypertable(rel->rd_id)));
 
+	PushActiveSnapshot(GetTransactionSnapshot());
+
 	const CompressionSettings *settings;
 	HypercoreInfo *hcinfo;
 	TupleDesc tupdesc = RelationGetDescr(rel);
@@ -325,6 +327,7 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 			colsettings->cattnum_max = get_attnum(hcinfo->compressed_relid, max_attname);
 		}
 	}
+	PopActiveSnapshot();
 
 	return hcinfo;
 }
