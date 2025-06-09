@@ -12,10 +12,10 @@ DROP TABLE t1;
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
-ERROR:  hypertable option requires time_column
+ERROR:  hypertable option requires partition_column
 HINT:  Use "timescaledb.partition_column" to specify the column to use as partitioning column.
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
-ERROR:  hypertable option requires time_column
+ERROR:  hypertable option requires partition_column
 HINT:  Use "timescaledb.partition_column" to specify the column to use as partitioning column.
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
 ERROR:  column "null" does not exist
