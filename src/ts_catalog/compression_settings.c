@@ -24,7 +24,9 @@ ts_compression_settings_equal(const CompressionSettings *left, const Compression
 	return ts_array_equal(left->fd.segmentby, right->fd.segmentby) &&
 		   ts_array_equal(left->fd.orderby, right->fd.orderby) &&
 		   ts_array_equal(left->fd.orderby_desc, right->fd.orderby_desc) &&
-		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst);
+		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst) &&
+		   ts_array_equal(left->fd.minmax, right->fd.minmax) &&
+		   ts_array_equal(left->fd.bloom, right->fd.bloom);
 }
 
 CompressionSettings *
@@ -45,8 +47,7 @@ ts_compression_settings_materialize(const CompressionSettings *src, Oid relid, O
 CompressionSettings *
 ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segmentby,
 							   ArrayType *orderby, ArrayType *orderby_desc,
-							   ArrayType *orderby_nullsfirst, ArrayType *minmax,
-							   ArrayType *bloom)
+							   ArrayType *orderby_nullsfirst, ArrayType *minmax, ArrayType *bloom)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -134,14 +135,14 @@ compression_settings_fill_from_tuple(CompressionSettings *settings, TupleInfo *t
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_minmax)])
 		fd->minmax = NULL;
 	else
-		fd->minmax = DatumGetArrayTypeP(
-			values[AttrNumberGetAttrOffset(Anum_compression_settings_minmax)]);
+		fd->minmax =
+			DatumGetArrayTypeP(values[AttrNumberGetAttrOffset(Anum_compression_settings_minmax)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_bloom)])
 		fd->bloom = NULL;
 	else
-		fd->bloom = DatumGetArrayTypeP(
-			values[AttrNumberGetAttrOffset(Anum_compression_settings_bloom)]);
+		fd->bloom =
+			DatumGetArrayTypeP(values[AttrNumberGetAttrOffset(Anum_compression_settings_bloom)]);
 	MemoryContextSwitchTo(old);
 
 	if (should_free)
@@ -277,6 +278,8 @@ compression_settings_rename_column(CompressionSettings *settings, const char *ol
 {
 	settings->fd.segmentby = ts_array_replace_text(settings->fd.segmentby, old, new);
 	settings->fd.orderby = ts_array_replace_text(settings->fd.orderby, old, new);
+	settings->fd.minmax = ts_array_replace_text(settings->fd.minmax, old, new);
+	settings->fd.bloom = ts_array_replace_text(settings->fd.bloom, old, new);
 	ts_compression_settings_update(settings);
 }
 

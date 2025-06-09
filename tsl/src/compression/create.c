@@ -1329,6 +1329,18 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
 	}
 
+	if (!with_clause_options[AlterTableFlagMinMax].is_default)
+	{
+		settings->fd.minmax =
+			ts_compress_hypertable_parse_minmax(with_clause_options[AlterTableFlagMinMax], ht);
+	}
+
+	if (!with_clause_options[AlterTableFlagBloom].is_default)
+	{
+		settings->fd.bloom =
+			ts_compress_hypertable_parse_bloom(with_clause_options[AlterTableFlagBloom], ht);
+	}
+
 	ts_compression_settings_update(settings);
 }
 
