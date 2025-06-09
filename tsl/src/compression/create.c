@@ -552,6 +552,8 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 												  NULL,
 												  NULL,
 												  NULL,
+												  NULL,
+												  NULL,
 												  NULL);
 
 		Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
@@ -879,7 +881,7 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
  * 4. Copy constraints to internal compression table
  */
 bool
-tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
+tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options) // here
 {
 	int32 compress_htid;
 	bool compress_disable = !with_clause_options[AlterTableFlagColumnstore].is_default &&
@@ -906,6 +908,8 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 	{
 		settings = ts_compression_settings_create(ht->main_table_relid,
 												  InvalidOid,
+												  NULL,
+												  NULL,
 												  NULL,
 												  NULL,
 												  NULL,
@@ -1183,7 +1187,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	if (!OidIsValid(orderby_fn))
 	{
 		/* fallback to original logic */
-		OrderBySettings obs = (OrderBySettings){ 0 };
+		OrderBySettings obs = (OrderBySettings) { 0 };
 		obs = add_time_to_order_by_if_not_included(obs, segmentby, ht);
 		elog(LOG_SERVER_ONLY,
 			 "order_by default: hypertable=\"%s\" function=\"\" confidence=-1",
@@ -1475,6 +1479,8 @@ tsl_compression_enable(Hypertable *ht, WithClauseResult *with_clause_options)
 	{
 		CompressionSettings *settings = ts_compression_settings_create(ht->main_table_relid,
 																	   InvalidOid,
+																	   NULL,
+																	   NULL,
 																	   NULL,
 																	   NULL,
 																	   NULL,

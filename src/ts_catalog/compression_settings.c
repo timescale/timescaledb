@@ -35,7 +35,9 @@ ts_compression_settings_materialize(const CompressionSettings *src, Oid relid, O
 															  src->fd.segmentby,
 															  src->fd.orderby,
 															  src->fd.orderby_desc,
-															  src->fd.orderby_nullsfirst);
+															  src->fd.orderby_nullsfirst,
+															  src->fd.minmax,
+															  src->fd.bloom);
 
 	return dst;
 }
@@ -43,7 +45,8 @@ ts_compression_settings_materialize(const CompressionSettings *src, Oid relid, O
 CompressionSettings *
 ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segmentby,
 							   ArrayType *orderby, ArrayType *orderby_desc,
-							   ArrayType *orderby_nullsfirst)
+							   ArrayType *orderby_nullsfirst, ArrayType *minmax,
+							   ArrayType *bloom)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -66,6 +69,8 @@ ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segment
 	fd.orderby = orderby;
 	fd.orderby_desc = orderby_desc;
 	fd.orderby_nullsfirst = orderby_nullsfirst;
+	fd.minmax = minmax;
+	fd.bloom = bloom;
 
 	rel = table_open(catalog_get_table_id(catalog, COMPRESSION_SETTINGS), RowExclusiveLock);
 
@@ -126,6 +131,17 @@ compression_settings_fill_from_tuple(CompressionSettings *settings, TupleInfo *t
 		fd->orderby_nullsfirst = DatumGetArrayTypeP(
 			values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_nullsfirst)]);
 
+	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_minmax)])
+		fd->minmax = NULL;
+	else
+		fd->minmax = DatumGetArrayTypeP(
+			values[AttrNumberGetAttrOffset(Anum_compression_settings_minmax)]);
+
+	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_bloom)])
+		fd->bloom = NULL;
+	else
+		fd->bloom = DatumGetArrayTypeP(
+			values[AttrNumberGetAttrOffset(Anum_compression_settings_bloom)]);
 	MemoryContextSwitchTo(old);
 
 	if (should_free)
@@ -376,6 +392,18 @@ compression_settings_formdata_make_tuple(const FormData_compression_settings *fd
 			PointerGetDatum(fd->orderby_nullsfirst);
 	else
 		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_nullsfirst)] = true;
+
+	if (fd->minmax)
+		values[AttrNumberGetAttrOffset(Anum_compression_settings_minmax)] =
+			PointerGetDatum(fd->minmax);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_minmax)] = true;
+
+	if (fd->bloom)
+		values[AttrNumberGetAttrOffset(Anum_compression_settings_bloom)] =
+			PointerGetDatum(fd->bloom);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_bloom)] = true;
 
 	return heap_form_tuple(desc, values, nulls);
 }
