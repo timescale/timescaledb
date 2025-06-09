@@ -326,7 +326,7 @@ throw_sparse_index_error(char *sparse_index, bool is_minmax)
 }
 
 static ArrayType *
-parse_sparse_indexes_collist(char *inpstr, Hypertable *hypertable, bool is_minmax)
+parse_sparse_index_collist(char *inpstr, Hypertable *hypertable, bool is_minmax)
 {
 	StringInfoData buf;
 	List *parsed;
@@ -466,7 +466,7 @@ ts_compress_hypertable_parse_minmax(WithClauseResult minmax, Hypertable *hyperta
 {
 	if (!minmax.is_default)
 	{
-		return parse_sparse_indexes_collist(TextDatumGetCString(minmax.parsed), hypertable, true);
+		return parse_sparse_index_collist(TextDatumGetCString(minmax.parsed), hypertable, true);
 	}
 	else
 		return NULL;
@@ -480,7 +480,7 @@ ts_compress_hypertable_parse_bloom(WithClauseResult bloom, Hypertable *hypertabl
 {
 	if (!bloom.is_default)
 	{
-		return parse_sparse_indexes_collist(TextDatumGetCString(bloom.parsed), hypertable, false);
+		return parse_sparse_index_collist(TextDatumGetCString(bloom.parsed), hypertable, false);
 	}
 	else
 		return NULL;
