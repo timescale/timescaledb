@@ -22,7 +22,7 @@ step "s1_begin" {
 }
 
 step "s1_copy" {
-COPY metrics FROM PROGRAM 'seq 10 | xargs -II date -d "2025-01-01 + I hour" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-01-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
 }
 
 step "s1_commit" {
@@ -39,7 +39,7 @@ step "s2_begin" {
 }
 
 step "s2_copy" {
-COPY metrics FROM PROGRAM 'seq 10 | xargs -II date -d "2025-01-01 + I hour" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-01-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
 }
 
 step "s2_commit" {
