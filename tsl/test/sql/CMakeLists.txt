@@ -204,6 +204,11 @@ set(SOLO_TESTS
     cagg_bgw
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
+    # These are solo tests because of a bug in PostgreSQL 17.5. A fix for it
+    # seems to be scheduled for release with 17.6.
+    #
+    # See
+    # https://github.com/postgres/postgres/commit/d87d07b7ad3b782cb74566cd771ecdb2823adf6a
     cagg_invalidation
     cagg_plugin
     cagg_policy_incremental
