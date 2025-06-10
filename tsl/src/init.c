@@ -145,7 +145,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
-	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
 	.continuous_agg_read_invalidation_record = ts_invalidation_read_record,
 	.cagg_try_repair = tsl_cagg_try_repair,
 

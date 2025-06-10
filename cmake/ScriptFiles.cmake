@@ -35,7 +35,6 @@ set(SOURCE_FILES
     ddl_triggers.sql
     bookend.sql
     time_bucket.sql
-    time_bucket_ng.sql
     version.sql
     size_utils.sql
     histogram.sql
