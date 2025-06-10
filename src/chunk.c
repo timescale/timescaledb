@@ -1335,7 +1335,7 @@ ts_chunk_find_for_point(const Hypertable *ht, const Point *p)
  * Create a chunk through insertion of a tuple at a given point.
  */
 Chunk *
-ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, const char *schema,
+ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *schema,
 						  const char *prefix)
 {
 	/*
@@ -1366,8 +1366,6 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 			 * release the lock early.
 			 */
 			UnlockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
-			if (found)
-				*found = true;
 			return chunk;
 		}
 
@@ -1378,16 +1376,11 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 		chunk = chunk_resurrect(ht, chunk_id);
 		if (chunk != NULL)
 		{
-			if (found)
-				*found = true;
 			return chunk;
 		}
 	}
 
 	/* Create the chunk normally. */
-	if (found)
-		*found = false;
-
 	Chunk *chunk = chunk_create_from_point_after_lock(ht, p, schema, NULL, prefix);
 
 	ASSERT_IS_VALID_CHUNK(chunk);
