@@ -126,16 +126,11 @@ typedef enum LogType
 static Relation open_invalidation_log(LogType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
-static HeapTuple create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start,
-										 int64 end);
 static bool save_invalidation_for_refresh(const CAggInvalidationState *state,
 										  const Invalidation *invalidation);
 static void set_remainder_after_cut(Invalidation *remainder, int32 hyper_id,
 									int64 lowest_modified_value, int64 greatest_modified_value);
 static void invalidation_entry_reset(Invalidation *entry);
-static void
-invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
-										 const ContinuousAggsBucketFunction *bucket_function);
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
 											   int32 hyper_id, Oid dimtype,
@@ -192,7 +187,7 @@ hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id, LOCKMO
 		Int32GetDatum(hyper_id));
 }
 
-static HeapTuple
+HeapTuple
 create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end)
 {
 	Datum values[Natts_continuous_aggs_materialization_invalidation_log] = { 0 };
@@ -486,7 +481,7 @@ invalidation_entry_reset(Invalidation *entry)
  * invalidation to bucket boundaries and in the process merge a lot more
  * invalidations.
  */
-static void
+void
 invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 										 const ContinuousAggsBucketFunction *bucket_function)
 {
