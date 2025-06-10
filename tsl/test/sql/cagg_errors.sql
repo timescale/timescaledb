@@ -223,6 +223,8 @@ Select sum( b), min(c)
 from rowsec_tab
 group by time_bucket('1', a) WITH NO DATA;
 
+DROP TABLE rowsec_tab CASCADE;
+
 drop table conditions cascade;
 
 --negative tests for WITH options
@@ -494,6 +496,9 @@ CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous, timescaledb.material
 --Check error handling for this case
 SELECT compress_chunk(ch) FROM show_chunks('i2980') ch;
 
+DROP TABLE i2980 CASCADE;
+DROP TABLE comp_ht_test CASCADE;
+
 -- cagg on normal view should error out
 CREATE VIEW v1 AS SELECT now() AS time;
 CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',time) FROM v1 GROUP BY 1;
@@ -504,3 +509,43 @@ CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous, timescaledb.materia
 
 -- No FROM clause in CAGG definition
 CREATE MATERIALIZED VIEW cagg1 with (timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT 1 GROUP BY 1 WITH NO DATA;
+
+CREATE TABLE "conditions"(
+  time         TIMESTAMP WITH TIME ZONE NOT NULL,
+  device_id    TEXT,
+  temperature  NUMERIC,
+  humidity     NUMERIC
+) WITH (
+  timescaledb.hypertable,
+  timescaledb.partition_column='time',
+  timescaledb.chunk_interval='1 day'
+);
+
+CREATE MATERIALIZED VIEW conditions_by_hour
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket(INTERVAL '1 hour', time) AS bucket,
+  device_id,
+  MAX(temperature),
+  MIN(temperature),
+  COUNT(*)
+FROM conditions
+GROUP BY 1, 2
+WITH NO DATA;
+
+-- Should work
+INSERT INTO conditions (time, device_id, temperature, humidity)
+VALUES
+  ('2023-10-01 00:00:00+00', 'device1', 20.5, 30.0);
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+
+-- Remove dimensions to test cagg trigger for invalid dimension
+TRUNCATE _timescaledb_catalog.dimension CASCADE;
+
+-- Should fail with no valid open dimension
+DELETE FROM conditions WHERE device_id = 'device1';
+
+DROP TABLE conditions cascade;
