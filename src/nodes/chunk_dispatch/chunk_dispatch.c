@@ -67,7 +67,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 {
 	ChunkInsertState *cis;
 	bool cis_changed = true;
-	bool found = true;
 	Chunk *chunk = NULL;
 
 	/* Direct inserts into internal compressed hypertable is not supported.
@@ -137,7 +136,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 		if (!chunk)
 		{
-			chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point, &found);
+			chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point);
 		}
 
 		if (!chunk)
