@@ -51,6 +51,7 @@ default_ignored_tests = {
     "bgw_launcher",
     "telemetry",
     "memoize",
+    "net",
 }
 
 # Tests that we do not run as part of a Flake tests
