@@ -6,6 +6,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/invalidation_record.c
     ${CMAKE_CURRENT_SOURCE_DIR}/invalidation_threshold.c
     ${CMAKE_CURRENT_SOURCE_DIR}/invalidation.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/invalidation_multi.c
     ${CMAKE_CURRENT_SOURCE_DIR}/materialize.c
     ${CMAKE_CURRENT_SOURCE_DIR}/options.c
     ${CMAKE_CURRENT_SOURCE_DIR}/planner.c

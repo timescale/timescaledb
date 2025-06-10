@@ -19,6 +19,7 @@
 #include <utils/builtins.h>
 #include <utils/datetime.h>
 #include <utils/jsonb.h>
+#include <utils/rangetypes.h>
 
 #include "compat/compat.h"
 #include "process_utility.h"
@@ -413,3 +414,5 @@ extern TSDLLEXPORT Oid ts_get_rel_am(Oid relid);
 extern TSDLLEXPORT void ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode);
 extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);
 extern TSDLLEXPORT char *ts_get_attr_expr(Relation rel, AttrNumber attno);
+extern TSDLLEXPORT RangeType *ts_internal_to_range(int64 lower, int64 upper, Oid dimtype,
+												   Oid rngtype);
