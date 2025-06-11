@@ -8,7 +8,6 @@ set(TEST_FILES
     bgw_policy.sql
     bgw_security.sql
     cagg_api.sql
-    cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_policy.sql
@@ -149,10 +148,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_policy_run.sql
     decompress_memory.sql
     decompress_vector_qual.sql
-    exp_cagg_monthly.sql
-    exp_cagg_next_gen.sql
-    exp_cagg_origin.sql
-    exp_cagg_timezone.sql
     hypercore.sql
     hypercore_create.sql
     hypercore_scans.sql
@@ -180,7 +175,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_TEMPLATES
     cagg_bgw.sql.in
     cagg_ddl.sql.in
-    cagg_migrate_function.sql.in
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_update_delete.sql.in
