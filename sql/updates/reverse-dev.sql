@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 DROP PROCEDURE _timescaledb_functions.process_hypertable_invalidations(REGCLASS);
 DROP PROCEDURE @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
 DROP PROCEDURE @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
@@ -62,3 +63,5 @@ CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
     window_end               "any",
     force                    BOOLEAN = FALSE
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+=======
+>>>>>>> 7b30533d4 (Release 2.20.3 (#8248))
