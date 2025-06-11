@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 CREATE PROCEDURE _timescaledb_functions.process_hypertable_invalidations(
     hypertable REGCLASS
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
@@ -61,5 +60,3 @@ CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
     force                    BOOLEAN = FALSE,
     options                  JSONB = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
-=======
->>>>>>> 7b30533d4 (Release 2.20.3 (#8248))
