@@ -48,6 +48,7 @@ END
 $$;
 DELETE FROM _timescaledb_catalog.chunk_column_stats WHERE chunk_id IS NULL;
 ALTER TABLE _timescaledb_catalog.chunk_column_stats ALTER COLUMN chunk_id SET NOT NULL;
+
 DROP PROCEDURE @extschema@.refresh_continuous_aggregate(
     continuous_aggregate REGCLASS,
     window_start "any",
@@ -62,3 +63,32 @@ CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
     window_end               "any",
     force                    BOOLEAN = FALSE
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts DATE) RETURNS DATE
+     AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
+ CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts DATE, origin DATE) RETURNS DATE
+     AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
+ CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMP) RETURNS TIMESTAMP
+     AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
+ CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMP, origin TIMESTAMP) RETURNS TIMESTAMP
+     AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
+ CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT) RETURNS TIMESTAMPTZ
+     AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
+ CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ, timezone TEXT) RETURNS TIMESTAMPTZ
+     AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
+ CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ) RETURNS TIMESTAMPTZ
+     AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C STABLE PARALLEL SAFE STRICT;
+
+ CREATE OR REPLACE FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ) RETURNS TIMESTAMPTZ
+     AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C STABLE PARALLEL SAFE STRICT;
+
+-- Migrate a CAgg which is using the experimental time_bucket_ng function
+ -- into a CAgg using the regular time_bucket function
+ CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_to_time_bucket(cagg REGCLASS)
+ AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C;

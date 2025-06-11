@@ -46,6 +46,7 @@ $$ LANGUAGE PLPGSQL;
 -- chunk_id.
 ALTER TABLE _timescaledb_catalog.chunk_column_stats ALTER COLUMN chunk_id DROP NOT NULL;
 UPDATE _timescaledb_catalog.chunk_column_stats SET chunk_id = NULL WHERE chunk_id = 0;
+
 DROP PROCEDURE @extschema@.refresh_continuous_aggregate(
     continuous_aggregate REGCLASS,
     window_start "any",
@@ -60,3 +61,21 @@ CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
     force                    BOOLEAN = FALSE,
     options                  JSONB = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts DATE);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts DATE, origin DATE);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMP);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMP, origin TIMESTAMP);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, timezone TEXT);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ, timezone TEXT);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ);
+
+DROP FUNCTION timescaledb_experimental.time_bucket_ng(bucket_width INTERVAL, ts TIMESTAMPTZ, origin TIMESTAMPTZ);
+
+DROP PROCEDURE _timescaledb_functions.cagg_migrate_to_time_bucket(cagg REGCLASS);

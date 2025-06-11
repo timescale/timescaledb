@@ -16,6 +16,5 @@
 #include "common.h"
 
 extern Datum continuous_agg_validate_query(PG_FUNCTION_ARGS);
-extern Datum continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS);
 extern Datum continuous_agg_get_bucket_function(PG_FUNCTION_ARGS);
 extern Datum continuous_agg_get_bucket_function_info(PG_FUNCTION_ARGS);

@@ -153,7 +153,6 @@ extern TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method;
 
 extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 
-extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
 extern TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
 
 /*
