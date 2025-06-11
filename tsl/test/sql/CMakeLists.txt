@@ -224,7 +224,6 @@ set(SOLO_TESTS
     cagg_bgw
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
-    cagg_errors
     cagg_invalidation
     cagg_policy_incremental
     hypercore
