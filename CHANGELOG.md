@@ -4,6 +4,20 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.20.3 (2025-06-11)
+
+This release contains bug fixes since the 2.20.2 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#8107](https://github.com/timescale/timescaledb/pull/8107) Adjust SkipScan cost for quals needing full scan of indexed data.
+* [#8211](https://github.com/timescale/timescaledb/pull/8211) Fixed dump and restore when chunk skipping is enabled.
+* [#8216](https://github.com/timescale/timescaledb/pull/8216) Fix for dropped quals bug in SkipScan.
+* [#8230](https://github.com/timescale/timescaledb/pull/8230) Fix for inserting into compressed data when vectorised check is not available.
+* [#8236](https://github.com/timescale/timescaledb/pull/8236) Fixed the snapshot handling in background workers.
+
+**Thanks**
+* @ikaakkola for reporting that SkipScan is slow when non-index quals do not match any tuples.
+
 ## 2.20.2 (2025-06-02)
 
 This release contains bug fixes since the 2.20.1 release. We recommend that you upgrade at the next available opportunity.
