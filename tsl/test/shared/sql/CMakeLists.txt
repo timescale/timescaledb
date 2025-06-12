@@ -3,6 +3,7 @@ set(TEST_FILES_SHARED
     chunkwise_agg_gather_sort.sql
     classify_relation.sql
     compat.sql
+    compress_bloom_sparse_compat.sql
     compress_unique_index.sql
     compression_dml.sql
     compression_nulls_not_distinct.sql
