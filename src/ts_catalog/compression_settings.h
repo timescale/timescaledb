@@ -15,11 +15,10 @@ typedef struct CompressionSettings
 	FormData_compression_settings fd;
 } CompressionSettings;
 
-TSDLLEXPORT CompressionSettings *ts_compression_settings_create(Oid relid, Oid compress_relid,
-																ArrayType *segmentby,
-																ArrayType *orderby,
-																ArrayType *orderby_desc,
-																ArrayType *orderby_nullsfirst);
+TSDLLEXPORT CompressionSettings *
+ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segmentby,
+							   ArrayType *orderby, ArrayType *orderby_desc,
+							   ArrayType *orderby_nullsfirst, ArrayType *minmax, ArrayType *bloom);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get(Oid relid);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get_by_compress_relid(Oid relid);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_materialize(const CompressionSettings *src,

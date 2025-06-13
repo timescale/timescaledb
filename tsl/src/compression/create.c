@@ -255,7 +255,9 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 	Relation rel = table_open(src_reloid, AccessShareLock);
 
 	Bitmapset *index_columns = NULL;
-	if (ts_guc_auto_sparse_indexes)
+
+	/* Sparse indexes are only created automatically if they are not set in compression settings */
+	if (ts_guc_auto_sparse_indexes && !settings->fd.minmax && !settings->fd.bloom)
 	{
 		/*
 		 * Check which columns have btree indexes. We will create sparse minmax
@@ -424,6 +426,74 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			}
 		}
 
+		const bool is_bloom = ts_array_is_member(settings->fd.bloom, NameStr(attr->attname));
+		if (is_bloom && ts_guc_enable_sparse_index_bloom)
+		{
+			/*
+			 * The type must be hashable. For some types we use our own hash functions
+			 * which have better characteristics.
+			 */
+			FmgrInfo *finfo = NULL;
+			if (bloom1_get_hash_function(attr->atttypid, &finfo) == NULL)
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_FUNCTION),
+						 errmsg("invalid bloom filter column type %s",
+								format_type_be(attr->atttypid)),
+						 errdetail("Could not identify a hashing function for the type.")));
+			/*
+			 * Add bloom filter sparse index for this column.
+			 */
+			ColumnDef *bloom_column_def =
+				makeColumnDef(compressed_column_metadata_name_v2("bloom1", NameStr(attr->attname)),
+							  ts_custom_type_cache_get(CUSTOM_TYPE_BLOOM1)->type_oid,
+							  /* typmod = */ -1,
+							  /* collation = */ 0);
+
+			/*
+			 * We have our custom compression for bloom filters, and the
+			 * result is almost incompressible with lz4 (~2%), so disable it.
+			 */
+			bloom_column_def->storage = TYPSTORAGE_EXTERNAL;
+
+			compressed_column_defs = lappend(compressed_column_defs, bloom_column_def);
+		}
+
+		const bool is_minmax = ts_array_is_member(settings->fd.minmax, NameStr(attr->attname));
+		if (is_minmax)
+		{
+			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+
+			/*
+			 * a comparison operator if required for min max operations
+			 */
+			if (!OidIsValid(type->lt_opr))
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_FUNCTION),
+						 errmsg("invalid minmax column type %s", format_type_be(attr->atttypid)),
+						 errdetail("Could not identify a less-than operator for the type.")));
+
+			ColumnDef *def =
+				makeColumnDef(compressed_column_metadata_name_v2("min", NameStr(attr->attname)),
+							  attr->atttypid,
+							  attr->atttypmod,
+							  attr->attcollation);
+			if (attr->attstorage != TYPSTORAGE_PLAIN)
+			{
+				def->storage = TYPSTORAGE_MAIN;
+			}
+			compressed_column_defs = lappend(compressed_column_defs, def);
+
+			def = makeColumnDef(compressed_column_metadata_name_v2("max", NameStr(attr->attname)),
+								attr->atttypid,
+								attr->atttypmod,
+								attr->attcollation);
+			if (attr->attstorage != TYPSTORAGE_PLAIN)
+			{
+				def->storage = TYPSTORAGE_MAIN;
+			}
+			compressed_column_defs = lappend(compressed_column_defs, def);
+		}
+
 		compressed_column_defs = lappend(compressed_column_defs,
 										 makeColumnDef(NameStr(attr->attname),
 													   compresseddata_oid,
@@ -552,6 +622,8 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 												  NULL,
 												  NULL,
 												  NULL,
+												  NULL,
+												  NULL,
 												  NULL);
 
 		Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
@@ -563,8 +635,10 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	else
 	{
 		List *column_defs = build_columndefs(settings, src_chunk->table_id);
-		compress_chunk->table_id =
-			compression_chunk_create(src_chunk, compress_chunk, column_defs, tablespace_oid);
+		compress_chunk->table_id = compression_chunk_create(src_chunk,
+															compress_chunk,
+															column_defs,
+															tablespace_oid);
 	}
 
 	if (!OidIsValid(compress_chunk->table_id))
@@ -879,7 +953,7 @@ update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_claus
  * 4. Copy constraints to internal compression table
  */
 bool
-tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options)
+tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options) // here
 {
 	int32 compress_htid;
 	bool compress_disable = !with_clause_options[AlterTableFlagColumnstore].is_default &&
@@ -906,6 +980,8 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 	{
 		settings = ts_compression_settings_create(ht->main_table_relid,
 												  InvalidOid,
+												  NULL,
+												  NULL,
 												  NULL,
 												  NULL,
 												  NULL,
@@ -1183,7 +1259,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	if (!OidIsValid(orderby_fn))
 	{
 		/* fallback to original logic */
-		OrderBySettings obs = (OrderBySettings){ 0 };
+		OrderBySettings obs = (OrderBySettings) { 0 };
 		obs = add_time_to_order_by_if_not_included(obs, segmentby, ht);
 		elog(LOG_SERVER_ONLY,
 			 "order_by default: hypertable=\"%s\" function=\"\" confidence=-1",
@@ -1323,6 +1399,25 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 		settings->fd.orderby = obs.orderby;
 		settings->fd.orderby_desc = obs.orderby_desc;
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
+	}
+
+	if (!with_clause_options[AlterTableFlagMinMax].is_default)
+	{
+		settings->fd.minmax =
+			ts_compress_hypertable_parse_minmax(with_clause_options[AlterTableFlagMinMax], ht);
+	}
+
+	if (!with_clause_options[AlterTableFlagBloom].is_default)
+	{
+		if (!ts_guc_enable_sparse_index_bloom)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("Creating bloom sparse index is disabled"),
+					 errhint("Set \"enable_sparse_index_bloom\" to true.")));
+		}
+		settings->fd.bloom =
+			ts_compress_hypertable_parse_bloom(with_clause_options[AlterTableFlagBloom], ht);
 	}
 
 	ts_compression_settings_update(settings);
@@ -1475,6 +1570,8 @@ tsl_compression_enable(Hypertable *ht, WithClauseResult *with_clause_options)
 	{
 		CompressionSettings *settings = ts_compression_settings_create(ht->main_table_relid,
 																	   InvalidOid,
+																	   NULL,
+																	   NULL,
 																	   NULL,
 																	   NULL,
 																	   NULL,
