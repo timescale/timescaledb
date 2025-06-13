@@ -494,7 +494,7 @@ INSERT INTO bigint_tab VALUES(5);
 INSERT INTO bigint_tab VALUES(10);
 INSERT INTO bigint_tab VALUES(20);
 CALL run_job(:job_mid);
-SELECT * FROM mat_bigint;
+SELECT * FROM mat_bigint ORDER BY 1;
 
 -- test NULL for end
 SELECT remove_continuous_aggregate_policy('mat_bigint');
@@ -654,12 +654,12 @@ ALTER materialized view deals_best_daily set (timescaledb.materialized_only=true
 
 -- we have data from 6 weeks before to May 5 2022 (Thu)
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-03');
-SELECT * FROM deals_best_weekly;
+SELECT * FROM deals_best_weekly ORDER BY bucket;
 CALL refresh_continuous_aggregate('deals_best_daily', '2022-04-20', '2022-05-04');
 SELECT * FROM deals_best_daily ORDER BY bucket LIMIT 2;
 -- expect to get an up-to-date notice
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-05');
-SELECT * FROM deals_best_weekly;
+SELECT * FROM deals_best_weekly ORDER BY bucket;
 
 -- github issue 5907: segfault when creating 1-step policies on cagg
 -- whose underlying hypertable has a retention policy setup
