@@ -93,7 +93,7 @@ jobs:
         vectorized_aggregation
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v3.1.4
+      uses: Vampire/setup-wsl@v5
       with:
         distribution: Debian
 
