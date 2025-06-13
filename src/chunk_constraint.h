@@ -74,6 +74,7 @@ extern int ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id,
 														 bool delete_metadata,
 														 bool drop_constraint);
 extern void ts_chunk_constraints_recreate(const Hypertable *ht, const Chunk *chunk);
+extern int ts_chunk_constraint_delete_metadata_by_dimension_slice_id(int32 dimension_slice_id);
 extern int ts_chunk_constraint_rename_hypertable_constraint(int32 chunk_id, const char *old_name,
 															const char *new_name);
 extern int ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name,

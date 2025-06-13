@@ -1047,6 +1047,24 @@ ts_chunk_constraints_recreate(const Hypertable *ht, const Chunk *chunk)
 	ts_chunk_constraints_create(ht, chunk);
 }
 
+int
+ts_chunk_constraint_delete_metadata_by_dimension_slice_id(int32 dimension_slice_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
+	int count = 0;
+
+	ts_chunk_constraint_scan_iterator_set_slice_id(&iterator, dimension_slice_id);
+
+	ts_scanner_foreach(&iterator)
+	{
+		count++;
+
+		chunk_constraint_delete_metadata(ts_scan_iterator_tuple_info(&iterator));
+	}
+	return count;
+}
+
 static void
 chunk_constraint_rename_on_chunk_table(int32 chunk_id, const char *old_name, const char *new_name)
 {
