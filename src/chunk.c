@@ -711,11 +711,18 @@ copy_hypertable_acl_to_relid(const Hypertable *ht, const Oid owner_id, const Oid
  * instead needs the proper permissions on the database to create the schema.
  */
 Oid
-ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tablespacename)
+ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tablespacename,
+					  Oid amoid)
 {
 	Relation rel;
 	ObjectAddress address;
 	int sec_ctx;
+	char *amname = NULL;
+
+	if (OidIsValid(amoid))
+		amname = get_am_name(amoid);
+	else if (chunk->relkind == RELKIND_RELATION)
+		amname = get_am_name(ts_get_rel_am(chunk->hypertable_relid));
 
 	/*
 	 * CreateStmt node to create the chunk table
@@ -731,9 +738,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		.tablespacename = tablespacename ? (char *) tablespacename : NULL,
 		.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
-		.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
-							get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
-							NULL,
+		.accessMethod = amname,
 	};
 	Oid uid, saved_uid;
 
@@ -950,12 +955,12 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 }
 
 static Oid
-chunk_create_table(Chunk *chunk, const Hypertable *ht)
+chunk_create_table(Chunk *chunk, const Hypertable *ht, Oid amoid)
 {
 	/* Create the actual table relation for the chunk */
 	const char *tablespace = ts_hypertable_select_tablespace_name(ht, chunk);
 
-	chunk->table_id = ts_chunk_create_table(chunk, ht, tablespace);
+	chunk->table_id = ts_chunk_create_table(chunk, ht, tablespace, amoid);
 
 	Assert(OidIsValid(chunk->table_id));
 
@@ -968,7 +973,8 @@ chunk_create_table(Chunk *chunk, const Hypertable *ht)
  */
 static Chunk *
 chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const char *schema_name,
-								   const char *table_name, const char *prefix, int32 chunk_id)
+								   const char *table_name, const char *prefix, Oid amoid,
+								   int32 chunk_id)
 {
 	Chunk *chunk;
 
@@ -977,7 +983,7 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, chunk_id);
 	Assert(chunk != NULL);
 
-	chunk_create_table(chunk, ht);
+	chunk_create_table(chunk, ht, amoid);
 
 	return chunk;
 }
@@ -985,7 +991,7 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
-									   const char *prefix)
+									   const char *prefix, Oid amoid)
 {
 	chunk_insert_check_hook_type osm_chunk_insert_hook = ts_get_osm_chunk_insert_hook();
 
@@ -1033,6 +1039,7 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 													  schema_name,
 													  table_name,
 													  prefix,
+													  amoid,
 													  get_next_chunk_id());
 
 	/* Insert any new chunk column stats entries into the catalog */
@@ -1083,7 +1090,8 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 static Chunk *
 chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube *cube,
 												 Oid chunk_table_relid, const char *schema_name,
-												 const char *table_name, const char *prefix)
+												 const char *table_name, const char *prefix,
+												 Oid amoid)
 {
 	Oid current_chunk_schemaid = get_rel_namespace(chunk_table_relid);
 	Oid new_chunk_schemaid = InvalidOid;
@@ -1233,12 +1241,18 @@ chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p, const c
 	/* Resolve collisions with other chunks by cutting the new hypercube */
 	chunk_collision_resolve(ht, cube, p);
 
-	return chunk_create_from_hypercube_after_lock(ht, cube, schema_name, table_name, prefix);
+	return chunk_create_from_hypercube_after_lock(ht,
+												  cube,
+												  schema_name,
+												  table_name,
+												  prefix,
+												  InvalidOid);
 }
 
 Chunk *
 ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
-									 const char *table_name, Oid chunk_table_relid, bool *created)
+									 const char *table_name, Oid chunk_table_relid, Oid amoid,
+									 bool *created)
 {
 	ChunkStub *stub;
 	Chunk *chunk = NULL;
@@ -1272,10 +1286,15 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 																		 chunk_table_relid,
 																		 schema_name,
 																		 table_name,
-																		 NULL);
+																		 NULL,
+																		 amoid);
 			else
-				chunk =
-					chunk_create_from_hypercube_after_lock(ht, hc, schema_name, table_name, NULL);
+				chunk = chunk_create_from_hypercube_after_lock(ht,
+															   hc,
+															   schema_name,
+															   table_name,
+															   NULL,
+															   amoid);
 
 			if (NULL != created)
 				*created = true;
@@ -1866,7 +1885,7 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 		/* Create data table and related objects */
 		chunk->hypertable_relid = ht->main_table_relid;
 		chunk->relkind = RELKIND_RELATION;
-		chunk->table_id = chunk_create_table(chunk, ht);
+		chunk->table_id = chunk_create_table(chunk, ht, InvalidOid);
 		chunk_create_table_constraints(ht, chunk);
 
 		/* Finally, update the chunk tuple to no longer be a tombstone */
