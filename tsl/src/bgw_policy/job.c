@@ -425,7 +425,8 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										context,
 										refresh_window->start_isnull,
 										refresh_window->end_isnull,
-										false,
+										(context.callctx != CAGG_REFRESH_POLICY_BATCHED),
+										false, /* force */
 										policy_data.process_hypertable_invalidations);
 		if (processing_batch >= policy_data.max_batches_per_execution &&
 			processing_batch < context.number_of_batches &&

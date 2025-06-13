@@ -32,6 +32,10 @@
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
+/* Default buckets per batch is 2, which means that the job will refresh 2 buckets at a time */
+#define DEFAULT_BUCKETS_PER_BATCH 2
+/* Default max batches per execution is 0, which means no limit */
+#define DEFAULT_MAX_BATCHES_PER_EXECUTION 0
 
 int32
 policy_continuous_aggregate_get_mat_hypertable_id(const Jsonb *config)
@@ -151,6 +155,9 @@ policy_refresh_cagg_get_buckets_per_batch(const Jsonb *config)
 	bool found;
 	int32 res = ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH, &found);
 
+	if (!found)
+		res = DEFAULT_BUCKETS_PER_BATCH; /* default value */
+
 	return res;
 }
 
@@ -162,7 +169,7 @@ policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config)
 		ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION, &found);
 
 	if (!found)
-		res = 10; /* default value */
+		res = DEFAULT_MAX_BATCHES_PER_EXECUTION; /* default value */
 
 	return res;
 }
