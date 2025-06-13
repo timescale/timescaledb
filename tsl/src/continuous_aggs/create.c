@@ -954,9 +954,10 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		continuous_agg_refresh_internal(cagg,
 										&refresh_window,
 										context,
-										true,
-										true,
-										false,
+										true,  /* start_isnull */
+										true,  /* end_isnull */
+										true,  /* bucketing_refresh_window */
+										false, /* force */
 										true /* process_hypertable_invalidations */);
 	}
 

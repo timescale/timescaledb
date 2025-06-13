@@ -690,6 +690,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 									context,
 									PG_ARGISNULL(1),
 									PG_ARGISNULL(2),
+									true,
 									force,
 									process_hypertable_invalidations);
 
@@ -790,7 +791,7 @@ void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg,
 								const CaggRefreshContext context, const bool start_isnull,
-								const bool end_isnull, bool force,
+								const bool end_isnull, bool bucketing_refresh_window, bool force,
 								bool process_hypertable_invalidations)
 {
 	int32 mat_id = cagg->data.mat_hypertable_id;
@@ -842,7 +843,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 					   get_rel_name(cagg->relid));
 
 	/* No bucketing when open ended */
-	if (!(start_isnull && end_isnull))
+	if (bucketing_refresh_window && !(start_isnull && end_isnull))
 	{
 		if (cagg->bucket_function->bucket_fixed_interval == false)
 		{
