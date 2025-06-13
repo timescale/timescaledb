@@ -151,6 +151,9 @@ policy_refresh_cagg_get_buckets_per_batch(const Jsonb *config)
 	bool found;
 	int32 res = ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH, &found);
 
+	if (!found)
+		res = 2; /* default value */
+
 	return res;
 }
 
@@ -162,7 +165,7 @@ policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config)
 		ts_jsonb_get_int32_field(config, POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION, &found);
 
 	if (!found)
-		res = 10; /* default value */
+		res = 0; /* default value */
 
 	return res;
 }
