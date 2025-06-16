@@ -216,3 +216,68 @@ CREATE TABLE t24(time timestamptz NOT NULL, device text, value float) WITH (tsdb
 SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
 ROLLBACK;
 
+-- test configurable bloom and minmax
+BEGIN;
+CREATE TABLE t25(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.index='bloom(value)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t26(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.index='bloom(value),minmax(device)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+
+--multi column
+BEGIN;
+CREATE TABLE t27(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.index='bloom(value),bloom(device)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+
+--test errors
+\set ON_ERROR_STOP 0
+-- invalid syntax
+BEGIN;
+CREATE TABLE t28(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.index='bloom(value),bloom(count(device))');
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t29(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.index='value,bloom(count(device))');
+ROLLBACK;
+
+-- duplicate column
+BEGIN;
+CREATE TABLE t30(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.index='bloom(value),minmax(value)');
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t31(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.index='bloom(value),bloom(value)');
+ROLLBACK;
+
+-- invalid column
+BEGIN;
+CREATE TABLE t32(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.index='bloom(value),bloom(foo)');
+ROLLBACK;
+
+-- same column as orderby
+BEGIN;
+CREATE TABLE t33(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value)');
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t34(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='minmax(value)');
+ROLLBACK;
+
+-- same column as segmentby
+BEGIN;
+CREATE TABLE t35(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.segmentby='value', tsdb.index='minmax(value)');
+ROLLBACK;
+
+-- guc disabled
+set timescaledb.enable_sparse_index_bloom to false;
+
+BEGIN;
+CREATE TABLE t36(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.index='bloom(value)');
+ROLLBACK;
+
+reset timescaledb.enable_sparse_index_bloom;
+\set ON_ERROR_STOP 1
