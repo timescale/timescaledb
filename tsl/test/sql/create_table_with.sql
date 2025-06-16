@@ -216,3 +216,9 @@ CREATE TABLE t24(time timestamptz NOT NULL, device text, value float) WITH (tsdb
 SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
 ROLLBACK;
 
+-- test configurable bloom and minmax
+BEGIN;
+CREATE TABLE t25(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.index='bloom(value)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+

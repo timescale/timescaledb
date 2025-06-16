@@ -80,6 +80,7 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 		switch (i)
 		{
 			case AlterTableFlagChunkTimeInterval:
+			case AlterTableFlagIndex:
 				continue;
 				break;
 			case AlterTableFlagColumnstore:
