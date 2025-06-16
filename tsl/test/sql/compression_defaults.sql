@@ -5,8 +5,8 @@
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE VIEW chunk_settings AS
-SELECT hypertable, count(*) as chunks, segmentby, orderby
-FROM timescaledb_information.chunk_compression_settings cs group by hypertable,segmentby,orderby ORDER BY 1,2,3,4;
+SELECT hypertable, count(*) as chunks, segmentby, orderby, index
+FROM timescaledb_information.chunk_compression_settings cs group by hypertable,segmentby,orderby, index ORDER BY 1,2,3,4,5;
 
 -- statitics on
 CREATE TABLE "public"."metrics" (
