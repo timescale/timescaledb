@@ -101,6 +101,8 @@ invalidation_tuple_get_heap_tuple(LogicalRepTupleData *tupleData, TupleDesc tupd
 
 /*
  * Decode invalidation tuple in bytea format.
+ *
+ * Invalidation tuple is stored in logical replication wire protocol format.
  */
 LogicalRepRelId
 ts_invalidation_tuple_decode(LogicalRepTupleData *tuple, bytea *record)
