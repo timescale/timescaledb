@@ -14,8 +14,6 @@ NOTICE:  adding not-null constraint to column "ts"
  (1,public,test,t)
 (1 row)
 
-alter table test set (timescaledb.compress, timescaledb.compress_segmentby = 's',
-    timescaledb.compress_orderby = 'ts');
 insert into test
 select ts, ts % 10 s, mix(ts)::text c from generate_series(1, 10000) ts;
 insert into test
@@ -23,6 +21,8 @@ select ts, 10 + ts % 10 s, mix(ts % 100)::text c from generate_series(10001, 150
 insert into test
 select ts, 20 + ts % 10 s, mix(ts % 10)::text c from generate_series(15001, 20000) ts;
 create index on test using brin(c text_bloom_ops);
+alter table test set (timescaledb.compress, timescaledb.compress_segmentby = 's',
+    timescaledb.compress_orderby = 'ts');
 select count(compress_chunk(x)) from show_chunks('test') x;
  count 
 -------

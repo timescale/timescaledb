@@ -19,9 +19,6 @@ NOTICE:  adding not-null constraint to column "ts"
  (1,public,bscan,t)
 (1 row)
 
-alter table bscan set (timescaledb.compress,
-    timescaledb.compress_segmentby = 's',
-    timescaledb.compress_orderby = 'id, ts');
 insert into bscan
 select ts,
     ts % 239 s,
@@ -29,6 +26,9 @@ select ts,
     (mix(ts % 1483) * 1483)::int payload
 from generate_series(1, 1000000) ts;
 create index on bscan(payload);
+alter table bscan set (timescaledb.compress,
+    timescaledb.compress_segmentby = 's',
+    timescaledb.compress_orderby = 'id, ts');
 select count(compress_chunk(x)) from show_chunks('bscan') x;
  count 
 -------

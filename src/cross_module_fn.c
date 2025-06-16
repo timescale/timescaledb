@@ -293,6 +293,13 @@ preprocess_query_tsl_default_fn_community(Query *parse, int *cursor_opts)
 	/* No op in community licensed code */
 }
 
+static PGFunction
+bloom1_get_hash_function_default(Oid type, FmgrInfo **finfo)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -396,6 +403,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.bool_compressor_append = error_no_default_fn_pg_community,
 	.bool_compressor_finish = error_no_default_fn_pg_community,
 	.bloom1_contains = error_no_default_fn_pg_community,
+	.bloom1_get_hash_function = bloom1_get_hash_function_default,
 
 	.decompress_batches_for_insert = error_no_default_fn_chunk_insert_state_community,
 	.init_decompress_state_for_insert = error_no_default_fn_chunk_insert_state_community,
