@@ -122,7 +122,11 @@ SELECT ht.schema_name AS hypertable_schema,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
   directview.viewdefinition AS view_definition,
-  cagg.finalized
+  cagg.finalized,
+  CASE
+    WHEN cagg.collect_using = 0 THEN 'trigger'
+    WHEN cagg.collect_using = 1 THEN 'wal'
+  END AS collect_using
 FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
   LATERAL (

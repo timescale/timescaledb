@@ -54,6 +54,12 @@ typedef enum ContinuousAggViewType
 	ContinuousAggAnyView
 } ContinuousAggViewType;
 
+typedef enum ContinuousAggCollectUsing
+{
+	ContinuousAggCollectUsingTrigger = 0,
+	ContinuousAggCollectUsingWal,
+} ContinuousAggCollectUsing;
+
 /*
  * Information about the bucketing function.
  */

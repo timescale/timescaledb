@@ -15,6 +15,7 @@
 #include <postgres.h>
 
 #include "continuous_aggs/invalidation.h"
+#include "continuous_aggs/invalidation_threshold.h"
 #include "guc.h"
 #include "ts_catalog/continuous_agg.h"
 #include <catalog/pg_type_d.h>
@@ -158,7 +159,8 @@ multi_invalidation_hypertable_entry_init(MultiHypertableInvalidationEntry *entry
 	foreach (lc, caggs)
 	{
 		ContinuousAgg *cagg = lfirst(lc);
-		entry->caggs = lappend_int(entry->caggs, cagg->data.mat_hypertable_id);
+		if (cagg->data.collect_using == ContinuousAggCollectUsingWal)
+			entry->caggs = lappend_int(entry->caggs, cagg->data.mat_hypertable_id);
 	}
 
 	return caggs;

@@ -59,6 +59,10 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
         .arg_names = {"compress_chunk_interval", "compress_chunk_time_interval", NULL},
          .type_id = INTERVALOID,
     },
+	[CreateMaterializedViewFlagCollectUsing] = {
+        .arg_names = {"collect_using", NULL},
+		.type_id = TEXTOID,
+	},
 };
 
 WithClauseResult *

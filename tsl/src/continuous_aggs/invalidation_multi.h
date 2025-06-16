@@ -86,3 +86,6 @@ extern void multi_invalidation_write_range_entry(MultiHypertableInvalidationStat
 												 MultiHypertableInvalidationRangeEntry *entry);
 extern void multi_invalidation_write_all(MultiHypertableInvalidationState *state);
 extern void multi_invalidation_move_invalidations(MultiHypertableInvalidationState *state);
+extern MultiHypertableInvalidationEntry *
+multi_invalidation_state_get_or_set_hypertable_entry(MultiHypertableInvalidationState *state,
+													 int32 hypertable_id);
