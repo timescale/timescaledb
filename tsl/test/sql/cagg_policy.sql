@@ -515,6 +515,10 @@ SELECT remove_compression_policy('mat_bigint');
 SELECT add_compression_policy('mat_smallint', 5::smallint);
 SELECT add_compression_policy('mat_bigint', 20::bigint);
 
+
+-- Test multiple refresh policies being defined on a cagg
+SELECT add_compression_policy('mat')
+
 -- end of coverage tests
 
 --TEST continuous aggregate + compression policy on caggs
@@ -555,6 +559,7 @@ WITH NO DATA;
 
 -- this was previously crashing
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, NULL, '1 h'::interval, if_not_exists => true);
+\set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval, if_not_exists => true);
 SELECT remove_continuous_aggregate_policy('metrics_cagg');
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true);
@@ -562,7 +567,6 @@ SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, 
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
 SELECT remove_continuous_aggregate_policy('metrics_cagg');
 --can set compression policy only after setting up refresh policy --
-\set ON_ERROR_STOP 0
 SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
 
 --can set compression policy only after enabling compression --
