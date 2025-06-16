@@ -845,3 +845,290 @@ drop table corner;
 drop table badtable;
 drop table byref;
 drop table arraybloom;
+-- Test configurable sparse indexes settings
+CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
+create table test_settings(x int, value text, u uuid, ts timestamp);
+select create_hypertable('test_settings', 'x');
+WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
+NOTICE:  adding not-null constraint to column "x"
+      create_hypertable      
+-----------------------------
+ (11,public,test_settings,t)
+(1 row)
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"),minmax("ts")');
+select * from settings;
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                              index                               
+---------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"col": "u", "type": "bloom"}, {"col": "ts", "type": "minmax"}]
+(1 row)
+
+--multi column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), bloom("ts")');
+select * from settings;
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                              index                              
+---------------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"col": "u", "type": "bloom"}, {"col": "ts", "type": "bloom"}]
+(1 row)
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u), bloom(ts)');
+select * from settings;
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                              index                              
+---------------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"col": "u", "type": "bloom"}, {"col": "ts", "type": "bloom"}]
+(1 row)
+
+--test errors
+\set ON_ERROR_STOP 0
+-- invalid syntax
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), bloom(count(u))');
+ERROR:  sparse index bloom's first option must reference a valid column.
+-- same column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), minmax("u")');
+ERROR:  duplicate column name "u"
+-- duplicate column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), bloom("u")');
+ERROR:  duplicate column name "u"
+-- invalid column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), minmax("foo")');
+ERROR:  column "foo" does not exist
+-- same column as orderby
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("x"), minmax("ts")');
+ERROR:  cannot use column "x" for both ordering and sparse_index
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), minmax("x")');
+ERROR:  cannot use column "x" for both ordering and sparse_index
+-- guc disabled
+set timescaledb.enable_sparse_index_bloom to false;
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u")');
+ERROR:  Creating bloom sparse index is disabled
+reset timescaledb.enable_sparse_index_bloom;
+\set ON_ERROR_STOP 1
+drop table test_settings;
+-- Test configurable sparse indexes functionality
+create table test_sparse_index(x int, value text, u uuid, ts timestamp);
+select create_hypertable('test_sparse_index', 'x');
+WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
+NOTICE:  adding not-null constraint to column "x"
+        create_hypertable        
+---------------------------------
+ (13,public,test_sparse_index,t)
+(1 row)
+
+insert into test_sparse_index
+select x, md5(x::text),
+    case when x = 7134 then '90ec9e8e-4501-4232-9d03-6d7cf6132815'
+        else '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid end,
+    '2021-01-01'::timestamp + (interval '1 hour') * x
+from generate_series(1, 10000) x;
+alter table test_sparse_index set (timescaledb.compress,
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"),minmax("ts")');
+select * from settings;
+       relid       | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                              index                               
+-------------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------
+ test_sparse_index |                |           | {x}     | {f}          | {f}                | [{"col": "u", "type": "bloom"}, {"col": "ts", "type": "minmax"}]
+(1 row)
+
+select count(compress_chunk(x)) from show_chunks('test_sparse_index') x;
+ count 
+-------
+     1
+(1 row)
+
+vacuum full analyze test_sparse_index;
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test_sparse_index') limit 1)
+\gset
+\d+ :chunk
+                                       Table "_timescaledb_internal.compress_hyper_14_14_chunk"
+        Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+----------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count       | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_min_1       | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_max_1       | integer                               |           |          |         | plain    | 1000         | 
+ x                    | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ value                | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_bloom1_u | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
+ u                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_min_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ _ts_meta_v2_max_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ ts                   | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+Indexes:
+    "compress_hyper_14_14_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
+Options: toast_tuple_target=128
+
+-- UUID uses bloom
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
+                                                                                                                                                                                                            QUERY PLAN                                                                                                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   Output: count(*)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_13_13_chunk (actual rows=1 loops=1)
+         Filter: (_hyper_13_13_chunk.u = '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+         Rows Removed by Filter: 999
+         Bulk Decompression: false
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_14_14_chunk (actual rows=1 loops=1)
+               Output: compress_hyper_14_14_chunk._ts_meta_count, compress_hyper_14_14_chunk._ts_meta_min_1, compress_hyper_14_14_chunk._ts_meta_max_1, compress_hyper_14_14_chunk.x, compress_hyper_14_14_chunk.value, compress_hyper_14_14_chunk._ts_meta_v2_bloom1_u, compress_hyper_14_14_chunk.u, compress_hyper_14_14_chunk._ts_meta_v2_min_ts, compress_hyper_14_14_chunk._ts_meta_v2_max_ts, compress_hyper_14_14_chunk.ts
+               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_14_14_chunk._ts_meta_v2_bloom1_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+               Rows Removed by Filter: 9
+(10 rows)
+
+-- Timestamp uses minmax
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
+                                                                                                                                                                                                            QUERY PLAN                                                                                                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   Output: count(*)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_13_13_chunk (actual rows=169 loops=1)
+         Vectorized Filter: ((_hyper_13_13_chunk.ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (_hyper_13_13_chunk.ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
+         Rows Removed by Filter: 831
+         Bulk Decompression: true
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_14_14_chunk (actual rows=1 loops=1)
+               Output: compress_hyper_14_14_chunk._ts_meta_count, compress_hyper_14_14_chunk._ts_meta_min_1, compress_hyper_14_14_chunk._ts_meta_max_1, compress_hyper_14_14_chunk.x, compress_hyper_14_14_chunk.value, compress_hyper_14_14_chunk._ts_meta_v2_bloom1_u, compress_hyper_14_14_chunk.u, compress_hyper_14_14_chunk._ts_meta_v2_min_ts, compress_hyper_14_14_chunk._ts_meta_v2_max_ts, compress_hyper_14_14_chunk.ts
+               Filter: ((compress_hyper_14_14_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_14_14_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
+               Rows Removed by Filter: 9
+(10 rows)
+
+drop table test_sparse_index;
+-- Test configurable sparse index in CREATE TABLE .. WITH
+create table test_sparse_index(x int, value text, u uuid, ts timestamp) with (
+    tsdb.hypertable,
+    tsdb.partition_column='x',
+    tsdb.order_by='x',
+    tsdb.index='bloom("u"),minmax("ts")');
+NOTICE:  adding not-null constraint to column "x"
+select * from settings;
+       relid       | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                              index                               
+-------------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------
+ test_sparse_index |                |           | {x}     | {f}          | {f}                | [{"col": "u", "type": "bloom"}, {"col": "ts", "type": "minmax"}]
+(1 row)
+
+insert into test_sparse_index
+select x, md5(x::text),
+    case when x = 7134 then '90ec9e8e-4501-4232-9d03-6d7cf6132815'
+        else '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid end,
+    '2021-01-01'::timestamp + (interval '1 hour') * x
+from generate_series(1, 10000) x;
+select count(compress_chunk(x)) from show_chunks('test_sparse_index') x;
+ count 
+-------
+     1
+(1 row)
+
+vacuum full analyze test_sparse_index;
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test_sparse_index') limit 1)
+\gset
+\d+ :chunk
+                                       Table "_timescaledb_internal.compress_hyper_16_16_chunk"
+        Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+----------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count       | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_min_1       | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_max_1       | integer                               |           |          |         | plain    | 1000         | 
+ x                    | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ value                | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_bloom1_u | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
+ u                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_min_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ _ts_meta_v2_max_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ ts                   | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+Indexes:
+    "compress_hyper_16_16_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
+Options: toast_tuple_target=128
+
+-- these tests show that despite column having multiple sparse indexes, the appropriate one is selected by the planner
+-- UUID uses bloom
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
+                                                                                                                                                                                                            QUERY PLAN                                                                                                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   Output: count(*)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_15_15_chunk (actual rows=1 loops=1)
+         Filter: (_hyper_15_15_chunk.u = '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+         Rows Removed by Filter: 999
+         Bulk Decompression: false
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_16_16_chunk (actual rows=1 loops=1)
+               Output: compress_hyper_16_16_chunk._ts_meta_count, compress_hyper_16_16_chunk._ts_meta_min_1, compress_hyper_16_16_chunk._ts_meta_max_1, compress_hyper_16_16_chunk.x, compress_hyper_16_16_chunk.value, compress_hyper_16_16_chunk._ts_meta_v2_bloom1_u, compress_hyper_16_16_chunk.u, compress_hyper_16_16_chunk._ts_meta_v2_min_ts, compress_hyper_16_16_chunk._ts_meta_v2_max_ts, compress_hyper_16_16_chunk.ts
+               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_16_16_chunk._ts_meta_v2_bloom1_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+               Rows Removed by Filter: 9
+(10 rows)
+
+-- Timestamp uses minmax
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
+                                                                                                                                                                                                            QUERY PLAN                                                                                                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   Output: count(*)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_15_15_chunk (actual rows=169 loops=1)
+         Vectorized Filter: ((_hyper_15_15_chunk.ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (_hyper_15_15_chunk.ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
+         Rows Removed by Filter: 831
+         Bulk Decompression: true
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_16_16_chunk (actual rows=1 loops=1)
+               Output: compress_hyper_16_16_chunk._ts_meta_count, compress_hyper_16_16_chunk._ts_meta_min_1, compress_hyper_16_16_chunk._ts_meta_max_1, compress_hyper_16_16_chunk.x, compress_hyper_16_16_chunk.value, compress_hyper_16_16_chunk._ts_meta_v2_bloom1_u, compress_hyper_16_16_chunk.u, compress_hyper_16_16_chunk._ts_meta_v2_min_ts, compress_hyper_16_16_chunk._ts_meta_v2_max_ts, compress_hyper_16_16_chunk.ts
+               Filter: ((compress_hyper_16_16_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_16_16_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
+               Rows Removed by Filter: 9
+(10 rows)
+
+-- Test rename column
+alter table test_sparse_index rename ts to ts_new;
+select * from settings;
+                  relid                   |                  compress_relid                  | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                index                                 
+------------------------------------------+--------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------
+ test_sparse_index                        |                                                  |           | {x}     | {f}          | {f}                | [{"col": "u", "type": "bloom"}, {"col": "ts_new", "type": "minmax"}]
+ _timescaledb_internal._hyper_15_15_chunk | _timescaledb_internal.compress_hyper_16_16_chunk |           | {x}     | {f}          | {f}                | [{"col": "u", "type": "bloom"}, {"col": "ts_new", "type": "minmax"}]
+(2 rows)
+
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test_sparse_index') limit 1)
+\gset
+\d+ :chunk
+                                        Table "_timescaledb_internal.compress_hyper_16_16_chunk"
+         Column         |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count         | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_min_1         | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_max_1         | integer                               |           |          |         | plain    | 1000         | 
+ x                      | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ value                  | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_bloom1_u   | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
+ u                      | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_min_ts_new | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ _ts_meta_v2_max_ts_new | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ ts_new                 | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+Indexes:
+    "compress_hyper_16_16_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
+Options: toast_tuple_target=128
+
+drop table test_sparse_index;
