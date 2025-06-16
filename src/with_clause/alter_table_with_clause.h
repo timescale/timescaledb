@@ -20,6 +20,8 @@ typedef enum AlterTableFlags
 	AlterTableFlagSegmentBy,
 	AlterTableFlagOrderBy,
 	AlterTableFlagCompressChunkTimeInterval,
+	AlterTableFlagMinMax,
+	AlterTableFlagBloom,
 	AlterTableFlagsMax
 } AlterTableFlags;
 
@@ -47,3 +49,7 @@ ts_compress_hypertable_parse_chunk_time_interval(WithClauseResult *parsed_option
 												 Hypertable *hypertable);
 extern TSDLLEXPORT OrderBySettings ts_compress_parse_order_collist(char *inpstr,
 																   Hypertable *hypertable);
+extern TSDLLEXPORT ArrayType *ts_compress_hypertable_parse_minmax(WithClauseResult minmax,
+																  Hypertable *hypertable);
+extern TSDLLEXPORT ArrayType *ts_compress_hypertable_parse_bloom(WithClauseResult bloom,
+																 Hypertable *hypertable);
