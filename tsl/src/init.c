@@ -170,6 +170,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.uuid_compressor_append = tsl_uuid_compressor_append,
 	.uuid_compressor_finish = tsl_uuid_compressor_finish,
 	.bloom1_contains = bloom1_contains,
+	.bloom1_get_hash_function = bloom1_get_hash_function,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,
