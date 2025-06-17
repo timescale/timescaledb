@@ -21,7 +21,7 @@ typedef struct BatchHashingParams
 	int num_grouping_columns;
 	const CompressedColumnValues *grouping_column_values;
 
-	GroupingPolicyHash *policy;
+	GroupingPolicyHash *restrict policy;
 	HashingStrategy *restrict hashing;
 
 	uint32 *restrict result_key_indexes;

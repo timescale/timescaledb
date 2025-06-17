@@ -169,6 +169,101 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 	}
 }
 
+/*
+ * For some configurations of hashing, we want to generate dedicated
+ * implementations that will be more efficient. For example, for fixed-size keys
+ * when all the batch and key rows are valid.
+ */
+#define APPLY_FOR_BATCH_FILTER(X, NAME, COND)                                                      \
+	X(NAME##_nofilter, (COND) && (params.batch_filter == NULL))                                    \
+	X(NAME##_filter, (COND) && (params.batch_filter != NULL))
+
+#define APPLY_FOR_NULLABILITY(X, NAME, COND)                                                       \
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_notnull,                                                         \
+						   (COND) && params.single_grouping_column.buffers[0] == NULL)             \
+	APPLY_FOR_BATCH_FILTER(X,                                                                      \
+						   NAME##_nullable,                                                        \
+						   (COND) && params.single_grouping_column.buffers[0] != NULL)
+
+#define APPLY_FOR_TYPE(X, NAME, COND)                                                              \
+	APPLY_FOR_NULLABILITY(X,                                                                       \
+						  NAME##_byval,                                                            \
+						  (COND) && params.single_grouping_column.decompression_type ==            \
+										sizeof(OUTPUT_KEY_TYPE))                                   \
+	APPLY_FOR_NULLABILITY(X,                                                                       \
+						  NAME##_text,                                                             \
+						  (COND) &&                                                                \
+							  params.single_grouping_column.decompression_type == DT_ArrowText)    \
+	APPLY_FOR_NULLABILITY(X,                                                                       \
+						  NAME##_dict,                                                             \
+						  (COND) && params.single_grouping_column.decompression_type ==            \
+										DT_ArrowTextDict)
+
+#define APPLY_FOR_SPECIALIZATIONS(X) APPLY_FOR_TYPE(X, index, true)
+
+/*
+ * This is a template for a specialization of  fill_offsets_impl() for the case
+ * where the hashing parameters match the CONDITION.
+ */
+#define DEFINE(NAME, CONDITION)                                                                    \
+	static pg_noinline void FUNCTION_NAME(                                                         \
+		NAME)(BatchHashingParams params, int start_row, int end_row)                               \
+	{                                                                                              \
+		if (!(CONDITION))                                                                          \
+		{                                                                                          \
+			pg_unreachable();                                                                      \
+		}                                                                                          \
+                                                                                                   \
+		FUNCTION_NAME(fill_offsets_impl)(params, start_row, end_row);                              \
+	}
+
+/*
+ * Statically generate a specialization for each of the cases defined above.
+ */
+APPLY_FOR_SPECIALIZATIONS(DEFINE)
+
+#undef DEFINE
+
+/*
+ * This function chooses a statically generated specialization in runtime based
+ * on the hashing parameters.
+ */
+static void
+FUNCTION_NAME(dispatch_for_params)(BatchHashingParams params, int start_row, int end_row)
+{
+	if (params.num_grouping_columns == 0)
+	{
+		pg_unreachable();
+	}
+
+	if ((params.num_grouping_columns == 1) !=
+		(params.single_grouping_column.decompression_type != DT_Invalid))
+	{
+		pg_unreachable();
+	}
+
+#define DISPATCH(NAME, CONDITION)                                                                  \
+	if (CONDITION)                                                                                 \
+	{                                                                                              \
+		FUNCTION_NAME(NAME)(params, start_row, end_row);                                           \
+	}                                                                                              \
+	else
+
+	APPLY_FOR_SPECIALIZATIONS(DISPATCH)
+	{
+		/* Use a generic implementation if no specializations matched. */
+		FUNCTION_NAME(fill_offsets_impl)(params, start_row, end_row);
+	}
+#undef DISPATCH
+}
+
+#undef APPLY_FOR_SPECIALIZATIONS
+
+/*
+ * In some special cases we call a more efficient specialization of the grouping
+ * function.
+ */
 static void
 FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, int start_row,
 							int end_row)
@@ -177,7 +272,7 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, TupleTableSlot *vector_s
 
 	BatchHashingParams params = build_batch_hashing_params(policy, vector_slot);
 
-	FUNCTION_NAME(fill_offsets_impl)(params, start_row, end_row);
+	FUNCTION_NAME(dispatch_for_params)(params, start_row, end_row);
 }
 
 HashingStrategy FUNCTION_NAME(strategy) = {
