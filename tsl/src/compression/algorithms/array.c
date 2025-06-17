@@ -18,6 +18,7 @@
 #include "compression/compression.h"
 #include "datum_serialize.h"
 #include "simple8b_rle.h"
+#include "simple8b_rle_bitarray.h"
 #include "simple8b_rle_bitmap.h"
 
 #include "compression/arrow_c_data_interface.h"
@@ -140,6 +141,26 @@ array_compressor_append_null_value(Compressor *compressor)
 	array_compressor_append_null(extended->internal);
 }
 
+static bool
+array_compressor_is_full(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = array_compressor_alloc(extended->element_type);
+
+	Size datum_size_and_align;
+	ArrayCompressor *array_comp = (ArrayCompressor *) extended->internal;
+	if (datum_serializer_value_may_be_toasted(array_comp->serializer))
+		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+
+	datum_size_and_align =
+		datum_get_bytes_size(array_comp->serializer, array_comp->data.num_elements, val) -
+		array_comp->data.num_elements;
+
+	/* If we can't fit new datum in the max size, we are full */
+	return (datum_size_and_align + array_comp->data.num_elements) > MAX_ARRAY_COMPRESSOR_SIZE_BYTES;
+}
+
 static void *
 array_compressor_finish_and_reset(Compressor *compressor)
 {
@@ -153,6 +174,7 @@ array_compressor_finish_and_reset(Compressor *compressor)
 const Compressor array_compressor = {
 	.append_val = array_compressor_append_datum,
 	.append_null = array_compressor_append_null_value,
+	.is_full = array_compressor_is_full,
 	.finish = array_compressor_finish_and_reset,
 };
 
@@ -467,6 +489,90 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	iterator->deserializer = create_datum_deserializer(iterator->base.element_type);
 
 	return &iterator->base;
+}
+
+/* Pass through to the specialized functions below for BOOL and TEXT */
+ArrowArray *
+tsl_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext dest_mctx)
+{
+	switch (element_type)
+	{
+		case BOOLOID:
+			return tsl_bool_array_decompress_all(compressed_array, element_type, dest_mctx);
+		case TEXTOID:
+			return tsl_text_array_decompress_all(compressed_array, element_type, dest_mctx);
+		default:
+			elog(ERROR, "unsupported array type %u", element_type);
+			break;
+	}
+	return NULL;
+}
+
+ArrowArray *
+tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext dest_mctx)
+{
+	Assert(element_type == BOOLOID);
+	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
+	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
+	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+
+	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
+	CheckCompressedData(header->element_type == BOOLOID);
+
+	Simple8bRleSerialized *nulls_serialized = NULL;
+	if (header->has_nulls)
+	{
+		nulls_serialized = bytes_deserialize_simple8b_and_advance(&si);
+	}
+
+	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(&si);
+
+	const uint32 n_notnull = sizes_serialized->num_elements;
+	const uint32 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	const uint32 n_padded_bits = n_total + 63;
+	const uint32 n_padded_bytes = n_padded_bits / 8;
+
+	uint64 *validity_bitmap = NULL;
+	uint64 *values = MemoryContextAllocZero(dest_mctx, n_padded_bytes);
+
+	MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+	/* Decompress the nulls */
+	Simple8bRleBitArray validity_bits =
+		simple8brle_bitarray_decompress(nulls_serialized, /* inverted*/ true);
+	validity_bitmap = validity_bits.data;
+	MemoryContextSwitchTo(old_context);
+
+	/* Decompress the values using the iterator based decompressor */
+	{
+		int position = 0;
+		DecompressionIterator *iter =
+			tsl_array_decompression_iterator_from_datum_forward(PointerGetDatum(compressed_data),
+																BOOLOID);
+		for (DecompressResult r = array_decompression_iterator_try_next_forward(iter); !r.is_done;
+			 r = array_decompression_iterator_try_next_forward(iter))
+		{
+			if (!r.is_null)
+			{
+				bool data = DatumGetBool(r.val) == true;
+				if (data)
+				{
+					arrow_set_row_validity(values, position, true);
+				}
+			}
+			++position;
+		}
+	}
+
+	ArrowArray *result =
+		MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + (sizeof(void *) * 2));
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = values;
+	result->n_buffers = 2;
+	result->buffers = buffers;
+	result->length = n_total;
+	result->null_count = n_total - n_notnull;
+	return result;
 }
 
 #define ELEMENT_TYPE uint32

@@ -407,3 +407,15 @@ EXECUTE FUNCTION refresh_cagg_trigger_fun();
 INSERT INTO refresh_cagg_trigger_table VALUES(1);
 
 \set ON_ERROR_STOP 1
+
+-- check that cagg refresh is not blocked by decompression limit
+CREATE TABLE conditions_decompress_limit (time timestamptz NOT NULL, device text, temp float) WITH (tsdb.hypertable, tsdb.partition_column='time');
+INSERT INTO conditions_decompress_limit SELECT '2020-01-01','d' || i::text, 1.0 FROM generate_series(1,100) g(i);
+CREATE MATERIALIZED VIEW daily_temp_decompress_limit WITH (tsdb.continuous) AS SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp FROM conditions_decompress_limit GROUP BY 1,2 WITH NO DATA;
+ALTER MATERIALIZED VIEW daily_temp_decompress_limit SET (tsdb.columnstore,tsdb.segmentby = 'device');
+CALL refresh_continuous_aggregate('daily_temp_decompress_limit', NULL, NULL);
+SELECT compress_chunk(show_chunks('daily_temp_decompress_limit'));
+INSERT INTO conditions_decompress_limit SELECT '2020-01-01','d' || i::text, 2.0 FROM generate_series(1,100) g(i);
+SET timescaledb.max_tuples_decompressed_per_dml_transaction TO 1;
+CALL refresh_continuous_aggregate('daily_temp_decompress_limit', NULL, NULL);
+SHOW timescaledb.max_tuples_decompressed_per_dml_transaction;

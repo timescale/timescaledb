@@ -8,7 +8,7 @@ name: SQLsmith
     branches:
       - sqlsmith
       - main
-      - prerelease_test
+      - ?.*.x
   pull_request:
     paths: .github/workflows/sqlsmith.yaml
 
@@ -51,7 +51,7 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
-        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DWARNINGS_AS_ERRORS=OFF
         make -j$(nproc) -C build
         sudo make -C build install
 

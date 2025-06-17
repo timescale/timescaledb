@@ -15,12 +15,12 @@
 # In particular, we cannot create new roles and we cannot create new
 # databases.
 #
-# The following environment variables can be set:
-# - CURRENT_VERSION is the version to update from (required).
+# Info on the parameters:
+# - current_version is the version to update from
 #
-# - NEXT_VERSION is the version to update to (required).
+# - next_version is the version to update to 
 #
-# - CONNECTION_STRING is the URL to use for the connection (required).
+# - connection_string is the URL to use for the connection
 #
 
 if [ "$#" -ne 3 ]; then

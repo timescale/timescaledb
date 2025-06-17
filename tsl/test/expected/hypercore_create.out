@@ -135,6 +135,7 @@ select create_hypertable('test2', 'created_at');
 alter table test2
 	  set access method hypercore,
 	  set (compress_segmentby = 'location_id');
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure device_id is not a unique column and appropriate for a segment by
 NOTICE:  default segment by for hypertable "test2" is set to "device_id"
 NOTICE:  default order by for hypertable "test2" is set to "created_at DESC"
@@ -143,16 +144,19 @@ ERROR:  unrecognized parameter "compress_segmentby"
 alter table test2
 	  set access method hypercore,
 	  set (timescaledb.compress_segmentby = 'location_id');
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 NOTICE:  default order by for hypertable "test2" is set to "created_at DESC, device_id"
 -- Test altering hypertable to hypercore again. It should be allowed
 -- and be a no-op.
 alter table test2 set access method hypercore;
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 \set ON_ERROR_STOP 0
 -- This shows an error but the error is weird, we should probably get
 -- a better one.
 alter table test2
 	  set access method hypercore,
 	  set (compress_segmentby = 'location_id');
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 ERROR:  unrecognized parameter "compress_segmentby"
 \set ON_ERROR_STOP 1
 -- Create view for hypercore rels
@@ -336,6 +340,7 @@ select * from amrels where relparent='test3'::regclass;
 
 -- Set hypercore on hypertable
 alter table test3 set access method hypercore;
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 -- Create a third chunk
 insert into test3 values ('2022-10-01', 1, 1.0);
 -- The third chunk should be a hypercore chunk
@@ -366,7 +371,7 @@ select count(ch) from show_chunks('test4') ch;
 
 select ch as chunk from show_chunks('test4') ch limit 1 \gset
 alter table test4 set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test4" is set to ""
 NOTICE:  default order by for hypertable "test4" is set to ""time" DESC"
 \x on
@@ -765,12 +770,12 @@ commit;
 -- compressed.
 select compress_chunk(ch, hypercore_use_access_method => true, if_not_compressed => false)
 from show_chunks('test2') ch;
-ERROR:  chunk "_hyper_1_1_chunk" is already compressed
+ERROR:  chunk "_hyper_1_1_chunk" is already converted to columnstore
 -- Compressing from hypercore and not using access method should lead
 -- to an error since it is not supported.
 select compress_chunk(ch, hypercore_use_access_method => false)
 from show_chunks('test2') ch;
-ERROR:  cannot compress "_hyper_1_1_chunk" without using Hypercore access method
+ERROR:  cannot converting to columnstore "_hyper_1_1_chunk" without using Hypercore access method
 \set ON_ERROR_STOP 1
 -- Compressing a hypercore should by default lead to
 -- recompression. First check that :chunk is a hypercore.
@@ -886,31 +891,31 @@ order by rel;
 -- if_not_compressed is false. The commands below are all equivalent
 -- in this case.
 select compress_chunk(:'chunk3', hypercore_use_access_method => false, if_not_compressed=>false);
-ERROR:  chunk "_hyper_1_5_chunk" is already compressed
+ERROR:  chunk "_hyper_1_5_chunk" is already converted to columnstore
 select compress_chunk(:'chunk3', hypercore_use_access_method => NULL, if_not_compressed=>false);
-ERROR:  chunk "_hyper_1_5_chunk" is already compressed
+ERROR:  chunk "_hyper_1_5_chunk" is already converted to columnstore
 select compress_chunk(:'chunk3', if_not_compressed=>false);
-ERROR:  chunk "_hyper_1_5_chunk" is already compressed
+ERROR:  chunk "_hyper_1_5_chunk" is already converted to columnstore
 \set ON_ERROR_STOP 1
 -- For a heap-compressed chunk, these should all be equivalent and
 -- should not do anything when there is nothing to recompress. A
 -- notice should be raised instead of an error.
 select compress_chunk(:'chunk3', hypercore_use_access_method => false);
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_5_chunk
 (1 row)
 
 select compress_chunk(:'chunk3', hypercore_use_access_method => NULL);
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_5_chunk
 (1 row)
 
 select compress_chunk(:'chunk3');
-NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_5_chunk
@@ -1061,7 +1066,7 @@ select created from create_hypertable('test5', 'time');
 insert into test5 values ('2022-06-01', 1, 1.0), ('2022-08-01', 1, 1.0);
 select ch as chunk from show_chunks('test5') ch limit 1 \gset
 alter table test5 set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "test5" is set to ""
 NOTICE:  default order by for hypertable "test5" is set to ""time" DESC"
 select compress_chunk(:'chunk');
@@ -1122,6 +1127,7 @@ alter table conditions set (
 -- Set hypercore access method on the hypertable
 -------------------------------------------------------------------------------
 alter table conditions set access method hypercore;
+WARNING:  the hypercore access method is marked as deprecated with the 2.21.0 release and will be fully removed in the 2.22.0 release.
 -----------------------
 -- Create a new user
 -----------------------

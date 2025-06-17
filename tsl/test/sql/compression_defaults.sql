@@ -188,6 +188,97 @@ CREATE UNIQUE INDEX test_idx ON metrics(device_id, time);
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
 
+--test table with skewed statistics
+drop table metrics;
+CREATE TABLE "public"."metrics" (
+    "time" timestamp with time zone NOT NULL,
+    "device_id" "text",
+    "device_id2" "text",
+    "val" double precision
+) WITH (autovacuum_enabled=0);
+
+SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false);
+
+--skew device_id distribution compared to device_id2.
+--device_id2 will be the favourable default segmentby
+insert into metrics SELECT t, 1, 1, extract(epoch from t) from generate_series
+        ( '2007-02-01'::timestamp
+        , '2008-04-01'::timestamp
+        , '1 day'::interval) t;
+
+insert into metrics SELECT t, 1, 2, extract(epoch from t) from generate_series
+        ( '2010-02-01'::timestamp
+        , '2011-04-01'::timestamp
+        , '1 day'::interval) t;
+
+insert into metrics SELECT t, 1, 1, extract(epoch from t) from generate_series
+        ( '2012-02-01'::timestamp
+        , '2013-04-01'::timestamp
+        , '1 day'::interval) t;
+
+insert into metrics SELECT t, 2, 2, extract(epoch from t) from generate_series
+        ( '2016-02-01'::timestamp
+        , '2017-04-01'::timestamp
+        , '1 day'::interval) t;
+
+ANALYZE metrics;
+
+--use the best-scenario unique index (device_id2)
+CREATE UNIQUE INDEX test_idx ON metrics(device_id, time);
+CREATE UNIQUE INDEX test_idx2 ON metrics(device_id2, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+
+--opposite order of columns
+drop index test_idx;
+drop index test_idx2;
+CREATE UNIQUE INDEX test_idx ON metrics(time, device_id);
+CREATE UNIQUE INDEX test_idx2 ON metrics(time, device_id2);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+
+--use a high-cardinality column in the index (still choose device_id2)
+drop index test_idx;
+CREATE UNIQUE INDEX test_idx ON metrics(val, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+
+--use a non-unique index
+drop index test_idx;
+drop index test_idx2;
+CREATE INDEX test_idx ON metrics(device_id, time, val);
+CREATE INDEX test_idx2 ON metrics(device_id2, time, val);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+
+--another non-unique index column order (choose device_id since it is in a lower index position)
+drop index test_idx;
+drop index test_idx2;
+CREATE INDEX test_idx ON metrics(device_id, time, val);
+CREATE INDEX test_idx2 ON metrics(val, device_id2, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+
+--use a high-cardinality column in the non-unque index (still choose device_id2)
+drop index test_idx;
+CREATE INDEX test_idx ON metrics(val, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+
+--use 2 indexes (choose device_id since it is an indexed column)
+drop index test_idx;
+drop index test_idx2;
+CREATE INDEX test_idx ON metrics(val, time);
+CREATE INDEX test_idx2 ON metrics(device_id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+
+--no indexes (choose device_id2)
+drop index test_idx;
+drop index test_idx2;
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+
+ALTER TABLE metrics SET (timescaledb.compress = true);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE metrics SET (timescaledb.compress = false);
+
+ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE metrics SET (timescaledb.compress = false);
+
 --test on an empty order_by
 CREATE TABLE table1(col1 INT NOT NULL, col2 INT);
 SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
@@ -273,3 +364,26 @@ ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
  timescaledb.compress_orderby = 'time desc'
 );
+
+-- test default segmentby diabled when orderby is specified
+CREATE TABLE test_table (
+    ts   INT     NOT NULL,
+    uuid BIGINT  NOT NULL,
+    val  FLOAT
+);
+CREATE UNIQUE INDEX test_idx ON test_table (uuid, ts);
+
+SELECT create_hypertable(
+    'test_table',
+    'ts',
+    chunk_time_interval => 1500000
+);
+
+SELECT _timescaledb_functions.get_segmentby_defaults('public.test_table');
+
+ALTER TABLE test_table SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'uuid'
+);
+
+DROP TABLE test_table;

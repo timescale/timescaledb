@@ -11,7 +11,6 @@
 #define EXTENSION_NAME "timescaledb"	  /* Name of the actual extension */
 #define EXTENSION_NAMESPACE "timescaledb" /* Namespace for extension objects */
 #define EXTENSION_NAMESPACE_ALIAS "tsdb"  /* Namespace for extension objects */
-#define EXTENSION_FDW_NAME "timescaledb_fdw"
 #define TSL_LIBRARY_NAME "timescaledb-tsl"
 #define TS_LIBDIR "$libdir/"
 #define EXTENSION_SO TS_LIBDIR "" EXTENSION_NAME

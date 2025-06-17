@@ -80,7 +80,8 @@ static const struct config_enum_entry loglevel_options[] = {
 	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
 	{ "debug2", DEBUG2, false }, { "debug1", DEBUG1, false }, { "debug", DEBUG2, true },
 	{ "info", INFO, false },	 { "notice", NOTICE, false }, { "warning", WARNING, false },
-	{ "log", LOG, false },		 { NULL, 0, false }
+	{ "log", LOG, false },		 { "error", ERROR, false },	  { "fatal", FATAL, false },
+	{ NULL, 0, false }
 };
 
 /*
@@ -117,6 +118,15 @@ static const struct config_enum_entry hypercore_copy_to_options[] = {
 	{ NULL, 0, false }
 };
 
+static const struct config_enum_entry compress_truncate_behaviour_options[] = {
+	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
+	{ "truncate_or_delete", COMPRESS_TRUNCATE_OR_DELETE, false },
+	{ "truncate_disabled", COMPRESS_TRUNCATE_DISABLED, false },
+	{ NULL, 0, false }
+};
+
+bool ts_guc_enable_compressed_copy = false;
+bool ts_guc_enable_compressed_copy_presorted = false;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -150,15 +160,20 @@ bool ts_guc_enable_custom_hashagg = false;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
+TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom = true;
 TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
-TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
+TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
+TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
+bool ts_guc_enable_event_triggers = false;
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
+TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -168,6 +183,8 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
 TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 #endif
+TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
+TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier = 1.0;
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
@@ -294,8 +311,9 @@ ts_feature_flag_check(FeatureFlagType type)
 		return;
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("You are using a Dynamic PostgreSQL service. This feature is only available on "
-					"Time-series services. https://tsdb.co/dynamic-postgresql")));
+			 errmsg("You are using a PostgreSQL service. This feature is only available on "
+					"Time-series and analytics services. "
+					"https://docs.timescale.com/use-timescale/latest/services/")));
 }
 
 /*
@@ -459,6 +477,29 @@ ts_guc_default_orderby_fn_oid()
 void
 _guc_init(void)
 {
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_copy"),
+							 "Enable on-the-fly compression during COPY",
+							 NULL,
+							 &ts_guc_enable_compressed_copy,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_copy_presorted"),
+							 "Enable on-the-fly compression during COPY with ordered data, "
+							 "ordering is responsibility of the user",
+							 NULL,
+							 &ts_guc_enable_compressed_copy_presorted,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deprecation_warnings"),
 							 "Enable warnings when using deprecated functionality",
 							 NULL,
@@ -668,6 +709,33 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_skipscan"),
+							 "Enable SkipScan for compressed chunks",
+							 "Enable SkipScan for distinct inputs over compressed chunks",
+							 &ts_guc_enable_compressed_skip_scan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomRealVariable(MAKE_EXTOPTION("skip_scan_run_cost_multiplier"),
+							 "Multiplier for SkipScan run cost as an option to make the cost "
+							 "smaller so that SkipScan can be chosen",
+							 "Default is 1.0 i.e. regularly estimated SkipScan run cost, 0.0 will "
+							 "make SkipScan to have run cost = 0",
+							 &ts_guc_skip_scan_run_cost_multiplier,
+							 1.0,
+							 0.0,
+							 1.0,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "
@@ -795,15 +863,16 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_bool_compression"),
-							 "Enable experimental bool compression functionality",
+							 "Enable bool compression functionality",
 							 "Enable bool compression",
 							 &ts_guc_enable_bool_compression,
-							 false,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,
 							 NULL);
+
 	DefineCustomIntVariable(MAKE_EXTOPTION("compression_batch_size_limit"),
 							"The max number of tuples that can be batched together during "
 							"compression",
@@ -821,6 +890,29 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressor_batch_limit"),
+							 "Enable compressor batch limit",
+							 "Enable compressor batch limit for compressors which "
+							 "can go over the allocation limit (1 GB). This feature will"
+							 "limit those compressors by reducing the size of the batch and thus "
+							 "avoid hitting the limit.",
+							 &ts_guc_compression_enable_compressor_batch_limit,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_event_triggers"),
+							 "Enable event triggers for chunks creation",
+							 "Enable event triggers for chunks creation",
+							 &ts_guc_enable_event_triggers,
+							 false,
+							 PGC_SUSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_null_compression"),
@@ -835,6 +927,16 @@ _guc_init(void)
 							 NULL);
 #endif
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_ratio_warnings"),
+							 "Enable warnings for poor compression ratio",
+							 "Enable warnings for poor compression ratio",
+							 &ts_guc_enable_compression_ratio_warnings,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	/*
 	 * Define the limit on number of invalidation-based refreshes we allow per
 	 * refresh call. If this limit is exceeded, fall back to a single refresh that
@@ -937,6 +1039,17 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_sparse_index_bloom"),
+							 "Enable creation of the bloom1 sparse index on compressed chunks",
+							 "This sparse index speeds up the equality queries on compressed "
+							 "columns, and can be disabled when not desired.",
+							 &ts_guc_enable_sparse_index_bloom,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
 							 "Enable columnar-optimized scans for supported access methods",
 							 "A columnar scan replaces sequence scans for columnar-oriented "
@@ -1005,6 +1118,21 @@ _guc_init(void)
 							 "Delete all rows after compression instead of truncate",
 							 &ts_guc_enable_delete_after_compression,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomEnumVariable(MAKE_EXTOPTION("compress_truncate_behaviour"),
+							 "Define behaviour of truncate after compression",
+							 "Defines how truncate behaves at the end of compression. "
+							 "'truncate_only' forces truncation. 'truncate_disabled' deletes rows "
+							 "instead of truncate. 'truncate_or_delete' allows falling back to "
+							 "deletion.",
+							 (int *) &ts_guc_compress_truncate_behaviour,
+							 COMPRESS_TRUNCATE_ONLY,
+							 compress_truncate_behaviour_options,
 							 PGC_USERSET,
 							 0,
 							 NULL,

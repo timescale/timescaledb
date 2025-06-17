@@ -19,6 +19,7 @@
 #include "bgw/timer.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/policies_v2.h"
+#include "bgw_policy/policy_config.h"
 #include "chunk.h"
 #include "dimension.h"
 #include "errors.h"
@@ -58,21 +59,6 @@ policy_retention_check(PG_FUNCTION_ARGS)
 	policy_retention_read_and_validate_config(PG_GETARG_JSONB_P(0), NULL);
 
 	PG_RETURN_VOID();
-}
-
-int32
-policy_retention_get_hypertable_id(const Jsonb *config)
-{
-	bool found;
-	int32 hypertable_id =
-		ts_jsonb_get_int32_field(config, POL_RETENTION_CONF_KEY_HYPERTABLE_ID, &found);
-
-	if (!found)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find hypertable_id in config for job")));
-
-	return hypertable_id;
 }
 
 int64
@@ -236,7 +222,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 		if (is_equal)
 		{
 			/* If all arguments are the same, do nothing */
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(NOTICE,
 					(errmsg("retention policy already exists for hypertable \"%s\", skipping",
 							get_rel_name(ht_oid))));
@@ -244,7 +230,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 		}
 		else
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(WARNING,
 					(errmsg("retention policy already exists for hypertable \"%s\"",
 							get_rel_name(ht_oid)),
@@ -287,7 +273,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 	JsonbParseState *parse_state = NULL;
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, POL_RETENTION_CONF_KEY_HYPERTABLE_ID, hypertable->fd.id);
+	ts_jsonb_add_int32(parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
 
 	switch (window_type)
 	{
@@ -352,7 +338,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 										initial_start,
 										timezone);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_INT32(job_id);
 }
@@ -446,7 +432,7 @@ policy_retention_remove_internal(Oid table_oid, bool if_exists)
 
 	Assert(hypertable != NULL);
 	int32 ht_id = hypertable->fd.id;
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	ts_hypertable_permissions_check(table_oid, GetUserId());
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,

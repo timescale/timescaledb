@@ -1,33 +1,40 @@
-CREATE FUNCTION _timescaledb_internal.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
-CREATE FUNCTION _timescaledb_functions.create_chunk_table(hypertable REGCLASS, slices JSONB, schema_name NAME, table_name NAME) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C VOLATILE;
+DROP PROCEDURE _timescaledb_functions.process_hypertable_invalidations(REGCLASS);
+DROP PROCEDURE @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
+DROP PROCEDURE @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
+DROP PROCEDURE _timescaledb_functions.policy_process_hypertable_invalidations(INTEGER, JSONB);
+DROP FUNCTION _timescaledb_functions.policy_process_hypertable_invalidations_check(JSONB);
 
--- Revert new option `refresh_newest_first` from incremental cagg refresh policy
-DROP FUNCTION @extschema@.add_continuous_aggregate_policy(
-    continuous_aggregate REGCLASS,
-    start_offset "any",
-    end_offset "any",
-    schedule_interval INTERVAL,
-    if_not_exists BOOL,
-    initial_start TIMESTAMPTZ,
-    timezone TEXT,
-    include_tiered_data BOOL,
-    buckets_per_batch INTEGER,
-    max_batches_per_execution INTEGER,
-    refresh_newest_first BOOL
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
+DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(
+  INTEGER, INTEGER, ANYELEMENT, INTEGER, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN
 );
 
-CREATE FUNCTION @extschema@.add_continuous_aggregate_policy(
+CREATE PROCEDURE _timescaledb_functions.policy_compression_execute(
+  job_id              INTEGER,
+  htid                INTEGER,
+  lag                 ANYELEMENT,
+  maxchunks           INTEGER,
+  verbose_log         BOOLEAN,
+  recompress_enabled  BOOLEAN,
+  use_creation_time   BOOLEAN,
+  useam               BOOLEAN = NULL)
+AS $$
+BEGIN
+  -- empty body
+END;
+$$ LANGUAGE PLPGSQL;
+
+DROP PROCEDURE @extschema@.refresh_continuous_aggregate(
     continuous_aggregate REGCLASS,
-    start_offset "any",
-    end_offset "any",
-    schedule_interval INTERVAL,
-    if_not_exists BOOL = false,
-    initial_start TIMESTAMPTZ = NULL,
-    timezone TEXT = NULL,
-    include_tiered_data BOOL = NULL,
-    buckets_per_batch INTEGER = NULL,
-    max_batches_per_execution INTEGER = NULL
-)
-RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
-LANGUAGE C VOLATILE;
+    window_start "any",
+    window_end "any",
+    force BOOLEAN,
+    options JSONB
+);
+
+CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
+    continuous_aggregate     REGCLASS,
+    window_start             "any",
+    window_end               "any",
+    force                    BOOLEAN = FALSE
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';

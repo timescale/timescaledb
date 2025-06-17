@@ -91,7 +91,7 @@ jobs:
         docker pull ${TEST_IMAGE}
         docker buildx imagetools inspect ${TEST_IMAGE}
         docker run -i --rm -v $(pwd):/mnt -e EXTRA_PKGS="${EXTRA_PKGS}" ${TEST_IMAGE} bash <<"EOF"
-          apk add cmake gcc make build-base krb5-dev sudo ${EXTRA_PKGS}
+          apk add cmake gcc make build-base krb5-dev sudo coreutils ${EXTRA_PKGS}
           apk add openssl1.1-compat-dev || apk add openssl-dev
           cd /mnt
           cp build_abi/install_ext/* `pg_config --sharedir`/extension/

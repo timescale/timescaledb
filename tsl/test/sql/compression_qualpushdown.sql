@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+set max_parallel_workers_per_gather = 0;
+
 -- qual pushdown tests for decompresschunk ---
 -- Test qual pushdown with ints
 CREATE TABLE meta (device_id INT PRIMARY KEY);
@@ -23,6 +25,7 @@ WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 ORDER BY ch1.id LIMIT 1 \gset
 
 SELECT compress_chunk(:'CHUNK_FULL_NAME');
+VACUUM FULL ANALYZE hyper;
 
 -- test for qual pushdown
 explain (costs off, verbose)
@@ -43,6 +46,27 @@ SELECT *
 FROM hyper
 WHERE time = 3::bigint;
 
+-- Test some volatile and stable functions
+SET timescaledb.enable_chunk_append TO OFF;
+SET timescaledb.enable_constraint_aware_append TO OFF;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time = device_id;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time = random()::int;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time
+    = CASE WHEN now() > '1970-01-01' THEN random()::int ELSE device_id END;
+
+EXPLAIN (COSTS OFF)
+SELECT * FROM hyper WHERE time
+    = CASE WHEN now() > '1970-01-01' THEN 1 ELSE device_id END;
+
+RESET timescaledb.enable_chunk_append;
+RESET timescaledb.enable_constraint_aware_append;
+
 --- github issue 1855
 --- TESTs for meta column pushdown filters on exprs with casts.
 CREATE TABLE metaseg_tab (
@@ -60,6 +84,8 @@ ALTER TABLE metaseg_tab SET (timescaledb.compress, timescaledb.compress_orderby=
 INSERT INTO metaseg_tab values (56,0,'2012-12-10 09:45:00','2012-12-10 09:50:00',1,0.1,'2012-12-10');
 
 SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
+VACUUM FULL ANALYZE metaseg_tab;
+
 select factorid, end_dt, logret
 from metaseg_tab
 where fmid = 56
@@ -106,7 +132,7 @@ ALTER TABLE pushdown_relabel SET (timescaledb.compress, timescaledb.compress_seg
 
 INSERT INTO pushdown_relabel SELECT '2000-01-01','varchar','char';
 SELECT compress_chunk(i) from show_chunks('pushdown_relabel') i;
-ANALYZE pushdown_relabel;
+VACUUM FULL ANALYZE pushdown_relabel;
 
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
@@ -119,6 +145,7 @@ EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar' AND dev_c = 'char';
 EXPLAIN (costs off) SELECT * FROM pushdown_relabel WHERE dev_vc = 'varchar'::char(10) AND dev_c = 'char'::varchar;
+RESET enable_seqscan;
 
 -- github issue #5286
 CREATE TABLE deleteme AS
@@ -134,6 +161,8 @@ ALTER TABLE deleteme SET (
 );
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
+VACUUM FULL ANALYZE deleteme;
+
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE segment::text like '%4%';
 EXPLAIN (costs off) SELECT sum(data) FROM deleteme WHERE '4' = segment::text;
 
@@ -148,6 +177,8 @@ ALTER TABLE deleteme_with_bytea SET (
 );
 
 SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
+VACUUM FULL ANALYZE deleteme_with_bytea;
+
 EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata = E'\\x';
 EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123';
 
@@ -161,6 +192,7 @@ ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentb
 
 INSERT INTO svf_pushdown SELECT '2020-01-01';
 SELECT compress_chunk(show_chunks('svf_pushdown'));
+VACUUM FULL ANALYZE svf_pushdown;
 
 -- constraints should be pushed down into scan below decompresschunk in all cases
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
@@ -196,3 +228,4 @@ LATERAL(
     EXISTS (SELECT FROM meta) LIMIT 1
 ) l;
 
+DROP TABLE svf_pushdown;

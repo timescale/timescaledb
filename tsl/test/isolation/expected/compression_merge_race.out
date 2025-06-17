@@ -117,7 +117,7 @@ step s1_compress_all_chunks_single_transaction:
     BEGIN;
     select count(compress_chunk(c, true)) from show_chunks('sensor_data') c;
 
-s1: NOTICE:  chunk "_hyper_X_X_chunk" is already compressed
+s1: NOTICE:  chunk "_hyper_X_X_chunk" is already converted to columnstore
 count
 -----
    48

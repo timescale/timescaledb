@@ -20,3 +20,5 @@ typedef struct BatchMetadataBuilder
 BatchMetadataBuilder *batch_metadata_builder_minmax_create(Oid type, Oid collation,
 														   int min_attr_offset,
 														   int max_attr_offset);
+
+BatchMetadataBuilder *batch_metadata_builder_bloom1_create(Oid type, int bloom_attr_offset);

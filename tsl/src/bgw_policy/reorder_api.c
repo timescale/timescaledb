@@ -24,11 +24,10 @@
 #include "bgw/timer.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
+#include "bgw_policy/policy_config.h"
 #include "bgw_policy/reorder_api.h"
-#include "errors.h"
 #include "guc.h"
 #include "hypertable.h"
-#include "reorder.h"
 #include "utils.h"
 /*
  * Default scheduled interval for reorder jobs should be 1/2 of the default chunk length.
@@ -48,25 +47,10 @@
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("5 min"), InvalidOid, -1))
 
-#define CONFIG_KEY_HYPERTABLE_ID "hypertable_id"
 #define CONFIG_KEY_INDEX_NAME "index_name"
 
 #define POLICY_REORDER_PROC_NAME "policy_reorder"
 #define POLICY_REORDER_CHECK_NAME "policy_reorder_check"
-
-int32
-policy_reorder_get_hypertable_id(const Jsonb *config)
-{
-	bool found;
-	int32 hypertable_id = ts_jsonb_get_int32_field(config, CONFIG_KEY_HYPERTABLE_ID, &found);
-
-	if (!found)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find hypertable_id in config for job")));
-
-	return hypertable_id;
-}
 
 char *
 policy_reorder_get_index_name(const Jsonb *config)
@@ -210,7 +194,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 		schedule_interval.month = 0;
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (jobs != NIL)
 	{
@@ -262,7 +246,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	JsonbParseState *parse_state = NULL;
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-	ts_jsonb_add_int32(parse_state, CONFIG_KEY_HYPERTABLE_ID, hypertable_id);
+	ts_jsonb_add_int32(parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable_id);
 	ts_jsonb_add_str(parse_state, CONFIG_KEY_INDEX_NAME, NameStr(*index_name));
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
@@ -308,7 +292,7 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
 														   FUNCTIONS_SCHEMA_NAME,
 														   ht->fd.id);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	if (jobs == NIL)
 	{

@@ -5,6 +5,9 @@
 CREATE INDEX ON :TABLE(dev);
 CREATE INDEX ON :TABLE(time);
 
+-- To test scenarios with SkipScan/no SkipScan over a mix of uncompressed and compressed chunks
+SET timescaledb.enable_compressed_skipscan TO false;
+
 -- IndexPath without pathkeys doesnt use SkipScan
 EXPLAIN (costs off, timing off, summary off) SELECT count(DISTINCT 1) FROM pg_rewrite;
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE where dev=1;
@@ -36,3 +39,5 @@ DROP INDEX _timescaledb_internal._hyper_1_1_chunk_skip_scan_ht_dev_idx1;
 
 DROP INDEX _timescaledb_internal._hyper_1_1_chunk_skip_scan_ht_dev_time_idx;
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
+
+RESET timescaledb.enable_compressed_skipscan;

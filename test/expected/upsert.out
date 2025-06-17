@@ -37,7 +37,7 @@ EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
     ('2017-01-20T10:00:01', 2.4, 'pink') ON CONFLICT DO NOTHING;
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
- Custom Scan (HypertableModify) (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on public.upsert_test (actual rows=0 loops=1)
          Conflict Resolution: NOTHING
          Tuples Inserted: 1

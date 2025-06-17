@@ -644,7 +644,7 @@ ts_bgw_job_find(int32 bgw_job_id, MemoryContext mctx, bool fail_if_not_found)
 	}
 
 	if (num_found == 0 && fail_if_not_found)
-		elog(ERROR, "job %d not found", bgw_job_id);
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("job %d not found", bgw_job_id)));
 
 	return job;
 }
@@ -785,6 +785,10 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	Datum values[Natts_bgw_job] = { 0 };
 	bool isnull[Natts_bgw_job] = { 0 };
 	bool doReplace[Natts_bgw_job] = { 0 };
+
+	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] =
+		NameGetDatum(&updated_job->fd.application_name);
+	doReplace[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = true;
 
 	Datum old_schedule_interval =
 		slot_getattr(ti->slot, Anum_bgw_job_schedule_interval, &isnull[0]);
@@ -1192,7 +1196,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									&got_lock);
 	if (job == NULL)
 		/* If the job is not found, we can't proceed */
-		elog(ERROR, "job %d not found when running the background worker", params.job_id);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("job %d not found when running the background worker", params.job_id)));
 
 	/* get parameters from bgworker */
 	job->job_history.id = params.job_history_id;
@@ -1224,9 +1230,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 		/* The job is responsible for committing or aborting it's own txns */
 		if (IsTransactionState())
-			elog(ERROR,
-				 "TimescaleDB background job \"%s\" failed to end the transaction",
-				 NameStr(job->fd.application_name));
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TRANSACTION_STATE),
+					 errmsg("TimescaleDB background job \"%s\" failed to end the transaction",
+							NameStr(job->fd.application_name))));
 	}
 	PG_CATCH();
 	{
@@ -1237,6 +1244,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 			/* If there was an error, rollback what was done before the error */
 			AbortCurrentTransaction();
 		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
 
 		/* Free the old job if it exists, it's no longer needed, and since it's
 		 * in the TopMemoryContext it won't be freed otherwise.
@@ -1286,6 +1294,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 */
 		elog(LOG, "job %d threw an error", params.job_id);
 
+		PopActiveSnapshot();
 		CommitTransactionCommand();
 		ReThrowError(edata);
 	}
@@ -1408,6 +1417,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	bool nulls[Natts_bgw_job] = { false };
 	int32 job_id;
 	char app_name[NAMEDATALEN];
+	int name_len;
 
 	rel = table_open(catalog_get_table_id(catalog, BGW_JOB), RowExclusiveLock);
 	desc = RelationGetDescr(rel);
@@ -1467,7 +1477,10 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 	job_id = DatumGetInt32(ts_catalog_table_next_seq_id(catalog, BGW_JOB));
-	snprintf(app_name, NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
+	name_len = snprintf(app_name, NAMEDATALEN, "%s [%d]", NameStr(*application_name), job_id);
+
+	if (name_len >= NAMEDATALEN)
+		ereport(ERROR, (errcode(ERRCODE_NAME_TOO_LONG), errmsg("application name too long.")));
 
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_id)] = Int32GetDatum(job_id);
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)] = CStringGetDatum(app_name);

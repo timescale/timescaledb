@@ -12,6 +12,7 @@
 #include "bgw_policy/job.h"
 #include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
+#include "bgw_policy/process_hyper_inval_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "chunk.h"
@@ -25,6 +26,7 @@
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "compression/recompress.h"
+#include "compression/sparse_index_bloom1.h"
 #include "config.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
@@ -96,6 +98,10 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policy_refresh_cagg_proc = policy_refresh_cagg_proc,
 	.policy_refresh_cagg_check = policy_refresh_cagg_check,
 	.policy_refresh_cagg_remove = policy_refresh_cagg_remove,
+	.policy_process_hyper_inval_add = policy_process_hyper_inval_add,
+	.policy_process_hyper_inval_proc = policy_process_hyper_inval_proc,
+	.policy_process_hyper_inval_check = policy_process_hyper_inval_check,
+	.policy_process_hyper_inval_remove = policy_process_hyper_inval_remove,
 	.policy_reorder_add = policy_reorder_add,
 	.policy_reorder_proc = policy_reorder_proc,
 	.policy_reorder_check = policy_reorder_check,
@@ -142,6 +148,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
 	.continuous_agg_call_invalidation_trigger = execute_cagg_trigger,
 	.continuous_agg_refresh = continuous_agg_refresh,
+	.continuous_agg_process_hypertable_invalidations =
+		continuous_agg_process_hypertable_invalidations,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,
@@ -170,18 +178,25 @@ CrossModuleFunctions tsl_cm_functions = {
 	.array_compressor_finish = tsl_array_compressor_finish,
 	.bool_compressor_append = tsl_bool_compressor_append,
 	.bool_compressor_finish = tsl_bool_compressor_finish,
+	.bloom1_contains = bloom1_contains,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
+	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
 	.hypercore_handler = hypercore_handler,
 	.hypercore_proxy_handler = hypercore_proxy_handler,
 	.hypercore_decompress_update_segment = hypercore_decompress_update_segment,
 	.is_compressed_tid = tsl_is_compressed_tid,
 	.compression_enable = tsl_compression_enable,
+	.compressor_init = tsl_compressor_init,
+	.compressor_add_slot = tsl_compressor_add_slot,
+	.compressor_flush = tsl_compressor_flush,
+	.compressor_free = tsl_compressor_free,
+	.compression_chunk_create = tsl_compression_chunk_create,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
 	.show_chunk = chunk_show,
@@ -194,6 +209,7 @@ CrossModuleFunctions tsl_cm_functions = {
 		tsl_get_compressed_chunk_index_for_recompression,
 	.preprocess_query_tsl = tsl_preprocess_query,
 	.merge_chunks = chunk_merge_chunks,
+	.split_chunk = chunk_split_chunk,
 };
 
 static void

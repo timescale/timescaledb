@@ -5,6 +5,10 @@
 -- Avoid chunkwise aggregation to make the test stable
 set timescaledb.enable_chunkwise_aggregation to off;
 
+-- Hypercore TAM uses alternative sparse index predicate pushdown code which
+-- lacks the support for the bloom1 sparse index at the moment.
+set timescaledb.enable_sparse_index_bloom to off;
+
 create table readings(time timestamptz,
        location text,
        device int,
@@ -496,3 +500,6 @@ fetch backward 2 from cur1;
 fetch backward 2 from cur1;
 close cur1;
 commit;
+
+reset timescaledb.enable_chunkwise_aggregation;
+reset timescaledb.enable_sparse_index_bloom;

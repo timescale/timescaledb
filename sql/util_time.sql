@@ -3,6 +3,17 @@
 -- LICENSE-APACHE for a copy of the license.
 
 -- This file contains utilities for time conversion.
+
+-- Return the minimum for the type. For time types, it will be the
+-- Unix timestamp in microseconds.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.get_internal_time_min(REGTYPE) RETURNS BIGINT
+AS '@MODULE_PATHNAME@', 'ts_get_internal_time_min' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+-- Return the minimum for the type. For time types, it will be the
+-- Unix timestamp in microseconds.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.get_internal_time_max(REGTYPE) RETURNS BIGINT
+AS '@MODULE_PATHNAME@', 'ts_get_internal_time_max' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.to_unix_microseconds(ts TIMESTAMPTZ) RETURNS BIGINT
     AS '@MODULE_PATHNAME@', 'ts_pg_timestamp_to_unix_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
@@ -46,3 +57,31 @@ RETURNS INT8 AS '@MODULE_PATHNAME@', 'ts_continuous_agg_watermark_materialized' 
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.subtract_integer_from_now( hypertable_relid REGCLASS, lag INT8 )
 RETURNS INT8 AS '@MODULE_PATHNAME@', 'ts_subtract_integer_from_now' LANGUAGE C STABLE STRICT;
+
+-- Convert integer UNIX timestamps in microsecond to a timestamp range.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.make_multirange_from_internal_time(
+    base tstzrange, low_usec bigint, high_usec bigint
+) RETURNS TSTZMULTIRANGE AS
+$body$
+  select multirange(tstzrange(_timescaledb_functions.to_timestamp(low_usec),
+			      _timescaledb_functions.to_timestamp(high_usec)));
+$body$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+SET search_path TO pg_catalog, pg_temp;
+
+-- Convert integer UNIX timestamps in microsecond to a timestamp range.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.make_multirange_from_internal_time(
+    base TSRANGE, low_usec bigint, high_usec bigint
+) RETURNS TSMULTIRANGE AS
+$body$
+  select multirange(tsrange(_timescaledb_functions.to_timestamp_without_timezone(low_usec),
+			    _timescaledb_functions.to_timestamp_without_timezone(high_usec)));
+$body$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+SET search_path TO pg_catalog, pg_temp;
+
+-- Helper function to construct a range given an existing type from
+-- UNIX timestamps in microsecond precision.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.make_range_from_internal_time(
+    base anyrange, low_usec anyelement, high_usec anyelement
+) RETURNS anyrange
+AS '@MODULE_PATHNAME@', 'ts_make_range_from_internal_time'
+LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;

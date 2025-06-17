@@ -526,19 +526,64 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
                      Filter: (device = ANY ('{1,2,3}'::integer[]))
 (39 rows)
 
--- -- Test direct ordered select from a single partially compressed chunk
--- -- Note that this currently doesn't work: https://github.com/timescale/timescaledb/issues/7084
--- select * from show_chunks('ht_metrics_compressed') chunk order by chunk limit 1 \gset
---
--- :PREFIX
--- SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
---
--- SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
---
--- :PREFIX
--- SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
---
--- SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
+-- Test direct ordered select from a single partially compressed chunk
+select * from show_chunks('ht_metrics_compressed') chunk order by chunk limit 1 \gset
+:PREFIX
+SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Merge Append (actual rows=5 loops=1)
+         Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=3 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time"
+               Sort Method: top-N heapsort 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=54 loops=1)
+(12 rows)
+
+SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
+             time             | device | value 
+------------------------------+--------+-------
+ Thu Jan 02 00:00:00 2020 PST |      1 |   0.1
+ Thu Jan 02 00:00:00 2020 PST |      1 |   0.1
+ Thu Jan 02 06:00:00 2020 PST |      1 |   0.1
+ Thu Jan 02 09:00:00 2020 PST |      1 |   0.1
+ Thu Jan 02 12:00:00 2020 PST |      1 |   0.1
+(5 rows)
+
+:PREFIX
+SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Merge Append (actual rows=5 loops=1)
+         Sort Key: _hyper_1_1_chunk.device DESC, _hyper_1_1_chunk."time" DESC
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=4 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: compress_hyper_2_4_chunk.device DESC, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
+                     Sort Method: quicksort 
+                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: _hyper_1_1_chunk.device DESC, _hyper_1_1_chunk."time" DESC
+               Sort Method: top-N heapsort 
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=54 loops=1)
+(12 rows)
+
+SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
+             time             | device | value 
+------------------------------+--------+-------
+ Wed Jan 08 12:00:00 2020 PST |      3 |   0.3
+ Wed Jan 08 09:00:00 2020 PST |      3 |   0.3
+ Wed Jan 08 06:00:00 2020 PST |      3 |   0.3
+ Wed Jan 08 00:00:00 2020 PST |      3 |   0.3
+ Wed Jan 08 00:00:00 2020 PST |      3 |   0.3
+(5 rows)
+
 CREATE TABLE test1 (
 time timestamptz NOT NULL,
     x1 integer,
@@ -1507,6 +1552,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test4') ch;
 (1 row)
 
 INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
+VACUUM ANALYZE test4;
 set enable_hashagg TO false;
 SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
              time             | device 

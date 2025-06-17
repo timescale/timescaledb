@@ -1,0 +1,1 @@
+Implements: #8208 Use NULL compression for BOOL batches with all null values like the other compression algorithms

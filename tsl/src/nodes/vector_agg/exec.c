@@ -356,6 +356,20 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 			return NULL;
 		}
 
+		if (dcontext->ps->instrument)
+		{
+			/*
+			 * Ensure proper EXPLAIN output for the underlying DecompressChunk
+			 * node.
+			 *
+			 * This value is normally updated by InstrStopNode(), and is
+			 * required so that the calculations in InstrEndLoop() run properly.
+			 * We have to call it manually because we run the underlying
+			 * DecompressChunk manually and not as a normal Postgres node.
+			 */
+			dcontext->ps->instrument->running = true;
+		}
+
 		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
 
 		/* If the entire batch is filtered out, then immediately read the next
@@ -376,10 +390,14 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 	if (dcontext->ps->instrument)
 	{
 		/*
-		 * These values are normally updated by InstrStopNode(), and are
+		 * Ensure proper EXPLAIN output for the underlying DecompressChunk
+		 * node.
+		 *
+		 * This value is normally updated by InstrStopNode(), and is
 		 * required so that the calculations in InstrEndLoop() run properly.
+		 * We have to call it manually because we run the underlying
+		 * DecompressChunk manually and not as a normal Postgres node.
 		 */
-		dcontext->ps->instrument->running = true;
 		dcontext->ps->instrument->tuplecount += not_filtered_rows;
 	}
 

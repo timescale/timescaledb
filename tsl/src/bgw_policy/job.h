@@ -18,6 +18,12 @@
 /* Add config keys common across job types here */
 #define CONFIG_KEY_VERBOSE_LOG "verbose_log" /*used only by retention now*/
 
+typedef struct PolicyMoveHyperInvalData
+{
+	Hypertable *hypertable;
+	Cache *hcache;
+} PolicyMoveHyperInvalData;
+
 typedef struct PolicyReorderData
 {
 	Hypertable *hypertable;
@@ -41,6 +47,7 @@ typedef struct PolicyContinuousAggData
 	int32 buckets_per_batch;
 	int32 max_batches_per_execution;
 	bool refresh_newest_first;
+	bool process_hypertable_invalidations;
 } PolicyContinuousAggData;
 
 typedef struct PolicyCompressionData
@@ -57,12 +64,16 @@ typedef void (*reorder_func)(Oid tableOid, Oid indexOid, bool verbose, Oid wait_
 extern bool policy_reorder_execute(int32 job_id, Jsonb *config);
 extern bool policy_retention_execute(int32 job_id, Jsonb *config);
 extern bool policy_refresh_cagg_execute(int32 job_id, Jsonb *config);
+extern bool policy_process_hyper_inval_execute(int32 job_id, Jsonb *config);
 extern bool policy_recompression_execute(int32 job_id, Jsonb *config);
 extern void policy_reorder_read_and_validate_config(Jsonb *config, PolicyReorderData *policy_data);
 extern void policy_retention_read_and_validate_config(Jsonb *config,
 													  PolicyRetentionData *policy_data);
 extern void policy_refresh_cagg_read_and_validate_config(Jsonb *config,
 														 PolicyContinuousAggData *policy_data);
+extern void
+policy_process_hyper_inval_read_and_validate_config(Jsonb *config,
+													PolicyMoveHyperInvalData *policy_data);
 extern void policy_compression_read_and_validate_config(Jsonb *config,
 														PolicyCompressionData *policy_data);
 extern void policy_recompression_read_and_validate_config(Jsonb *config,

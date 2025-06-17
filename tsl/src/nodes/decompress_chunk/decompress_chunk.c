@@ -64,10 +64,8 @@ static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compress
 										 const CompressionInfo *compression_info,
 										 const SortInfo *sort_info);
 
-static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root,
-														 const CompressionInfo *info,
-														 int parallel_workers,
-														 Path *compressed_path);
+static DecompressChunkPath *
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
 
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 											 const Chunk *chunk, RelOptInfo *chunk_rel,
@@ -362,6 +360,8 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 DecompressChunkPath *
 copy_decompress_chunk_path(DecompressChunkPath *src)
 {
+	Assert(ts_is_decompress_chunk_path(&src->custom_path.path));
+
 	DecompressChunkPath *dst = palloc(sizeof(DecompressChunkPath));
 	memcpy(dst, src, sizeof(DecompressChunkPath));
 
@@ -443,12 +443,14 @@ static void
 cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 {
 	/* startup_cost is cost before fetching first tuple */
-	if (compressed_path->rows > 0)
-		path->startup_cost = compressed_path->total_cost / compressed_path->rows;
+	const double compressed_rows = Max(1, compressed_path->rows);
+	path->startup_cost =
+		compressed_path->startup_cost +
+		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
 	/* total_cost is cost for fetching all tuples */
-	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 	path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
+	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 }
 
 /* Smoothstep function S1 (the h01 cubic Hermite spline). */
@@ -864,6 +866,22 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	{
 		Path *compressed_path = lfirst(lc);
 
+		/* We want to consider startup costs so that IndexScan is preferred to sorted SeqScan when
+		   we may have a chance to use SkipScan. We consider startup costs for LIMIT queries, and
+		   SkipScan is basically a "LIMIT 1" query run "ndistinct" times. At this point we don't
+		   have all information to check if SkipScan can be used, but we can narrow it down.
+		*/
+		if (!chunk_rel->consider_startup && IsA(compressed_path, IndexPath))
+		{
+			/* Candidate for SELECT DISTINCT SkipScan */
+			if (list_length(root->distinct_pathkeys) == 1
+				/* Candidate for DISTINCT aggregate SkipScan */
+				|| (root->numOrderedAggs >= 1 && list_length(root->group_pathkeys) == 1))
+			{
+				chunk_rel->consider_startup = true;
+			}
+		}
+
 		/*
 		 * We skip any BitmapScan parameterized paths here as supporting
 		 * those would require fixing up the internal scan. Since we
@@ -942,8 +960,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 				continue;
 		}
 
+		Assert(compressed_path->parallel_workers == 0);
 		Path *chunk_path =
-			(Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
+			(Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+		Assert(chunk_path->parallel_workers == 0);
 
 		/*
 		 * Create a path for the batch sorted merge optimization. This optimization performs a
@@ -1126,10 +1146,11 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			 * If this is a partially compressed chunk we have to combine data
 			 * from compressed and uncompressed chunk.
 			 */
-			path = (Path *) decompress_chunk_path_create(root,
-														 compression_info,
-														 compressed_path->parallel_workers,
-														 compressed_path);
+			Assert(compressed_path->parallel_workers > 0);
+			Assert(compressed_path->parallel_safe);
+			path = (Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+			Assert(path->parallel_workers > 0);
+			Assert(path->parallel_safe);
 
 			if (consider_partial)
 			{
@@ -1865,8 +1886,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 }
 
 static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, int parallel_workers,
-							 Path *compressed_path)
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
 {
 	DecompressChunkPath *path;
 
@@ -1901,13 +1921,16 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, int
 	path->custom_path.methods = &decompress_chunk_path_methods;
 	path->batch_sorted_merge = false;
 
-	/* To prevent a non-parallel path with this node appearing
-	 * in a parallel plan we only set parallel_safe to true
-	 * when parallel_workers is greater than 0 which is only
-	 * the case when creating partial paths. */
-	path->custom_path.path.parallel_safe = parallel_workers > 0;
-	path->custom_path.path.parallel_workers = parallel_workers;
+	/*
+	 * DecompressChunk doesn't manage any parallelism itself.
+	 */
 	path->custom_path.path.parallel_aware = false;
+
+	/*
+	 * It can be applied per parallel worker, if its underlying scan is parallel.
+	 */
+	path->custom_path.path.parallel_safe = compressed_path->parallel_safe;
+	path->custom_path.path.parallel_workers = compressed_path->parallel_workers;
 
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;

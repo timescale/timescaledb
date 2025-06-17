@@ -48,6 +48,17 @@ CREATE INDEX skip_scan_expr_idx ON :TABLE((dev % 3));
 DROP INDEX skip_scan_expr_idx;
 
 CREATE INDEX ON :TABLE(dev_name);
+
+-- Tests for #8107: accounting for scanning most of the input due to non-index quals
+-- Non-index qual, no tuples match: SeqScan preferred
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE val < 0 ORDER BY 1;
+-- Highly selective non-index qual, have to scan many tuples to match: SeqScan preferred
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE time = 100 ORDER BY 1;
+-- Same but a combo of non-index quals
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE time = 100 and dev = 1 ORDER BY 1;
+-- Highly selective index qual: less tuples to scan for low-selective non-index qual, can choose SkipScan
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev_name IS NULL and dev = 1 ORDER BY 1;
+
 CREATE INDEX ON :TABLE(dev);
 CREATE INDEX ON :TABLE(dev, time);
 CREATE INDEX ON :TABLE(time,dev);
@@ -71,6 +82,7 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT *, 'q1_9' FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev, time, 'q1_10' FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev, NULL, 'q1_11' FROM :TABLE ORDER BY dev;
+
 -- distinct on expressions not supported
 :PREFIX SELECT DISTINCT time_bucket(10,time), 'q1_12' FROM :TABLE;
 :PREFIX SELECT DISTINCT length(dev_name), 'q1_13' FROM :TABLE;
@@ -169,6 +181,18 @@ CREATE INDEX ON :TABLE(time,dev,val);
 
 -- test constants in ORDER BY
 :PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE dev = 1 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE dev = 1 and time = 100 ORDER BY dev, time DESC;
+:PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
+
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT dev FROM :TABLE) sq JOIN :TABLE ref ON (sq.dev = ref.dev) WHERE 1 > 2;
+
+-- test multiple distincts with all but one pinned: #7998
+:PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT dev, time, val FROM :TABLE WHERE time = 100 and val = 100 ORDER BY 1;
+:PREFIX SELECT DISTINCT ON (dev, time) * FROM :TABLE WHERE time = 100 ORDER BY dev;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev = 1 AND time < 20 ORDER BY dev, time;
 
 -- CTE
 :PREFIX WITH devices AS (
@@ -238,4 +262,15 @@ TRUNCATE skip_scan_insert;
 
 -- no tuples in resultset
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls WHERE time IS NOT NULL;
+
+-- Test for SDC issue #2976
+-- We should use index "btree ("time", dev, dev_name)" where "dev_name" index key is #3 but we have 2 index quals including SkipScan qual
+-- We should not drop qual on "dev_name"
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev,dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+DROP INDEX skip_scan_idx_time_dev_dname;
+-- "dev_name" is not a key column: it's not in the index quals and should be a filter
+CREATE INDEX skip_scan_idx_time_dev_dname ON :TABLE(time,dev) INCLUDE(dev_name);
+:PREFIX SELECT DISTINCT time FROM :TABLE WHERE dev_name IS NULL ORDER BY 1;
+DROP INDEX skip_scan_idx_time_dev_dname;
 

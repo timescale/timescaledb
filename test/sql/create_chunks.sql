@@ -171,3 +171,12 @@ SELECT relname, relreplident FROM show_chunks('test_ht') ch JOIN pg_class c ON (
 SELECT count(*) FROM test_tb;
 SELECT count(*) FROM test_ht;
 SELECT count(*) FROM test_output;
+
+-- test ALTER TABLE SET (tsdb.chunk_interval) on a hypertable
+CREATE TABLE t_with(time timestamptz not null, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time');
+
+SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 't_with';
+ALTER TABLE t_with SET (tsdb.chunk_interval = '1 hour');
+SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 't_with';
+
+

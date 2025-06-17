@@ -49,6 +49,9 @@ get_vector_const_predicate(Oid pg_predicate)
 		case F_TEXTNE:
 			return vector_const_textne;
 
+		case F_BOOLEQ:
+			return vector_booleq;
+
 		default:
 			/*
 			 * More checks below, this branch is to placate the static analyzers.
@@ -94,5 +97,133 @@ vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
 		{
 			result[i] &= validity_word;
 		}
+	}
+}
+
+void
+vector_booleq(const ArrowArray *arrow, Datum arg, uint64 *restrict result)
+{
+	bool check_val = DatumGetBool(arg);
+	if (check_val)
+	{
+		vector_booleantest(arrow, IS_TRUE, result);
+	}
+	else
+	{
+		vector_booleantest(arrow, IS_FALSE, result);
+	}
+}
+
+void
+vector_booleantest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
+{
+	const uint16 bitmap_words = (arrow->length + 63) / 64;
+	const uint64 *restrict validity = (const uint64 *) arrow->buffers[0];
+	const uint64 *restrict values = (const uint64 *) arrow->buffers[1];
+
+	switch (test_type)
+	{
+		case IS_TRUE:
+		{
+			if (validity)
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= validity[i] & values[i];
+				}
+			}
+			else
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= values[i];
+				}
+			}
+			break;
+		}
+		case IS_NOT_TRUE:
+		{
+			if (validity)
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= (~validity[i] | ~values[i]);
+				}
+			}
+			else
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= ~values[i];
+				}
+			}
+			break;
+		}
+		case IS_FALSE:
+		{
+			if (validity)
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= validity[i] & ~values[i];
+				}
+			}
+			else
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= ~values[i];
+				}
+			}
+			break;
+		}
+		case IS_NOT_FALSE:
+		{
+			if (validity)
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= (~validity[i] | values[i]);
+				}
+			}
+			else
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= values[i];
+				}
+			}
+			break;
+		}
+		case IS_UNKNOWN:
+		{
+			if (validity)
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= ~validity[i];
+				}
+			}
+			else
+			{
+				/* No validity, so all rows are valid and all result rows are filtered out. */
+				memset(result, 0, bitmap_words * sizeof(uint64));
+			}
+			break;
+		}
+		case IS_NOT_UNKNOWN:
+		{
+			if (validity)
+			{
+				for (uint16 i = 0; i < bitmap_words; i++)
+				{
+					result[i] &= validity[i];
+				}
+			}
+			break;
+		}
+		default:
+			Assert(false);
+			break;
 	}
 }

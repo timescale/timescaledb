@@ -53,6 +53,7 @@ select * from test_chartab order by mac_id , ts limit 2;
        8864 | 0014070000011039 | 150 | Sat Dec 14 02:52:05.863 2019
 (2 rows)
 
+VACUUM ANALYZE test_chartab;
 -- test constraintawareappend sort node handling
 SET enable_hashagg TO false;
 SET timescaledb.enable_chunkwise_aggregation TO false;
@@ -83,8 +84,8 @@ EXPLAIN (analyze,costs off,timing off,summary off) SELECT
 FROM merge_sort
 WHERE time < now()
 GROUP BY 2, 3;
-                                                                          QUERY PLAN                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=1 loops=1)
    Group Key: merge_sort.device_id, merge_sort.measure_id
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=745 loops=1)
@@ -94,7 +95,11 @@ GROUP BY 2, 3;
                Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=120 loops=1)
                      Vectorized Filter: ("time" < "timestamp"(now()))
-                     ->  Index Scan using compress_hyper_4_10_chunk_device_id_measure_id__ts_meta_min_idx on compress_hyper_4_10_chunk (actual rows=1 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: compress_hyper_4_10_chunk.device_id, compress_hyper_4_10_chunk.measure_id
+                           Sort Method: quicksort 
+                           ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=1 loops=1)
+                                 Filter: (_ts_meta_min_1 < now())
                ->  Sort (actual rows=168 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                      Sort Method: quicksort 
@@ -115,7 +120,7 @@ GROUP BY 2, 3;
                      Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_9_chunk (actual rows=121 loops=1)
                            Filter: ("time" < now())
-(30 rows)
+(34 rows)
 
 -- this should exclude the decompressed chunk
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT
@@ -184,17 +189,17 @@ WHERE check_equal_228(rtt) ORDER BY ts;
 EXPLAIN (analyze,costs off,timing off,summary off)
 SELECT * from test_chartab
 WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
- Sort (actual rows=1 loops=1)
-   Sort Key: test_chartab.ts
-   Sort Method: quicksort 
-   ->  Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
-         Chunks excluded during startup: 0
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
-               Filter: check_equal_228(rtt)
-               Rows Removed by Filter: 2
-               Vectorized Filter: (ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
+   Order: test_chartab.ts
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
+         Filter: ((ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone) AND check_equal_228(rtt))
+         Rows Removed by Filter: 2
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: compress_hyper_2_3_chunk._ts_meta_min_1
+               Sort Method: quicksort 
                ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3 loops=1)
                      Filter: (_ts_meta_min_1 < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
 (11 rows)
@@ -208,7 +213,7 @@ SELECT create_hypertable('pseudo','time');
 (1 row)
 
 ALTER TABLE pseudo SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "pseudo" is set to ""
 NOTICE:  default order by for hypertable "pseudo" is set to ""time" DESC"
 INSERT INTO pseudo SELECT '2000-01-01';

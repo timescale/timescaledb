@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Test that the compressed batch sorted merge plan is chosen based on the
 -- cardinality of the segmentby columns.
+set max_parallel_workers_per_gather = 0;
 -- helper function: float -> pseudorandom float [0..1].
 create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
 create table t(ts timestamp, low_card int, high_card int, value float);
@@ -134,3 +135,4 @@ explain (costs off) select * from t where high_card < 10 order by ts;
 (5 rows)
 
 reset work_mem;
+reset max_parallel_workers_per_gather;

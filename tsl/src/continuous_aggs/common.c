@@ -481,7 +481,9 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 	}
 
 	if (!found)
-		elog(ERROR, "continuous aggregate view must include a valid time bucket function");
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("continuous aggregate view must include a valid time bucket function")));
 }
 
 /*
@@ -769,7 +771,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 		if (!ht)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 					 errmsg("table \"%s\" is not a hypertable", get_rel_name(rte->relid))));
@@ -781,7 +783,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 		if (!cagg_parent)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("invalid continuous aggregate query"),
@@ -791,7 +793,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 		if (!ContinuousAggIsFinalized(cagg_parent))
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("old format of continuous aggregate is not supported"),
@@ -819,7 +821,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertable is an internal compressed hypertable")));
@@ -836,7 +838,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, false);
 			Assert(cagg != NULL);
 
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertable is a continuous aggregate materialization table"),
@@ -859,7 +861,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	 */
 	if (part_dimension == NULL || part_dimension->partitioning != NULL)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("custom partitioning functions not supported"
@@ -874,7 +876,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 		if (strlen(funcschema) == 0 || strlen(funcname) == 0)
 		{
-			ts_cache_release(hcache);
+			ts_cache_release(&hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("custom time function required on hypertable \"%s\"",
@@ -906,7 +908,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 								INVALID_HYPERTABLE_ID);
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	/*
 	 * We need a GROUP By clause with time_bucket on the partitioning
@@ -1304,7 +1306,7 @@ makeRangeTblEntry(Query *query, const char *aliasname)
 
 	rte->lateral = false;
 	rte->inh = false; /* never true for subqueries */
-	rte->inFromCl = true;
+	rte->inFromCl = false;
 
 	return rte;
 }
@@ -1436,11 +1438,11 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	}
 
 	query->targetList = tlist;
+	query->jointree = makeFromExpr(NIL, NULL);
 
 	if (sortClause)
 	{
 		query->sortClause = sortClause;
-		query->jointree = makeFromExpr(NIL, NULL);
 	}
 
 	setop->colTypes = col_types;

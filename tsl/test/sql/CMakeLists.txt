@@ -7,10 +7,12 @@ set(TEST_FILES
     bgw_job_ddl.sql
     bgw_policy.sql
     bgw_security.sql
+    cagg_api.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_policy.sql
+    cagg_policy_move.sql
     cagg_refresh.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
@@ -18,11 +20,13 @@ set(TEST_FILES
     chunk_column_stats.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
+    compress_bloom_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
     compressed_collation.sql
     compressed_detoaster.sql
     compress_float8_corrupt.sql
+    compression_allocation.sql
     compression_conflicts.sql
     compression_constraints.sql
     compression_create_compressed_table.sql
@@ -30,6 +34,7 @@ set(TEST_FILES
     compression_fks.sql
     compression_indexcreate.sql
     compression_insert.sql
+    compression_null_dump_restore.sql
     compression_nulls_and_defaults.sql
     compression_policy.sql
     compression_qualpushdown.sql
@@ -42,6 +47,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     create_table_with.sql
     custom_hashagg.sql
+    decompress_chunk_cost.sql
     decompress_index.sql
     foreign_keys.sql
     hypercore_columnar.sql
@@ -72,6 +78,7 @@ set(TEST_FILES
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
+    split_chunk.sql
     transparent_decompression_join_index.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
@@ -84,12 +91,17 @@ set(TEST_TEMPLATES
     cagg_union_view.sql.in
     cagg_permissions.sql.in
     compression_permissions.sql.in
+    ordered_append.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
 
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
+endif()
+
+if(NOT APPLE)
+  list(APPEND TEST_FILES compressed_copy.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -106,15 +118,17 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_scheduler_restart.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
-    cagg_refresh_policy_incremental.sql
+    cagg_policy_incremental.sql
     compress_bgw_reorder_drop_chunks.sql
     chunk_api.sql
     chunk_merge.sql
     chunk_utils_compression.sql
     chunk_utils_internal.sql
+    compress_bloom_sparse_debug.sql
     compression_algos.sql
     compression_bgw.sql
     compression_bools.sql
+    compression_bool_vectorized.sql
     compression_ddl.sql
     compression_errors.sql
     compression_hypertable.sql
@@ -211,7 +225,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
-    cagg_refresh_policy_incremental
+    cagg_policy_incremental
     hypercore
     move
     reorder

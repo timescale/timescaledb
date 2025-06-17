@@ -341,7 +341,7 @@ QUERY PLAN
 -- test UPDATE
 :PREFIX UPDATE const_now SET value = EXTRACT(EPOCH FROM now()) WHERE time > now();
 QUERY PLAN
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on const_now
          Update on _hyper_X_X_chunk const_now_1
          ->  Result
@@ -352,7 +352,7 @@ QUERY PLAN
 -- test DELETE
 :PREFIX DELETE FROM const_now WHERE time > now();
 QUERY PLAN
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Delete on const_now
          Delete on _hyper_X_X_chunk const_now_1
          ->  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk const_now_1

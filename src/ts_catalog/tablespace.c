@@ -186,7 +186,7 @@ tablespace_validate_revoke_internal(const char *tspcname, tuple_found_func tuple
 
 	tablespace_scan_by_name(tspcname, tuple_found, &info);
 
-	ts_cache_release(info.hcache);
+	ts_cache_release(&info.hcache);
 }
 
 static void
@@ -463,7 +463,7 @@ tablespace_delete_from_all(const char *tspcname, Oid userid, List **hypertables)
 										   &info,
 										   0,
 										   RowExclusiveLock);
-	ts_cache_release(info.hcache);
+	ts_cache_release(&info.hcache);
 
 	if (num_deleted > 0)
 		CommandCounterIncrement();
@@ -589,7 +589,7 @@ ts_tablespace_attach_internal(Name tspcname, Oid hypertable_oid, bool if_not_att
 		ts_catalog_restore_user(&sec_ctx);
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 }
 
 static int
@@ -618,7 +618,7 @@ tablespace_detach_one(Oid hypertable_oid, const char *tspcname, Oid tspcoid, boo
 						tspcname,
 						get_rel_name(hypertable_oid))));
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return ret;
 }
@@ -636,7 +636,7 @@ tablespace_detach_all(Oid hypertable_oid)
 
 	ret = ts_tablespace_delete(ht->fd.id, NULL, InvalidOid);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return ret;
 }
@@ -783,7 +783,7 @@ ts_tablespace_show(PG_FUNCTION_ARGS)
 	}
 	else
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		SRF_RETURN_DONE(funcctx);
 	}
 }
