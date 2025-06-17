@@ -75,8 +75,17 @@ typedef struct HashingStrategy
 	 */
 	uint8 *tmp_key_storage;
 	uint64 num_tmp_key_storage_bytes;
+
+	/*
+	 * For single text key that uses dictionary encoding, in some cases we first
+	 * calculate the key indexes for the dictionary entries, and then translate
+	 * it to the actual rows.
+	 */
+	uint32 *restrict key_index_for_dict;
+	uint64 num_key_index_for_dict;
+	bool use_key_index_for_dict;
 } HashingStrategy;
 
-void hash_strategy_output_key_alloc(GroupingPolicyHash *policy, uint16 nrows);
+void hash_strategy_output_key_alloc(HashingStrategy *hashing, uint16 nrows);
 void hash_strategy_output_key_single_emit(GroupingPolicyHash *policy, uint32 current_key,
 										  TupleTableSlot *aggregated_slot);

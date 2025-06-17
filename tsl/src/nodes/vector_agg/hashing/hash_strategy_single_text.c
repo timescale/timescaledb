@@ -142,7 +142,8 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	/*
 	 * Determine whether we're going to use the dictionary for hashing.
 	 */
-	policy->use_key_index_for_dict = false;
+	HashingStrategy *hashing = &policy->hashing;
+	hashing->use_key_index_for_dict = false;
 
 	BatchHashingParams params = build_batch_hashing_params(policy, vector_slot);
 	if (params.single_grouping_column.decompression_type != DT_ArrowTextDict)
@@ -171,15 +172,15 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * to a given batch row. We don't need the offsets for the previous batch
 	 * that are currently stored there, so we don't need to use repalloc.
 	 */
-	if ((size_t) dict_rows > policy->num_key_index_for_dict)
+	if ((size_t) dict_rows > hashing->num_key_index_for_dict)
 	{
-		if (policy->key_index_for_dict != NULL)
+		if (hashing->key_index_for_dict != NULL)
 		{
-			pfree(policy->key_index_for_dict);
+			pfree(hashing->key_index_for_dict);
 		}
-		policy->num_key_index_for_dict = dict_rows;
-		policy->key_index_for_dict =
-			palloc(sizeof(policy->key_index_for_dict[0]) * policy->num_key_index_for_dict);
+		hashing->num_key_index_for_dict = dict_rows;
+		hashing->key_index_for_dict =
+			palloc(sizeof(hashing->key_index_for_dict[0]) * hashing->num_key_index_for_dict);
 	}
 
 	/*
@@ -192,8 +193,8 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 		const size_t dict_words = (dict_rows + 63) / 64;
 		memset(dict_filter, 0, sizeof(*dict_filter) * dict_words);
 
-		bool *restrict tmp = (bool *) policy->key_index_for_dict;
-		Assert(sizeof(*tmp) <= sizeof(*policy->key_index_for_dict));
+		bool *restrict tmp = (bool *) hashing->key_index_for_dict;
+		Assert(sizeof(*tmp) <= sizeof(*hashing->key_index_for_dict));
 		memset(tmp, 0, sizeof(*tmp) * dict_rows);
 
 		int outer;
@@ -201,7 +202,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 		{
 #define INNER_LOOP(INNER_MAX)                                                                      \
 	const uint64 word = row_filter[outer];                                                         \
-	for (int inner = 0; inner < INNER_MAX; inner++)                                                \
+	for (int inner = 0; inner < (INNER_MAX); inner++)                                              \
 	{                                                                                              \
 		const int16 index =                                                                        \
 			((int16 *) params.single_grouping_column.buffers[3])[outer * 64 + inner];              \
@@ -221,7 +222,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 		{
 #define INNER_LOOP(INNER_MAX)                                                                      \
 	uint64 word = 0;                                                                               \
-	for (int inner = 0; inner < INNER_MAX; inner++)                                                \
+	for (int inner = 0; inner < (INNER_MAX); inner++)                                              \
 	{                                                                                              \
 		word |= (tmp[outer * 64 + inner] ? 1ull : 0ull) << inner;                                  \
 	}                                                                                              \
@@ -248,23 +249,20 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * batch filter.
 	 */
 	bool have_null_key = false;
-	if (row_filter != NULL)
+	if (params.single_grouping_column.arrow->null_count > 0)
 	{
-		if (params.single_grouping_column.arrow->null_count > 0)
+		if (row_filter != NULL)
 		{
 			Assert(params.single_grouping_column.buffers[0] != NULL);
 			const size_t batch_words = (batch_rows + 63) / 64;
 			for (size_t i = 0; i < batch_words; i++)
 			{
-				have_null_key = have_null_key ||
-								(row_filter[i] &
-								 (~((uint64 *) params.single_grouping_column.buffers[0])[i])) != 0;
+				const uint64 filtered_null_word =
+					row_filter[i] & (~((uint64 *) params.single_grouping_column.buffers[0])[i]);
+				have_null_key = (filtered_null_word != 0) || have_null_key;
 			}
 		}
-	}
-	else
-	{
-		if (params.single_grouping_column.arrow->null_count > 0)
+		else
 		{
 			Assert(params.single_grouping_column.buffers[0] != NULL);
 			have_null_key = true;
@@ -277,10 +275,10 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * null key before all other keys in case of NULLS FIRST.
 	 */
 	const bool nulls_first = !arrow_row_is_valid(params.single_grouping_column.buffers[0], 0);
-	if (have_null_key && nulls_first && policy->hashing.null_key_index == 0)
+	if (have_null_key && nulls_first && hashing->null_key_index == 0)
 	{
-		policy->hashing.null_key_index = ++params.hashing->last_used_key_index;
-		policy->hashing.output_keys[policy->hashing.null_key_index] = PointerGetDatum(NULL);
+		hashing->null_key_index = ++params.hashing->last_used_key_index;
+		hashing->output_keys[hashing->null_key_index] = PointerGetDatum(NULL);
 	}
 
 	/*
@@ -288,12 +286,12 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * text values.
 	 */
 	Assert(params.single_grouping_column.decompression_type = DT_ArrowTextDict);
-	Assert((size_t) dict_rows <= policy->num_key_index_for_dict);
-	memset(policy->key_index_for_dict, 0, sizeof(*policy->key_index_for_dict) * dict_rows);
+	Assert((size_t) dict_rows <= hashing->num_key_index_for_dict);
+	memset(hashing->key_index_for_dict, 0, sizeof(*hashing->key_index_for_dict) * dict_rows);
 
 	params.single_grouping_column.decompression_type = DT_ArrowText;
 	params.single_grouping_column.buffers[0] = NULL;
-	params.result_key_indexes = policy->key_index_for_dict;
+	params.result_key_indexes = hashing->key_index_for_dict;
 
 	single_text_fill_offsets_impl(params, 0, dict_rows);
 
@@ -302,10 +300,10 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * have one. Note that we have to respect NULLS FIRST/LAST. Here we add the
 	 * null key after all other keys in case of NULLS LAST.
 	 */
-	if (have_null_key && !nulls_first && policy->hashing.null_key_index == 0)
+	if (have_null_key && !nulls_first && hashing->null_key_index == 0)
 	{
-		policy->hashing.null_key_index = ++params.hashing->last_used_key_index;
-		policy->hashing.output_keys[policy->hashing.null_key_index] = PointerGetDatum(NULL);
+		hashing->null_key_index = ++params.hashing->last_used_key_index;
+		hashing->output_keys[hashing->null_key_index] = PointerGetDatum(NULL);
 	}
 
 	/*
@@ -346,7 +344,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 		}
 	}
 
-	policy->use_key_index_for_dict = true;
+	hashing->use_key_index_for_dict = true;
 
 	DEBUG_PRINT("computed the dict offsets\n");
 }
@@ -354,11 +352,11 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 static void
 single_text_offsets_translate(BatchHashingParams params, int start_row, int end_row)
 {
-	GroupingPolicyHash *policy = params.policy;
-	Assert(policy->use_key_index_for_dict);
+	HashingStrategy *hashing = params.hashing;
+	Assert(hashing->use_key_index_for_dict);
 
 	uint32 *restrict indexes_for_rows = params.result_key_indexes;
-	uint32 *restrict indexes_for_dict = policy->key_index_for_dict;
+	uint32 *restrict indexes_for_dict = hashing->key_index_for_dict;
 
 	for (int row = start_row; row < end_row; row++)
 	{
@@ -371,7 +369,7 @@ single_text_offsets_translate(BatchHashingParams params, int start_row, int end_
 		}
 		else
 		{
-			indexes_for_rows[row] = policy->hashing.null_key_index;
+			indexes_for_rows[row] = hashing->null_key_index;
 		}
 
 		Assert(indexes_for_rows[row] != 0 || !arrow_row_is_valid(params.batch_filter, row));
