@@ -421,3 +421,32 @@ INSERT INTO metrics SELECT '2025-01-01','d1',1,42;
 ERROR:  new row for relation "_hyper_9_32_chunk" violates check constraint "metrics_c1_check"
 \set ON_ERROR_STOP 1
 ROLLBACK;
+-- test unique expression indexes
+BEGIN;
+-- should succeed since no conflict
+CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
+ROLLBACK;
+BEGIN;
+INSERT INTO metrics SELECT '2025-01-01','d1',1;
+-- partially compressed chunk
+-- should fail because there is conflict
+\set ON_ERROR_STOP 0
+CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
+ERROR:  duplicate key value violates unique constraint
+\set ON_ERROR_STOP 1
+ROLLBACK;
+BEGIN;
+INSERT INTO metrics SELECT '2025-01-01','d1',1;
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+ count 
+-------
+     1
+(1 row)
+
+-- fully compressed chunk
+-- should fail because there is conflict
+\set ON_ERROR_STOP 0
+CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
+ERROR:  duplicate key value violates unique constraint
+\set ON_ERROR_STOP 1
+ROLLBACK;

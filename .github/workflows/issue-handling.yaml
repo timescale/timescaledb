@@ -33,10 +33,15 @@ jobs:
     name: Notify security channel
     runs-on: timescaledb-runner-arm64
     if: >-
-      github.event_name == 'issues' &&
-      github.event.action != 'closed' &&
-      ( contains(github.event.issue.labels.*.name, 'segfault') ||
-        contains(github.event.issue.labels.*.name, 'security') )
+      github.event_name == 'issues' && github.event.action == 'opened' && (
+          contains(github.event.issue.labels.*.name, 'segfault') ||
+          contains(github.event.issue.labels.*.name, 'security')
+      )
+      ||
+      github.event_name == 'issues' && github.event.action == 'labeled' && (
+          github.event.label.name == 'segfault' ||
+          github.event.label.name == 'security'
+      )
     env:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     steps:

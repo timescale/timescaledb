@@ -21,6 +21,7 @@
 #include <utils/jsonb.h>
 
 #include "compat/compat.h"
+#include "process_utility.h"
 
 /*
  * Macro for debug messages that should *only* be present in debug builds but
@@ -103,7 +104,15 @@ slot_as_string(TupleTableSlot *slot)
 	(psprintf("%s()", fcinfo->flinfo ? get_func_name(FC_FN_OID(fcinfo)) : __func__))
 
 #define TS_PREVENT_FUNC_IF_READ_ONLY() PreventCommandIfReadOnly(TS_FUNCNAME())
-#define TS_PREVENT_IN_TRANSACTION_BLOCK(toplevel) PreventInTransactionBlock(toplevel, TS_FUNCNAME())
+
+#define TS_PREVENT_IN_TRANSACTION_BLOCK(CMD)                                                       \
+	do                                                                                             \
+	{                                                                                              \
+		bool _isTopLevel = ts_process_utility_is_top_level();                                      \
+		/* Reset context before calling PreventInTransactionBlock in case it aborts. */            \
+		ts_process_utility_context_reset();                                                        \
+		PreventInTransactionBlock(_isTopLevel, (CMD));                                             \
+	} while (0)
 
 #define MAX(x, y) ((x) > (y) ? x : y)
 #define MIN(x, y) ((x) < (y) ? x : y)
@@ -403,3 +412,4 @@ extern TSDLLEXPORT Oid ts_get_rel_am(Oid relid);
 extern TSDLLEXPORT void ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode);
 extern TSDLLEXPORT bool ts_is_hypercore_am(Oid amoid);
 extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);
+extern TSDLLEXPORT char *ts_get_attr_expr(Relation rel, AttrNumber attno);

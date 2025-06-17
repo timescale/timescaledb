@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 SELECT
-       format('include/%s.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
+       format('include/%s_query.sql', :'TEST_BASE_NAME') as "TEST_QUERY_NAME",
        format('%s/shared/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNOPTIMIZED",
        format('%s/shared/results/%s_results_uncompressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_UNCOMPRESSED",
        format('%s/shared/results/%s_results_compressed.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_COMPRESSED"
@@ -1220,15 +1220,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 :PREFIX EXECUTE prep;
@@ -1240,15 +1240,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 :PREFIX EXECUTE prep;
@@ -1260,15 +1260,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 :PREFIX EXECUTE prep;
@@ -1280,15 +1280,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 :PREFIX EXECUTE prep;
@@ -1300,15 +1300,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 DEALLOCATE prep;
@@ -1890,15 +1890,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 :PREFIX EXECUTE prep;
@@ -1910,15 +1910,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 :PREFIX EXECUTE prep;
@@ -1930,15 +1930,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 :PREFIX EXECUTE prep;
@@ -1950,15 +1950,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 :PREFIX EXECUTE prep;
@@ -1970,15 +1970,15 @@ QUERY PLAN
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=100 loops=1)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
-                     Index Cond: (device_id = 1)
+                     Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
 (16 rows)
 
 DEALLOCATE prep;

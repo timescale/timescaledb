@@ -3,9 +3,11 @@ name: Memory tests
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
       - memory_test
       - trigger/memory_test
+  pull_request:
+    paths: .github/workflows/memory-tests.yaml
 jobs:
   memory_leak:
     name: Memory leak on insert PG${{ matrix.pg }}
@@ -36,6 +38,7 @@ jobs:
 
     - name: Setup database
       run: |
+        sudo pg_createcluster ${{matrix.pg}} main
         sudo tee -a /etc/postgresql/${{ matrix.pg }}/main/postgresql.conf <<-CONF
           shared_preload_libraries = 'timescaledb'
           max_worker_processes = 0

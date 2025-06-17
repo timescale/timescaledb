@@ -113,7 +113,7 @@ setup
       FROM _timescaledb_catalog.continuous_agg
       WHERE user_view_name = cagg
       INTO mattable;
-      EXECUTE format('LOCK table %s IN EXCLUSIVE MODE', mattable);
+      EXECUTE format('LOCK table %s IN ROW EXCLUSIVE MODE', mattable);
     END; $$ LANGUAGE plpgsql;
 }
 
@@ -123,7 +123,6 @@ setup
 setup
 {
     CALL refresh_continuous_aggregate('cond_10', 0, 30);
-
 }
 
 # Generate some invalidations. Must be done in separate transcations
@@ -150,6 +149,17 @@ setup
 teardown {
     DROP TABLE conditions CASCADE;
     DROP TABLE conditions2 CASCADE;
+}
+
+# Waitpoint for cagg invalidation logs
+session "WP"
+step "WP_enable"
+{
+    SELECT debug_waitpoint_enable('clear_cagg_invalidations_for_refresh_lock');
+}
+step "WP_release"
+{
+    SELECT debug_waitpoint_release('clear_cagg_invalidations_for_refresh_lock');
 }
 
 # Session to refresh the cond_10 continuous aggregate
@@ -187,7 +197,6 @@ step "R2_refresh"
     CALL refresh_continuous_aggregate('cond_10', 35, 62);
 }
 
-
 # Refresh on same aggregate (cond_10) that doesn't overlap with R1 and R2
 session "R3"
 setup
@@ -210,6 +219,20 @@ setup
 step "R4_refresh"
 {
     CALL refresh_continuous_aggregate('cond_20', 39, 84);
+}
+
+# Refresh on same aggregate (cond_10) that doesn't overlap with R1 and R2
+# with DEBUG1 enabled
+session "R5"
+setup
+{
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+}
+step "R5_refresh"
+{
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
 }
 
 # Define a number of lock sessions to simulate concurrent refreshes
@@ -327,20 +350,24 @@ permutation "R3_refresh" "L2_read_lock_threshold_table" "R1_refresh" "L2_read_un
 #
 ##################################################################
 
-# Interleave two refreshes that are overlapping (one simulated). Since
-# we serialize refreshes, R1 should block until the lock is released
+# Interleave two refreshes that are overlapping (one simulated)
 permutation "L3_lock_cagg_table" "R1_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
-# R1 and R2 queued to refresh, both should serialize
+# R1 and R2 queued to refresh
 permutation "L3_lock_cagg_table" "R1_refresh" "R2_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
-# R1 and R3 don't have overlapping refresh windows, but should serialize
-# anyway. This could potentially be optimized in the future.
+# R1 and R3 don't have overlapping refresh windows, but should skip
+# locks and process the materialization.
 permutation "L3_lock_cagg_table" "R1_refresh" "R3_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
 # Concurrent refreshing across two different aggregates on same
 # hypertable does not block
 permutation "L3_lock_cagg_table" "R3_refresh" "R4_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
-# Concurrent refresh of caggs on different hypertables should not block each other
+# Concurrent refresh of caggs on different hypertables should not
+# block each other
 permutation "R1_refresh" "R12_refresh"
+
+# CAgg invalidation logs processing skipping locks due to
+# the concurrent execution
+permutation "WP_enable" "R1_refresh"("WP_enable") "R5_refresh"("WP_enable") "WP_release" "S1_select" "R3_refresh" "S1_select"

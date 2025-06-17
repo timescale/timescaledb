@@ -1440,11 +1440,11 @@ SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
 \set ON_ERROR_STOP 0
 -- Updating or deleting everything will break the set limit.
 UPDATE test_limit SET id = 0;
-DELETE FROM test_limit WHERE id > 0;
+DELETE FROM test_limit WHERE id = 1;
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
 UPDATE test_limit SET id = 0;
-DELETE FROM test_limit WHERE id > 0;
+DELETE FROM test_limit WHERE id = 1;
 \set ON_ERROR_STOP 1
 
 DROP TABLE test_limit;
@@ -1466,6 +1466,7 @@ VALUES -- chunk1
 -- enable compression, compress all chunks
 ALTER TABLE test_partials SET (timescaledb.compress);
 SELECT compress_chunk(show_chunks('test_partials'));
+VACUUM ANALYZE test_partials;
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
@@ -1474,11 +1475,13 @@ SELECT * FROM test_partials ORDER BY time;
 -- data gets shifted to the uncompressed parts
 EXPLAIN (costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
 DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
+VACUUM ANALYZE test_partials;
 -- All 3 chunks will now become partially compressed chunks
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
 SELECT compress_chunk(show_chunks('test_partials'));
+VACUUM ANALYZE test_partials;
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 DROP TABLE test_partials;
@@ -1563,6 +1566,21 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time IN ('2020-01-01','2020-01-0
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = current_query(); ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',current_query()); ROLLBACK;
 
+-- test DELETE optimization without predicates
+-- should delete 3 complete batches without decompression
+BEGIN; :EXPLAIN DELETE FROM test_pushdown; ROLLBACK;
+
+-- test DELETE optimization on non-segmentby columns
+-- this shows optimization can be applied if in-memory filtering is enabled
+\set QUIET off
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+SET timescaledb.enable_dml_decompression_tuple_filtering TO OFF;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+\set QUIET on
+
 -- github issue #6858
 -- check update triggers work correctly both on uncompressed and compressed chunks
 CREATE TABLE update_trigger_test (
@@ -1616,3 +1634,21 @@ BEGIN;
 UPDATE update_trigger_test SET measurement = measurement + 2
 WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
 ROLLBACK;
+
+-- check reporting of affected rows is correct for direct batch delete
+CREATE TABLE delete_counter(time timestamptz NOT NULL, device text) WITH (tsdb.hypertable,tsdb.partition_column='time');
+INSERT INTO delete_counter SELECT '2020-01-01'::timestamptz, 'a' from generate_series(1,123);
+INSERT INTO delete_counter SELECT '2020-01-01'::timestamptz, 'b' from generate_series(1,123);
+INSERT INTO delete_counter SELECT '2020-02-01'::timestamptz, 'c' from generate_series(1,123);
+ALTER TABLE delete_counter SET (timescaledb.compress_segmentby='device');
+SELECT count(compress_chunk(ch)) FROM show_chunks('delete_counter') ch;
+INSERT INTO delete_counter SELECT '2020-02-01'::timestamptz, 'd' from generate_series(1,123);
+INSERT INTO delete_counter SELECT '2020-03-01'::timestamptz, 'e' from generate_series(1,123);
+
+\set QUIET off
+BEGIN; :EXPLAIN DELETE FROM delete_counter; ROLLBACK;
+BEGIN; DELETE FROM delete_counter; ROLLBACK;
+
+BEGIN; :EXPLAIN DELETE FROM delete_counter WHERE random() < 1; ROLLBACK;
+BEGIN; DELETE FROM delete_counter WHERE random() < 1; ROLLBACK;
+

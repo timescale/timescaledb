@@ -8,7 +8,7 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@v5
+      - uses: actions/stale@v9
         with:
           stale-issue-message: "
             Dear Author,
@@ -42,15 +42,25 @@ jobs:
           # Add this label after 'days-before-issue-stale' days to mark it as stale
           stale-issue-label: 'no-activity'
 
+          # Label added when issues are closed. Can be used to identify issues closed by the stale bot.
+          close-issue-label: 'closed-by-bot'
+
           # Process only issues that contain the label 'waiting-for-author'
           only-labels: 'waiting-for-author'
 
           # Stale only issues with one of these labels
-          any-of-issue-labels: 'bug,enhancement,stale-issue'
+          #
+          # Disabled because some issues are marked wait-for-author
+          # while, e.g., 'bug' is removed because it wasn't a bug.
+          #
+          # any-of-issue-labels: 'bug,enhancement,stale-issue'
 
           # Exclude issues with the 'in-progress' label
           exempt-issue-labels: 'in-progress'
 
           # Exclude assigned issues
-          exempt-all-assignees: true
-
+          #
+          # Removed because people often forget to unassign. They will
+          # be notified by the stale-bot when issue is marked as stale.
+          #
+          #exempt-all-assignees: true

@@ -26,6 +26,7 @@
 #include "dictionary.h"
 #include "dictionary_hash.h"
 #include "simple8b_rle.h"
+#include "simple8b_rle_bitarray.h"
 #include "simple8b_rle_bitmap.h"
 
 /*
@@ -86,11 +87,13 @@ typedef struct DictionaryCompressor
 {
 	dictionary_hash *dictionary_items;
 	uint32 next_index;
+	uint32 dict_val_size;
 	Oid type;
 	int16 typlen;
 	bool typbyval;
 	char typalign;
 	bool has_nulls;
+	DatumSerializer *serializer;
 	Simple8bRleCompressor dictionary_indexes;
 	Simple8bRleCompressor nulls;
 } DictionaryCompressor;
@@ -122,6 +125,26 @@ dictionary_compressor_append_null_value(Compressor *compressor)
 	dictionary_compressor_append_null(extended->internal);
 }
 
+static bool
+dictionary_compressor_is_full(Compressor *compressor, Datum val)
+{
+	ExtendedCompressor *extended = (ExtendedCompressor *) compressor;
+	if (extended->internal == NULL)
+		extended->internal = dictionary_compressor_alloc(extended->element_type);
+
+	Size datum_size_and_align;
+	DictionaryCompressor *dict_comp = (DictionaryCompressor *) extended->internal;
+	if (datum_serializer_value_may_be_toasted(dict_comp->serializer))
+		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+
+	datum_size_and_align =
+		datum_get_bytes_size(dict_comp->serializer, dict_comp->dict_val_size, val) -
+		dict_comp->dict_val_size;
+
+	/* If we can't fit new datum in the max size, we are full */
+	return (datum_size_and_align + dict_comp->dict_val_size) > MAX_ARRAY_COMPRESSOR_SIZE_BYTES;
+}
+
 static void *
 dictionary_compressor_finish_and_reset(Compressor *compressor)
 {
@@ -135,6 +158,7 @@ dictionary_compressor_finish_and_reset(Compressor *compressor)
 const Compressor dictionary_compressor = {
 	.append_val = dictionary_compressor_append_datum,
 	.append_null = dictionary_compressor_append_null_value,
+	.is_full = dictionary_compressor_is_full,
 	.finish = dictionary_compressor_finish_and_reset,
 };
 
@@ -157,6 +181,7 @@ dictionary_compressor_alloc(Oid type)
 		lookup_type_cache(type, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
 
 	compressor->next_index = 0;
+	compressor->dict_val_size = 0;
 	compressor->has_nulls = false;
 	compressor->type = type;
 	compressor->typlen = tentry->typlen;
@@ -164,6 +189,7 @@ dictionary_compressor_alloc(Oid type)
 	compressor->typalign = tentry->typalign;
 
 	compressor->dictionary_items = dictionary_hash_alloc(tentry);
+	compressor->serializer = create_datum_serializer(type);
 
 	simple8brle_compressor_init(&compressor->dictionary_indexes);
 	simple8brle_compressor_init(&compressor->nulls);
@@ -185,6 +211,9 @@ dictionary_compressor_append(DictionaryCompressor *compressor, Datum val)
 
 	Assert(compressor != NULL);
 
+	if (datum_serializer_value_may_be_toasted(compressor->serializer))
+		val = PointerGetDatum(PG_DETOAST_DATUM_PACKED(val));
+
 	dict_item = dictionary_insert(compressor->dictionary_items, val, &found);
 
 	if (!found)
@@ -195,6 +224,12 @@ dictionary_compressor_append(DictionaryCompressor *compressor, Datum val)
 		Assert(compressor->next_index <= INT16_MAX - 1);
 		compressor->next_index += 1;
 	}
+
+	Size datum_size_and_align =
+		datum_get_bytes_size(compressor->serializer, compressor->dict_val_size, val) -
+		compressor->dict_val_size;
+
+	compressor->dict_val_size += datum_size_and_align;
 
 	simple8brle_compressor_append(&compressor->dictionary_indexes, dict_item->index);
 	simple8brle_compressor_append(&compressor->nulls, 0);
@@ -404,6 +439,91 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 		iter->values[i] = res.val;
 	}
 	Assert(array_decompression_iterator_try_next_forward(dictionary_iterator).is_done);
+}
+
+/* Pass through to the specialized functions below for BOOL and TEXT */
+ArrowArray *
+tsl_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+{
+	switch (element_type)
+	{
+		case BOOLOID:
+			return tsl_bool_dictionary_decompress_all(compressed, element_type, dest_mctx);
+		case TEXTOID:
+			return tsl_text_dictionary_decompress_all(compressed, element_type, dest_mctx);
+		default:
+			elog(ERROR, "unsupported dictionary type %u", element_type);
+			break;
+	}
+	return NULL;
+}
+
+ArrowArray *
+tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+{
+	Assert(element_type == BOOLOID);
+
+	compressed = PointerGetDatum(PG_DETOAST_DATUM(compressed));
+	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
+	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+
+	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
+	CheckCompressedData(header->element_type == BOOLOID);
+
+	Simple8bRleSerialized *indices_serialized = bytes_deserialize_simple8b_and_advance(&si);
+
+	Simple8bRleSerialized *nulls_serialized = NULL;
+	if (header->has_nulls)
+	{
+		nulls_serialized = bytes_deserialize_simple8b_and_advance(&si);
+	}
+
+	const uint32 n_notnull = indices_serialized->num_elements;
+	const uint32 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	const uint32 n_padded_bits = n_total + 63;
+	const uint32 n_padded_bytes = n_padded_bits / 8;
+
+	uint64 *validity_bitmap = NULL;
+	uint64 *values = MemoryContextAllocZero(dest_mctx, n_padded_bytes);
+
+	MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+	/* Decompress the nulls */
+	Simple8bRleBitArray validity_bits =
+		simple8brle_bitarray_decompress(nulls_serialized, /* inverted*/ true);
+	validity_bitmap = validity_bits.data;
+	MemoryContextSwitchTo(old_context);
+
+	/* Decompress the values using the iterator based decompressor */
+	{
+		int position = 0;
+		DecompressionIterator *iter =
+			tsl_dictionary_decompression_iterator_from_datum_forward(compressed, BOOLOID);
+		for (DecompressResult r = dictionary_decompression_iterator_try_next_forward(iter);
+			 !r.is_done;
+			 r = dictionary_decompression_iterator_try_next_forward(iter))
+		{
+			if (!r.is_null)
+			{
+				bool data = DatumGetBool(r.val) == true;
+				if (data)
+				{
+					arrow_set_row_validity(values, position, true);
+				}
+			}
+			++position;
+		}
+	}
+
+	ArrowArray *result =
+		MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + (sizeof(void *) * 2));
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = values;
+	result->n_buffers = 2;
+	result->buffers = buffers;
+	result->length = n_total;
+	result->null_count = n_total - n_notnull;
+	return result;
 }
 
 #define ELEMENT_TYPE int16

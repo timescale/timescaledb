@@ -798,6 +798,9 @@ int
 ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs, int32 chunk_id,
 												 const char chunk_relkind, Oid hypertable_oid)
 {
+	/* This should never be called with NULL ccs.  */
+	Ensure(ccs, "ccs must not be NULL");
+
 	ConstraintContext cc = {
 		.chunk_relkind = chunk_relkind,
 		.ccs = ccs,

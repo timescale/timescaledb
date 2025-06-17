@@ -54,11 +54,13 @@ set(SOURCE_FILES
     job_api.sql
     policy_api.sql
     policy_internal.sql
+    cagg_api.sql
     cagg_utils.sql
     cagg_migrate.sql
     job_stat_history_log_retention.sql
     osm_api.sql
-    compression_defaults.sql)
+    compression_defaults.sql
+    sparse_index.sql)
 
 if(ENABLE_DEBUG_UTILS AND CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND SOURCE_FILES debug_build_utils.sql)

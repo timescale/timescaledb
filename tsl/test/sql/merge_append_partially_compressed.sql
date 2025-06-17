@@ -49,19 +49,18 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY device, time DESC LIMIT 1; -- with pushdown
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY device, time DESC LIMIT 1; -- with pushdown
 
--- -- Test direct ordered select from a single partially compressed chunk
--- -- Note that this currently doesn't work: https://github.com/timescale/timescaledb/issues/7084
--- select * from show_chunks('ht_metrics_compressed') chunk order by chunk limit 1 \gset
---
--- :PREFIX
--- SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
---
--- SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
---
--- :PREFIX
--- SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
---
--- SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
+-- Test direct ordered select from a single partially compressed chunk
+select * from show_chunks('ht_metrics_compressed') chunk order by chunk limit 1 \gset
+
+:PREFIX
+SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
+
+SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
+
+:PREFIX
+SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
+
+SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
 
 
 CREATE TABLE test1 (
@@ -275,6 +274,7 @@ INSERT INTO test4 SELECT '2025-01-02', NULL, 0.1;
 INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
 SELECT count(compress_chunk(ch)) FROM show_chunks('test4') ch;
 INSERT INTO test4 SELECT '2025-01-02', 'd', 0.1;
+VACUUM ANALYZE test4;
 
 set enable_hashagg TO false;
 SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;

@@ -15,6 +15,7 @@ extern Datum tsl_create_compressed_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_compress_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_decompress_chunk(PG_FUNCTION_ARGS);
 extern Oid tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress);
+extern Chunk *tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk);
 
 extern Datum tsl_get_compressed_chunk_index_for_recompression(
 	PG_FUNCTION_ARGS); // arg is oid of uncompressed chunk

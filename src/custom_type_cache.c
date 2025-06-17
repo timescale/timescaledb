@@ -19,6 +19,11 @@ static CustomTypeInfo typeinfo[_CUSTOM_TYPE_MAX_INDEX] = {
 		.type_name = "compressed_data",
 		.type_oid = InvalidOid,
 	},
+	[CUSTOM_TYPE_BLOOM1] = {
+		.schema_name = INTERNAL_SCHEMA_NAME,
+		.type_name = "bloom1",
+		.type_oid = InvalidOid,
+	}
 };
 
 extern CustomTypeInfo *

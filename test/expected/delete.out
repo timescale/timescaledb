@@ -113,7 +113,7 @@ DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
                                                                       QUERY PLAN                                                                       
 -------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Delete on "two_Partitions"
          Delete on _hyper_1_1_chunk "two_Partitions_2"
          Delete on _hyper_1_2_chunk "two_Partitions_3"

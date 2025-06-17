@@ -245,15 +245,17 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 		get_hypertable_or_cagg_name(srcht, &cagg_ht_name);
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression not enabled on \"%s\"", NameStr(cagg_ht_name)),
-				 errdetail("It is not possible to compress chunks on a hypertable or"
-						   " continuous aggregate that does not have compression enabled."),
-				 errhint("Enable compression using ALTER TABLE/MATERIALIZED VIEW with"
-						 " the timescaledb.compress option.")));
+				 errmsg("columnstore not enabled on \"%s\"", NameStr(cagg_ht_name)),
+				 errdetail("It is not possible to convert chunks to columnstore on a hypertable or"
+						   " continuous aggregate that does not have columnstore enabled."),
+				 errhint("Enable columnstore using ALTER TABLE/MATERIALIZED VIEW with"
+						 " the timescaledb.enable_columnstore option.")));
 	}
 	compress_ht = ts_hypertable_get_by_id(srcht->fd.compressed_hypertable_id);
 	if (compress_ht == NULL)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compress hypertable")));
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+				 errmsg("missing columnstore-enabled hypertable")));
 	/* user has to be the owner of the compression table too */
 	ts_hypertable_permissions_check(compress_ht->main_table_relid, GetUserId());
 
@@ -365,7 +367,7 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	const DimensionSlice *compressed_slice =
 		ts_hypercube_get_slice_by_dimension_id(cxt->srcht_chunk->cube, time_dim->fd.id);
 	if (!compressed_slice)
-		elog(ERROR, "compressed chunk has no time dimension slice");
+		elog(ERROR, "columnstore chunk has no time dimension slice");
 	/*
 	 * Ensure the compressed chunk is AFTER the chunk that
 	 * it is being merged into. This is already guaranteed by previous checks.
@@ -401,7 +403,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 
 	/* acquire locks on src and compress hypertable and src chunk */
 	ereport(DEBUG1,
-			(errmsg("acquiring locks for compressing \"%s.%s\"",
+			(errmsg("acquiring locks for converting to columnstore \"%s.%s\"",
 					get_namespace_name(get_rel_namespace(chunk_relid)),
 					get_rel_name(chunk_relid))));
 	LockRelationOid(cxt.srcht->main_table_relid, AccessShareLock);
@@ -411,7 +413,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 	ereport(DEBUG1,
-			(errmsg("locks acquired for compressing \"%s.%s\"",
+			(errmsg("locks acquired for converting to columnstore \"%s.%s\"",
 					get_namespace_name(get_rel_namespace(chunk_relid)),
 					get_rel_name(chunk_relid))));
 
@@ -448,7 +450,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 		new_compressed_chunk = true;
 		ereport(DEBUG1,
-				(errmsg("new compressed chunk \"%s.%s\" created",
+				(errmsg("new columnstore chunk \"%s.%s\" created",
 						NameStr(compress_ht_chunk->fd.schema_name),
 						NameStr(compress_ht_chunk->fd.table_name))));
 
@@ -473,7 +475,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		compress_ht_chunk = ts_chunk_get_by_id(mergable_chunk->fd.compressed_chunk_id, true);
 		result_chunk_id = mergable_chunk->table_id;
 		ereport(DEBUG1,
-				(errmsg("merge into existing compressed chunk \"%s.%s\"",
+				(errmsg("merge into existing columnstore chunk \"%s.%s\"",
 						NameStr(compress_ht_chunk->fd.schema_name),
 						NameStr(compress_ht_chunk->fd.table_name))));
 	}
@@ -532,12 +534,24 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 											  cstat.rowcnt_post_compression,
 											  cstat.rowcnt_frozen);
 
-		/* Copy chunk constraints (including fkey) to compressed chunk.
-		 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
-		 * referenced table during compression.
-		 */
-		ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
-		ts_trigger_create_all_on_chunk(compress_ht_chunk);
+		/* Detect and emit warning if poor compression ratio is found */
+		float compression_ratio = ((float) before_size.total_size / after_size.total_size);
+		float POOR_COMPRESSION_THRESHOLD = 1.0;
+		if (ts_guc_enable_compression_ratio_warnings &&
+			compression_ratio < POOR_COMPRESSION_THRESHOLD)
+			ereport(WARNING,
+					errcode(ERRCODE_WARNING),
+					errmsg("poor compression rate detected for chunk \"%s\"'",
+						   get_rel_name(chunk_relid)),
+					errdetail("Chunk \"%s\" has a poor compression ratio: %.2f. Size before "
+							  "compression: " INT64_FORMAT
+							  " bytes. Size after compression: " INT64_FORMAT " bytes",
+							  get_rel_name(chunk_relid),
+							  compression_ratio,
+							  before_size.total_size,
+							  after_size.total_size),
+					errhint("Changing compression settings for \"%s\" can improve compression rate",
+							get_rel_name(hypertable_relid)));
 	}
 	else
 	{
@@ -563,7 +577,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		}
 	}
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return result_chunk_id;
 }
 
@@ -583,22 +597,25 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(uncompressed_hypertable))
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("decompress_chunk must not be called on the internal compressed chunk")));
+				 errmsg(
+					 "convert_to_rowstore must not be called on the internal columnstore chunk")));
 
 	compressed_hypertable =
 		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);
 	if (compressed_hypertable == NULL)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+				 errmsg("missing columnstore-enabled hypertable")));
 
 	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
 		elog(ERROR, "hypertable and chunk do not match");
 
 	if (uncompressed_chunk->fd.compressed_chunk_id == INVALID_CHUNK_ID)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		ereport((if_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("chunk \"%s\" is not compressed",
+				 errmsg("chunk \"%s\" is not converted to columnstore",
 						get_rel_name(uncompressed_chunk->table_id))));
 		return;
 	}
@@ -609,7 +626,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
 	ereport(DEBUG1,
-			(errmsg("acquiring locks for decompressing \"%s.%s\"",
+			(errmsg("acquiring locks for converting to rowstore \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
 	/* acquire locks on src and compress hypertable and src chunk */
@@ -636,7 +653,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 	ereport(DEBUG1,
-			(errmsg("locks acquired for decompressing \"%s.%s\"",
+			(errmsg("locks acquired for converting to rowstore \"%s.%s\"",
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
 
@@ -673,7 +690,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
 	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	write_logical_replication_msg_decompression_end();
 }
 
@@ -731,10 +748,6 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
 	EventTriggerAlterTableEnd();
 
-	/* Copy chunk constraints (including fkey) to compressed chunk */
-	ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
-	ts_trigger_create_all_on_chunk(compress_ht_chunk);
-
 	/* Insert empty stats to compression_chunk_size */
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 										  &uncompressed_size,
@@ -753,7 +766,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 		 */
 		ts_chunk_set_partial(cxt.srcht_chunk);
 	}
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_OID(chunk_relid);
 }
@@ -849,10 +862,11 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 			Assert(rel_is_hypercore);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot compress \"%s\" without using Hypercore access method",
+					 errmsg("cannot converting to columnstore \"%s\" without using Hypercore "
+							"access method",
 							get_rel_name(chunk->table_id)),
-					 errhint(
-						 "Decompress first and then compress without Hypercore access method.")));
+					 errhint("Convert to rowstore first and then convert to columnstore without "
+							 "Hypercore access method.")));
 			break;
 		case USE_AM_NULL:
 			Assert(rel_is_hypercore);
@@ -948,7 +962,8 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			write_logical_replication_msg_compression_end();
 			ereport((if_not_compressed ? NOTICE : ERROR),
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
-					 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk->table_id))));
+					 errmsg("chunk \"%s\" is already converted to columnstore",
+							get_rel_name(chunk->table_id))));
 			return uncompressed_chunk_id;
 		}
 
@@ -1001,7 +1016,9 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
 	if (!ht->fd.compressed_hypertable_id)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+				 errmsg("missing columnstore-enabled hypertable")));
 
 	if (ts_is_hypercore_am(uncompressed_chunk->amoid))
 		set_access_method(uncompressed_chunk_id, "heap");
@@ -1009,7 +1026,8 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	{
 		ereport((if_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("chunk \"%s\" is not compressed", get_rel_name(uncompressed_chunk_id))));
+				 errmsg("chunk \"%s\" is not converted to columnstore",
+						get_rel_name(uncompressed_chunk_id))));
 
 		PG_RETURN_NULL();
 	}
@@ -1063,4 +1081,11 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 	table_close(uncompressed_chunk_rel, NoLock);
 
 	return index_oid;
+}
+
+Chunk *
+tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk)
+{
+	/* Create a new compressed chunk */
+	return create_compress_chunk(compressed_ht, src_chunk, InvalidOid);
 }

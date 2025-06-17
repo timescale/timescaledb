@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 
+#include "bgw_policy/policies_v2.h"
 #include <access/xact.h>
 #include <executor/spi.h>
 #include <fmgr.h>
@@ -22,9 +23,9 @@
 #include "dimension_slice.h"
 #include "guc.h"
 #include "hypertable.h"
-#include "hypertable_cache.h"
 #include "invalidation.h"
 #include "invalidation_threshold.h"
+#include "jsonb_utils.h"
 #include "materialize.h"
 #include "process_utility.h"
 #include "refresh.h"
@@ -32,7 +33,6 @@
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
-#include "utils.h"
 
 #define CAGG_REFRESH_LOG_LEVEL                                                                     \
 	(context.callctx == CAGG_REFRESH_POLICY || context.callctx == CAGG_REFRESH_POLICY_BATCHED ?    \
@@ -646,12 +646,23 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 {
 	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool force = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
+	Jsonb *options = PG_ARGISNULL(4) ? NULL : PG_GETARG_JSONB_P(4);
+	bool process_hypertable_invalidations = true;
 	ContinuousAgg *cagg;
 	InternalTimeRange refresh_window = {
 		.type = InvalidOid,
 	};
 
 	ts_feature_flag_check(FEATURE_CAGG);
+
+	if (options)
+	{
+		bool found;
+		bool value = ts_jsonb_get_bool_field(options,
+											 POL_REFRESH_CONF_KEY_PROCESS_HYPERTABLE_INVALIDATIONS,
+											 &found);
+		process_hypertable_invalidations = !found || value;
+	}
 
 	cagg = cagg_get_by_relid_or_fail(cagg_relid);
 	refresh_window.type = cagg->partition_type;
@@ -679,7 +690,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 									context,
 									PG_ARGISNULL(1),
 									PG_ARGISNULL(2),
-									force);
+									force,
+									process_hypertable_invalidations);
 
 	PG_RETURN_VOID();
 }
@@ -739,12 +751,9 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * same continuous aggregate when they don't have overlapping refresh
 	 * windows.
 	 */
-	LockRelationOid(hyper_relid, ExclusiveLock);
-	const CaggsInfo all_caggs_info =
-		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
+	LockRelationOid(hyper_relid, RowExclusiveLock);
 	invalidations = invalidation_process_cagg_log(cagg,
 												  refresh_window,
-												  &all_caggs_info,
 												  ts_guc_cagg_max_individual_materializations,
 												  &do_merged_refresh,
 												  &merged_refresh_window,
@@ -781,7 +790,8 @@ void
 continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg,
 								const CaggRefreshContext context, const bool start_isnull,
-								const bool end_isnull, bool force)
+								const bool end_isnull, bool force,
+								bool process_hypertable_invalidations)
 {
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
@@ -804,6 +814,17 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * still take a long time and it is probably best for consistency to always
 	 * prevent transaction blocks.  */
 	PreventInTransactionBlock(nonatomic, REFRESH_FUNCTION_NAME);
+
+	/*
+	 * We don't cagg refresh to fail because of decompression limit. So disable
+	 * the decompression limit for the duration of the refresh.
+	 */
+	const char *old_decompression_limit =
+		GetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction", false, false);
+	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
+					"0",
+					PGC_USERSET,
+					PGC_S_SESSION);
 
 	/* Connect to SPI manager due to the underlying SPI calls */
 	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
@@ -900,10 +921,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		return;
 	}
 
-	/* Process invalidations in the hypertable invalidation log */
-	const CaggsInfo all_caggs_info =
-		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	invalidation_process_hypertable_log(cagg, refresh_window.type, &all_caggs_info);
+	if (process_hypertable_invalidations)
+		invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
 
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
@@ -919,6 +938,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
+
+	SetConfigOption("timescaledb.max_tuples_decompressed_per_dml_transaction",
+					old_decompression_limit,
+					PGC_USERSET,
+					PGC_S_SESSION);
 
 	rc = SPI_finish();
 	if (rc != SPI_OK_FINISH)
@@ -1137,7 +1161,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 					OPERATOR(pg_catalog.&&) \
 					pg_catalog.int8range(lowest_modified_value, greatest_modified_value) \
 					AND lowest_modified_value IS NOT NULL \
-					AND (greatest_modified_value IS NOT NULL AND greatest_modified_value != -210866803200000001) \
+					AND (greatest_modified_value IS NOT NULL AND greatest_modified_value != $7) \
 			) \
 		ORDER BY \
 			refresh_start %s;";
@@ -1151,14 +1175,15 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	/* Prepare for SPI call */
 	int res;
-	Oid types[] = { INT4OID, INT4OID, INT4OID, INT8OID, INT8OID, INT8OID };
+	Oid types[] = { INT4OID, INT4OID, INT4OID, INT8OID, INT8OID, INT8OID, INT8OID };
 	Datum values[] = { Int32GetDatum(ht->fd.id),
 					   Int32GetDatum(time_dim->fd.id),
 					   Int32GetDatum(cagg->data.mat_hypertable_id),
 					   Int64GetDatum(batch_size),
 					   Int64GetDatum(refresh_window.start),
-					   Int64GetDatum(refresh_window.end) };
-	char nulls[] = { false, false, false, false, false, false };
+					   Int64GetDatum(refresh_window.end),
+					   Int64GetDatum(CAGG_INVALIDATION_WRONG_GREATEST_VALUE) };
+	char nulls[] = { false, false, false, false, false, false, false };
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	if (SPI_connect() != SPI_OK_CONNECT)
@@ -1169,7 +1194,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 	RestrictSearchPath();
 
 	res = SPI_execute_with_args(query_str,
-								6,
+								7,
 								types,
 								values,
 								nulls,

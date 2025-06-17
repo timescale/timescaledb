@@ -209,6 +209,78 @@ where lhs.created_at is null or rhs.created_at is null;
 drop table test_numeric;
 drop table test_numeric_saved;
 -- Test that decompressing and scanning boolean columns works.
+set timescaledb.enable_bool_compression=false;
+\set the_table test_bool_compression_disabled
+\set the_type boolean
+\set the_generator (random() > 0.5)
+\set the_aggregate count(value)
+\set the_clause value = true
+\ir include/hypercore_type_table.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO queries
+create table test_bool_compression_disabled(created_at timestamptz not null unique, value boolean);
+select create_hypertable('test_bool_compression_disabled', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (5,t)
+(1 row)
+
+alter table test_bool_compression_disabled set (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = '',
+      timescaledb.compress_orderby = 'created_at'
+);
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert some data to produce at least two chunks.
+\set ECHO queries
+insert into test_bool_compression_disabled(created_at, value)
+select t, (random()>0.5)
+from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
+-- Save away the table so that we can make sure that a hypercore
+-- table and a heap table produce the same result.
+create table :saved_table as select * from :the_table;
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_13_chunk
+ _timescaledb_internal._hyper_5_14_chunk
+ _timescaledb_internal._hyper_5_15_chunk
+(3 rows)
+
+-- This part of the include file will run a query with the aggregate
+-- provided by the including file and test that using a hypercore
+-- with compressed rows and a normal table produces the same result
+-- for the query with the given aggregate.
+\set ECHO queries
+with
+  lhs as (
+      select date_trunc('hour', created_at) as created_at,
+      	     count(value) as "count(value)"
+      from test_bool_compression_disabled where (value=true) group by date_trunc('hour', created_at)
+  ),
+  rhs as (
+      select date_trunc('hour', created_at) as created_at,
+      	     count(value) as "count(value)"
+      from test_bool_compression_disabled_saved where (value=true) group by date_trunc('hour', created_at)
+  )
+select lhs.*, rhs.*
+from lhs full join rhs using (created_at)
+where lhs.created_at is null or rhs.created_at is null;
+ created_at | count(value) | created_at | count(value) 
+------------+--------------+------------+--------------
+(0 rows)
+
+drop table test_bool_compression_disabled;
+drop table test_bool_compression_disabled_saved;
+set timescaledb.enable_bool_compression=true;
 \set the_table test_bool
 \set the_type boolean
 \set the_generator (random() > 0.5)
@@ -223,7 +295,7 @@ create table test_bool(created_at timestamptz not null unique, value boolean);
 select create_hypertable('test_bool', by_range('created_at'));
  create_hypertable 
 -------------------
- (5,t)
+ (7,t)
 (1 row)
 
 alter table test_bool set (
@@ -249,9 +321,9 @@ create table :saved_table as select * from :the_table;
 select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_5_13_chunk
- _timescaledb_internal._hyper_5_14_chunk
- _timescaledb_internal._hyper_5_15_chunk
+ _timescaledb_internal._hyper_7_19_chunk
+ _timescaledb_internal._hyper_7_20_chunk
+ _timescaledb_internal._hyper_7_21_chunk
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate
@@ -296,7 +368,7 @@ create table test_text(created_at timestamptz not null unique, value text);
 select create_hypertable('test_text', by_range('created_at'));
  create_hypertable 
 -------------------
- (7,t)
+ (9,t)
 (1 row)
 
 alter table test_text set (
@@ -322,9 +394,9 @@ create table :saved_table as select * from :the_table;
 select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_7_19_chunk
- _timescaledb_internal._hyper_7_20_chunk
- _timescaledb_internal._hyper_7_21_chunk
+ _timescaledb_internal._hyper_9_25_chunk
+ _timescaledb_internal._hyper_9_26_chunk
+ _timescaledb_internal._hyper_9_27_chunk
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate
@@ -360,80 +432,6 @@ drop table test_text_saved;
 \set the_generator jsonb_build_object(:'a_name',round(random()*100))
 \set the_aggregate sum((value->:'a_name')::int)
 \set the_clause true
-\ir include/hypercore_type_table.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-\set ECHO queries
-create table test_jsonb(created_at timestamptz not null unique, value jsonb);
-select create_hypertable('test_jsonb', by_range('created_at'));
- create_hypertable 
--------------------
- (9,t)
-(1 row)
-
-alter table test_jsonb set (
-      timescaledb.compress,
-      timescaledb.compress_segmentby = '',
-      timescaledb.compress_orderby = 'created_at'
-);
-select setseed(1);
- setseed 
----------
- 
-(1 row)
-
--- Insert some data to produce at least two chunks.
-\set ECHO queries
-insert into test_jsonb(created_at, value)
-select t, jsonb_build_object('temp',round(random()*100))
-from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
--- Save away the table so that we can make sure that a hypercore
--- table and a heap table produce the same result.
-create table :saved_table as select * from :the_table;
--- Compress the rows in the hypercore.
-select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
-             compress_chunk              
------------------------------------------
- _timescaledb_internal._hyper_9_25_chunk
- _timescaledb_internal._hyper_9_26_chunk
- _timescaledb_internal._hyper_9_27_chunk
-(3 rows)
-
--- This part of the include file will run a query with the aggregate
--- provided by the including file and test that using a hypercore
--- with compressed rows and a normal table produces the same result
--- for the query with the given aggregate.
-\set ECHO queries
-with
-  lhs as (
-      select date_trunc('hour', created_at) as created_at,
-      	     sum((value->'temp')::int) as "sum((value->'temp')::int)"
-      from test_jsonb where (true) group by date_trunc('hour', created_at)
-  ),
-  rhs as (
-      select date_trunc('hour', created_at) as created_at,
-      	     sum((value->'temp')::int) as "sum((value->'temp')::int)"
-      from test_jsonb_saved where (true) group by date_trunc('hour', created_at)
-  )
-select lhs.*, rhs.*
-from lhs full join rhs using (created_at)
-where lhs.created_at is null or rhs.created_at is null;
- created_at | sum((value->'temp')::int) | created_at | sum((value->'temp')::int) 
-------------+---------------------------+------------+---------------------------
-(0 rows)
-
-drop table test_jsonb;
-drop table test_jsonb_saved;
--- Test that we can decompress and scan JSON fields with a filter
--- using JSON operators (these are function calls, so they do not have
--- simple scan keys).
-\set a_name temp
-\set the_table test_jsonb
-\set the_type jsonb
-\set the_generator jsonb_build_object(:'a_name',round(random()*100))
-\set the_aggregate sum((value->:'a_name')::int)
-\set the_clause ((value->:'a_name')::numeric >= 0.5) and ((value->:'a_name')::numeric <= 0.6)
 \ir include/hypercore_type_table.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -483,6 +481,80 @@ with
   lhs as (
       select date_trunc('hour', created_at) as created_at,
       	     sum((value->'temp')::int) as "sum((value->'temp')::int)"
+      from test_jsonb where (true) group by date_trunc('hour', created_at)
+  ),
+  rhs as (
+      select date_trunc('hour', created_at) as created_at,
+      	     sum((value->'temp')::int) as "sum((value->'temp')::int)"
+      from test_jsonb_saved where (true) group by date_trunc('hour', created_at)
+  )
+select lhs.*, rhs.*
+from lhs full join rhs using (created_at)
+where lhs.created_at is null or rhs.created_at is null;
+ created_at | sum((value->'temp')::int) | created_at | sum((value->'temp')::int) 
+------------+---------------------------+------------+---------------------------
+(0 rows)
+
+drop table test_jsonb;
+drop table test_jsonb_saved;
+-- Test that we can decompress and scan JSON fields with a filter
+-- using JSON operators (these are function calls, so they do not have
+-- simple scan keys).
+\set a_name temp
+\set the_table test_jsonb
+\set the_type jsonb
+\set the_generator jsonb_build_object(:'a_name',round(random()*100))
+\set the_aggregate sum((value->:'a_name')::int)
+\set the_clause ((value->:'a_name')::numeric >= 0.5) and ((value->:'a_name')::numeric <= 0.6)
+\ir include/hypercore_type_table.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO queries
+create table test_jsonb(created_at timestamptz not null unique, value jsonb);
+select create_hypertable('test_jsonb', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (13,t)
+(1 row)
+
+alter table test_jsonb set (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = '',
+      timescaledb.compress_orderby = 'created_at'
+);
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert some data to produce at least two chunks.
+\set ECHO queries
+insert into test_jsonb(created_at, value)
+select t, jsonb_build_object('temp',round(random()*100))
+from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
+-- Save away the table so that we can make sure that a hypercore
+-- table and a heap table produce the same result.
+create table :saved_table as select * from :the_table;
+-- Compress the rows in the hypercore.
+select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_13_37_chunk
+ _timescaledb_internal._hyper_13_38_chunk
+ _timescaledb_internal._hyper_13_39_chunk
+(3 rows)
+
+-- This part of the include file will run a query with the aggregate
+-- provided by the including file and test that using a hypercore
+-- with compressed rows and a normal table produces the same result
+-- for the query with the given aggregate.
+\set ECHO queries
+with
+  lhs as (
+      select date_trunc('hour', created_at) as created_at,
+      	     sum((value->'temp')::int) as "sum((value->'temp')::int)"
       from test_jsonb where (((value->'temp')::numeric>=0.5)and((value->'temp')::numeric<=0.6)) group by date_trunc('hour', created_at)
   ),
   rhs as (
@@ -517,7 +589,7 @@ create table test_name(created_at timestamptz not null unique, value name);
 select create_hypertable('test_name', by_range('created_at'));
  create_hypertable 
 -------------------
- (13,t)
+ (15,t)
 (1 row)
 
 alter table test_name set (
@@ -543,9 +615,9 @@ create table :saved_table as select * from :the_table;
 select compress_chunk(show_chunks(:'the_table'), hypercore_use_access_method => true);
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_13_37_chunk
- _timescaledb_internal._hyper_13_38_chunk
- _timescaledb_internal._hyper_13_39_chunk
+ _timescaledb_internal._hyper_15_43_chunk
+ _timescaledb_internal._hyper_15_44_chunk
+ _timescaledb_internal._hyper_15_45_chunk
 (3 rows)
 
 -- This part of the include file will run a query with the aggregate

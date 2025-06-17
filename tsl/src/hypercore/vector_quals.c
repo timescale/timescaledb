@@ -98,9 +98,9 @@ ExecVectorQual(VectorQualState *vqstate, ExprContext *econtext)
 		(direction == BackwardScanDirection && arrow_slot_is_last(slot)))
 	{
 		vector_qual_state_reset(vqstate);
-		VectorQualSummary vector_qual_summary = vqstate->vectorized_quals_constified != NIL ?
-													vector_qual_compute(vqstate) :
-													AllRowsPass;
+		BatchQualSummary vector_qual_summary = vqstate->vectorized_quals_constified != NIL ?
+												   vector_qual_compute(vqstate) :
+												   AllRowsPass;
 
 		switch (vector_qual_summary)
 		{

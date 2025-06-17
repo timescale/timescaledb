@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -xue
+set -o pipefail
 
 if [ -z "${CI_STATS_DB:-}" ]
 then

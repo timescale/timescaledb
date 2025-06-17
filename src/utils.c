@@ -938,7 +938,7 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 		elog(ERROR, "could not find valid integer_now function for hypertable");
 
 	int64 res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return Int64GetDatum(res);
 }
 
@@ -1212,7 +1212,7 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
 	if (ht == NULL)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		PG_RETURN_NULL();
 	}
 
@@ -1274,7 +1274,7 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 	values[3] = Int64GetDatum(total_relsize.total_size);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return HeapTupleGetDatum(tuple);
 }
@@ -1971,4 +1971,25 @@ ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name)
 	/* we add the schema qualified name here as well*/
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	return JsonbValueToJsonb(result);
+}
+
+char *
+ts_get_attr_expr(Relation rel, AttrNumber attno)
+{
+	TupleConstr *constr = rel->rd_att->constr;
+	char *expr = NULL;
+
+	for (int i = 0; i < constr->num_defval; i++)
+	{
+		if (constr->defval[i].adnum == attno)
+		{
+			expr = TextDatumGetCString(
+				DirectFunctionCall2(pg_get_expr,
+									CStringGetTextDatum(constr->defval[i].adbin),
+									ObjectIdGetDatum(RelationGetRelid(rel))));
+			break;
+		}
+	}
+
+	return expr;
 }

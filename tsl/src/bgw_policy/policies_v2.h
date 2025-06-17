@@ -23,10 +23,10 @@
 #define POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH "buckets_per_batch"
 #define POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION "max_batches_per_execution"
 #define POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST "refresh_newest_first"
+#define POL_REFRESH_CONF_KEY_PROCESS_HYPERTABLE_INVALIDATIONS "process_hypertable_invalidations"
 
 #define POLICY_COMPRESSION_PROC_NAME "policy_compression"
 #define POLICY_COMPRESSION_CHECK_NAME "policy_compression_check"
-#define POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID "hypertable_id"
 #define POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER "compress_after"
 #define POL_COMPRESSION_CONF_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
 #define POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE "compress_created_before"
@@ -37,11 +37,9 @@
 
 #define POLICY_RETENTION_PROC_NAME "policy_retention"
 #define POLICY_RETENTION_CHECK_NAME "policy_retention_check"
-#define POL_RETENTION_CONF_KEY_HYPERTABLE_ID "hypertable_id"
 #define POL_RETENTION_CONF_KEY_DROP_AFTER "drop_after"
 #define POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE "drop_created_before"
 
-#define SHOW_POLICY_KEY_HYPERTABLE_ID "hypertable_id"
 #define SHOW_POLICY_KEY_POLICY_NAME "policy_name"
 #define SHOW_POLICY_KEY_REFRESH_INTERVAL "refresh_interval"
 #define SHOW_POLICY_KEY_REFRESH_START_OFFSET "refresh_start_offset"

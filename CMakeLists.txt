@@ -60,6 +60,31 @@ function(GET_PG_CONFIG var)
       PARENT_SCOPE)
 endfunction()
 
+# Search paths for Postgres binaries
+if(WIN32)
+  find_path(
+    PG_PATH postgres.exe
+    PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
+    PATH_SUFFIXES bin 15/bin 16/bin
+    DOC "The path to a PostgreSQL installation")
+elseif(UNIX)
+  find_path(
+    PG_PATH postgres
+    PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
+    PATH_SUFFIXES bin 15/bin 16/bin
+    DOC "The path to a PostgreSQL installation")
+endif()
+
+find_program(
+  PG_CONFIG pg_config
+  HINTS ${PG_PATH}
+  PATH_SUFFIXES bin
+  DOC "The path to the pg_config of the PostgreSQL version to compile against")
+
+if(NOT PG_CONFIG)
+  message(FATAL_ERROR "Unable to find 'pg_config'")
+endif()
+
 configure_file("version.config" "version.config" COPYONLY)
 file(READ version.config VERSION_CONFIG)
 
@@ -76,24 +101,48 @@ if(VERSION_CONFIG
   endif()
 endif()
 
-# fallback for < 2.20 downgrade can be removed after we release 2.20
-if(VERSION_CONFIG
-   MATCHES
-   ".*downgrade_to_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
-)
-  set(UPDATE_FROM_VERSION ${CMAKE_MATCH_1})
-  set(DOWNGRADE_TO_VERSION ${CMAKE_MATCH_1})
-  set(PREVIOUS_VERSION ${CMAKE_MATCH_1})
-endif()
-
 if(VERSION_CONFIG MATCHES
    ".*previous_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
 )
   set(PREVIOUS_VERSION ${CMAKE_MATCH_1})
+else()
+  message(
+    FATAL_ERROR "Could not determine previous version from version.config")
 endif()
 
 # a hack to avoid change of SQL extschema variable
 set(extschema "@extschema@")
+
+# If not explicitly specified, try to use the same compiler as Postgres to avoid
+# mismatches and simplify configuration.
+if((NOT DEFINED CMAKE_C_COMPILER) AND (NOT DEFINED ENV{CC}))
+  get_pg_config(PG_CC --cc)
+
+  # The first word might be ccache or similar, so handle this.
+  string(REPLACE " " ";" PG_CC_LIST ${PG_CC})
+  list(POP_FRONT PG_CC_LIST PG_CC_FIRST)
+  if(PG_CC_LIST)
+    # Got multi-word PG CC, treat the first word as ccache.
+    find_program(PG_CCACHE_FOUND ${PG_CC_FIRST})
+    if((NOT DEFINED CMAKE_C_COMPILER_LAUNCHER) AND PG_CCACHE_FOUND)
+      message(
+        STATUS
+          "Using ${PG_CCACHE_FOUND} as C compiler launcher based on pg_config CC"
+      )
+      set(CMAKE_C_COMPILER_LAUNCHER ${PG_CCACHE_FOUND})
+    endif()
+    set(PG_CC ${PG_CC_LIST})
+  else()
+    # Single-word CC.
+    set(PG_CC ${PG_CC_FIRST})
+  endif()
+
+  find_program(PG_CC_FOUND ${PG_CC})
+  if(PG_CC_FOUND)
+    message(STATUS "Using ${PG_CC_FOUND} as CC based on pg_config CC")
+    set(CMAKE_C_COMPILER ${PG_CC_FOUND})
+  endif()
+endif()
 
 # Set project name, version, and language. Language needs to be set for compiler
 # checks
@@ -296,31 +345,6 @@ if(ENABLE_OPTIMIZER_DEBUG)
       "Enabling OPTIMIZER_DEBUG. Make sure that ${PG_SOURCE_DIR} is installed and built with OPTIMIZER_DEBUG."
   )
   add_definitions(-DOPTIMIZER_DEBUG)
-endif()
-
-# Search paths for Postgres binaries
-if(WIN32)
-  find_path(
-    PG_PATH postgres.exe
-    PATHS "C:/PostgreSQL" "C:/Program Files/PostgreSQL"
-    PATH_SUFFIXES bin 15/bin 16/bin
-    DOC "The path to a PostgreSQL installation")
-elseif(UNIX)
-  find_path(
-    PG_PATH postgres
-    PATHS $ENV{HOME} /opt/local/pgsql /usr/local/pgsql /usr/lib/postgresql
-    PATH_SUFFIXES bin 15/bin 16/bin
-    DOC "The path to a PostgreSQL installation")
-endif()
-
-find_program(
-  PG_CONFIG pg_config
-  HINTS ${PG_PATH}
-  PATH_SUFFIXES bin
-  DOC "The path to the pg_config of the PostgreSQL version to compile against")
-
-if(NOT PG_CONFIG)
-  message(FATAL_ERROR "Unable to find 'pg_config'")
 endif()
 
 find_package(Git)
@@ -696,7 +720,7 @@ add_custom_target(licensecheck
 # This needs to be the last subdirectory so that other targets are already
 # defined
 if(CODECOVERAGE)
-  add_subdirectory(codecov)
+  add_subdirectory(coverage)
 endif()
 
 if(IS_DIRECTORY ${PROJECT_SOURCE_DIR}/.git)

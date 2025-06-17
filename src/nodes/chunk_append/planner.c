@@ -24,7 +24,7 @@
 #include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "nodes/vector_agg.h"
 
 static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,
@@ -117,7 +117,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	tlist = orig_tlist;
 
 	/*
-	 * If this is a child of HypertableModify we need to adjust
+	 * If this is a child of ModifyHypertable we need to adjust
 	 * targetlists to not have any ROWID_VAR references as postgres
 	 * asserts that scan targetlists do not have them in setrefs.c
 	 *

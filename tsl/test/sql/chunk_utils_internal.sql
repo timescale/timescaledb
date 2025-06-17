@@ -799,6 +799,48 @@ DELETE FROM event WHERE  info = 'osm_chunk_ts';
 DELETE FROM event WHERE  info = 'chunk_ts';
 SELECT * FROM event ORDER BY ts;
 
--- clean up databases created
+-- event triggers on chunk creation
+CREATE TABLE ht_try(timec timestamptz NOT NULL, acq_id bigint, value bigint);
+SELECT create_hypertable('ht_try', 'timec', chunk_time_interval => interval '1 day');
+
+-- creating event triggers requires superuser permissions
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- event trigger on ddl_start
+CREATE OR REPLACE FUNCTION ddl_start_trigger_func() RETURNS EVENT_TRIGGER AS
+$$
+BEGIN
+    RAISE NOTICE 'ddl_start_trigger_func() is invoked';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE EVENT TRIGGER ddl_start_trigger
+ON ddl_command_start WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION ddl_start_trigger_func();
+-- event trigger on ddl_end
+CREATE OR REPLACE FUNCTION ddl_end_trigger_func() RETURNS EVENT_TRIGGER AS
+$$
+DECLARE
+    cmd RECORD;
+BEGIN
+    RAISE NOTICE 'ddl_end_trigger_func() is invoked';
+    FOR cmd IN SELECT * FROM pg_event_trigger_ddl_commands()
+    LOOP
+        RAISE NOTICE 'tag: %, object: %', cmd.command_tag, cmd.object_identity::regclass;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE EVENT TRIGGER ddl_end_trigger
+ON ddl_command_end WHEN TAG IN ('CREATE TABLE') EXECUTE FUNCTION ddl_end_trigger_func();
+
+-- by default event triggers on chunk creation are disabled
+INSERT INTO ht_try VALUES ('2025-05-01 00:00', 1, 10);
+SET timescaledb.enable_event_triggers = on;
+INSERT INTO ht_try VALUES ('2025-05-02 00:00', 1, 10);
+RESET timescaledb.enable_event_triggers;
+DROP EVENT TRIGGER ddl_start_trigger;
+DROP EVENT TRIGGER ddl_end_trigger;
+DROP TABLE ht_try;
+
+-- clean up databases created
 DROP DATABASE postgres_fdw_db WITH (FORCE);

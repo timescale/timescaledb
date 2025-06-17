@@ -5,11 +5,13 @@
  */
 #pragma once
 
-#include "compat/compat.h"
 #include <postgres.h>
-#include "hypertable_cache.h"
+
 #include <nodes/plannodes.h>
+#include <parser/parse_node.h>
 #include <tcop/utility.h>
+
+#include "cache.h"
 
 typedef struct ProcessUtilityArgs
 {
@@ -80,6 +82,11 @@ extern void ts_process_utility_set_expect_chunk_modification(bool expect);
  * in that function.
  */
 extern TSDLLEXPORT bool ts_process_utility_is_context_nonatomic(void);
+
+/*
+ * Check if we are at top level.
+ */
+extern TSDLLEXPORT bool ts_process_utility_is_top_level(void);
 
 /*
  * Currently in TS ProcessUtility hook the saved ProcessUtilityContext

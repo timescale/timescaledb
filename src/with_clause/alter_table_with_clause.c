@@ -24,21 +24,25 @@
 #include "alter_table_with_clause.h"
 
 static const WithClauseDefinition alter_table_with_clause_def[] = {
-		[AlterTableFlagCompressEnabled] = {
+		[AlterTableFlagChunkTimeInterval] = {
+			.arg_names = {"chunk_interval", NULL},
+			 .type_id = TEXTOID,
+		},
+		[AlterTableFlagColumnstore] = {
 			.arg_names = {"compress", "columnstore", "enable_columnstore", NULL},
 			.type_id = BOOLOID,
 			.default_val = (Datum)false,
 		},
-		[AlterTableFlagCompressSegmentBy] = {
-			.arg_names = {"compress_segmentby", "segmentby", NULL},
+		[AlterTableFlagSegmentBy] = {
+			.arg_names = {"compress_segmentby", "segmentby", "segment_by", NULL},
 			 .type_id = TEXTOID,
 		},
-		[AlterTableFlagCompressOrderBy] = {
-			.arg_names = {"compress_orderby", "orderby", NULL},
+		[AlterTableFlagOrderBy] = {
+			.arg_names = {"compress_orderby", "orderby", "order_by", NULL},
 			 .type_id = TEXTOID,
 		},
 		[AlterTableFlagCompressChunkTimeInterval] = {
-			.arg_names = {"compress_chunk_time_interval", NULL},
+			.arg_names = {"compress_chunk_interval", "compress_chunk_time_interval", NULL},
 			 .type_id = INTERVALOID,
 		},
 };
@@ -305,12 +309,11 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
  * compress_segmentby = `col1,col2,col3`
  */
 ArrayType *
-ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypertable *hypertable)
+ts_compress_hypertable_parse_segment_by(WithClauseResult segmentby, Hypertable *hypertable)
 {
-	if (parsed_options[AlterTableFlagCompressSegmentBy].is_default == false)
+	if (!segmentby.is_default)
 	{
-		Datum textarg = parsed_options[AlterTableFlagCompressSegmentBy].parsed;
-		return parse_segment_collist(TextDatumGetCString(textarg), hypertable);
+		return parse_segment_collist(TextDatumGetCString(segmentby.parsed), hypertable);
 	}
 	else
 		return NULL;
@@ -320,12 +323,10 @@ ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypert
  * E.g. timescaledb.compress_orderby = 'col1 asc nulls first,col2 desc,col3'
  */
 OrderBySettings
-ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertable *hypertable)
+ts_compress_hypertable_parse_order_by(WithClauseResult orderby, Hypertable *hypertable)
 {
-	Ensure(parsed_options[AlterTableFlagCompressOrderBy].is_default == false,
-		   "with clause is not default");
-	Datum textarg = parsed_options[AlterTableFlagCompressOrderBy].parsed;
-	return ts_compress_parse_order_collist(TextDatumGetCString(textarg), hypertable);
+	Ensure(!orderby.is_default, "with clause is not default");
+	return ts_compress_parse_order_collist(TextDatumGetCString(orderby.parsed), hypertable);
 }
 
 /* returns List of CompressedParsedCol

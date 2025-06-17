@@ -10,7 +10,7 @@ name: Regression Linux i386
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
@@ -53,6 +53,8 @@ jobs:
         IGNORES: >-
           append-*
           bgw_db_scheduler*
+          compress_bloom_sparse_debug
+          compression_allocation
           hypercore_parallel
           hypercore_vacuum
           hypercore_vectoragg
@@ -65,6 +67,7 @@ jobs:
           vector_agg_text
           vector_agg_uuid_segmentby
           vectorized_aggregation
+          net
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
     strategy:
@@ -79,7 +82,7 @@ jobs:
     - name: Install 64-bit libraries for GitHub actions
       run: |
         apt-get update
-        apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64
+        apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64 jq
 
     - name: Install build dependencies
       run: |

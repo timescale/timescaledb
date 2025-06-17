@@ -61,12 +61,12 @@ gapfill_locf_tuple_returned(GapFillLocfColumnState *locf, Datum value, bool isnu
  * gapfill_locf_calculate gets called for every gapfilled tuple to calculate values
  */
 void
-gapfill_locf_calculate(GapFillLocfColumnState *locf, GapFillState *state, int64 time, Datum *value,
-					   bool *isnull)
+gapfill_locf_calculate(GapFillLocfColumnState *locf, GapFillState *state, TupleTableSlot *ecxt_slot,
+					   int64 time, Datum *value, bool *isnull)
 {
 	/* only evaluate expr for first tuple */
 	if (locf->isnull && locf->lookup_last && time == state->gapfill_start)
-		locf->value = gapfill_exec_expr(state, locf->lookup_last, &locf->isnull);
+		locf->value = gapfill_exec_expr(state, ecxt_slot, locf->lookup_last, &locf->isnull);
 
 	*value = locf->value;
 	*isnull = locf->isnull;

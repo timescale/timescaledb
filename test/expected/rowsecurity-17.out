@@ -2269,7 +2269,7 @@ INSERT INTO bv1 VALUES (12, 'xxx'); -- ok
 EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on b1
          Update on _hyper_8_41_chunk b1_1
          ->  Result
@@ -2285,7 +2285,7 @@ NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
 EXPLAIN (COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Delete on b1
          Delete on _hyper_8_42_chunk b1_1
          ->  Custom Scan (ChunkAppend) on b1
@@ -3797,7 +3797,7 @@ INSERT INTO t2 (SELECT * FROM t1);
 EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
                           QUERY PLAN                          
 --------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on t2
          ->  Custom Scan (ChunkDispatch)
                ->  Append
@@ -4355,7 +4355,7 @@ SELECT * FROM current_check;
 EXPLAIN (COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF current_check_cursor;
                             QUERY PLAN                             
 -------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Update on current_check
          Update on _hyper_21_104_chunk current_check_1
          ->  Tid Scan on _hyper_21_104_chunk current_check_1

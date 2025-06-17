@@ -389,7 +389,7 @@ ts_hypertable_relid_to_id(Oid relid)
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 	int result = ht ? ht->fd.id : INVALID_HYPERTABLE_ID;
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return result;
 }
 
@@ -1003,13 +1003,12 @@ hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
  * Create a chunk for the point, given that it does not exist yet.
  */
 Chunk *
-ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point, bool *found)
+ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point)
 {
 	Assert(ts_subspace_store_get(h->chunk_cache, point) == NULL);
 
 	Chunk *chunk = ts_chunk_create_for_point(h,
 											 point,
-											 found,
 											 NameStr(h->fd.associated_schema_name),
 											 NameStr(h->fd.associated_table_prefix));
 
@@ -1157,7 +1156,7 @@ hypertable_relid_lookup(Oid relid)
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 	Oid result = (ht == NULL) ? InvalidOid : ht->main_table_relid;
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return result;
 }
@@ -1544,7 +1543,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 	else
 	{
 		/* Release previously pinned cache */
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 
 		if (closed_dim_info && !closed_dim_info->num_slices_is_set)
 		{
@@ -1576,7 +1575,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 	}
 
 	retval = create_hypertable_datum(fcinfo, ht, created, is_generic);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_DATUM(retval);
 }
@@ -1992,7 +1991,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	}
 
 	/* Refresh the cache to get the updated hypertable with added dimensions */
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
 
 	/* Verify that existing indexes are compatible with a hypertable */
@@ -2029,7 +2028,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 	insert_blocker_trigger_add(table_relid);
 
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return true;
 }
@@ -2110,6 +2109,19 @@ ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)
 	return false;
 }
 
+bool
+ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name)
+{
+	uint16 i;
+
+	for (i = 0; i < ht->space->num_dimensions; i++)
+	{
+		if (namestrcmp(&ht->space->dimensions[i].fd.column_name, NameStr(column_name)) == 0)
+			return true;
+	}
+	return false;
+}
+
 static void
 integer_now_func_validate(Oid now_func_oid, Oid open_dim_type)
 {
@@ -2176,7 +2188,7 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(hypertable))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("custom time function not supported on internal compression table")));
+				 errmsg("custom time function not supported on internal columnstore table")));
 
 	/* validate that the open dimension uses numeric type */
 	open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
@@ -2212,7 +2224,7 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 						NULL,
 						NULL,
 						&now_func_oid);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	PG_RETURN_NULL();
 }
 
@@ -2645,7 +2657,7 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 		ht->fd.status = ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 
 	ts_hypertable_update_status_osm(ht);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	slice->fd.range_start = range_start_internal;
 	slice->fd.range_end = range_end_internal;

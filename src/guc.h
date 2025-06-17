@@ -52,6 +52,8 @@ extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
+extern bool ts_guc_enable_compressed_copy;
+extern bool ts_guc_enable_compressed_copy_presorted;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT int ts_guc_enable_transparent_decompression;
@@ -73,12 +75,25 @@ extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
 extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
+extern TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit;
 #if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
 #endif
+extern bool ts_guc_enable_event_triggers;
+extern TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan;
+extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
+extern TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings;
+
+typedef enum CompressTruncateBehaviour
+{
+	COMPRESS_TRUNCATE_ONLY,
+	COMPRESS_TRUNCATE_OR_DELETE,
+	COMPRESS_TRUNCATE_DISABLED,
+} CompressTruncateBehaviour;
+extern TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour;
 
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel
@@ -99,6 +114,7 @@ extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
+extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
