@@ -110,7 +110,7 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
  *
  * The Hypertable ResultRelInfo is used as a template for the chunk's new ResultRelInfo.
  */
-static inline ResultRelInfo *
+ResultRelInfo *
 create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel, EState *estate)
 {
 	ResultRelInfo *rri;
@@ -492,6 +492,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->cds = dispatch->dispatch_state;
+	state->counters = dispatch->counters;
 	state->mctx = cis_context;
 	state->rel = rel;
 	state->result_relation_info = relinfo;
