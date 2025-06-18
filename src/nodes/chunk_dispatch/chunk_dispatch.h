@@ -58,7 +58,6 @@ typedef struct ChunkDispatchState
 	Plan *subplan;
 	Cache *hypertable_cache;
 	Oid hypertable_relid;
-	List *arbiter_indexes;
 	/*
 	 * Keep a pointer to the parent ModifyTableState executor node since we need
 	 * to manipulate the current result relation on-the-fly for chunk routing

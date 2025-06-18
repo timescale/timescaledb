@@ -526,9 +526,6 @@ ts_is_chunk_dispatch_state(PlanState *state)
 void
 ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *mtstate)
 {
-	ModifyTable *mt_plan = castNode(ModifyTable, mtstate->ps.plan);
-
 	/* Inserts on hypertables should always have one subplan */
 	state->mtstate = mtstate;
-	state->arbiter_indexes = mt_plan->arbiterIndexes;
 }

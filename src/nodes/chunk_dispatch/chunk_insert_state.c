@@ -58,12 +58,6 @@ get_modifytable(const ChunkDispatch *dispatch)
 	return castNode(ModifyTable, get_modifytable_state(dispatch)->ps.plan);
 }
 
-static List *
-chunk_dispatch_get_arbiter_indexes(const ChunkDispatch *dispatch)
-{
-	return dispatch->dispatch_state->arbiter_indexes;
-}
-
 static bool
 chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
 {
@@ -392,14 +386,12 @@ destroy_on_conflict_state(ChunkInsertState *state)
 
 /* Translate hypertable indexes to chunk indexes in the arbiter clause */
 static void
-set_arbiter_indexes(ChunkInsertState *state, const ChunkDispatch *dispatch)
+set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
 {
-	List *arbiter_indexes = chunk_dispatch_get_arbiter_indexes(dispatch);
+	List *chunk_arbiter_indexes = NIL;
 	ListCell *lc;
 
-	state->arbiter_indexes = NIL;
-
-	foreach (lc, arbiter_indexes)
+	foreach (lc, ht_arbiter_indexes)
 	{
 		Oid hypertable_index = lfirst_oid(lc);
 		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(state->rel), true);
@@ -415,17 +407,18 @@ set_arbiter_indexes(ChunkInsertState *state, const ChunkDispatch *dispatch)
 							get_rel_name(RelationGetRelid(state->rel)))));
 		}
 
-		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim.indexoid);
+		chunk_arbiter_indexes = lappend_oid(chunk_arbiter_indexes, cim.indexoid);
 	}
-	state->result_relation_info->ri_onConflictArbiterIndexes = state->arbiter_indexes;
+	state->result_relation_info->ri_onConflictArbiterIndexes = chunk_arbiter_indexes;
 }
 
 /* Change the projections to work with chunks instead of hypertables */
 static void
 adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid rowtype)
 {
+	ResultRelInfo *ht_rri = dispatch->hypertable_result_rel_info;
 	ResultRelInfo *chunk_rri = cis->result_relation_info;
-	Relation hyper_rel = dispatch->hypertable_result_rel_info->ri_RelationDesc;
+	Relation hyper_rel = ht_rri->ri_RelationDesc;
 	Relation chunk_rel = cis->rel;
 	TupleConversionMap *chunk_map = NULL;
 	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
@@ -444,8 +437,7 @@ adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid row
 			get_adjusted_projection_info_returning(chunk_rri->ri_projectReturning,
 												   chunk_dispatch_get_returning_clauses(dispatch),
 												   chunk_map,
-												   dispatch->hypertable_result_rel_info
-													   ->ri_RangeTableIndex,
+												   ht_rri->ri_RangeTableIndex,
 												   rowtype,
 												   RelationGetDescr(chunk_rel));
 	}
@@ -453,7 +445,7 @@ adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid row
 	/* Set the chunk's arbiter indexes for ON CONFLICT statements */
 	if (onconflict_action != ONCONFLICT_NONE)
 	{
-		set_arbiter_indexes(cis, dispatch);
+		set_arbiter_indexes(cis, ht_rri->ri_onConflictArbiterIndexes);
 
 		if (onconflict_action == ONCONFLICT_UPDATE)
 			setup_on_conflict_state(cis, dispatch, chunk_map);
