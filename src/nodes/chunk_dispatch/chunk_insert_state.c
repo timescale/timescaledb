@@ -58,20 +58,6 @@ get_modifytable(const ChunkDispatch *dispatch)
 	return castNode(ModifyTable, get_modifytable_state(dispatch)->ps.plan);
 }
 
-static bool
-chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
-{
-	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
-		return false;
-	return get_modifytable(dispatch)->returningLists != NIL;
-}
-
-static List *
-chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
-{
-	return linitial(get_modifytable(dispatch)->returningLists);
-}
-
 OnConflictAction
 ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 {
@@ -408,16 +394,24 @@ set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
 
 /* Change the projections to work with chunks instead of hypertables */
 static void
-adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid rowtype)
+adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsertState *cis,
+				   Oid rowtype)
 {
-	ResultRelInfo *ht_rri = dispatch->hypertable_result_rel_info;
 	ResultRelInfo *chunk_rri = cis->result_relation_info;
 	Relation hyper_rel = ht_rri->ri_RelationDesc;
 	Relation chunk_rel = cis->rel;
 	TupleConversionMap *chunk_map = NULL;
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+	OnConflictAction onConflictAction = ONCONFLICT_NONE;
+	List *returningLists = NIL;
 
-	if (chunk_dispatch_has_returning(dispatch))
+	if (mtstate)
+	{
+		ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
+		onConflictAction = mt->onConflictAction;
+		returningLists = mt->returningLists;
+	}
+
+	if (returningLists)
 	{
 		/*
 		 * We need the opposite map from cis->hyper_to_chunk_map. The map needs
@@ -429,7 +423,7 @@ adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid row
 
 		chunk_rri->ri_projectReturning =
 			get_adjusted_projection_info_returning(chunk_rri->ri_projectReturning,
-												   chunk_dispatch_get_returning_clauses(dispatch),
+												   linitial(returningLists),
 												   chunk_map,
 												   ht_rri->ri_RangeTableIndex,
 												   rowtype,
@@ -437,12 +431,12 @@ adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid row
 	}
 
 	/* Set the chunk's arbiter indexes for ON CONFLICT statements */
-	if (onconflict_action != ONCONFLICT_NONE)
+	if (onConflictAction != ONCONFLICT_NONE)
 	{
 		set_arbiter_indexes(cis, ht_rri->ri_onConflictArbiterIndexes);
 
-		if (onconflict_action == ONCONFLICT_UPDATE)
-			setup_on_conflict_state(ht_rri, dispatch->dispatch_state->mtstate, cis, chunk_map);
+		if (onConflictAction == ONCONFLICT_UPDATE)
+			setup_on_conflict_state(ht_rri, mtstate, cis, chunk_map);
 	}
 }
 
@@ -537,7 +531,10 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 		state->hyper_to_chunk_map =
 			convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
 
-	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
+	adjust_projections(dispatch->hypertable_result_rel_info,
+					   dispatch->dispatch_state->mtstate,
+					   state,
+					   RelationGetForm(rel)->reltype);
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
 	 * want this slot tied to the executor's tuple table, since that would tie
