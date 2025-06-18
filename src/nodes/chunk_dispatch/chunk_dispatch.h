@@ -58,6 +58,7 @@ typedef struct ChunkDispatchState
 	Plan *subplan;
 	Cache *hypertable_cache;
 	Oid hypertable_relid;
+
 	/*
 	 * Keep a pointer to the parent ModifyTableState executor node since we need
 	 * to manipulate the current result relation on-the-fly for chunk routing
@@ -101,8 +102,8 @@ extern void ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch);
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
 										 const on_chunk_changed_func on_chunk_changed, void *data);
-extern void ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch,
-															ChunkInsertState *cis,
-															TupleTableSlot *slot);
+extern void ts_chunk_dispatch_decompress_batches_for_insert(ChunkInsertState *cis,
+															TupleTableSlot *slot, EState *estate,
+															bool update_counter);
 
 extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath);

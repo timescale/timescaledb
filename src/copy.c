@@ -1057,7 +1057,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 		Assert(cis != NULL);
 
-		ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, myslot);
+		ts_chunk_dispatch_decompress_batches_for_insert(cis, myslot, dispatch->estate, false);
 
 		/* Triggers and stuff need to be invoked in query context. */
 		MemoryContextSwitchTo(oldcontext);
