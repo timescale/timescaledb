@@ -173,8 +173,8 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 }
 
 extern void
-ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkInsertState *cis,
-												TupleTableSlot *slot)
+ts_chunk_dispatch_decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot,
+												EState *estate, bool update_counter)
 {
 	if (!cis->chunk_compressed || (cis->cached_decompression_state &&
 								   !cis->cached_decompression_state->has_primary_or_unique_index))
@@ -186,14 +186,13 @@ ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkIn
 	 * potentially lead to a conflict are in the decompressed chunk so
 	 * postgres can do proper constraint checking.
 	 */
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
 
 	ts_cm_functions->init_decompress_state_for_insert(cis, slot);
 	ts_cm_functions->decompress_batches_for_insert(cis, slot);
 
 	/* mark rows visible */
-	if (onconflict_action == ONCONFLICT_UPDATE)
-		dispatch->estate->es_output_cid = GetCurrentCommandId(true);
+	if (update_counter)
+		estate->es_output_cid = GetCurrentCommandId(true);
 
 	if (ts_guc_max_tuples_decompressed_per_dml > 0)
 	{
@@ -429,7 +428,15 @@ chunk_dispatch_exec(CustomScanState *node)
 												   state);
 
 	if (!cis->use_tam)
-		ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
+	{
+		bool update_counter =
+			ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE;
+
+		ts_chunk_dispatch_decompress_batches_for_insert(cis,
+														slot,
+														dispatch->estate,
+														update_counter);
+	}
 
 	MemoryContextSwitchTo(old);
 
@@ -526,9 +533,6 @@ ts_is_chunk_dispatch_state(PlanState *state)
 void
 ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *mtstate)
 {
-	ModifyTable *mt_plan = castNode(ModifyTable, mtstate->ps.plan);
-
 	/* Inserts on hypertables should always have one subplan */
 	state->mtstate = mtstate;
-	state->arbiter_indexes = mt_plan->arbiterIndexes;
 }

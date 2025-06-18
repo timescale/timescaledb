@@ -54,8 +54,6 @@ typedef struct ChunkInsertState
 {
 	Relation rel;
 	ResultRelInfo *result_relation_info;
-	/* Per-chunk arbiter indexes for ON CONFLICT handling */
-	List *arbiter_indexes;
 	ChunkDispatchState *cds;
 
 	/* When the tuple descriptors for the main hypertable (root) and a chunk
