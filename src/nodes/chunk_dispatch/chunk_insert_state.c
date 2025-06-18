@@ -245,21 +245,17 @@ adjust_chunk_colnos(List *colnos, ResultRelInfo *chunk_rri)
  * columns, etc.
  */
 static void
-setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
+setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsertState *state,
 						TupleConversionMap *chunk_map)
 {
 	TupleConversionMap *map = state->hyper_to_chunk_map;
 	ResultRelInfo *chunk_rri = state->result_relation_info;
-	ResultRelInfo *hyper_rri = dispatch->hypertable_result_rel_info;
 	Relation chunk_rel = state->result_relation_info->ri_RelationDesc;
-	Relation hyper_rel = hyper_rri->ri_RelationDesc;
-	ModifyTableState *mtstate = castNode(ModifyTableState, dispatch->dispatch_state->mtstate);
+	Relation hyper_rel = ht_rri->ri_RelationDesc;
 	ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
 
-	Assert(ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE);
-
 	OnConflictSetState *onconfl = makeNode(OnConflictSetState);
-	memcpy(onconfl, hyper_rri->ri_onConflict, sizeof(OnConflictSetState));
+	memcpy(onconfl, ht_rri->ri_onConflict, sizeof(OnConflictSetState));
 	chunk_rri->ri_onConflict = onconfl;
 
 #if PG16_LT
@@ -270,7 +266,7 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 #endif
 
 	Assert(mt->onConflictSet);
-	Assert(hyper_rri->ri_onConflict != NULL);
+	Assert(ht_rri->ri_onConflict != NULL);
 
 	/*
 	 * Need a separate existing slot for each partition, as the
@@ -296,9 +292,9 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 		 * Projections and where clauses themselves don't store state
 		 * / are independent of the underlying storage.
 		 */
-		onconfl->oc_ProjSlot = hyper_rri->ri_onConflict->oc_ProjSlot;
-		onconfl->oc_ProjInfo = hyper_rri->ri_onConflict->oc_ProjInfo;
-		onconfl->oc_WhereClause = hyper_rri->ri_onConflict->oc_WhereClause;
+		onconfl->oc_ProjSlot = ht_rri->ri_onConflict->oc_ProjSlot;
+		onconfl->oc_ProjInfo = ht_rri->ri_onConflict->oc_ProjInfo;
+		onconfl->oc_WhereClause = ht_rri->ri_onConflict->oc_WhereClause;
 		state->conflproj_slot = onconfl->oc_ProjSlot;
 	}
 	else
@@ -323,7 +319,7 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 
 		onconflset = translate_clause(onconflset,
 									  chunk_map,
-									  hyper_rri->ri_RangeTableIndex,
+									  ht_rri->ri_RangeTableIndex,
 									  hyper_rel,
 									  chunk_rel);
 
@@ -358,7 +354,7 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 		{
 			List *clause = translate_clause(castNode(List, onconflict_where),
 											chunk_map,
-											hyper_rri->ri_RangeTableIndex,
+											ht_rri->ri_RangeTableIndex,
 											hyper_rel,
 											chunk_rel);
 
@@ -446,7 +442,7 @@ adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid row
 		set_arbiter_indexes(cis, ht_rri->ri_onConflictArbiterIndexes);
 
 		if (onconflict_action == ONCONFLICT_UPDATE)
-			setup_on_conflict_state(cis, dispatch, chunk_map);
+			setup_on_conflict_state(ht_rri, dispatch->dispatch_state->mtstate, cis, chunk_map);
 	}
 }
 
@@ -495,7 +491,9 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
-	relinfo = create_chunk_result_relation_info(dispatch->hypertable_result_rel_info, rel, dispatch->estate);
+	relinfo = create_chunk_result_relation_info(dispatch->hypertable_result_rel_info,
+												rel,
+												dispatch->estate);
 	CheckValidResultRelCompat(relinfo, chunk_dispatch_get_cmd_type(dispatch), NIL);
 
 	state = palloc0(sizeof(ChunkInsertState));
