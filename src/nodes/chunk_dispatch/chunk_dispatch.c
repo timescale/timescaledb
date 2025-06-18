@@ -41,6 +41,7 @@ ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
 	cd->prev_cis = NULL;
 	cd->prev_cis_oid = InvalidOid;
+	cd->counters = palloc0(sizeof(SharedCounters));
 
 	return cd;
 }
@@ -196,14 +197,14 @@ ts_chunk_dispatch_decompress_batches_for_insert(ChunkInsertState *cis, TupleTabl
 
 	if (ts_guc_max_tuples_decompressed_per_dml > 0)
 	{
-		if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
+		if (cis->counters->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
 					 errmsg("tuple decompression limit exceeded by operation"),
 					 errdetail("current limit: %d, tuples decompressed: %lld",
 							   ts_guc_max_tuples_decompressed_per_dml,
-							   (long long int) cis->cds->tuples_decompressed),
+							   (long long int) cis->counters->tuples_decompressed),
 					 errhint("Consider increasing "
 							 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
 							 "to 0 (unlimited).")));
