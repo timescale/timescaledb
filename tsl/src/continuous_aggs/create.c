@@ -27,6 +27,7 @@
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
+#include <catalog/pg_type_d.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
@@ -34,6 +35,8 @@
 #include <commands/trigger.h>
 #include <commands/view.h>
 #include <executor/spi.h>
+#include <fmgr.h>
+#include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
@@ -58,7 +61,9 @@
 #include <utils/elog.h>
 #include <utils/pg_lsn.h>
 #include <utils/rel.h>
+#include <utils/resowner.h>
 #include <utils/ruleutils.h>
+#include <utils/snapshot.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
@@ -68,6 +73,7 @@
 #include "finalize.h"
 #include "invalidation_threshold.h"
 
+#include "continuous_aggs/invalidation_multi.h"
 #include "debug_assert.h"
 #include "dimension.h"
 #include "extension_constants.h"

@@ -11,6 +11,7 @@ set(TEST_FILES
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
+    cagg_invalidation_multi.sql
     cagg_policy.sql
     cagg_policy_move.sql
     cagg_plugin.sql
@@ -226,6 +227,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
+    cagg_invalidation_multi
     cagg_policy_incremental
     hypercore
     move

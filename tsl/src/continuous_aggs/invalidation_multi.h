@@ -75,17 +75,20 @@ typedef struct MultiHypertableInvalidationState
 	HTAB *hypertables;	/* Cache for information about hypertables being processed */
 	HTAB *ranges;		/* Cache with ranges for all continuous aggregates */
 	Relation logrel;	/* Materialization invalidation log table being written */
+	NameData slot_name; /* Name of the slot to use when reading invalidations */
 } MultiHypertableInvalidationState;
 
 extern void multi_invalidation_state_init(MultiHypertableInvalidationState *state,
-										  MemoryContext mcxt);
+										  const char *slot_name, MemoryContext mcxt);
 extern void multi_invalidation_state_cleanup(MultiHypertableInvalidationState *state);
 extern void multi_invalidation_range_add(MultiHypertableInvalidationState *state,
 										 const Invalidation *invalidation);
 extern void multi_invalidation_range_write(MultiHypertableInvalidationState *state,
 										   MultiHypertableInvalidationRangeEntry *entry);
 extern void multi_invalidation_range_write_all(MultiHypertableInvalidationState *state);
-extern void multi_invalidation_move_invalidations(MultiHypertableInvalidationState *state);
+extern void multi_invalidation_state_move_invalidations(MultiHypertableInvalidationState *state);
 extern MultiHypertableInvalidationEntry *
 multi_invalidation_state_hypertable_entry_get_for_update(MultiHypertableInvalidationState *state,
 														 int32 hypertable_id);
+extern void multi_invalidation_process_hypertable_log(List *hypertables);
+extern Datum continuous_agg_process_multi_hypertable_invalidations(PG_FUNCTION_ARGS);

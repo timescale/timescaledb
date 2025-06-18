@@ -2001,7 +2001,7 @@ ts_get_attr_expr(Relation rel, AttrNumber attno)
  * the range. It is used to look up ranges for the type.
  */
 RangeType *
-ts_internal_to_range(int64 lower, int64 upper, Oid dimtype)
+ts_internal_to_range(int64 lower, int64 upper, Oid dimtype, Oid rngtype)
 {
 	Assert(lower < upper);
 	RangeBound lbound = {
@@ -2016,8 +2016,8 @@ ts_internal_to_range(int64 lower, int64 upper, Oid dimtype)
 		.inclusive = false,
 		.lower = false,
 	};
-	/* Need to look up the range type using the element type here !!! */
-	TypeCacheEntry *typcache = lookup_type_cache(dimtype, 0);
+
+	TypeCacheEntry *typcache = lookup_type_cache(rngtype, TYPECACHE_RANGE_INFO);
 #if PG16_LT
 	return make_range(typcache, &lbound, &ubound, false);
 #else
