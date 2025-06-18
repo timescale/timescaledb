@@ -125,22 +125,20 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
  * The Hypertable ResultRelInfo is used as a template for the chunk's new ResultRelInfo.
  */
 static inline ResultRelInfo *
-create_chunk_result_relation_info(const ChunkDispatch *dispatch, Relation rel)
+create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel, EState *estate)
 {
 	ResultRelInfo *rri;
-	ResultRelInfo *rri_orig = dispatch->hypertable_result_rel_info;
-	Index hyper_rti = rri_orig->ri_RangeTableIndex;
 	rri = makeNode(ResultRelInfo);
 
-	InitResultRelInfo(rri, rel, hyper_rti, NULL, dispatch->estate->es_instrument);
+	InitResultRelInfo(rri, rel, ht_rri->ri_RangeTableIndex, NULL, estate->es_instrument);
 
 	/* Copy options from the main table's (hypertable's) result relation info */
-	rri->ri_WithCheckOptions = rri_orig->ri_WithCheckOptions;
-	rri->ri_WithCheckOptionExprs = rri_orig->ri_WithCheckOptionExprs;
-	rri->ri_projectReturning = rri_orig->ri_projectReturning;
+	rri->ri_WithCheckOptions = ht_rri->ri_WithCheckOptions;
+	rri->ri_WithCheckOptionExprs = ht_rri->ri_WithCheckOptionExprs;
+	rri->ri_projectReturning = ht_rri->ri_projectReturning;
 
 	rri->ri_FdwState = NULL;
-	rri->ri_usesFdwDirectModify = rri_orig->ri_usesFdwDirectModify;
+	rri->ri_usesFdwDirectModify = ht_rri->ri_usesFdwDirectModify;
 
 	if (RelationGetForm(rel)->relkind == RELKIND_FOREIGN_TABLE)
 		rri->ri_FdwRoutine = GetFdwRoutineForRelation(rel, true);
@@ -497,7 +495,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
-	relinfo = create_chunk_result_relation_info(dispatch, rel);
+	relinfo = create_chunk_result_relation_info(dispatch->hypertable_result_rel_info, rel, dispatch->estate);
 	CheckValidResultRelCompat(relinfo, chunk_dispatch_get_cmd_type(dispatch), NIL);
 
 	state = palloc0(sizeof(ChunkInsertState));
