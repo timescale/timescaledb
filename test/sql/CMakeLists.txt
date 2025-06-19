@@ -94,7 +94,6 @@ set(SOLO_TESTS
     bgw_launcher
     chunk_utils
     index
-    net
     pg_dump_unprivileged
     tablespace
     telemetry)

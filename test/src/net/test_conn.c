@@ -26,7 +26,7 @@ ts_test_conn(PG_FUNCTION_ARGS)
 #ifdef TS_USE_OPENSSL
 	int ssl_port = 443;
 #endif
-	char *host = "postman-echo.com";
+	char *host = "httpbin.org";
 
 	/* Test connection_init/destroy */
 	conn = ts_connection_create(CONNECTION_PLAIN);
