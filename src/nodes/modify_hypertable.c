@@ -110,8 +110,9 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 		/* setup chunk dispatch state only for INSERTs */
 		state->cds = get_chunk_dispatch_state(subplan);
 		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
-		state->ctr->onConflictAction = mt->onConflictAction;
+		state->ctr->counters->onConflictAction = mt->onConflictAction;
 		state->ctr->mht_state = state;
+		state->cds->dispatch->counters = state->ctr->counters;
 
 		/* Ensure that we found at least one ChunkDispatchState node */
 		Assert(state->cds);

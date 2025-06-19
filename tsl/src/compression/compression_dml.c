@@ -1173,9 +1173,9 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 			return constraints;
 	}
 
-	if (constraints->covered && cis->cds && cis->cds->dispatch)
+	if (constraints->covered && cis)
 	{
-		constraints->on_conflict = ts_chunk_dispatch_get_on_conflict_action(cis->cds->dispatch);
+		constraints->on_conflict = cis->counters->onConflictAction;
 	}
 
 	return constraints;

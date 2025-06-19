@@ -42,7 +42,7 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 										   estate->es_query_cxt,
 										   ts_guc_max_open_chunks_per_insert);
 
-	ctr->onConflictAction = ONCONFLICT_NONE;
+	ctr->counters->onConflictAction = ONCONFLICT_NONE;
 	return ctr;
 }
 
@@ -207,7 +207,7 @@ chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr)
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(relinfo, ctr->onConflictAction != ONCONFLICT_NONE);
+		ExecOpenIndices(relinfo, ctr->counters->onConflictAction != ONCONFLICT_NONE);
 
 	if (relinfo->ri_TrigDesc != NULL)
 	{

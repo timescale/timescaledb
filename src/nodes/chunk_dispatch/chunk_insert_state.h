@@ -61,6 +61,7 @@ typedef struct SharedCounters
 	int64 batches_decompressed;
 	/* Number of tuples decompressed */
 	int64 tuples_decompressed;
+	OnConflictAction onConflictAction;
 } SharedCounters;
 
 typedef struct ChunkInsertState
