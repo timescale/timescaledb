@@ -3362,6 +3362,11 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 #else
 	actionStates = cds->rri->ri_notMatchedMergeAction;
 #endif
+#if PG17_GE
+	actionStates = ctr->hypertable_rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#else
+	actionStates = ctr->hypertable_rri->ri_notMatchedMergeAction;
+#endif
 	/*
 	 * Make source tuple available to ExecQual and ExecProject. We don't
 	 * need the target tuple, since the WHEN quals and targetlist can't
@@ -3405,7 +3410,7 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 #else
 				context->relaction = action;
 #endif
-				if (cds->is_dropped_attr_exists)
+				if (ctr->has_dropped_attrs)
 				{
 					AttrMap *map;
 					TupleDesc parenttupdesc, chunktupdesc;
