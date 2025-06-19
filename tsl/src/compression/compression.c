@@ -1037,6 +1037,27 @@ row_compressor_is_full(RowCompressor *row_compressor, TupleTableSlot *row)
 	return false;
 }
 
+void
+row_compressor_append_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot)
+{
+	MemoryContext old_ctx;
+	slot_getallattrs(slot);
+	old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
+	if (row_compressor->first_iteration)
+	{
+		row_compressor_update_group(row_compressor, slot);
+		row_compressor->first_iteration = false;
+	}
+	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
+	bool compressed_row_is_full = row_compressor_is_full(row_compressor, slot);
+
+	Ensure(!changed_groups, "row is in different group");
+	Ensure(!compressed_row_is_full, "batch is full");
+	row_compressor_append_row(row_compressor, slot);
+	MemoryContextSwitchTo(old_ctx);
+	ExecClearTuple(slot);
+}
+
 static void
 row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
 									BulkWriter *writer)
@@ -1212,13 +1233,12 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 		Int32GetDatum(row_compressor->rows_compressed_into_current_value);
 	row_compressor->compressed_is_null[row_compressor->count_metadata_column_offset] = false;
 
-	HeapTuple tuple = heap_form_tuple(row_compressor->out_desc,
-									  row_compressor->compressed_values,
-									  row_compressor->compressed_is_null);
-
 	MemoryContextSwitchTo(old_cxt);
 
-	return tuple;
+	/* Build the tuple on the callers memory context */
+	return heap_form_tuple(row_compressor->out_desc,
+						   row_compressor->compressed_values,
+						   row_compressor->compressed_is_null);
 }
 
 void
