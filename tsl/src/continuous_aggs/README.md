@@ -80,10 +80,20 @@ underlying continuous aggregate.
 
 ## The Invalidation Log and Threshold ##
 
+There are two mechanisms for collecting hypertable invalidations:
+1. A trigger on the hypertable, which writes to a dedicated
+   *hypertable invalidation log* table.
+2. A logical decoding plugin, which scans the WAL to produce
+   invalidation entries.
+
+### Invalidation Log Table
+
 Mutating transactions must record their mutations in the invalidation
 log, so that a refresh knows to re-materialize the invalidated
-range. This happens by installing a trigger on the source hypertable
-when the first continuous aggregate on that hypertable is created.
+range. When using the trigger approach, this happens
+by installing a trigger on the source hypertable when the first
+continuous aggregate on that hypertable is created. The trigger
+writes entries to the hypertable invalidation log.
 
 To reduce the extra writes by the trigger, only one invalidation range
 (lowest and highest modified value) is written at the end of a
@@ -115,19 +125,75 @@ entries that are outside the refresh window. Subsequently, if the
 refresh window does not match any invalidations, there is nothing to
 refresh either.
 
+### Hypertable Invalidations Plugin
+
+The hypertable invalidations plugin is available in
+`invalidation_plugin.c` and is used to read hypertable invalidations
+directly from the WAL for a hypertable associated with a continuous
+aggregate.
+
+To reduce the dependencies on the TimescaleDB version, the hypertable
+invalidation plugin is made as simple as possible and does not use the
+metadata tables of the TimescaleDB extension and instead is configured
+to read specific relids and attribute names when fetching data.
+
+While processing the WAL, the timestamps are collected into ranges
+with the same format as `continuous_agg_hypertable_invalidation_log`
+and (similarly to when using the trigger to record changes) only one
+invalidation range (lowest and highest modified value in microseconds
+since UNIX Epoch) is produced for each modified hypertable in each
+mutating transaction. For the same reasons as above, this means that a
+refresh might materialize more data than necessary.
+
+The invalidations plugin will return a result set consisting of the
+modifications done of the primary partition column, but the
+"hypertable_id" of the invalidation will be the relid and it is up to
+the TimescaleDB extension to decode this into a hypertable id.
+
+The modifications are represented as tuples consisting of the relid
+for the change and the start and end timestamp as int64, which is the
+internal representation of timestamp values. It is up to the receiver
+to use the timestamps accordingly.
+
+To be able to collect a unique key for each changed row when doing a
+`DELETE` or an `UPDATE`, it is required that the hypertable has a
+replica identity set. This can either be the primary key of the
+hypertable, or a unique index, or the full row if neither is suitable.
+
 ## Distribution of functions across files
-common.c
-This file contains the functions common in all scenarios of creating a continuous aggregates.
 
-create.c
-This file contains the functions that are directly responsible for the creation of the continuous aggregates,
-like creating hypertable, catalog_entry, view, etc.
+Each source file has an associated header file that should be included
+to use functions from the corresponding file.
 
-finalize.c
-This file contains the specific functions for the case when continous aggregates are created in old format.
+<dl>
+<dt>`common.c`</dt>
+<dd>This file contains the functions common in all scenarios of creating a continuous aggregates.</dd>
 
-materialize.c
-This file contains the functions directly dealing with the materialization of the continuous aggregates.
+<dt>`create.c`</dt>
+<dd>This file contains the functions that are directly responsible for the creation of the continuous aggregates,
+like creating hypertable, catalog_entry, view, etc.</dd>
 
-repair.c
-The repair and rebuilding related functions are put together in this file
+<dt>`finalize.c`</dt>
+<dd>This file contains the specific functions for the case when continous aggregates are created in old format.</dd>
+
+<dt>`materialize.c`</dt>
+<dd>This file contains the functions directly dealing with the materialization of the continuous aggregates.</dd>
+
+<dt>`repair.c`</dt>
+<dd>The repair and rebuilding related functions are put together in this file.</dd>
+</dl>
+
+<dt>`invalidation.c`</dt>
+<dd>Functions related to invalidation processing for continuous aggregates.</dd>
+</dl>
+
+<dt>`invalidation_plugin.c`</dt>
+<dd>The invalidation plugin.</dd>
+
+<dt>`invalidation_cache.c`</dt>
+<dd>The invalidation cache for the invalidation plugin.</dd>
+
+<dt>`invalidation_funcs.c`</dt>
+<dd>Useful invalidation functions.</dd>
+</dl>
+

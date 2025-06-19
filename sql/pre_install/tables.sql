@@ -373,7 +373,9 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,
   finalized bool NOT NULL DEFAULT TRUE,
+  collect_using integer NOT NULL DEFAULT 0,
   -- table constraints
+  CONSTRAINT continuous_agg_collect_using CHECK (collect_using BETWEEN 0 AND 1),
   CONSTRAINT continuous_agg_pkey PRIMARY KEY (mat_hypertable_id),
   CONSTRAINT continuous_agg_partial_view_schema_partial_view_name_key UNIQUE (partial_view_schema, partial_view_name),
   CONSTRAINT continuous_agg_user_view_schema_user_view_name_key UNIQUE (user_view_schema, user_view_name),

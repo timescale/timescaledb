@@ -14,8 +14,11 @@
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
+#include <catalog/pg_type_d.h>
 #include <commands/trigger.h>
+#include <executor/spi.h>
 #include <fmgr.h>
+#include <lib/stringinfo.h>
 #include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
@@ -131,6 +134,40 @@ init_materialization_invalidation_log_scan_by_materialization_id(ScanIterator *i
 		BTEqualStrategyNumber,
 		F_INT4EQ,
 		Int32GetDatum(materialization_id));
+}
+
+static bool
+drop_invalidation_slot_check(int collect_using, const char *slot_name)
+{
+	static SPIPlanPtr plan_count_caggs_using = NULL;
+	static const char *query_count_caggs_using =
+		"SELECT "
+		"EXISTS(SELECT * FROM _timescaledb_catalog.continuous_agg WHERE collect_using = $1)"
+		" AND "
+		"EXISTS(SELECT 1 FROM pg_replication_slots WHERE slot_name = $2::name)";
+	Datum args[2] = { Int32GetDatum(collect_using), CStringGetDatum(slot_name) };
+	char nulls[2] = { ' ', ' ' };
+
+	SPI_connect();
+
+	if (plan_count_caggs_using == NULL)
+	{
+		Oid argtypes[2] = { INT2OID, NAMEOID };
+		SPIPlanPtr plan = SPI_prepare(query_count_caggs_using, 2, argtypes);
+		if (plan == NULL)
+			elog(ERROR, "SPI_prepare failed for \"%s\"", query_count_caggs_using);
+		SPI_keepplan(plan);
+		plan_count_caggs_using = plan;
+	}
+
+	int rc = SPI_execute_plan(plan_count_caggs_using, args, nulls, true, 1);
+	Ensure(rc >= 0, "unable to count number of continuous aggregates");
+	Assert(SPI_processed == 1);
+	bool isnull;
+	Datum result = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+	Ensure(!isnull, "null value returned when checking for cagg invalidation slot");
+	SPI_finish();
+	return DatumGetBool(result);
 }
 
 static int32
@@ -250,6 +287,8 @@ continuous_agg_formdata_make_tuple(const FormData_continuous_agg *fd, TupleDesc 
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(fd->materialized_only);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)] = BoolGetDatum(fd->finalized);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_collect_using)] =
+		Int32GetDatum(fd->collect_using);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -300,6 +339,8 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
 	fd->finalized = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)]);
+	fd->collect_using =
+		DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_continuous_agg_collect_using)]);
 
 	if (should_free)
 		heap_freetuple(tuple);
@@ -870,6 +911,13 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 			LockRelationOid(raw_hypertable_trig.objectId, AccessExclusiveLock);
 		}
 	}
+
+	/* Drop invalidation slot if there are no continuous aggregates. This is
+	 * important since there is no actor that reads the slot, which means that
+	 * the WAL cannot be pruned. */
+	if (drop_invalidation_slot_check(ContinuousAggCollectUsingWal,
+									 CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_SLOT_NAME))
+		ts_hypertable_drop_slot(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_SLOT_NAME);
 
 	/*
 	 * Following objects might be already dropped in case of CASCADE

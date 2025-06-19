@@ -904,6 +904,7 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_materialize_only,
 	Anum_continuous_agg_finalized,
+	Anum_continuous_agg_collect_using,
 	_Anum_continuous_agg_max,
 } Anum_continuous_agg;
 
@@ -922,6 +923,7 @@ typedef struct FormData_continuous_agg
 	NameData direct_view_name;
 	bool materialized_only;
 	bool finalized;
+	int collect_using;
 } FormData_continuous_agg;
 
 typedef FormData_continuous_agg *Form_continuous_agg;
@@ -1004,9 +1006,16 @@ typedef enum Anum_continuous_aggs_bucket_function_pkey
 #define Natts_continuous_aggs_bucket_function_pkey                                                 \
 	(_Anum_continuous_aggs_bucket_function_pkey_max - 1)
 
-/****** CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE definitions*/
+/*
+ * CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE definitions
+ *
+ * The definition of CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME is
+ * generated from config.h.in and can be found in the generated file.
+ */
 #define CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE_NAME                                     \
 	"continuous_aggs_hypertable_invalidation_log"
+#define CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_SLOT_NAME "continuous_aggs_hypertable_invalidations"
+
 typedef enum Anum_continuous_aggs_hypertable_invalidation_log
 {
 	Anum_continuous_aggs_hypertable_invalidation_log_hypertable_id = 1,

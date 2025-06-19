@@ -16,9 +16,11 @@
  * cagg_create.
  */
 #include <postgres.h>
+
 #include <access/reloptions.h>
 #include <access/sysattr.h>
 #include <access/xact.h>
+#include <c.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_namespace.h>
@@ -30,6 +32,7 @@
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
 #include <commands/view.h>
+#include <executor/spi.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
@@ -45,43 +48,44 @@
 #include <parser/parse_relation.h>
 #include <parser/parse_type.h>
 #include <parser/parsetree.h>
+#include <replication/slot.h>
+#include <storage/lwlocknames.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
+#include <utils/elog.h>
+#include <utils/pg_lsn.h>
 #include <utils/rel.h>
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
 #include "common.h"
+#include "config.h"
 #include "create.h"
 #include "finalize.h"
 #include "invalidation_threshold.h"
 
 #include "debug_assert.h"
 #include "dimension.h"
-#include "errors.h"
 #include "extension_constants.h"
-#include "func_cache.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "invalidation.h"
-#include "options.h"
 #include "refresh.h"
 #include "time_utils.h"
-#include "timezones.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
-#include "utils.h"
 #include "with_clause/create_materialized_view_with_clause.h"
 
 static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 									  const char *user_view, const char *partial_schema,
 									  const char *partial_view, bool materialized_only,
 									  const char *direct_schema, const char *direct_view,
-									  const bool finalized, const int32 parent_mat_hypertable_id);
+									  const bool finalized, const int32 parent_mat_hypertable_id,
+									  int collect_using);
 static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
 												 const char *bucket_width, const char *origin,
 												 const char *offset, const char *timezone,
@@ -125,7 +129,7 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 						  const char *user_view, const char *partial_schema,
 						  const char *partial_view, bool materialized_only,
 						  const char *direct_schema, const char *direct_view, const bool finalized,
-						  const int32 parent_mat_hypertable_id)
+						  const int32 parent_mat_hypertable_id, int collect_using)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -171,6 +175,8 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)] = BoolGetDatum(finalized);
+	values[AttrNumberGetAttrOffset(Anum_continuous_agg_collect_using)] =
+		Int32GetDatum(collect_using);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -296,6 +302,88 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create materialization hypertable")));
+}
+
+/*
+ * Check if a named slot is defined.
+ *
+ * From ReplicationSlotCreate() in src/backend/replication/slot.c.
+ */
+static bool
+is_slot_defined(const char *name)
+{
+	bool slot_exists = false;
+
+	LWLockAcquire(ReplicationSlotControlLock, LW_SHARED);
+	for (int i = 0; !slot_exists && i < max_replication_slots; i++)
+	{
+		ReplicationSlot *slot = &ReplicationSlotCtl->replication_slots[i];
+		if (slot->in_use && strcmp(name, NameStr(slot->data.name)) == 0)
+			slot_exists = true;
+	}
+	LWLockRelease(ReplicationSlotControlLock);
+
+	return slot_exists;
+}
+
+/*
+ * Add a logical decoding slot for reading invalidations.
+ *
+ * If a logical slot do not exist, it will be created. If it already exists,
+ * nothing will happen.
+ *
+ * It is important that the slot exists if and only if there are continuous
+ * aggregates that use the WAL to collect invalidations.
+ *
+ * Obviously, the slot is needed to read invalidations for the hypertables and
+ * it need to have the version expected by the timescale extension. If the
+ * versions do not match, the returned rows will not match what is expected.
+ *
+ * Less obvious, the slot need to be removed once there are no more continuous
+ * aggregates that need the slot. If not, the WAL will not be used and will
+ * start to fill up storage.
+ */
+static XLogRecPtr
+cagg_add_logical_decoding_slot(void)
+{
+	CatalogSecurityContext sec_ctx;
+	StringInfoData sql;
+
+	if (is_slot_defined(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_SLOT_NAME))
+		return InvalidXLogRecPtr;
+
+	initStringInfo(&sql);
+	appendStringInfo(&sql,
+					 "SELECT lsn FROM pg_create_logical_replication_slot(%s, %s, false, false, "
+					 "false)",
+					 quote_literal_cstr(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_SLOT_NAME),
+					 quote_literal_cstr(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME));
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	SPI_connect();
+
+	int ret = SPI_execute(sql.data, true, 0);
+	if (ret != SPI_OK_SELECT)
+		elog(ERROR,
+			 "failed to create logical replication slot \"%s\": %s",
+			 CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_SLOT_NAME,
+			 SPI_result_code_string(ret));
+
+	if (SPI_processed != 1)
+		ereport(ERROR,
+				errmsg("failed to create replication slot \"%s\"",
+					   CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_SLOT_NAME),
+				errdetail("expected one row, but got %d rows", (int) SPI_processed));
+
+	bool isnull;
+	Datum lsn = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+
+	Ensure(!isnull, "unexpected NULL LSN from pg_create_logical_replication_slot");
+
+	SPI_finish();
+	ts_catalog_restore_user(&sec_ctx);
+
+	return DatumGetLSN(lsn);
 }
 
 /*
@@ -596,6 +684,29 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 	}
 }
 
+static const char *collect_using_info[] = {
+	[ContinuousAggCollectUsingTrigger] = "trigger",
+	[ContinuousAggCollectUsingWal] = "wal",
+};
+
+static int
+get_collect_using(WithClauseResult *with_clause_options)
+{
+	if (with_clause_options[CreateMaterializedViewFlagCollectUsing].is_default)
+		return ContinuousAggCollectUsingTrigger;
+
+	const char *collect_using = text_to_cstring(
+		DatumGetTextP(with_clause_options[CreateMaterializedViewFlagCollectUsing].parsed));
+
+	for (size_t i = 0; i < sizeof(collect_using_info) / sizeof(*collect_using_info); ++i)
+		if (strcmp(collect_using_info[i], collect_using) == 0)
+			return i;
+	ereport(ERROR,
+			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			errmsg("unrecognized value \"%s\" for collect_using", collect_using));
+	return -1; /* To keep linter happy */
+}
+
 /*
  * Modifies the passed in ViewStmt to do the following
  * a) Create a hypertable for the continuous agg materialization.
@@ -671,6 +782,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	bool materialized_only =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
 	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
+	int collect_using = get_collect_using(with_clause_options);
 
 	int64 matpartcol_interval = 0;
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
@@ -702,6 +814,13 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	 * The options are valid only for internal use (ts_continuous).
 	 */
 	stmt->options = NULL;
+
+	/*
+	 * Step 0: Create logical replication slot if used. This needs to be first
+	 * since we cannot do this in a transaction that has performed any writes.
+	 */
+	if (collect_using == ContinuousAggCollectUsingWal)
+		cagg_add_logical_decoding_slot();
 
 	/*
 	 * Old format caggs are not supported anymore, there is no need to add
@@ -781,7 +900,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  dum_rel->schemaname,
 							  dum_rel->relname,
 							  finalized,
-							  bucket_info->parent_mat_hypertable_id);
+							  bucket_info->parent_mat_hypertable_id,
+							  collect_using);
 
 	char *bucket_origin = NULL;
 	char *bucket_offset = NULL;
@@ -833,8 +953,10 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										 bucket_info->bf->bucket_time_timezone,
 										 bucket_info->bf->bucket_fixed_interval);
 
-	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */
-	cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
+	/* Step 5: Create trigger on raw hypertable or create logical replication
+	 * slot, if needed. */
+	if (collect_using == ContinuousAggCollectUsingTrigger)
+		cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
 }
 
 DDLResult

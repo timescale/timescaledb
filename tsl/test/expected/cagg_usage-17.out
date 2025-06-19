@@ -88,6 +88,7 @@ view_definition                   |  SELECT time_bucket('@ 1 hour'::interval, ob
                                   |    FROM device_readings                                                     +
                                   |   GROUP BY (time_bucket('@ 1 hour'::interval, observation_time)), device_id;
 finalized                         | t
+collect_using                     | trigger
 
 \x
 -- Refresh interval
@@ -597,3 +598,67 @@ ORDER BY 1;
  _hyper_12_20_chunk |            0 | f       |        
 (2 rows)
 
+\set ON_ERROR_STOP 1
+\x on
+SELECT slot_name, plugin, slot_type, two_phase, failover FROM pg_replication_slots;
+(0 rows)
+
+\x off
+-- Test the option "collect_using"
+CREATE MATERIALIZED VIEW metrics_summary_wal
+  WITH (timescaledb.continuous, timescaledb.collect_using = 'wal')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM metrics
+     GROUP BY 1,2;
+NOTICE:  refreshing continuous aggregate "metrics_summary_wal"
+\x on
+SELECT slot_name, plugin, slot_type, two_phase, failover FROM pg_replication_slots;
+-[ RECORD 1 ]---------------------------------------
+slot_name | continuous_aggs_hypertable_invalidations
+plugin    | timescaledb-invalidations
+slot_type | logical
+two_phase | f
+failover  | f
+
+\x off
+CREATE MATERIALIZED VIEW metrics_summary_trigger
+  WITH (timescaledb.continuous, timescaledb.collect_using = 'trigger')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM metrics
+     GROUP BY 1,2;
+NOTICE:  refreshing continuous aggregate "metrics_summary_trigger"
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW metrics_summary_magic
+  WITH (timescaledb.continuous, timescaledb.collect_using = 'magic')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM metrics
+     GROUP BY 1,2;
+ERROR:  unrecognized value "magic" for collect_using
+\set ON_ERROR_STOP 1
+-- Check that it was actually written to the catalog
+SELECT view_name, collect_using
+  FROM timescaledb_information.continuous_aggregates
+ WHERE view_name like 'metrics_summary%';
+        view_name        | collect_using 
+-------------------------+---------------
+ metrics_summary_trigger | trigger
+ metrics_summary_wal     | wal
+(2 rows)
+
+\x on
+SELECT slot_name, plugin, slot_type, two_phase, failover FROM pg_replication_slots;
+-[ RECORD 1 ]---------------------------------------
+slot_name | continuous_aggs_hypertable_invalidations
+plugin    | timescaledb-invalidations
+slot_type | logical
+two_phase | f
+failover  | f
+
+\x off
+DROP MATERIALIZED VIEW metrics_summary_wal;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_17_25_chunk
+\x on
+SELECT slot_name, plugin, slot_type, two_phase, failover FROM pg_replication_slots;
+(0 rows)
+
+\x off

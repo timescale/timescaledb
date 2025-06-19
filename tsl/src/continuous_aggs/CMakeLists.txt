@@ -3,8 +3,10 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/create.c
     ${CMAKE_CURRENT_SOURCE_DIR}/finalize.c
     ${CMAKE_CURRENT_SOURCE_DIR}/insert.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/invalidation_funcs.c
     ${CMAKE_CURRENT_SOURCE_DIR}/invalidation_threshold.c
     ${CMAKE_CURRENT_SOURCE_DIR}/invalidation.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/invalidation_multi.c
     ${CMAKE_CURRENT_SOURCE_DIR}/materialize.c
     ${CMAKE_CURRENT_SOURCE_DIR}/options.c
     ${CMAKE_CURRENT_SOURCE_DIR}/planner.c
@@ -12,3 +14,19 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/repair.c
     ${CMAKE_CURRENT_SOURCE_DIR}/utils.c)
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})
+
+add_library(${TSL_CAGG_INVALIDATION_PLUGIN_NAME} MODULE
+            invalidation_plugin.c invalidation_plugin_cache.c)
+
+# VERSION and SOVERSION are not really used right now.
+set_target_properties(
+  ${TSL_CAGG_INVALIDATION_PLUGIN_NAME}
+  PROPERTIES OUTPUT_NAME ${TSL_CAGG_INVALIDATION_PLUGIN_NAME}
+             PREFIX ""
+             VERSION ${PROJECT_VERSION}
+             SOVERSION ${PROJECT_VERSION_MAJOR}
+             POSITION_INDEPENDENT_CODE ON)
+target_include_directories(${TSL_CAGG_INVALIDATION_PLUGIN_NAME}
+                           PRIVATE ${PG_INCLUDEDIR})
+install(TARGETS ${TSL_CAGG_INVALIDATION_PLUGIN_NAME}
+        LIBRARY DESTINATION ${PG_PKGLIBDIR})
