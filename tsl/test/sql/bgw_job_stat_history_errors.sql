@@ -85,7 +85,8 @@ FROM _timescaledb_internal.bgw_job_stat_history
 WHERE succeeded IS FALSE;
 -- drop all job_stats for the retention job
 DELETE FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 3;
-SELECT  next_start FROM alter_job(3, next_start => now() + interval '2 seconds') \gset
+SELECT FROM alter_job(3, next_start => now());
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(3, 1);
 -- only the last row remains
 SELECT job_id, pid, succeeded, execution_start, execution_finish, data
@@ -138,6 +139,8 @@ BEGIN
   FROM generate_series(1, njobs) AS i;
 END;
 $TEST$;
+
+SELECT _timescaledb_functions.restart_background_workers();
 
 -- Wait for jobs to run
 DO
