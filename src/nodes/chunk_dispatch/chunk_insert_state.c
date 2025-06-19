@@ -393,7 +393,7 @@ set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
 }
 
 /* Change the projections to work with chunks instead of hypertables */
-static void
+void
 adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsertState *cis,
 				   Oid rowtype)
 {

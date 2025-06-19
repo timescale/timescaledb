@@ -89,6 +89,7 @@
 typedef struct ModifyTableContext
 {
 	/* Operation state */
+  ModifyHypertableState *mhtstate;
 	ModifyTableState *mtstate;
 	EPQState *epqstate;
 	EState *estate;
@@ -172,7 +173,7 @@ static bool ExecOnConflictUpdate(ModifyTableContext *context,
 
 static TupleTableSlot *ExecPrepareTupleRouting(ModifyTableState *mtstate,
 											   EState *estate,
-											   ChunkDispatchState *cds,
+                         ChunkTupleRouting *ctr,
 											   ResultRelInfo *targetRelInfo,
 											   TupleTableSlot *slot,
 											   ResultRelInfo **partRelInfo);
@@ -551,17 +552,20 @@ ExecGetInsertNewTuple(ResultRelInfo *relinfo,
 static TupleTableSlot *
 ExecPrepareTupleRouting(ModifyTableState *mtstate,
 						EState *estate,
-						ChunkDispatchState *cds,
+            ChunkTupleRouting *ctr,
 						ResultRelInfo *targetRelInfo,
 						TupleTableSlot *slot,
 						ResultRelInfo **partRelInfo)
 {
-	ChunkInsertState *cis = cds->cis;
+
+  Point *point = ts_hyperspace_calculate_point(ctr->hypertable->space, slot);
+	ChunkInsertState *cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
+  ctr->cis = cis;
 	/* Convert the tuple to the chunk's rowtype, if necessary */
-	if (cis->hyper_to_chunk_map != NULL && cds->is_dropped_attr_exists == false)
+	if (cis->hyper_to_chunk_map != NULL && !ctr->has_dropped_attrs)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
 
-	*partRelInfo = cds->rri;
+	*partRelInfo = cis->result_relation_info;
 	return slot;
 }
 
@@ -588,7 +592,6 @@ ExecPrepareTupleRouting(ModifyTableState *mtstate,
 TupleTableSlot *
 ExecInsert(ModifyTableContext *context,
 		   ResultRelInfo *resultRelInfo,
-		   ChunkDispatchState *cds,
 		   TupleTableSlot *slot,
 		   bool canSetTag)
 {
@@ -609,11 +612,11 @@ ExecInsert(ModifyTableContext *context,
 	 * If the input result relation is a partitioned table, find the leaf
 	 * partition to insert the tuple into.
 	 */
-	if (cds)
+	if (true)
 	{
 		ResultRelInfo *partRelInfo;
 
-		slot = ExecPrepareTupleRouting(mtstate, estate, cds,
+		slot = ExecPrepareTupleRouting(mtstate, estate, context->mhtstate->ctr,
 									   resultRelInfo, slot,
 									   &partRelInfo);
 		resultRelInfo = partRelInfo;
@@ -2299,26 +2302,6 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 static void fireASTriggers(ModifyTableState *node);
 static void fireBSTriggers(ModifyTableState *node);
 
-static ChunkDispatchState *
-get_chunk_dispatch_state(PlanState *substate)
-{
-	switch (nodeTag(substate))
-	{
-		case T_CustomScanState:
-		{
-			if (ts_is_chunk_dispatch_state(substate))
-				return (ChunkDispatchState *) substate;
-			break;
-		}
-		case T_ResultState:
-			return get_chunk_dispatch_state(castNode(ResultState, substate)->ps.lefttree);
-		default:
-			break;
-	}
-
-	return NULL;
-}
-
 /* ----------------------------------------------------------------
  *	   ExecModifyTable
  *
@@ -2331,7 +2314,7 @@ get_chunk_dispatch_state(PlanState *substate)
 TupleTableSlot *
 ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 {
-	ModifyHypertableState *ht_state = (ModifyHypertableState *) cs_node;
+	ModifyHypertableState *mhtstate = (ModifyHypertableState *) cs_node;
 	ModifyTableState *node = castNode(ModifyTableState, pstate);
 	ModifyTableContext context;
 	EState *estate = node->ps.state;
@@ -2347,6 +2330,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	List *relinfos = NIL;
 	ListCell *lc;
 	ChunkDispatchState *cds = NULL;
+  ChunkTupleRouting *ctr = mhtstate->ctr;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -2386,9 +2370,10 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 	if (operation == CMD_INSERT || operation == CMD_MERGE)
 	{
-		cds = get_chunk_dispatch_state(subplanstate);
+		cds = mhtstate->cds;
 	}
 	/* Set global context */
+  context.mhtstate = mhtstate;
 	context.mtstate = node;
 	context.epqstate = &node->mt_epqstate;
 	context.estate = estate;
@@ -2396,18 +2381,18 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	 * For UPDATE/DELETE on compressed hypertable, decompress chunks and
 	 * move rows to uncompressed chunks.
 	 */
-	if ((operation == CMD_DELETE || operation == CMD_UPDATE) && !ht_state->comp_chunks_processed)
+	if ((operation == CMD_DELETE || operation == CMD_UPDATE) && !mhtstate->comp_chunks_processed)
 	{
 		/* Modify snapshot only if something got decompressed */
 		if (ts_cm_functions->decompress_target_segments &&
-			ts_cm_functions->decompress_target_segments(ht_state))
+			ts_cm_functions->decompress_target_segments(mhtstate))
 		{
-			ht_state->comp_chunks_processed = true;
+			mhtstate->comp_chunks_processed = true;
 			/*
 			 * save snapshot set during ExecutorStart(), since this is the same
 			 * snapshot used to SeqScan of uncompressed chunks
 			 */
-			ht_state->snapshot = estate->es_snapshot;
+			mhtstate->snapshot = estate->es_snapshot;
 
 			CommandCounterIncrement();
 			/* use a static copy of current transaction snapshot
@@ -2419,14 +2404,14 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 			if (ts_guc_max_tuples_decompressed_per_dml > 0)
 			{
-				if (ht_state->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
+				if (mhtstate->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
 							 errmsg("tuple decompression limit exceeded by operation"),
 							 errdetail("current limit: %d, tuples decompressed: %lld",
 									   ts_guc_max_tuples_decompressed_per_dml,
-									   (long long int) ht_state->tuples_decompressed),
+									   (long long int) mhtstate->tuples_decompressed),
 							 errhint("Consider increasing "
 									 "timescaledb.max_tuples_decompressed_per_dml_transaction or "
 									 "set to 0 (unlimited).")));
@@ -2434,8 +2419,8 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			}
 		}
 		/* Account for tuples deleted via batch DELETE in compressed chunks */
-		if (operation == CMD_DELETE && ht_state->tuples_deleted > 0)
-			estate->es_processed += ht_state->tuples_deleted;
+		if (operation == CMD_DELETE && mhtstate->tuples_deleted > 0)
+			estate->es_processed += mhtstate->tuples_deleted;
 	}
 	/*
 	 * Fetch rows from subplan, and execute the required table modification
@@ -2495,6 +2480,14 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			continue;
 		}
 
+		if (mhtstate->ctr && mhtstate->ctr->cis && operation == CMD_INSERT && mhtstate->ctr->cis->skip_current_tuple)
+		{
+			mhtstate->ctr->cis->skip_current_tuple = false;
+			if (node->ps.instrument)
+				node->ps.instrument->ntuples2++;
+			continue;
+		}
+
 		/* No more tuples to process? */
 		if (TupIsNull(context.planSlot))
 			break;
@@ -2505,12 +2498,19 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		 * XXX do we need an additional support of NOT MATCHED BY SOURCE
 		 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 		 */
-		if (cds && cds->rri && operation == CMD_MERGE)
+		if (ctr && cds->rri && operation == CMD_MERGE)
 #if PG17_GE
 			cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
 				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
 #else
 			cds->rri->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
+#endif
+		if (mhtstate->ctr && mhtstate->ctr->cis && mhtstate->ctr->cis->result_relation_info && operation == CMD_MERGE)
+#if PG17_GE
+			mhtstate->ctr->cis->result_relation_info->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
+				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#else
+			mhtstate->ctr->cis->result_relation_info->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
 #endif
 		/*
 		 * When there are multiple result relations, each tuple contains a
@@ -2693,7 +2693,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				if (unlikely(!resultRelInfo->ri_projectNewInfoValid))
 					ExecInitInsertProjection(node, resultRelInfo);
 				slot = ExecGetInsertNewTuple(resultRelInfo, context.planSlot);
-				slot = ExecInsert(&context, resultRelInfo, cds, slot, node->canSetTag);
+				slot = ExecInsert(&context, resultRelInfo, slot, node->canSetTag);
 				break;
 			case CMD_UPDATE:
 				/* Initialize projection info if first time for this table */
@@ -2750,11 +2750,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	 */
 	relinfos = estate->es_opened_result_relations;
 
-	if (ht_state->comp_chunks_processed)
+	if (mhtstate->comp_chunks_processed)
 	{
 		UnregisterSnapshot(estate->es_snapshot);
-		estate->es_snapshot = ht_state->snapshot;
-		ht_state->comp_chunks_processed = false;
+		estate->es_snapshot = mhtstate->snapshot;
+		mhtstate->comp_chunks_processed = false;
 	}
 
 	foreach (lc, relinfos)
@@ -3343,6 +3343,7 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	List *actionStates = NIL;
 	ListCell *l;
 	TupleTableSlot *rslot = NULL;
+  ChunkTupleRouting *ctr = context->mhtstate->ctr;
 
 	/*
 	 * For INSERT actions, the root relation's merge action is OK since
@@ -3426,14 +3427,13 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 																		   &TTSOpsVirtual));
 					rslot = ExecInsert(context,
 									   resultRelInfo,
-									   cds,
 									   (chunk_slot ? chunk_slot : newslot),
 									   canSetTag);
 					if (chunk_slot)
 						ExecDropSingleTupleTableSlot(chunk_slot);
 				}
 				else
-					rslot = ExecInsert(context, resultRelInfo, cds, newslot, canSetTag);
+					rslot = ExecInsert(context, resultRelInfo, newslot, canSetTag);
 				mtstate->mt_merge_inserted = 1;
 				break;
 			case CMD_NOTHING:

@@ -16,6 +16,7 @@
 typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
 typedef struct ChunkDispatchState ChunkDispatchState;
 typedef struct CompressionSettings CompressionSettings;
+typedef struct ChunkTupleRouting ChunkTupleRouting;
 typedef struct tuple_filtering_constraints tuple_filtering_constraints;
 
 /*
@@ -121,3 +122,5 @@ ResultRelInfo *create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation
 TSDLLEXPORT OnConflictAction
 ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);
 void ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk);
+void adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsertState *cis,
+						Oid rowtype);

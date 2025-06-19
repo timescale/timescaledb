@@ -25,8 +25,10 @@ typedef struct ChunkTupleRouting
 
 	ModifyHypertableState *mht_state;  /* state for the ModifyHypertable custom scan node */
 	OnConflictAction onConflictAction; /* ON CONFLICT action for the current statement */
+	bool has_dropped_attrs;
 
 	SharedCounters *counters; /* shared counters for the current statement */
+  ChunkInsertState *cis;
 } ChunkTupleRouting;
 
 ChunkTupleRouting *ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri);
