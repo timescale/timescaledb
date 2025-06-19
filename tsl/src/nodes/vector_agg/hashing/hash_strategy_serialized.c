@@ -83,7 +83,8 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 	{
 		const CompressedColumnValues *column_values = &params.grouping_column_values[column_index];
 
-		if (column_values->decompression_type == DT_Scalar)
+		if (params.have_scalar_or_nullable_columns &&
+			column_values->decompression_type == DT_Scalar)
 		{
 			if (!*column_values->output_isnull)
 			{
@@ -117,7 +118,8 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 			continue;
 		}
 
-		const bool is_valid = arrow_row_is_valid(column_values->buffers[0], row);
+		const bool is_valid = !params.have_scalar_or_nullable_columns ||
+							  arrow_row_is_valid(column_values->buffers[0], row);
 		if (!is_valid)
 		{
 			continue;
@@ -205,7 +207,8 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 	{
 		const CompressedColumnValues *column_values = &params.grouping_column_values[column_index];
 
-		if (column_values->decompression_type == DT_Scalar)
+		if (params.have_scalar_or_nullable_columns &&
+			column_values->decompression_type == DT_Scalar)
 		{
 			const bool is_valid = !*column_values->output_isnull;
 			byte_bitmap_set_row_validity(serialized_key_validity_bitmap, column_index, is_valid);
@@ -262,7 +265,8 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 			continue;
 		}
 
-		const bool is_valid = arrow_row_is_valid(column_values->buffers[0], row);
+		const bool is_valid = !params.have_scalar_or_nullable_columns ||
+							  arrow_row_is_valid(column_values->buffers[0], row);
 		byte_bitmap_set_row_validity(serialized_key_validity_bitmap, column_index, is_valid);
 
 		if (!is_valid)
