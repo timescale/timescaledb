@@ -68,7 +68,6 @@ jobs:
           vector_agg_text
           vector_agg_uuid_segmentby
           vectorized_aggregation
-          net
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
