@@ -368,3 +368,100 @@ select count(*) from long group by a order by 1 limit 10;
 (5 rows)
 
 reset timescaledb.debug_require_vector_agg;
+-- Dictionary encoding with null values, used to test NULLS FIRST/LAST in the
+-- group aggregate mode.
+create table dictnulls(t int, x text);
+select create_hypertable('dictnulls', 't');
+NOTICE:  adding not-null constraint to column "t"
+   create_hypertable    
+------------------------
+ (5,public,dictnulls,t)
+(1 row)
+
+insert into dictnulls select x * 10,
+        (case when x % 11 != 0
+            then to_char(x % 11, '00')
+            else null end)::text
+from generate_series(1, 10000) x
+;
+alter table dictnulls set (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x');
+select count(compress_chunk(x)) from show_chunks('dictnulls') x;
+ count 
+-------
+     2
+(1 row)
+
+-- Test NULLS FIRST/LAST in GroupAgg mode.
+set enable_hashagg to off;
+explain (costs off) select x, count(*) from dictnulls group by x order by x nulls last;
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Group Key: _hyper_5_9_chunk.x
+   ->  Merge Append
+         Sort Key: _hyper_5_9_chunk.x
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk
+                     ->  Index Scan using compress_hyper_6_11_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on compress_hyper_6_11_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_5_10_chunk
+                     ->  Index Scan using compress_hyper_6_12_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on compress_hyper_6_12_chunk
+(10 rows)
+
+select x, count(*) from dictnulls group by x order by x nulls last;
+  x  | count 
+-----+-------
+  01 |   910
+  02 |   909
+  03 |   909
+  04 |   909
+  05 |   909
+  06 |   909
+  07 |   909
+  08 |   909
+  09 |   909
+  10 |   909
+     |   909
+(11 rows)
+
+alter table dictnulls set (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x nulls first');
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('dictnulls') x;
+ count 
+-------
+     2
+(1 row)
+
+explain (costs off) select x, count(*) from dictnulls group by x order by x nulls first;
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Group Key: _hyper_5_9_chunk.x
+   ->  Merge Append
+         Sort Key: _hyper_5_9_chunk.x NULLS FIRST
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk
+                     ->  Index Scan using compress_hyper_6_13_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on compress_hyper_6_13_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_5_10_chunk
+                     ->  Index Scan using compress_hyper_6_14_chunk__ts_meta_min_1__ts_meta_max_1__ts_idx on compress_hyper_6_14_chunk
+(10 rows)
+
+select x, count(*) from dictnulls group by x order by x nulls first;
+  x  | count 
+-----+-------
+     |   909
+  01 |   910
+  02 |   909
+  03 |   909
+  04 |   909
+  05 |   909
+  06 |   909
+  07 |   909
+  08 |   909
+  09 |   909
+  10 |   909
+(11 rows)
+
+reset enable_hashagg;
