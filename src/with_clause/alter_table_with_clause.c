@@ -19,6 +19,7 @@
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
+#include "debug_assert.h"
 #include "ts_catalog/array_utils.h"
 
 #include "alter_table_with_clause.h"
@@ -44,6 +45,14 @@ static const WithClauseDefinition alter_table_with_clause_def[] = {
 		[AlterTableFlagCompressChunkTimeInterval] = {
 			.arg_names = {"compress_chunk_interval", "compress_chunk_time_interval", NULL},
 			 .type_id = INTERVALOID,
+		},
+		[AlterTableFlagMinMax] = {
+			.arg_names = {"compress_minmax", "compress_min_max", "minmax", "min_max", NULL},
+			 .type_id = TEXTOID,
+		},
+		[AlterTableFlagBloom] = {
+			.arg_names = {"compress_bloom", "bloom", NULL},
+			 .type_id = TEXTOID,
 		},
 };
 
@@ -305,6 +314,112 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 	return settings;
 }
 
+static inline void
+throw_sparse_index_error(char *sparse_index, const char *sparse_index_type)
+{
+	ereport(ERROR,
+			(errcode(ERRCODE_SYNTAX_ERROR),
+			 errmsg("unable to parse sparse index option \"%s\"", sparse_index),
+			 errhint("The option timescaledb.compress_%s must"
+					 " be a set of columns separated by commas.",
+					 sparse_index_type)));
+}
+
+static ArrayType *
+parse_sparse_index_collist(char *inpstr, Hypertable *hypertable, const char *sparse_index_type)
+{
+	Ensure((strcmp("bloom", sparse_index_type) == 0 || strcmp("minmax", sparse_index_type) == 0),
+		   "\"%s\" is not a valid sparse index configuration type",
+		   sparse_index_type);
+	StringInfoData buf;
+	List *parsed;
+	ListCell *lc;
+	SelectStmt *select;
+	RawStmt *raw;
+
+	if (strlen(inpstr) == 0)
+		return NULL;
+
+	initStringInfo(&buf);
+
+	/* parse the sparse index list exactly how you would targetlist */
+	appendStringInfo(&buf,
+					 "SELECT %s FROM %s.%s",
+					 inpstr,
+					 quote_identifier(NameStr(hypertable->fd.schema_name)),
+					 quote_identifier(NameStr(hypertable->fd.table_name)));
+
+	PG_TRY();
+	{
+		parsed = raw_parser(buf.data, RAW_PARSE_DEFAULT);
+	}
+	PG_CATCH();
+	{
+		throw_sparse_index_error(inpstr, sparse_index_type);
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
+	if (list_length(parsed) != 1)
+		throw_sparse_index_error(inpstr, sparse_index_type);
+	if (!IsA(linitial(parsed), RawStmt))
+		throw_sparse_index_error(inpstr, sparse_index_type);
+	raw = linitial(parsed);
+
+	if (!IsA(raw->stmt, SelectStmt))
+		throw_sparse_index_error(inpstr, sparse_index_type);
+	select = (SelectStmt *) raw->stmt;
+
+	if (select->targetList == NULL)
+		throw_sparse_index_error(inpstr, sparse_index_type);
+
+	ArrayType *sparse_index = NULL;
+	foreach (lc, select->targetList)
+	{
+		if (!IsA(lfirst(lc), ResTarget))
+			throw_sparse_index_error(inpstr, sparse_index_type);
+		ResTarget *target = lfirst(lc);
+
+		if (!IsA(target->val, ColumnRef))
+			throw_sparse_index_error(inpstr, sparse_index_type);
+		ColumnRef *cf = (ColumnRef *) target->val;
+
+		if (list_length(cf->fields) != 1)
+			throw_sparse_index_error(inpstr, sparse_index_type);
+
+		if (!IsA(linitial(cf->fields), String))
+			throw_sparse_index_error(inpstr, sparse_index_type);
+
+		char *colname = strVal(linitial(cf->fields));
+		AttrNumber col_attno = get_attnum(hypertable->main_table_relid, colname);
+		if (col_attno == InvalidAttrNumber)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("column \"%s\" does not exist", colname),
+					 errhint("The timescaledb.compress_%s option must reference a valid "
+							 "column.",
+							 sparse_index_type)));
+		}
+
+		/* get normalized column name */
+		colname = get_attname(hypertable->main_table_relid, col_attno, false);
+
+		/* check if sparse_index columns are distinct. */
+		if (ts_array_is_member(sparse_index, colname))
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("duplicate column name \"%s\"", colname),
+					 errhint("The timescaledb.compress_%s option must reference distinct "
+							 "column.",
+							 sparse_index_type)));
+
+		sparse_index = ts_array_add_element_text(sparse_index, pstrdup(colname));
+	}
+
+	return sparse_index;
+}
+
 /* returns List of CompressedParsedCol
  * compress_segmentby = `col1,col2,col3`
  */
@@ -340,6 +455,34 @@ ts_compress_hypertable_parse_chunk_time_interval(WithClauseResult *parsed_option
 	{
 		Datum textarg = parsed_options[AlterTableFlagCompressChunkTimeInterval].parsed;
 		return DatumGetIntervalP(textarg);
+	}
+	else
+		return NULL;
+}
+
+/* returns List of CompressedParsedCol
+ * compress_minmax = `col1,col2,col3`
+ */
+ArrayType *
+ts_compress_hypertable_parse_minmax(WithClauseResult minmax, Hypertable *hypertable)
+{
+	if (!minmax.is_default)
+	{
+		return parse_sparse_index_collist(TextDatumGetCString(minmax.parsed), hypertable, "minmax");
+	}
+	else
+		return NULL;
+}
+
+/* returns List of CompressedParsedCol
+ * compress_bloom = `col1,col2,col3`
+ */
+ArrayType *
+ts_compress_hypertable_parse_bloom(WithClauseResult bloom, Hypertable *hypertable)
+{
+	if (!bloom.is_default)
+	{
+		return parse_sparse_index_collist(TextDatumGetCString(bloom.parsed), hypertable, "bloom");
 	}
 	else
 		return NULL;
