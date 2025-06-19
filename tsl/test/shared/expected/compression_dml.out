@@ -225,10 +225,9 @@ QUERY PLAN
          Conflict Resolution: NOTHING
          Tuples Inserted: 1
          Conflicting Tuples: 0
-         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
-                     ->  Result (actual rows=1 loops=1)
-(8 rows)
+         ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(7 rows)
 
 BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT(time,device) DO UPDATE SET value=EXCLUDED.value; ROLLBACK;
 QUERY PLAN
@@ -238,10 +237,9 @@ QUERY PLAN
          Conflict Arbiter Indexes: lazy_decompress_pkey
          Tuples Inserted: 1
          Conflicting Tuples: 0
-         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
-                     ->  Result (actual rows=1 loops=1)
-(9 rows)
+         ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(8 rows)
 
 -- should decompress 1 batch cause there is match
 BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
@@ -251,10 +249,9 @@ QUERY PLAN
          Conflict Resolution: NOTHING
          Tuples Inserted: 0
          Conflicting Tuples: 1
-         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
-                     ->  Result (actual rows=1 loops=1)
-(8 rows)
+         ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(7 rows)
 
 -- no decompression cause no match in batch
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBACK;

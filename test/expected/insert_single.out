@@ -324,13 +324,12 @@ SELECT * FROM "3dim";
 EXPLAIN (COSTS FALSE)
 INSERT INTO "3dim" VALUES('2017-01-21T09:00:01', 32.9, 'green', 'nyc'),
                          ('2017-01-21T09:00:47', 27.3, 'purple', 'la') RETURNING *;
-                 QUERY PLAN                  
----------------------------------------------
+              QUERY PLAN               
+---------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on "3dim"
-         ->  Custom Scan (ChunkDispatch)
-               ->  Values Scan on "*VALUES*"
-(4 rows)
+         ->  Values Scan on "*VALUES*"
+(3 rows)
 
 EXPLAIN (COSTS FALSE)
 WITH "3dim_insert" AS (
@@ -338,26 +337,24 @@ WITH "3dim_insert" AS (
 ), regular_insert AS (
    INSERT INTO regular_table VALUES('2017-01-21T10:00:51', 14.3) RETURNING time, temp
 ) INSERT INTO "1dim" (SELECT time, temp FROM "3dim_insert" UNION SELECT time, temp FROM regular_insert);
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    CTE 3dim_insert
      ->  Custom Scan (ModifyHypertable)
            ->  Insert on "3dim"
-                 ->  Custom Scan (ChunkDispatch)
-                       ->  Result
+                 ->  Result
    CTE regular_insert
      ->  Insert on regular_table
            ->  Result
    ->  Insert on "1dim"
-         ->  Custom Scan (ChunkDispatch)
-               ->  Unique
-                     ->  Sort
-                           Sort Key: "3dim_insert"."time", "3dim_insert".temp
-                           ->  Append
-                                 ->  CTE Scan on "3dim_insert"
-                                 ->  CTE Scan on regular_insert
-(17 rows)
+         ->  Unique
+               ->  Sort
+                     Sort Key: "3dim_insert"."time", "3dim_insert".temp
+                     ->  Append
+                           ->  CTE Scan on "3dim_insert"
+                           ->  CTE Scan on regular_insert
+(15 rows)
 
 -- test prepared statement INSERT
 PREPARE "1dim_plan" (timestamp, float) AS

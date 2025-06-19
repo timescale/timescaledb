@@ -1155,13 +1155,12 @@ ERROR:  duplicate key value violates unique constraint "77_3_unique_null_time_u1
 \set ON_ERROR_STOP 1
 -- neither of these should need to decompress
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);
-                           QUERY PLAN                            
------------------------------------------------------------------
+                       QUERY PLAN                       
+--------------------------------------------------------
  Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on unique_null (actual rows=0 loops=1)
-         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-               ->  Result (actual rows=1 loops=1)
-(4 rows)
+         ->  Result (actual rows=1 loops=1)
+(3 rows)
 
 SELECT count(*) FROM unique_null;
  count 
@@ -1170,13 +1169,12 @@ SELECT count(*) FROM unique_null;
 (1 row)
 
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', 1, NULL, 1.0);
-                           QUERY PLAN                            
------------------------------------------------------------------
+                       QUERY PLAN                       
+--------------------------------------------------------
  Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on unique_null (actual rows=0 loops=1)
-         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-               ->  Result (actual rows=1 loops=1)
-(4 rows)
+         ->  Result (actual rows=1 loops=1)
+(3 rows)
 
 SELECT count(*) FROM unique_null;
  count 
@@ -1185,13 +1183,12 @@ SELECT count(*) FROM unique_null;
 (1 row)
 
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, NULL, 1.0);
-                           QUERY PLAN                            
------------------------------------------------------------------
+                       QUERY PLAN                       
+--------------------------------------------------------
  Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on unique_null (actual rows=0 loops=1)
-         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-               ->  Result (actual rows=1 loops=1)
-(4 rows)
+         ->  Result (actual rows=1 loops=1)
+(3 rows)
 
 SELECT count(*) FROM unique_null;
  count 

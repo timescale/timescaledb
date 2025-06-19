@@ -14,8 +14,8 @@
 #include "cross_module_fn.h"
 
 typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
-typedef struct ChunkDispatchState ChunkDispatchState;
 typedef struct CompressionSettings CompressionSettings;
+typedef struct ChunkTupleRouting ChunkTupleRouting;
 typedef struct tuple_filtering_constraints tuple_filtering_constraints;
 
 /*
@@ -60,13 +60,14 @@ typedef struct SharedCounters
 	int64 batches_decompressed;
 	/* Number of tuples decompressed */
 	int64 tuples_decompressed;
+	OnConflictAction onConflictAction;
 } SharedCounters;
 
 typedef struct ChunkInsertState
 {
 	Relation rel;
 	ResultRelInfo *result_relation_info;
-	ChunkDispatchState *cds;
+	//	ChunkDispatchState *cds;
 
 	/* When the tuple descriptors for the main hypertable (root) and a chunk
 	 * differs, it is necessary to convert tuples to chunk format before
@@ -110,8 +111,6 @@ typedef struct ChunkInsertState
 
 typedef struct ChunkDispatch ChunkDispatch;
 
-extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,
-													  const ChunkDispatch *dispatch);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
 ResultRelInfo *create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel,
 												 EState *estate);
@@ -119,3 +118,5 @@ ResultRelInfo *create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation
 TSDLLEXPORT OnConflictAction
 ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);
 void ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk);
+void adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsertState *cis,
+						Oid rowtype);
