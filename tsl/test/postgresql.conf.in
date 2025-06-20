@@ -32,6 +32,9 @@ log_min_messages='INFO'
 # the isolation tester output.
 log_statement='all'
 
+# Some tests use logical entries in WAL
+wal_level = logical
+
 # It is necessary to have at least 2 more workers than `max_worker_processes`
 # in order to test failures starting bgworkers.
 timescaledb.max_background_workers=26
