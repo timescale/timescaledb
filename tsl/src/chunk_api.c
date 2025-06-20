@@ -20,6 +20,7 @@
 #include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <utils/array.h>
@@ -370,4 +371,119 @@ chunk_create(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_TS_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
+}
+
+/*
+ * Detach a chunk from a hypertable.
+ */
+Datum
+chunk_detach(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Cache *hcache;
+	Hypertable *ht;
+	Chunk *chunk;
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Assert(chunk != NULL);
+
+	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
+	Assert(ht != NULL);
+
+	if (!object_ownercheck(RelationRelationId, chunk_relid, GetUserId()))
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   get_relkind_objtype(chunk->relkind),
+					   get_rel_name(chunk_relid));
+
+	if (ts_chunk_is_compressed(chunk))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot detach compressed chunk \"%s\"", get_rel_name(chunk_relid)),
+				 errhint("decompress the chunk first")));
+
+	if (chunk->fd.osm_chunk)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot detach OSM chunk \"%s\"", get_rel_name(chunk_relid))));
+
+	LockRelationOid(chunk->hypertable_relid, ShareUpdateExclusiveLock);
+	LockRelationOid(chunk->table_id, AccessExclusiveLock);
+
+	AlterTableCmd cmd = {
+		.type = T_AlterTableCmd,
+		.subtype = AT_DropInherit,
+		.def = (Node *) makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
+	};
+	AlterTableStmt stmt = {
+		.type = T_AlterTableStmt,
+		.cmds = list_make1(&cmd),
+		.relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
+	};
+
+	ts_alter_table_with_event_trigger(chunk->table_id, (Node *) &stmt, list_make1(&cmd), false);
+
+	ts_chunk_detach_by_relid(chunk_relid);
+
+	ts_cache_release(&hcache);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * Attach an existing relation to a hypertable as a chunk.
+ */
+Datum
+chunk_attach(PG_FUNCTION_ARGS)
+{
+	Oid ht_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Oid chunk_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+	Jsonb *slices = PG_ARGISNULL(2) ? NULL : PG_GETARG_JSONB_P(2);
+	Cache *hcache;
+	Hypertable *ht;
+	Hypercube *hc;
+	Chunk PG_USED_FOR_ASSERTS_ONLY *chunk;
+	bool created;
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (!OidIsValid(chunk_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid chunk relation OID %u", chunk_relid)));
+
+	/* Only owner is allowed */
+	if (!object_ownercheck(RelationRelationId, chunk_relid, GetUserId()))
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   get_relkind_objtype(get_rel_relkind(chunk_relid)),
+					   get_rel_name(chunk_relid));
+
+	if (is_inheritance_child(chunk_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot attach chunk that is already a child of another table")));
+
+	LockRelationOid(ht_relid, ShareUpdateExclusiveLock);
+	LockRelationOid(chunk_relid, AccessExclusiveLock);
+
+	check_privileges_for_creating_chunk(ht_relid);
+	ht = ts_hypertable_cache_get_cache_and_entry(ht_relid, CACHE_FLAG_NONE, &hcache);
+	Assert(ht != NULL);
+
+	if (NULL == slices)
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid slices")));
+	hc = get_hypercube_from_slices(slices, ht);
+	Assert(hc != NULL);
+
+	chunk = ts_chunk_find_or_create_without_cuts(ht,
+												 hc,
+												 get_namespace_name(get_rel_namespace(chunk_relid)),
+												 get_rel_name(chunk_relid),
+												 chunk_relid,
+												 &created);
+	Assert(chunk != NULL);
+	ts_cache_release(&hcache);
+
+	PG_RETURN_VOID();
 }

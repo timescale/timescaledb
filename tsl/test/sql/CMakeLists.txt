@@ -108,6 +108,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
+    attach_chunk.sql
     bgw_custom.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
@@ -149,6 +150,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_policy_run.sql
     decompress_memory.sql
     decompress_vector_qual.sql
+    detach_chunk.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql
     exp_cagg_origin.sql

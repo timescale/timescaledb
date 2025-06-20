@@ -14,3 +14,4 @@
 
 extern TSDLLEXPORT void ts_fk_propagate(Oid conrelid, Hypertable *ht);
 extern TSDLLEXPORT void ts_chunk_copy_referencing_fk(const Hypertable *ht, const Chunk *chunk);
+extern TSDLLEXPORT void ts_chunk_drop_referencing_fk_by_chunk_id(Oid chunk_id);
