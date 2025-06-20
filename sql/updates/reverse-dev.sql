@@ -38,3 +38,5 @@ CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
     window_end               "any",
     force                    BOOLEAN = FALSE
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+DELETE FROM _timescaledb_catalog.compression_algorithm WHERE id = 7 AND version = 1 AND name = 'COMPRESSION_ALGORITHM_UUID';
