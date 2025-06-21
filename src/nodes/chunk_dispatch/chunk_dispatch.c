@@ -42,7 +42,6 @@ ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
 	cd->prev_cis = NULL;
 	cd->prev_cis_oid = InvalidOid;
-	cd->counters = palloc0(sizeof(SharedCounters));
 
 	return cd;
 }
@@ -312,34 +311,29 @@ chunk_dispatch_exec(CustomScanState *node)
 	TupleTableSlot *newslot = NULL;
 	if (dispatch->dispatch_state->mtstate->operation == CMD_MERGE)
 	{
-		for (int i = 0; i < ht->space->num_dimensions; i++)
-		{
-			/*
-			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
-			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
-			 */
+		/*
+		 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+		 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
+		 */
 #if PG17_GE
-			List *actionStates = dispatch->dispatch_state->mtstate->resultRelInfo
-									 ->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+		List *actionStates = dispatch->dispatch_state->mtstate->resultRelInfo
+								 ->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
 #else
-			List *actionStates =
-				dispatch->dispatch_state->mtstate->resultRelInfo->ri_notMatchedMergeAction;
+		List *actionStates =
+			dispatch->dispatch_state->mtstate->resultRelInfo->ri_notMatchedMergeAction;
 #endif
-			ListCell *l;
-			foreach (l, actionStates)
+		ListCell *l;
+		foreach (l, actionStates)
+		{
+			MergeActionState *action = (MergeActionState *) lfirst(l);
+			CmdType commandType = action->mas_action->commandType;
+			if (commandType == CMD_INSERT)
 			{
-				MergeActionState *action = (MergeActionState *) lfirst(l);
-				CmdType commandType = action->mas_action->commandType;
-				if (commandType == CMD_INSERT)
-				{
-					/* fetch full projection list */
-					action->mas_proj->pi_exprContext->ecxt_innertuple = slot;
-					newslot = ExecProject(action->mas_proj);
-					break;
-				}
-			}
-			if (newslot)
+				/* fetch full projection list */
+				action->mas_proj->pi_exprContext->ecxt_innertuple = slot;
+				newslot = ExecProject(action->mas_proj);
 				break;
+			}
 		}
 	}
 	/* Calculate the tuple's point in the N-dimensional hyperspace */

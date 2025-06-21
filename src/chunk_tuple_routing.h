@@ -23,7 +23,7 @@ typedef struct ChunkTupleRouting
 	EState *estate;
 	bool create_compressed_chunk;
 
-	ModifyHypertableState *mht_state;	/* state for the ModifyHypertable custom scan node */
+	ModifyHypertableState *mht_state; /* state for the ModifyHypertable custom scan node */
 	bool has_dropped_attrs;
 
 	SharedCounters *counters; /* shared counters for the current statement */

@@ -108,19 +108,20 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	if (mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE)
 	{
 		/* setup chunk dispatch state only for INSERTs */
-		state->cds = get_chunk_dispatch_state(subplan);
+		//		state->cds = get_chunk_dispatch_state(subplan);
 		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
 		state->ctr->counters->onConflictAction = mt->onConflictAction;
 		state->ctr->mht_state = state;
-		state->cds->dispatch->counters = state->ctr->counters;
-
-		/* Ensure that we found at least one ChunkDispatchState node */
-		Assert(state->cds);
-
-		ts_chunk_dispatch_state_set_parent(state->cds, mtstate);
+		if (state->cds && state->cds->dispatch)
+			state->cds->dispatch->counters = state->ctr->counters;
 	}
 	if (mtstate->operation == CMD_MERGE)
 	{
+		//state->cds = get_chunk_dispatch_state(subplan);
+		//Assert(state->cds);
+		///* Ensure that we found at least one ChunkDispatchState node */
+
+		//ts_chunk_dispatch_state_set_parent(state->cds, mtstate);
 		const AttrNumber natts = rel_get_natts(state->ctr->hypertable->main_table_relid);
 		for (AttrNumber attno = 1; attno <= natts; attno++)
 		{
@@ -434,12 +435,12 @@ ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 								 RelOptInfo *rel)
 {
 	Path *path = &mtpath->path;
-	Cache *hcache = ts_hypertable_cache_pin();
 	ModifyHypertablePath *hmpath;
 
-	if (mtpath->operation == CMD_INSERT || mtpath->operation == CMD_MERGE)
+	//	if (mtpath->operation == CMD_INSERT || mtpath->operation == CMD_MERGE)
+	if (mtpath->operation == CMD_MERGE)
 	{
-		mtpath->subpath = ts_chunk_dispatch_path_create(root, mtpath);
+//		mtpath->subpath = ts_chunk_dispatch_path_create(root, mtpath);
 	}
 
 	hmpath = palloc0(sizeof(ModifyHypertablePath));
@@ -451,8 +452,6 @@ ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	hmpath->cpath.custom_paths = list_make1(mtpath);
 	hmpath->cpath.methods = &modify_hypertable_path_methods;
 	path = &hmpath->cpath.path;
-
-	ts_cache_release(&hcache);
 
 	return path;
 }

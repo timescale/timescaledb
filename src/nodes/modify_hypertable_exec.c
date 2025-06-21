@@ -180,7 +180,6 @@ static TupleTableSlot *ExecPrepareTupleRouting(ModifyTableState *mtstate,
 
 static TupleTableSlot *ExecMerge(ModifyTableContext *context,
 								 ResultRelInfo *resultRelInfo,
-								 ChunkDispatchState *cds,
 								 ItemPointer tupleid,
 								 HeapTuple oldtuple,
 								 bool canSetTag);
@@ -195,7 +194,6 @@ static TupleTableSlot *ExecMergeMatched(ModifyTableContext *context,
 										bool *matched);
 static TupleTableSlot *ExecMergeNotMatched(ModifyTableContext *context,
 										   ResultRelInfo *resultRelInfo,
-										   ChunkDispatchState *cds,
 										   bool canSetTag);
 
 
@@ -558,9 +556,22 @@ ExecPrepareTupleRouting(ModifyTableState *mtstate,
 						ResultRelInfo **partRelInfo)
 {
 
-  Point *point = ts_hyperspace_calculate_point(ctr->hypertable->space, slot);
-	ChunkInsertState *cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
-  ctr->cis = cis;
+//  Point *point = ts_hyperspace_calculate_point(ctr->hypertable->space, slot);
+//	ChunkInsertState *cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
+//  ctr->cis = cis;
+//
+//	if (!cis->use_tam)
+//	{
+//		bool update_counter =
+//			castNode(ModifyTable, mtstate->ps.plan)->onConflictAction == ONCONFLICT_UPDATE;
+//
+//		ts_chunk_dispatch_decompress_batches_for_insert(cis,
+//														slot,
+//														ctr->estate,
+//														update_counter);
+//	}
+  ChunkInsertState *cis = ctr->cis;
+
 	/* Convert the tuple to the chunk's rowtype, if necessary */
 	if (cis->hyper_to_chunk_map != NULL && !ctr->has_dropped_attrs)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
@@ -602,7 +613,7 @@ ExecInsert(ModifyTableContext *context,
 	TupleTableSlot *planSlot = context->planSlot;
 	TupleTableSlot *result = NULL;
 	TransitionCaptureState *ar_insert_trig_tcs;
-	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
+	ModifyTable *node = castNode(ModifyTable, mtstate->ps.plan);
 	OnConflictAction onconflict = node->onConflictAction;
 	MemoryContext oldContext;
 
@@ -2454,7 +2465,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		{
 			context.planSlot = node->mt_merge_pending_not_matched;
 
-			slot = ExecMergeNotMatched(&context, node->resultRelInfo, cds, node->canSetTag);
+			slot = ExecMergeNotMatched(&context, node->resultRelInfo, node->canSetTag);
 
 			/* Clear the pending action */
 			node->mt_merge_pending_not_matched = NULL;
@@ -2472,25 +2483,36 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 		context.planSlot = ExecProcNode(subplanstate);
 
-		if (cds && cds->rri && operation == CMD_INSERT && cds->cis->skip_current_tuple)
-		{
-			cds->cis->skip_current_tuple = false;
-			if (node->ps.instrument)
-				node->ps.instrument->ntuples2++;
-			continue;
-		}
-
-		if (mhtstate->ctr && mhtstate->ctr->cis && operation == CMD_INSERT && mhtstate->ctr->cis->skip_current_tuple)
-		{
-			mhtstate->ctr->cis->skip_current_tuple = false;
-			if (node->ps.instrument)
-				node->ps.instrument->ntuples2++;
-			continue;
-		}
-
 		/* No more tuples to process? */
 		if (TupIsNull(context.planSlot))
 			break;
+
+    if (operation == CMD_INSERT || operation == CMD_MERGE)
+    {
+
+      Point *point = ts_hyperspace_calculate_point(ctr->hypertable->space, context.planSlot);
+	    ChunkInsertState *cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
+      ctr->cis = cis;
+
+	    if (!cis->use_tam)
+	    {
+	    	bool update_counter =
+	    		castNode(ModifyTable, node->ps.plan)->onConflictAction == ONCONFLICT_UPDATE;
+
+	    	ts_chunk_dispatch_decompress_batches_for_insert(cis,
+	    													context.planSlot,
+	    													ctr->estate,
+	    													update_counter);
+	    }
+
+		  if (operation == CMD_INSERT && mhtstate->ctr->cis->skip_current_tuple)
+		  {
+		  	mhtstate->ctr->cis->skip_current_tuple = false;
+		  	if (node->ps.instrument)
+		  		node->ps.instrument->ntuples2++;
+		  	continue;
+		  }
+    }
 
 		/*
 		 * copy INSERT merge action list to result relation info of corresponding chunk
@@ -2498,7 +2520,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		 * XXX do we need an additional support of NOT MATCHED BY SOURCE
 		 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 		 */
-		if (ctr && cds->rri && operation == CMD_MERGE)
+		if (cds && cds->rri && operation == CMD_MERGE)
 #if PG17_GE
 			cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
 				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
@@ -2529,7 +2551,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				{
 					EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
 					slot =
-						ExecMerge(&context, node->resultRelInfo, cds, NULL, NULL, node->canSetTag);
+						ExecMerge(&context, node->resultRelInfo, NULL, NULL, node->canSetTag);
 					if (slot)
 						return slot;
 					continue;
@@ -2610,7 +2632,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 						EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
 						slot = ExecMerge(&context,
 										 node->resultRelInfo,
-										 cds,
 										 NULL,
 										 NULL,
 										 node->canSetTag);
@@ -2653,7 +2674,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 						EvalPlanQualSetSlot(&node->mt_epqstate, context.planSlot);
 						slot = ExecMerge(&context,
 										 node->resultRelInfo,
-										 cds,
 										 NULL,
 										 NULL,
 										 node->canSetTag);
@@ -2730,7 +2750,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 								  true, false, node->canSetTag, NULL, NULL, NULL);
 				break;
 			case CMD_MERGE:
-				slot = ExecMerge(&context, resultRelInfo, cds, tupleid, oldtuple, node->canSetTag);
+				slot = ExecMerge(&context, resultRelInfo, tupleid, oldtuple, node->canSetTag);
 				break;
 			default:
 				elog(ERROR, "unknown operation");
@@ -3336,7 +3356,7 @@ lmerge_matched:;
  */
 static TupleTableSlot *
 ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
-					ChunkDispatchState *cds, bool canSetTag)
+					bool canSetTag)
 {
 	ModifyTableState *mtstate = context->mtstate;
 	ExprContext *econtext = mtstate->ps.ps_ExprContext;
@@ -3357,11 +3377,6 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	 * XXX do we need an additional support of NOT MATCHED BY SOURCE
 	 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 	 */
-#if PG17_GE
-	actionStates = cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
-#else
-	actionStates = cds->rri->ri_notMatchedMergeAction;
-#endif
 #if PG17_GE
 	actionStates = ctr->hypertable_rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
 #else
@@ -3417,7 +3432,7 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 					TupleTableSlot *chunk_slot = NULL;
 
 					parenttupdesc = RelationGetDescr(resultRelInfo->ri_RelationDesc);
-					chunktupdesc = RelationGetDescr(cds->rri->ri_RelationDesc);
+					chunktupdesc = RelationGetDescr(ctr->cis->result_relation_info->ri_RelationDesc);
 					/* map from parent to chunk */
 #if PG16_LT
 					map = build_attrmap_by_name_if_req(parenttupdesc, chunktupdesc);
@@ -3463,7 +3478,7 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
  * Perform MERGE.
  */
 TupleTableSlot *
-ExecMerge(ModifyTableContext *context, ResultRelInfo *resultRelInfo, ChunkDispatchState *cds,
+ExecMerge(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		  ItemPointer tupleid, HeapTuple oldtuple, bool canSetTag)
 {
 	bool matched;
@@ -3529,11 +3544,11 @@ ExecMerge(ModifyTableContext *context, ResultRelInfo *resultRelInfo, ChunkDispat
 	{
 #if PG17_GE
 		if (rslot == NULL)
-			rslot = ExecMergeNotMatched(context, resultRelInfo, cds, canSetTag);
+			rslot = ExecMergeNotMatched(context, resultRelInfo, canSetTag);
 		else
 			context->mtstate->mt_merge_pending_not_matched = context->planSlot;
 #else
-		(void) ExecMergeNotMatched(context, resultRelInfo, cds, canSetTag);
+		(void) ExecMergeNotMatched(context, resultRelInfo, canSetTag);
 #endif
 	}
 
