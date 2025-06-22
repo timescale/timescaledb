@@ -57,10 +57,10 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: release/${{ env.NEXT_VERSION }}--changelog"
+          branch: "release/${{ env.NEXT_VERSION }}--changelog"
           base: ${{ env.RELEASE_BRANCH }}
           delete-branch: true
-          title: 'Release ${{ env.NEXT_VERSION }}'
+          title: "Release ${{ env.NEXT_VERSION }}"
           labels: |
             release
             changelog
@@ -79,14 +79,13 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: release/${{ env.NEXT_VERSION }}--next"
+          branch: "release/${{ env.NEXT_VERSION }}--next"
           base: ${{ env.RELEASE_BRANCH }}
           delete-branch: true
-          title: 'Bump version to ${{ env.NEXT_VERSION }}'
+          title: "Bump version to ${{ env.NEXT_VERSION }}"
           labels: |
             release
           add-paths: |
             version.config
             sql/updates/*.sql
             sql/CMakeLists.txt
-            .unreleased/*
