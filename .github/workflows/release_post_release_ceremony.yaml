@@ -1,0 +1,32 @@
+name: Release - Post Release Ceremony
+"on":
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# The workflow needs the permission to a PR
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  post-release-ceremony:
+    name: Post Release Ceremony
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Get lastest tag
+        run: |
+          git fetch --tags
+          echo $(git describe --tags `git rev-list --tags --max-count=1`)
+
+      - name: Cherry pick last commit from tag to main
+        run: |
+          echo "TODO"
+
+      - name: Create PR for cherry picked commit
+        run: |
+          echo "TODO"
