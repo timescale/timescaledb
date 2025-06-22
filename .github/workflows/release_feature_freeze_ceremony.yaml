@@ -73,7 +73,7 @@ jobs:
         run: |
           ./scripts/release/build_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
 
-      # Submit PR for new version changes
+      # Submit PR for new version changes 
       - name: Create Pull Request for next version changes on release branch
         id: cpr_next_version_changes
         uses: peter-evans/create-pull-request@v7
