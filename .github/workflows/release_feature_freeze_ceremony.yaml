@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   release-feature-freeze-ceremony:
-    name: Minor Release - Feature Freeze
+    name: Release - Feature Freeze & CHANGELOG
     runs-on: ubuntu-latest
     environment:
       name: Release Ceremonies
@@ -65,12 +65,13 @@ jobs:
             release
             changelog
           add-paths: |
+            .unreleased/*
             CHANGELOG.md
 
       # Rework version.config and up & down grade scripts
       - name: Curate minor release artefacts
         run: |
-          ./scripts/release/curate_minor_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
+          ./scripts/release/build_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
 
       # Submit PR for new version changes
       - name: Create Pull Request for next version changes on release branch
