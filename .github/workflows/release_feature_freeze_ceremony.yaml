@@ -49,7 +49,7 @@ jobs:
       - name: Generate the CHANGELOG
         run: |
           ./scripts/changelog/generate.sh 
-          head -n 10 CHANGELOG.md
+          head -n 19 CHANGELOG.md | tail -n 10
 
       # Generate the CHANGELOG and submit it in a separate PR
       - name: Create Pull Request for CHANGELOG
@@ -67,6 +67,11 @@ jobs:
           add-paths: |
             .unreleased/*
             CHANGELOG.md
+
+      - name: "Validate CHANGELOG PR"
+        if: ${{ steps.cpr_changelog.outputs.pull-request-number }}
+        run: |
+          echo "Pull Request: ${{ steps.cpr_changelog.outputs.pull-request-url }}"
 
       # Rework version.config and up & down grade scripts
       - name: Curate minor release artefacts
@@ -89,3 +94,8 @@ jobs:
             version.config
             sql/updates/*.sql
             sql/CMakeLists.txt
+
+      - name: "Validate next version PR"
+        if: ${{ steps.cpr_next_version_changes.outputs.pull-request-number }}
+        run: |
+          echo "Pull Request: ${{ steps.cpr_next_version_changes.outputs.pull-request-url }}"
