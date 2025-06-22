@@ -24,7 +24,7 @@ echo "Building CHANGELOG"
 {
     echo "## ${RELEASE_NEXT} ($(date +"%Y-%m-%d"))"
     echo ""
-    echo "This release contains performance improvements and bug fixes since the 2.18.2 release. We recommend that you upgrade at the next available opportunity."
+    echo "This release contains performance improvements and bug fixes since the ${RELEASE_PREVIOUS} release. We recommend that you upgrade at the next available opportunity."
     echo ""
     echo "**Highlighted features in TimescaleDB v${RELEASE_NEXT}**"
     echo "* "
