@@ -18,7 +18,7 @@ jobs:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
 
-      - name: Get lastest tag
+      - name: Get latest tag
         run: |
           git fetch --tags
           echo $(git describe --tags `git rev-list --tags --max-count=1`)
