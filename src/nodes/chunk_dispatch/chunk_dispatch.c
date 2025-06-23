@@ -20,6 +20,7 @@
 #include "compat/compat.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
+#include "chunk_tuple_routing.h"
 #include "dimension.h"
 #include "errors.h"
 #include "guc.h"
@@ -171,45 +172,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	dispatch->prev_cis = cis;
 	dispatch->prev_cis_oid = cis->rel->rd_id;
 	return cis;
-}
-
-extern void
-ts_chunk_dispatch_decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot,
-												EState *estate, bool update_counter)
-{
-	if (!cis->chunk_compressed || (cis->cached_decompression_state &&
-								   !cis->cached_decompression_state->has_primary_or_unique_index))
-		return;
-
-	/*
-	 * If this is an INSERT into a compressed chunk with UNIQUE or
-	 * PRIMARY KEY constraints we need to make sure any batches that could
-	 * potentially lead to a conflict are in the decompressed chunk so
-	 * postgres can do proper constraint checking.
-	 */
-
-	ts_cm_functions->init_decompress_state_for_insert(cis, slot);
-	ts_cm_functions->decompress_batches_for_insert(cis, slot);
-
-	/* mark rows visible */
-	if (update_counter)
-		estate->es_output_cid = GetCurrentCommandId(true);
-
-	if (ts_guc_max_tuples_decompressed_per_dml > 0)
-	{
-		if (cis->counters->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					 errmsg("tuple decompression limit exceeded by operation"),
-					 errdetail("current limit: %d, tuples decompressed: %lld",
-							   ts_guc_max_tuples_decompressed_per_dml,
-							   (long long int) cis->counters->tuples_decompressed),
-					 errhint("Consider increasing "
-							 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
-							 "to 0 (unlimited).")));
-		}
-	}
 }
 
 static CustomScanMethods chunk_dispatch_plan_methods = {
@@ -433,10 +395,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		bool update_counter =
 			ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE;
 
-		ts_chunk_dispatch_decompress_batches_for_insert(cis,
-														slot,
-														dispatch->estate,
-														update_counter);
+		ts_chunk_tuple_routing_decompress_for_insert(cis, slot, dispatch->estate, update_counter);
 	}
 
 	MemoryContextSwitchTo(old);

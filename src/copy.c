@@ -161,7 +161,6 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
 	ccstate = palloc(sizeof(CopyChunkState));
 	ccstate->rel = rel;
 	ccstate->estate = estate;
-	ccstate->ctr = ts_chunk_tuple_routing_create(estate, rel);
 	ccstate->cstate = cstate;
 	ccstate->scandesc = scandesc;
 	ccstate->next_copy_from = from_func;
@@ -890,7 +889,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 	ExecOpenIndices(resultRelInfo, false);
 
-	ccstate->ctr->hypertable_rri = resultRelInfo;
+	ccstate->ctr = ts_chunk_tuple_routing_create(estate, resultRelInfo);
 
 	singleslot = table_slot_create(resultRelInfo->ri_RelationDesc, &estate->es_tupleTable);
 
@@ -1036,7 +1035,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 		Assert(cis != NULL);
 
-		ts_chunk_dispatch_decompress_batches_for_insert(cis, myslot, ccstate->ctr->estate, false);
+		ts_chunk_tuple_routing_decompress_for_insert(cis, myslot, ccstate->ctr->estate, false);
 
 		/* Triggers and stuff need to be invoked in query context. */
 		MemoryContextSwitchTo(oldcontext);
