@@ -2499,7 +2499,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	    	bool update_counter =
 	    		castNode(ModifyTable, node->ps.plan)->onConflictAction == ONCONFLICT_UPDATE;
 
-	    	ts_chunk_dispatch_decompress_batches_for_insert(cis,
+	    	ts_chunk_tuple_routing_decompress_for_insert(cis,
 	    													context.planSlot,
 	    													ctr->estate,
 	    													update_counter);

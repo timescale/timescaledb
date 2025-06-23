@@ -33,6 +33,6 @@ typedef struct ChunkTupleRouting
 ChunkTupleRouting *ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri);
 void ts_chunk_tuple_routing_destroy(ChunkTupleRouting *ctr);
 ChunkInsertState *ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point);
-extern void ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis,
+void ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis,
 														 TupleTableSlot *slot, EState *estate,
 														 bool update_counter);
