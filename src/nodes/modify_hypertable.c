@@ -14,26 +14,6 @@
 #include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/modify_hypertable.h"
 
-static ChunkDispatchState *
-get_chunk_dispatch_state(PlanState *substate)
-{
-	switch (nodeTag(substate))
-	{
-		case T_CustomScanState:
-		{
-			if (ts_is_chunk_dispatch_state(substate))
-				return (ChunkDispatchState *) substate;
-			break;
-		}
-		case T_ResultState:
-			return get_chunk_dispatch_state(castNode(ResultState, substate)->ps.lefttree);
-		default:
-			break;
-	}
-
-	return NULL;
-}
-
 static AttrNumber
 rel_get_natts(Oid relid)
 {
@@ -99,12 +79,6 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	if (estate->es_auxmodifytables && linitial(estate->es_auxmodifytables) == mtstate)
 		linitial(estate->es_auxmodifytables) = node;
 
-	/*
-	 * Find the ChunkDispatchState subnode and set their parent
-	 * ModifyTableState node
-	 */
-	PlanState *subplan = outerPlanState(mtstate);
-
 	if (mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE)
 	{
 		/* setup chunk dispatch state only for INSERTs */
@@ -112,16 +86,9 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
 		state->ctr->counters->onConflictAction = mt->onConflictAction;
 		state->ctr->mht_state = state;
-		if (state->cds && state->cds->dispatch)
-			state->cds->dispatch->counters = state->ctr->counters;
 	}
 	if (mtstate->operation == CMD_MERGE)
 	{
-		//state->cds = get_chunk_dispatch_state(subplan);
-		//Assert(state->cds);
-		///* Ensure that we found at least one ChunkDispatchState node */
-
-		//ts_chunk_dispatch_state_set_parent(state->cds, mtstate);
 		const AttrNumber natts = rel_get_natts(state->ctr->hypertable->main_table_relid);
 		for (AttrNumber attno = 1; attno <= natts; attno++)
 		{

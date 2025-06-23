@@ -623,7 +623,7 @@ ExecInsert(ModifyTableContext *context,
 	 * If the input result relation is a partitioned table, find the leaf
 	 * partition to insert the tuple into.
 	 */
-	if (true)
+	if (mtstate->operation ==CMD_INSERT)
 	{
 		ResultRelInfo *partRelInfo;
 
@@ -631,7 +631,13 @@ ExecInsert(ModifyTableContext *context,
 									   resultRelInfo, slot,
 									   &partRelInfo);
 		resultRelInfo = partRelInfo;
-	}
+	} else {
+//      RangeTblEntry *rte = rt_fetch(resultRelInfo->ri_RangeTableIndex, estate->es_range_table);
+//      RangeTblEntry *ht_rte = rt_fetch(context->mhtstate->ctr->hypertable_rri->ri_RangeTableIndex, estate->es_range_table);
+//      rte->perminfoindex = ht_rte->perminfoindex;
+		resultRelInfo = context->mhtstate->ctr->cis->result_relation_info;
+
+  }
 
 	ExecMaterializeSlot(slot);
 
@@ -2340,7 +2346,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	HeapTuple oldtuple;
 	List *relinfos = NIL;
 	ListCell *lc;
-	ChunkDispatchState *cds = NULL;
   ChunkTupleRouting *ctr = mhtstate->ctr;
 
 	CHECK_FOR_INTERRUPTS();
@@ -2379,10 +2384,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	resultRelInfo = node->resultRelInfo + node->mt_lastResultIndex;
 	subplanstate = outerPlanState(node);
 
-	if (operation == CMD_INSERT || operation == CMD_MERGE)
-	{
-		cds = mhtstate->cds;
-	}
 	/* Set global context */
   context.mhtstate = mhtstate;
 	context.mtstate = node;
@@ -2514,19 +2515,23 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		  }
     }
 
+	if (operation == CMD_MERGE)
+	{
+//		ResultRelInfo *partRelInfo;
+//
+//		slot = ExecPrepareTupleRouting(context.mtstate, estate, context.mhtstate->ctr,
+//									   resultRelInfo, slot,
+//									   &partRelInfo);
+//		resultRelInfo = partRelInfo;
+//    context.mtstate->resultRelInfo = resultRelInfo;
+	}
+
 		/*
 		 * copy INSERT merge action list to result relation info of corresponding chunk
 		 *
 		 * XXX do we need an additional support of NOT MATCHED BY SOURCE
 		 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 		 */
-		if (cds && cds->rri && operation == CMD_MERGE)
-#if PG17_GE
-			cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
-				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
-#else
-			cds->rri->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
-#endif
 		if (mhtstate->ctr && mhtstate->ctr->cis && mhtstate->ctr->cis->result_relation_info && operation == CMD_MERGE)
 #if PG17_GE
 			mhtstate->ctr->cis->result_relation_info->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
