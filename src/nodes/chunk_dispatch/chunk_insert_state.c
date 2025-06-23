@@ -26,7 +26,6 @@
 #include <utils/rls.h>
 
 #include "compat/compat.h"
-#include "chunk_dispatch.h"
 #include "chunk_index.h"
 #include "chunk_insert_state.h"
 #include "debug_point.h"

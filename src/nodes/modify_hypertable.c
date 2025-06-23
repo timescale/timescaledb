@@ -11,7 +11,6 @@
 
 #include "chunk_tuple_routing.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/modify_hypertable.h"
 
 static AttrNumber

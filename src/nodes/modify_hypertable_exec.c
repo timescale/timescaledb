@@ -78,7 +78,6 @@
 #include "hypertable_cache.h"
 #include "modify_hypertable.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "utils.h"
 
 /*
