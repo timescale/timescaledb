@@ -2487,9 +2487,9 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 		context.planSlot = ExecProcNode(subplanstate);
 
-		if (cds && cds->rri && operation == CMD_INSERT && cds->skip_current_tuple)
+		if (cds && cds->rri && operation == CMD_INSERT && cds->cis->skip_current_tuple)
 		{
-			cds->skip_current_tuple = false;
+			cds->cis->skip_current_tuple = false;
 			if (node->ps.instrument)
 				node->ps.instrument->ntuples2++;
 			continue;

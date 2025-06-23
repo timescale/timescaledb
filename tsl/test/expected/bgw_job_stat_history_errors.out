@@ -132,7 +132,16 @@ WHERE succeeded IS FALSE;
 
 -- drop all job_stats for the retention job
 DELETE FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 3;
-SELECT  next_start FROM alter_job(3, next_start => now() + interval '2 seconds') \gset
+SELECT FROM alter_job(3, next_start => now());
+--
+(1 row)
+
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+(1 row)
+
 SELECT test.wait_for_job_to_run(3, 1);
  wait_for_job_to_run 
 ---------------------
@@ -215,6 +224,12 @@ END;
 $TEST$;
 INFO:  Creating 26 jobs
 INFO:  Scheduling 26 jobs
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+(1 row)
+
 -- Wait for jobs to run
 DO
 $TEST$

@@ -9,6 +9,7 @@ set(SOURCES
     chunk_constraint.c
     chunk_index.c
     chunk_scan.c
+    chunk_tuple_routing.c
     constraint.c
     cross_module_fn.c
     copy.c

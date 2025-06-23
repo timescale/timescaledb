@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-2019 ]
+        os: [ windows-2022 ]
         pg: [ "15", "16", "17" ]
         include:
           - pg: 15

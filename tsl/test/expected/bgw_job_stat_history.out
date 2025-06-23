@@ -21,6 +21,8 @@ SHOW timescaledb.enable_job_execution_logging;
  off
 (1 row)
 
+SELECT add_job('custom_job_ok', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_1 \gset
+SELECT add_job('custom_job_error', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_2 \gset
 -- Start Background Workers
 SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
@@ -28,8 +30,6 @@ SELECT _timescaledb_functions.start_background_workers();
  t
 (1 row)
 
-SELECT add_job('custom_job_ok', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_1 \gset
-SELECT add_job('custom_job_error', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_2 \gset
 SELECT test.wait_for_job_to_run(:job_id_1, 1);
  wait_for_job_to_run 
 ---------------------
@@ -86,6 +86,12 @@ SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
  scheduled 
 -----------
+ t
+(1 row)
+
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
  t
 (1 row)
 
@@ -146,6 +152,12 @@ SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
  t
 (1 row)
 
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+(1 row)
+
 SELECT test.wait_for_job_to_run(:job_id_1, 3);
  wait_for_job_to_run 
 ---------------------
@@ -186,6 +198,12 @@ SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
  t
 (1 row)
 
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+(1 row)
+
 SELECT test.wait_for_job_to_run(:job_id_1, 4);
  wait_for_job_to_run 
 ---------------------
@@ -216,6 +234,12 @@ $$;
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
  scheduled 
 -----------
+ t
+(1 row)
+
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
  t
 (1 row)
 
@@ -256,6 +280,12 @@ SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
  t
 (1 row)
 
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+(1 row)
+
 SELECT test.wait_for_job_to_run(:job_id_1, 6);
  wait_for_job_to_run 
 ---------------------
@@ -284,6 +314,12 @@ BEGIN
 END
 $$;
 SELECT add_job('custom_job_alter', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_3 \gset
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+(1 row)
+
 SELECT test.wait_for_job_to_run(:job_id_3, 1);
  wait_for_job_to_run 
 ---------------------
@@ -295,6 +331,12 @@ FROM alter_job(:job_id_3, timezone => 'America/Sao_Paulo', fixed_schedule => fal
      timezone      | fixed_schedule |      config      | schedule_interval 
 -------------------+----------------+------------------+-------------------
  America/Sao_Paulo | f              | {"key": "value"} | @ 10 mins
+(1 row)
+
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
 (1 row)
 
 SELECT test.wait_for_job_to_run(:job_id_3, 2);

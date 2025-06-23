@@ -65,5 +65,5 @@ typedef struct VectorQualState
 } VectorQualState;
 
 extern Node *vector_qual_make(Node *qual, const VectorQualInfo *vqinfo);
-extern VectorQualSummary vector_qual_compute(VectorQualState *vqstate);
+extern BatchQualSummary vector_qual_compute(VectorQualState *vqstate);
 extern ArrowArray *make_single_value_arrow(Oid pgtype, Datum datum, bool isnull);

@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   release-feature-freeze-ceremony:
-    name: Minor Release - Feature Freeze
+    name: Release - Feature Freeze & CHANGELOG
     runs-on: ubuntu-latest
     environment:
       name: Release Ceremonies
@@ -18,21 +18,13 @@ jobs:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
 
-      # Create `2.XX.x` release branch of `main`
-      # Release branch is a dependency for the next steps
-      - name: Create Release Branch
-        uses: peterjgrainger/action-create-branch@v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-        with:
-          branch: '${{ env.RELEASE_BRANCH }}'
-
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install pip
           pip install PyGithub requests
 
+      # Read the next version and build the next versions
       - name: Set version configuration
         run: |
           NEXT_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
@@ -45,46 +37,65 @@ jobs:
 
           echo "Release branch: $RELEASE_BRANCH"
 
+      # Create `2.XX.x` release branch of `main`
+      # Release branch is a dependency for the next steps
+      - name: Create Release Branch
+        uses: peterjgrainger/action-create-branch@v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        with:
+          branch: '${{ env.RELEASE_BRANCH }}'
+
       - name: Generate the CHANGELOG
         run: |
           ./scripts/changelog/generate.sh 
-          head -n 10 CHANGELOG.md
+          head -n 19 CHANGELOG.md | tail -n 10
 
       # Generate the CHANGELOG and submit it in a separate PR
-      #
       - name: Create Pull Request for CHANGELOG
         id: cpr_changelog
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: release/${{ env.NEXT_VERSION }}--changelog"
+          branch: "release/${{ env.NEXT_VERSION }}--changelog"
           base: ${{ env.RELEASE_BRANCH }}
           delete-branch: true
-          title: 'CHANGELOG for ${{ env.NEXT_VERSION }}'
+          title: "Release ${{ env.NEXT_VERSION }}"
           labels: |
             release
             changelog
           add-paths: |
+            .unreleased/*
             CHANGELOG.md
 
+      - name: "Validate CHANGELOG PR"
+        if: ${{ steps.cpr_changelog.outputs.pull-request-number }}
+        run: |
+          echo "Pull Request: ${{ steps.cpr_changelog.outputs.pull-request-url }}"
+
+      # Rework version.config and up & down grade scripts
       - name: Curate minor release artefacts
         run: |
-          ./scripts/release/curate_minor_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
+          ./scripts/release/build_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
 
+      # Submit PR for new version changes 
       - name: Create Pull Request for next version changes on release branch
         id: cpr_next_version_changes
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: release/${{ env.NEXT_VERSION }}--next"
+          branch: "release/${{ env.NEXT_VERSION }}--next"
           base: ${{ env.RELEASE_BRANCH }}
           delete-branch: true
-          title: 'Bump version to ${{ env.NEXT_VERSION }}'
+          title: "Bump version to ${{ env.NEXT_VERSION }}"
           labels: |
             release
           add-paths: |
             version.config
             sql/updates/*.sql
             sql/CMakeLists.txt
-            .unreleased/*
 
+      - name: "Validate next version PR"
+        if: ${{ steps.cpr_next_version_changes.outputs.pull-request-number }}
+        run: |
+          echo "Pull Request: ${{ steps.cpr_next_version_changes.outputs.pull-request-url }}"
