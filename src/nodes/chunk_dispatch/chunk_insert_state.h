@@ -67,7 +67,7 @@ typedef struct ChunkInsertState
 {
 	Relation rel;
 	ResultRelInfo *result_relation_info;
-//	ChunkDispatchState *cds;
+	//	ChunkDispatchState *cds;
 
 	/* When the tuple descriptors for the main hypertable (root) and a chunk
 	 * differs, it is necessary to convert tuples to chunk format before

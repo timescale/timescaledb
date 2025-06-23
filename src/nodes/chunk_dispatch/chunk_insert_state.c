@@ -412,7 +412,6 @@ adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsert
 	}
 }
 
-
 void
 ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk)
 {

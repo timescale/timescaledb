@@ -301,4 +301,3 @@ ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, TupleTableSl
 		}
 	}
 }
-

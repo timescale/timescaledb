@@ -25,4 +25,5 @@
 // 															TupleTableSlot *slot, EState *estate,
 // 															bool update_counter);
 //
-// extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath);
+// extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath
+// *mtpath);
