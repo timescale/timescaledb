@@ -518,14 +518,16 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	deconstruct_array(arr, elem_type, typlen, typbyval, typalign, &items, &nulls, &num_items);
 
 	if (num_items == 0)
+	{
 		PG_RETURN_BOOL(false);
+	}
 
-		/*
-		 * Calculate the per-item base hashes that will be used for computing the
-		 * individual bloom filter bit offsets. We can reuse the "values" space to
-		 * avoid more allocations, but have to allocate as a fallback on 32-bit
-		 * systems.
-		 */
+	/*
+	 * Calculate the per-item base hashes that will be used for computing the
+	 * individual bloom filter bit offsets. We can reuse the "values" space to
+	 * avoid more allocations, but have to allocate as a fallback on 32-bit
+	 * systems.
+	 */
 #if FLOAT8PASSBYVAL
 	uint64 *item_base_hashes = items;
 #else
