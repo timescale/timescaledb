@@ -245,15 +245,17 @@ SET enable_indexscan = false;
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
 EXPLAIN (costs off, timing off, summary off)
 SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Limit
    ->  Sort
          Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-               ->  Seq Scan on compress_hyper_2_32_chunk
-                     Filter: (device < 4)
-(6 rows)
+               ->  Bitmap Heap Scan on compress_hyper_2_32_chunk
+                     Recheck Cond: (device < 4)
+                     ->  Bitmap Index Scan on compress_hyper_2_32_chunk_device__ts_meta_min_1__ts_meta_ma_idx
+                           Index Cond: (device < 4)
+(8 rows)
 
 SELECT time, location, device, temp, humidity, jdata FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     |      jdata       
