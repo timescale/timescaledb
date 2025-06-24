@@ -151,10 +151,9 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 	chunk_rel->baserestrictinfo = decompress_clauses;
 }
 
-static Node *
-make_segment_meta_opexpr(QualPushdownContext *context, Node *orig_expr, Oid opno,
-						 AttrNumber meta_column_attno, Var *uncompressed_var, Expr *compare_to_expr,
-						 StrategyNumber strategy)
+static OpExpr *
+make_segment_meta_opexpr(QualPushdownContext *context, Oid opno, AttrNumber meta_column_attno,
+						 Var *uncompressed_var, Expr *compare_to_expr, StrategyNumber strategy)
 {
 	Var *meta_var = makeVar(context->compressed_rel->relid,
 							meta_column_attno,
@@ -163,36 +162,13 @@ make_segment_meta_opexpr(QualPushdownContext *context, Node *orig_expr, Oid opno
 							InvalidOid,
 							0);
 
-//	if (IsA(orig_expr, OpExpr))
-//	{
-		return (Node *) make_opclause(opno,
-									  BOOLOID,
-									  false,
-									  (Expr *) meta_var,
-									  copyObject(compare_to_expr),
-									  InvalidOid,
-									  uncompressed_var->varcollid);
-//	}
-
-//	if (IsA(orig_expr, ScalarArrayOpExpr))
-//	{
-//		ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, orig_expr);
-//		ScalarArrayOpExpr *newopexpr = makeNode(ScalarArrayOpExpr);
-
-//		newopexpr->opno = opno;
-//		newopexpr->opfuncid = InvalidOid;
-//		newopexpr->hashfuncid = InvalidOid;
-//		newopexpr->negfuncid = InvalidOid;
-//		newopexpr->useOr = saop->useOr;
-//		newopexpr->inputcollid = saop->inputcollid;
-//		newopexpr->args = list_make2(meta_var, copyObject(compare_to_expr));
-//		newopexpr->location = saop->location;
-
-//		return (Node *) newopexpr;
-//	}
-
-	Assert(false);
-	return NULL;
+	return (OpExpr *) make_opclause(opno,
+									BOOLOID,
+									false,
+									(Expr *) meta_var,
+									copyObject(compare_to_expr),
+									InvalidOid,
+									uncompressed_var->varcollid);
 }
 
 static Expr *
@@ -245,81 +221,9 @@ expr_fetch_minmax_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 												  "max");
 }
 
-static void
-array_const_minmax(Const *array_const, Const **out_min, Const **out_max)
-{
-	Assert(array_const && !array_const->constisnull);
-
-	ArrayType *arr = DatumGetArrayTypeP(array_const->constvalue);
-	Oid elemtype = ARR_ELEMTYPE(arr);
-
-	int16 elmlen;
-	bool elmbyval;
-	char elmalign;
-	get_typlenbyvalalign(elemtype, &elmlen, &elmbyval, &elmalign);
-
-	Datum *elems;
-	bool *nulls;
-	int nelems;
-	deconstruct_array(arr, elemtype, elmlen, elmbyval, elmalign, &elems, &nulls, &nelems);
-
-	if (nelems == 0)
-	{
-		*out_min = makeNullConst(elemtype, -1, array_const->constcollid);
-		*out_max = makeNullConst(elemtype, -1, array_const->constcollid);
-		return;
-	}
-
-	TypeCacheEntry *tc = lookup_type_cache(elemtype, TYPECACHE_CMP_PROC_FINFO);
-	if (!OidIsValid(tc->cmp_proc_finfo.fn_oid))
-		elog(ERROR, "no btree comparison function for type %u", elemtype);
-
-	Datum best_min;
-	Datum best_max;
-	bool have_val = false;
-
-	for (int i = 0; i < nelems; ++i)
-	{
-		if (nulls[i])
-		{
-			continue;
-		}
-
-		if (!have_val)
-		{
-			best_min = best_max = elems[i];
-			have_val = true;
-			continue;
-		}
-
-		if (DatumGetInt32(FunctionCall2Coll(&tc->cmp_proc_finfo,
-											array_const->constcollid,
-											elems[i],
-											best_min)) < 0)
-			best_min = elems[i];
-
-		if (DatumGetInt32(FunctionCall2Coll(&tc->cmp_proc_finfo,
-											array_const->constcollid,
-											elems[i],
-											best_max)) > 0)
-			best_max = elems[i];
-	}
-
-	if (!have_val)
-	{
-		*out_min = makeNullConst(elemtype, -1, array_const->constcollid);
-		*out_max = makeNullConst(elemtype, -1, array_const->constcollid);
-		return;
-	}
-
-	*out_min = makeConst(elemtype, -1, array_const->constcollid, elmlen, best_min, false, elmbyval);
-
-	*out_max = makeConst(elemtype, -1, array_const->constcollid, elmlen, best_max, false, elmbyval);
-}
-
 static Expr *
-pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, Node *orig_expr, List *expr_args,
-									Oid op_oid, Oid op_collation)
+pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_args, Oid op_oid,
+									Oid op_collation)
 {
 	Expr *leftop, *rightop;
 	TypeCacheEntry *tce;
@@ -341,8 +245,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, Node *orig_exp
 	AttrNumber min_attno;
 	AttrNumber max_attno;
 	expr_fetch_minmax_metadata(context, leftop, &min_attno, &max_attno);
-	if ((min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber) &&
-		IsA(orig_expr, OpExpr))
+	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
 	{
 		/* No metadata for the left operand, try to commute the operator. */
 		op_oid = get_commutator(op_oid);
@@ -356,86 +259,46 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, Node *orig_exp
 	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
 	{
 		/* No metadata for either operand. */
-		fprintf(stderr, "no metadata for either operand\n");
 		return NULL;
 	}
 
 	Var *var_with_segment_meta = castNode(Var, leftop);
+	Expr *expr = rightop;
 
 	/* May be able to allow non-strict operations as well.
 	 * Next steps: Think through edge cases, either allow and write tests or figure out why we must
 	 * block strict operations
 	 */
 	if (!OidIsValid(op_oid) || !op_strict(op_oid))
-	{
-		fprintf(stderr, "not strict\n");
 		return NULL;
-	}
 
 	/* If the collation to be used by the OP doesn't match the column's collation do not push down
 	 * as the materialized min/max value do not match the semantics of what we need here */
 	if (var_with_segment_meta->varcollid != op_collation)
-	{
-		fprintf(stderr, "wrong collation\n");
 		return NULL;
-	}
 
 	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_BTREE_OPFAMILY);
 
 	strategy = get_op_opfamily_strategy(op_oid, tce->btree_opf);
 	if (strategy == InvalidStrategy)
-	{
-		fprintf(stderr, "invalid strategy\n");
 		return NULL;
-	}
 
-	fprintf(stderr, "strategy is %d\n", strategy);
+	Expr *new_expr = get_pushdownsafe_expr(context, expr);
 
-	if (IsA(orig_expr, ScalarArrayOpExpr) && strategy != BTEqualStrategyNumber)
-	{
-		/*
-		 * Only support the simplest case of x = any(array[1, 2, 3]) for scalar
-		 * array operations.
-		 */
-		return NULL;
-	}
-
-	Expr *pushed_down_rightop = get_pushdownsafe_expr(context, rightop);
-	if (pushed_down_rightop == NULL)
+	if (new_expr == NULL)
 	{
 		return NULL;
 	}
 
-	expr_type_id = exprType((Node *) pushed_down_rightop);
-	if (IsA(orig_expr, ScalarArrayOpExpr))
-	{
-		expr_type_id = get_element_type(expr_type_id);
-	}
+	expr = new_expr;
 
-	Expr *min_search_value = pushed_down_rightop;
-	Expr *max_search_value = pushed_down_rightop;
-	if (IsA(orig_expr, ScalarArrayOpExpr))
-	{ if (IsA(pushed_down_rightop, Const))
-	{
-		fprintf(stderr, "have const array\n");
-		array_const_minmax(castNode(Const, pushed_down_rightop),
-			(Const **) &min_search_value, (Const **) &max_search_value);
-		my_print(min_search_value);
-		my_print(max_search_value);
-	}
-	 else
-	 {
-		return NULL;
-	 }
-	}
+	expr_type_id = exprType((Node *) expr);
 
 	switch (strategy)
 	{
 		case BTEqualStrategyNumber:
 		{
-			/*
-			 * var = expr implies min < expr and max > expr.
-			 */
+			/* var = expr implies min < expr and max > expr */
 			Oid opno_le = get_opfamily_member(tce->btree_opf,
 											  tce->type_id,
 											  expr_type_id,
@@ -450,18 +313,16 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, Node *orig_exp
 
 			return make_andclause(
 				list_make2(make_segment_meta_opexpr(context,
-													orig_expr,
 													opno_le,
 													min_attno,
 													var_with_segment_meta,
-													min_search_value,
+													expr,
 													BTLessEqualStrategyNumber),
 						   make_segment_meta_opexpr(context,
-													orig_expr,
 													opno_ge,
 													max_attno,
 													var_with_segment_meta,
-													max_search_value,
+													expr,
 													BTGreaterEqualStrategyNumber)));
 		}
 		case BTLessStrategyNumber:
@@ -475,11 +336,10 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, Node *orig_exp
 					return NULL;
 
 				return (Expr *) make_segment_meta_opexpr(context,
-														 orig_expr,
 														 opno,
 														 min_attno,
 														 var_with_segment_meta,
-														 pushed_down_rightop,
+														 expr,
 														 strategy);
 			}
 
@@ -494,11 +354,10 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, Node *orig_exp
 					return NULL;
 
 				return (Expr *) make_segment_meta_opexpr(context,
-														 orig_expr,
 														 opno,
 														 max_attno,
 														 var_with_segment_meta,
-														 pushed_down_rightop,
+														 expr,
 														 strategy);
 			}
 		default:
@@ -650,81 +509,50 @@ modify_expression(Node *node, QualPushdownContext *context)
 
 	switch (nodeTag(node))
 	{
-		case T_ScalarArrayOpExpr:
 		case T_OpExpr:
 		{
-			Oid opno = InvalidOid;
-			List *args = NIL;
-			Oid collation = InvalidOid;
-			if (IsA(node, OpExpr))
+			OpExpr *opexpr = (OpExpr *) node;
+			if (opexpr->opresulttype == BOOLOID)
 			{
-				OpExpr *opexpr = (OpExpr *) node;
-				if (opexpr->opresulttype != BOOLOID)
-				{
-					break;
-				}
-				opno = opexpr->opno;
-				args = opexpr->args;
-				collation = opexpr->inputcollid;
-			}
-			else if (IsA(node, ScalarArrayOpExpr))
-			{
-				ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, node);
+				Expr *pd = NULL;
 
-				/*
-				 * Things like x = all(array[1, 2, 3]) are borderline
-				 * useless, but generic optimizations for them are very
-				 * complicated, so we only support the most useful case of
-				 * x = any(array[1, 2, 3]).
-				 */
-				if (!saop->useOr)
+				if (ts_guc_enable_sparse_index_bloom)
 				{
-					break;
+					/*
+					 * Try bloom1 sparse index.
+					 */
+					pd = pushdown_op_to_segment_meta_bloom1(context,
+															opexpr->args,
+															opexpr->opno,
+
+															opexpr->inputcollid);
 				}
 
-				opno = saop->opno;
-				args = saop->args;
-				collation = saop->inputcollid;
-			}
-			else
-			{
-				Assert(false);
-				break;
-			}
+				if (pd != NULL)
+				{
+					context->needs_recheck = true;
+					/* pd is on the compressed table so do not mutate further */
+					return (Node *) pd;
+				}
 
-			Expr *pd = NULL;
-
-			if (ts_guc_enable_sparse_index_bloom && IsA(node, OpExpr))
-			{
 				/*
-				 * Try bloom1 sparse index.
+				 * Try minmax sparse index.
 				 */
-				pd = pushdown_op_to_segment_meta_bloom1(context, args, opno, collation);
+				pd = pushdown_op_to_segment_meta_min_max(context,
+														 opexpr->args,
+														 opexpr->opno,
+														 opexpr->inputcollid);
+				if (pd != NULL)
+				{
+					context->needs_recheck = true;
+					/* pd is on the compressed table so do not mutate further */
+					return (Node *) pd;
+				}
 			}
-
-			if (pd != NULL)
-			{
-				context->needs_recheck = true;
-				/* pd is on the compressed table so do not mutate further */
-				return (Node *) pd;
-			}
-
-			/*
-			 * Try minmax sparse index.
-			 */
-			fprintf(stderr, "opno %d collation %d for orig:\n", opno, collation);
-			my_print(node);
-			pd = pushdown_op_to_segment_meta_min_max(context, node, args, opno, collation);
-			if (pd != NULL)
-			{
-				context->needs_recheck = true;
-				/* pd is on the compressed table so do not mutate further */
-				return (Node *) pd;
-			}
-
 			/* opexpr will still be checked for segment by columns */
 			break;
 		}
+		case T_ScalarArrayOpExpr:
 			{
 				fprintf(stderr, "saop!!!\n");
 

@@ -1992,7 +1992,7 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	 */
 
 	bool old_bitmapscan = enable_bitmapscan;
-	enable_bitmapscan = false;
+//	enable_bitmapscan = false;
 
 	if (sort_info->use_compressed_sort)
 	{
