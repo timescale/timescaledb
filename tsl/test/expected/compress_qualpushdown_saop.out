@@ -94,34 +94,42 @@ select * from saop where payload = all(array['1', '10']);
 (2 rows)
 
 explain (analyze, costs off, timing off, summary off)
-select * from saop where payload < any(array['1', '10']);
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
- Append (actual rows=336 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=168 loops=1)
-         Filter: (payload < ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 49832
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=168 loops=1)
-         Filter: (payload < ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 49832
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(9 rows)
+select * from saop where id < any(array['1', '10']);
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
+ Append (actual rows=6897 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=3449 loops=1)
+         Filter: (id < ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 19551
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23 loops=1)
+               Filter: ((_ts_meta_min_1 < '1'::text) OR (_ts_meta_min_1 < '10'::text))
+               Rows Removed by Filter: 46
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=3448 loops=1)
+         Filter: (id < ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 19552
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=23 loops=1)
+               Filter: ((_ts_meta_min_1 < '1'::text) OR (_ts_meta_min_1 < '10'::text))
+               Rows Removed by Filter: 46
+(13 rows)
 
 explain (analyze, costs off, timing off, summary off)
-select * from saop where payload < all(array['1', '10']);
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
- Append (actual rows=268 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=134 loops=1)
-         Filter: (payload < ALL ('{1,10}'::text[]))
-         Rows Removed by Filter: 49866
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=134 loops=1)
-         Filter: (payload < ALL ('{1,10}'::text[]))
-         Rows Removed by Filter: 49866
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(9 rows)
+select * from saop where id < all(array['1', '10']);
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Append (actual rows=3448 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1724 loops=1)
+         Filter: (id < ALL ('{1,10}'::text[]))
+         Rows Removed by Filter: 21276
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23 loops=1)
+               Filter: ((_ts_meta_min_1 < '1'::text) AND (_ts_meta_min_1 < '10'::text))
+               Rows Removed by Filter: 46
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=1724 loops=1)
+         Filter: (id < ALL ('{1,10}'::text[]))
+         Rows Removed by Filter: 21276
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=23 loops=1)
+               Filter: ((_ts_meta_min_1 < '1'::text) AND (_ts_meta_min_1 < '10'::text))
+               Rows Removed by Filter: 46
+(13 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where payload = any(array[s, '10']);

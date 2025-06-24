@@ -48,10 +48,10 @@ explain (analyze, costs off, timing off, summary off)
 select * from saop where payload = all(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
-select * from saop where payload < any(array['1', '10']);
+select * from saop where id < any(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
-select * from saop where payload < all(array['1', '10']);
+select * from saop where id < all(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where payload = any(array[s, '10']);
