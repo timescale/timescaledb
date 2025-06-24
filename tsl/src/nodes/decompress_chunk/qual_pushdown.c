@@ -501,6 +501,104 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 								 COERCE_EXPLICIT_CALL);
 }
 
+static Expr *
+pushdown_op_to_segment_meta_bloom1_saop(QualPushdownContext *context, List *expr_args, Oid op_oid,
+										Oid op_collation)
+{
+	Expr *original_leftop;
+	Expr *original_rightop;
+	TypeCacheEntry *tce;
+	int strategy;
+
+	if (list_length(expr_args) != 2)
+		return NULL;
+
+	original_leftop = linitial(expr_args);
+	original_rightop = lsecond(expr_args);
+
+	if (IsA(original_leftop, RelabelType))
+		original_leftop = ((RelabelType *) original_leftop)->arg;
+	if (IsA(original_rightop, RelabelType))
+		original_rightop = ((RelabelType *) original_rightop)->arg;
+
+	/*
+	 * For scalar array operation, we expect a var on the left side.
+	 */
+	AttrNumber bloom1_attno = InvalidAttrNumber;
+	expr_fetch_bloom1_metadata(context, original_leftop, &bloom1_attno);
+	if (bloom1_attno == InvalidAttrNumber)
+	{
+		/* No metadata for left operand. */
+		return NULL;
+	}
+
+	Var *var_with_segment_meta = castNode(Var, original_leftop);
+
+	/*
+	 * Play it safe and don't push down if the operator collation doesn't match
+	 * the column collation.
+	 */
+	if (var_with_segment_meta->varcollid != op_collation)
+	{
+		return NULL;
+	}
+
+	/*
+	 * We cannot use bloom filters for non-deterministic collations.
+	 */
+	if (OidIsValid(op_collation) && !get_collation_isdeterministic(op_collation))
+	{
+		return NULL;
+	}
+
+	/*
+	 * We only support hashable equality operators.
+	 */
+	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
+	strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
+	if (strategy != HTEqualStrategyNumber)
+	{
+		return NULL;
+	}
+
+	/*
+	 * The hash equality operators are supposed to be strict.
+	 */
+	Assert(op_strict(op_oid));
+
+	/*
+	 * Check if the righthand expression is safe to push down.
+	 */
+	Expr *pushed_down_rightop = get_pushdownsafe_expr(context, original_rightop);
+	if (pushed_down_rightop == NULL)
+	{
+		return NULL;
+	}
+
+	/*
+	 * var = any(array) implies bloom1_contains_any(var_bloom, array).
+	 */
+	Var *bloom_var = makeVar(context->compressed_rel->relid,
+							 bloom1_attno,
+							 ts_custom_type_cache_get(CUSTOM_TYPE_BLOOM1)->type_oid,
+							 -1,
+							 InvalidOid,
+							 0);
+
+	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+										 makeString("bloom1_contains_any")),
+							  /* nargs = */ -1,
+							  /* argtypes = */ (void *) -1,
+							  /* missing_ok = */ false);
+
+	return (Expr *) makeFuncExpr(func,
+								 BOOLOID,
+								 list_make2(bloom_var, pushed_down_rightop),
+								 /* funccollid = */ InvalidOid,
+								 /* inputcollid = */ InvalidOid,
+								 COERCE_EXPLICIT_CALL);
+}
+
 static Node *
 modify_expression(Node *node, QualPushdownContext *context)
 {
@@ -570,7 +668,32 @@ modify_expression(Node *node, QualPushdownContext *context)
 				return pushed_down;
 			}
 
+			/*
+			 * Try to transform x = any(array[]) into
+			 * bloom1_contains_any(bloom_x, array[]).
+			 */
+			tmp_context = *context;
 			ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, node);
+			if (saop->useOr)
+			{
+				void *pushed_down = pushdown_op_to_segment_meta_bloom1_saop(&tmp_context,
+																			saop->args,
+																			saop->opno,
+																			saop->inputcollid);
+
+				if (pushed_down != NULL && tmp_context.can_pushdown)
+				{
+					fprintf(stderr, "pushed down to bloom_contains_any\n");
+					my_print(pushed_down);
+					context->needs_recheck = true;
+					return pushed_down;
+				}
+			}
+
+			/*
+			 * Generic code for scalar array operation pushdown that transforms
+			 * them into a series of OR/AND clauses.
+			 */
 			OpExpr *opexpr = makeNode(OpExpr);
 			opexpr->opno = saop->opno;
 			opexpr->opfuncid = saop->opfuncid;
@@ -645,6 +768,7 @@ modify_expression(Node *node, QualPushdownContext *context)
 		case T_SQLValueFunction:
 		case T_CaseExpr:
 		case T_CaseWhen:
+		case T_ArrayExpr:
 			break;
 		case T_FuncExpr:
 			/*

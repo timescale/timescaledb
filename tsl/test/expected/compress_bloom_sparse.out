@@ -271,7 +271,7 @@ execute p('2345');
 deallocate p;
 reset plan_cache_mode;
 reset timescaledb.enable_chunk_append;
--- Scalar array operations are not yet supported
+-- Scalar array operations are supported as well.
 explain (analyze, verbose, costs off, timing off, summary off)
 select count(*) from bloom where x < any(array[1000, 2000]::int[]);
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
@@ -280,12 +280,13 @@ select count(*) from bloom where x < any(array[1000, 2000]::int[]);
    Output: count(*)
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=1999 loops=1)
          Vectorized Filter: (_hyper_1_1_chunk.x < ANY ('{1000,2000}'::integer[]))
-         Rows Removed by Filter: 8001
-         Batches Removed by Filter: 8
+         Rows Removed by Filter: 1
          Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10 loops=1)
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=2 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-(9 rows)
+               Filter: ((compress_hyper_2_2_chunk._ts_meta_min_1 < 1000) OR (compress_hyper_2_2_chunk._ts_meta_min_1 < 2000))
+               Rows Removed by Filter: 8
+(10 rows)
 
 explain (analyze, verbose, costs off, timing off, summary off)
 select count(*) from bloom where value = any(array[md5('1000'), md5('2000')]);
@@ -295,12 +296,13 @@ select count(*) from bloom where value = any(array[md5('1000'), md5('2000')]);
    Output: count(*)
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=2 loops=1)
          Vectorized Filter: (_hyper_1_1_chunk.value = ANY ('{a9b7ba70783b617e9998dc4dd82eb3c5,08f90c1a417155361a5c4b8d297e0d78}'::text[]))
-         Rows Removed by Filter: 9998
-         Batches Removed by Filter: 8
+         Rows Removed by Filter: 1998
          Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10 loops=1)
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=2 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
-(9 rows)
+               Filter: _timescaledb_functions.bloom1_contains_any(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, '{a9b7ba70783b617e9998dc4dd82eb3c5,08f90c1a417155361a5c4b8d297e0d78}'::text[])
+               Rows Removed by Filter: 8
+(10 rows)
 
 -- UUID uses bloom
 explain (analyze, verbose, costs off, timing off, summary off)
