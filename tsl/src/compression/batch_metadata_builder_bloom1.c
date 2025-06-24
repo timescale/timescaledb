@@ -470,9 +470,11 @@ bloom1_contains(PG_FUNCTION_ARGS)
 }
 
 static int
-uint64_qsort_cmp(const void *a, const void *b)
+uint64_qsort_cmp(const void *a_, const void *b_)
 {
-	return pg_cmp_u64(*(const uint64 *) a, *(const uint64 *) b);
+	const uint64 a = *(const uint64 *) a_;
+	const uint64 b = *(const uint64 *) b_;
+	return (a > b) - (a < b);
 }
 
 Datum

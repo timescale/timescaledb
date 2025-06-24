@@ -619,7 +619,6 @@ modify_expression(Node *node, QualPushdownContext *context)
 					pd = pushdown_op_to_segment_meta_bloom1(context,
 															opexpr->args,
 															opexpr->opno,
-
 															opexpr->inputcollid);
 				}
 
