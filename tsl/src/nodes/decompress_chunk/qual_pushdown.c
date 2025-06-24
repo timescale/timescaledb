@@ -553,88 +553,88 @@ modify_expression(Node *node, QualPushdownContext *context)
 			break;
 		}
 		case T_ScalarArrayOpExpr:
+		{
+			fprintf(stderr, "saop!!!\n");
+
+			/*
+			 * It can be possible to push down the SAOP as is, if it references
+			 * only the segmentby columns. Check this case first.
+			 */
+			QualPushdownContext tmp_context = *context;
+			void *pushed_down = expression_tree_mutator(node, modify_expression, &tmp_context);
+			if (pushed_down != NULL && tmp_context.can_pushdown)
 			{
-				fprintf(stderr, "saop!!!\n");
+				fprintf(stderr, "pushed down normally\n");
+				my_print(pushed_down);
+				context->needs_recheck |= tmp_context.needs_recheck;
+				return pushed_down;
+			}
 
-				/*
-				 * It can be possible to push down the SAOP as is, if it references
-				 * only the segmentby columns. Check this case first.
-				 */
-				QualPushdownContext tmp_context = *context;
-				void *pushed_down = expression_tree_mutator(node, modify_expression, &tmp_context);
-				if (pushed_down != NULL && tmp_context.can_pushdown)
-				{
-					fprintf(stderr, "pushed down normally\n");
-					my_print(pushed_down);
-					context->needs_recheck |= tmp_context.needs_recheck;
-					return pushed_down;
-				}
+			ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, node);
+			OpExpr *opexpr = makeNode(OpExpr);
+			opexpr->opno = saop->opno;
+			opexpr->opfuncid = saop->opfuncid;
+			opexpr->opresulttype = BOOLOID;
+			opexpr->inputcollid = saop->inputcollid;
+			// ArrayExpr *array_expr = castNode(ArrayExpr, list_nth(saop->args, 1));
 
-				ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, node);
-				OpExpr *opexpr = makeNode(OpExpr);
-				opexpr->opno = saop->opno;
-				opexpr->opfuncid = saop->opfuncid;
-				opexpr->opresulttype = BOOLOID;
-				opexpr->inputcollid = saop->inputcollid;
-				// ArrayExpr *array_expr = castNode(ArrayExpr, list_nth(saop->args, 1));
+			my_print(saop);
 
-				my_print(saop);
-
-				void *scalar_arg = linitial(saop->args);
-				void *array_arg = list_nth(saop->args, 1);
-				List *array_elements;
-				if (IsA(array_arg, Const))
-				{
-					array_elements = deconstruct_array_const(castNode(Const, array_arg));
-				}
-				else if (IsA(array_arg, ArrayExpr))
-				{
-					array_elements = castNode(ArrayExpr, array_arg)->elements;
-				}
-				else
-				{
-					/* Not sure anything else is allowed, but just skip it. */
-					fprintf(stderr, "wow! got this:\n");
-					my_print(array_arg);
-					break;
-				}
-
-				my_print(array_elements);
-
-				List *transformed_ops = NIL;
-				ListCell *lc;
-				foreach (lc, array_elements)
-				{
-					opexpr->args = list_make2(scalar_arg, lfirst(lc));
-					fprintf(stderr, "before transformation:\n");
-					my_print(opexpr);
-					void *transformed = modify_expression((Node *) opexpr, context);
-					if (transformed == NULL)
-					{
-						fprintf(stderr, "cannot transform:\n");
-						break;
-					}
-					else
-					{
-						fprintf(stderr, "transformed into:\n");
-						my_print(transformed);
-					}
-					transformed_ops = lappend(transformed_ops, transformed);
-				}
-				fprintf(stderr, "transformed:\n");
-				my_print(transformed_ops);
-
-				if (saop->useOr)
-				{
-					return (Node *) make_orclause(transformed_ops);
-				}
-				else
-				{
-					return (Node *) make_andclause(transformed_ops);
-				}
-
+			void *scalar_arg = linitial(saop->args);
+			void *array_arg = list_nth(saop->args, 1);
+			List *array_elements;
+			if (IsA(array_arg, Const))
+			{
+				array_elements = deconstruct_array_const(castNode(Const, array_arg));
+			}
+			else if (IsA(array_arg, ArrayExpr))
+			{
+				array_elements = castNode(ArrayExpr, array_arg)->elements;
+			}
+			else
+			{
+				/* Not sure anything else is allowed, but just skip it. */
+				fprintf(stderr, "wow! got this:\n");
+				my_print(array_arg);
 				break;
 			}
+
+			my_print(array_elements);
+
+			List *transformed_ops = NIL;
+			ListCell *lc;
+			foreach (lc, array_elements)
+			{
+				opexpr->args = list_make2(scalar_arg, lfirst(lc));
+				fprintf(stderr, "before transformation:\n");
+				my_print(opexpr);
+				void *transformed = modify_expression((Node *) opexpr, context);
+				if (transformed == NULL)
+				{
+					fprintf(stderr, "cannot transform:\n");
+					break;
+				}
+				else
+				{
+					fprintf(stderr, "transformed into:\n");
+					my_print(transformed);
+				}
+				transformed_ops = lappend(transformed_ops, transformed);
+			}
+			fprintf(stderr, "transformed:\n");
+			my_print(transformed_ops);
+
+			if (saop->useOr)
+			{
+				return (Node *) make_orclause(transformed_ops);
+			}
+			else
+			{
+				return (Node *) make_andclause(transformed_ops);
+			}
+
+			break;
+		}
 		case T_BoolExpr:
 		case T_CoerceViaIO:
 		case T_RelabelType:

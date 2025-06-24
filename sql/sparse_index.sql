@@ -6,3 +6,8 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1_contains(_timescaledb_i
 RETURNS bool
 AS '@MODULE_PATHNAME@', 'ts_bloom1_contains'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.bloom1, anyarray)
+RETURNS bool
+AS '@MODULE_PATHNAME@', 'ts_bloom1_contains_any'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;

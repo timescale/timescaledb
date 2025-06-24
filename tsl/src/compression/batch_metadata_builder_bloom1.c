@@ -37,7 +37,7 @@
  */
 
 #define BLOOM1_FALSE_POSITIVES 0.022
-#define BLOOM1_HASHES 6
+#define BLOOM1_BITS_PER_ELEMENT 6
 
 /*
  * Limit the bits belonging to the particular elements to a small contiguous
@@ -260,7 +260,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	 * (2) n = -m1 * log(1 - p ^ (1/k)) / k.
 	 */
 	const double m0 = orig_num_bits;
-	const double k = BLOOM1_HASHES;
+	const double k = BLOOM1_BITS_PER_ELEMENT;
 	const double p = BLOOM1_FALSE_POSITIVES;
 	const double t = orig_bits_set;
 	const double m1 = -log(1 - t / m0) / (log(1 - 1 / m0) * log(1 - pow(p, 1 / k)));
@@ -384,7 +384,7 @@ bloom1_update_val(void *builder_, Datum needle)
 	const uint64 datum_hash_1 =
 		calculate_hash(builder->hash_function, builder->hash_function_finfo, needle);
 	const uint32 absolute_mask = num_bits - 1;
-	for (int i = 0; i < BLOOM1_HASHES; i++)
+	for (int i = 0; i < BLOOM1_BITS_PER_ELEMENT; i++)
 	{
 		const uint32 absolute_bit_index = bloom1_get_one_offset(datum_hash_1, i) & absolute_mask;
 		const uint32 word_index = absolute_bit_index >> log2_word_bits;
@@ -456,7 +456,7 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	Datum needle = PG_GETARG_DATUM(1);
 	const uint64 datum_hash_1 = calculate_hash(fn, finfo, needle);
 	const uint32 absolute_mask = num_bits - 1;
-	for (int i = 0; i < BLOOM1_HASHES; i++)
+	for (int i = 0; i < BLOOM1_BITS_PER_ELEMENT; i++)
 	{
 		const uint32 absolute_bit_index = bloom1_get_one_offset(datum_hash_1, i) & absolute_mask;
 		const uint32 word_index = absolute_bit_index >> log2_word_bits;
@@ -467,6 +467,144 @@ bloom1_contains(PG_FUNCTION_ARGS)
 		}
 	}
 	PG_RETURN_BOOL(true);
+}
+
+static int
+uint64_qsort_cmp(const void *a, const void *b)
+{
+	return pg_cmp_u64(*(const uint64 *) a, *(const uint64 *) b);
+}
+
+Datum
+bloom1_contains_any(PG_FUNCTION_ARGS)
+{
+	/*
+	 * This function is not strict, because if we don't have a bloom filter, this
+	 * means the condition can potentially be true.
+	 */
+	if (PG_ARGISNULL(0))
+	{
+		PG_RETURN_BOOL(true);
+	}
+
+	/*
+	 * A null value cannot match the equality condition, although this probably
+	 * should be optimized away by the planner.
+	 */
+	if (PG_ARGISNULL(1))
+	{
+		PG_RETURN_BOOL(false);
+	}
+
+	ArrayType *arr = PG_GETARG_ARRAYTYPE_P(1);
+
+	Oid elem_type = ARR_ELEMTYPE(arr);
+
+	FmgrInfo *finfo = NULL;
+	PGFunction hash_fn = bloom1_get_hash_function(elem_type, &finfo);
+	if (hash_fn == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_DATA_EXCEPTION),
+				 errmsg("type %s lacks an extended hash function", format_type_be(elem_type))));
+
+	int16 typlen;
+	bool typbyval;
+	char typalign;
+	get_typlenbyvalalign(elem_type, &typlen, &typbyval, &typalign);
+
+	int num_items;
+	Datum *items;
+	bool *nulls;
+	deconstruct_array(arr, elem_type, typlen, typbyval, typalign, &items, &nulls, &num_items);
+
+	if (num_items == 0)
+		PG_RETURN_BOOL(false);
+
+		/*
+		 * Calculate the per-item base hashes that will be used for computing the
+		 * individual bloom filter bit offsets. We can reuse the "values" space to
+		 * avoid more allocations, but have to allocate as a fallback on 32-bit
+		 * systems.
+		 */
+#if FLOAT8PASSBYVAL
+	uint64 *item_base_hashes = items;
+#else
+	uint64 *item_base_hashes = palloc(sizeof(uint64) * num_items);
+#endif
+
+	int valid = 0;
+	for (int i = 0; i < num_items; i++)
+	{
+		if (nulls[i])
+		{
+			/*
+			 * A null value cannot match the equality condition.
+			 */
+			continue;
+		}
+
+		item_base_hashes[valid++] = calculate_hash(hash_fn, finfo, items[i]);
+	}
+
+	if (valid == 0)
+	{
+		/*
+		 * No non-null elements.
+		 */
+		PG_RETURN_BOOL(false);
+	}
+
+	/*
+	 * Sort the hashes for cache-friendly probing.
+	 */
+	pg_qsort(item_base_hashes, valid, sizeof(uint64), uint64_qsort_cmp);
+
+	/*
+	 * Unpack the bloom filter argument.
+	 */
+	struct varlena *bloom = PG_GETARG_VARLENA_P(0);
+	const char *words_buf = bloom1_words_buf(bloom);
+	const uint32 num_bits = bloom1_num_bits(bloom);
+
+	/* Must be a power of two. */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
+
+	/* Must be >= 64 bits. */
+	CheckCompressedData(num_bits >= 64);
+
+	const uint32 num_word_bits = sizeof(*words_buf) * 8;
+	Assert(num_bits % num_word_bits == 0);
+	const uint32 log2_word_bits = pg_leftmost_one_pos32(num_word_bits);
+	Assert(num_word_bits == (1ULL << log2_word_bits));
+
+	const uint32 word_mask = num_word_bits - 1;
+	Assert((word_mask >> num_word_bits) == 0);
+
+	const uint32 absolute_mask = num_bits - 1;
+
+	/* Probe the bloom filter. */
+	for (int item_index = 0; item_index < valid; item_index++)
+	{
+		const uint64 base_hash = item_base_hashes[item_index];
+		bool match = true;
+		for (int i = 0; i < BLOOM1_BITS_PER_ELEMENT; i++)
+		{
+			const uint32 absolute_bit_index = bloom1_get_one_offset(base_hash, i) & absolute_mask;
+			const uint32 word_index = absolute_bit_index >> log2_word_bits;
+			const uint32 word_bit_index = absolute_bit_index & word_mask;
+			if ((words_buf[word_index] & (1ULL << word_bit_index)) == 0)
+			{
+				match = false;
+				break;
+			}
+		}
+		if (match)
+		{
+			PG_RETURN_BOOL(true);
+		}
+	}
+
+	PG_RETURN_BOOL(false);
 }
 
 static int
@@ -531,7 +669,7 @@ bloom1_estimate_ndistinct(struct varlena *bloom)
 {
 	const double m = bloom1_num_bits(bloom);
 	const double t = pg_popcount(bloom1_words_buf(bloom), m / 8);
-	const double k = BLOOM1_HASHES;
+	const double k = BLOOM1_BITS_PER_ELEMENT;
 	return log(1 - t / m) / (k * log(1 - 1 / m));
 }
 
