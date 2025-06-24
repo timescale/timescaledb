@@ -1,0 +1,219 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+--
+-- Planning tests for compressed chunk table filter pushdown with scalar array
+-- operations.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- helper function: float -> pseudorandom float [-0.5..0.5]
+create or replace function mix(x anyelement) returns float8 as $$
+    select hashfloat8(x::float8) / pow(2, 32)
+$$ language sql;
+set max_parallel_workers_per_gather = 0;
+create table saop(ts int, s text, id text, payload text);
+select create_hypertable('saop', 'ts', chunk_time_interval => 50001);
+NOTICE:  adding not-null constraint to column "ts"
+ create_hypertable 
+-------------------
+ (1,public,saop,t)
+(1 row)
+
+alter table saop set (timescaledb.compress,
+    timescaledb.compress_segmentby = 's',
+    timescaledb.compress_orderby = 'id, ts');
+insert into saop
+select ts,
+    ts % 23 s,
+    ts % 29 id,
+    (mix(ts % 1483) * 1483)::int::text payload
+from generate_series(1, 100000) ts;
+create index on saop(payload);
+select count(compress_chunk(x)) from show_chunks('saop') x;
+ count 
+-------
+     2
+(1 row)
+
+vacuum full analyze saop;
+explain (analyze, costs off, timing off, summary off)
+select * from saop where s = any(array['1', '10']);
+                                                                    QUERY PLAN                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=8696 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=4348 loops=1)
+         ->  Index Scan using compress_hyper_2_3_chunk_s__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_3_chunk (actual rows=6 loops=1)
+               Index Cond: (s = ANY ('{1,10}'::text[]))
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=4348 loops=1)
+         ->  Index Scan using compress_hyper_2_4_chunk_s__ts_meta_min_1__ts_meta_max_1__t_idx on compress_hyper_2_4_chunk (actual rows=6 loops=1)
+               Index Cond: (s = ANY ('{1,10}'::text[]))
+(7 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where id = any(array['1', '10']);
+                                                                            QUERY PLAN                                                                            
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=6897 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=3449 loops=1)
+         Vectorized Filter: (id = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 19551
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23 loops=1)
+               Filter: (((_ts_meta_min_1 <= '1'::text) AND (_ts_meta_max_1 >= '1'::text)) OR ((_ts_meta_min_1 <= '10'::text) AND (_ts_meta_max_1 >= '10'::text)))
+               Rows Removed by Filter: 46
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=3448 loops=1)
+         Vectorized Filter: (id = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 19552
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=23 loops=1)
+               Filter: (((_ts_meta_min_1 <= '1'::text) AND (_ts_meta_max_1 >= '1'::text)) OR ((_ts_meta_min_1 <= '10'::text) AND (_ts_meta_max_1 >= '10'::text)))
+               Rows Removed by Filter: 46
+(13 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where payload = any(array['1', '10']);
+                                                                                       QUERY PLAN                                                                                        
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=270 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=135 loops=1)
+         Vectorized Filter: (payload = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 47604
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, '1'::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, '10'::text))
+               Rows Removed by Filter: 13
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=135 loops=1)
+         Vectorized Filter: (payload = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 47604
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, '1'::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, '10'::text))
+               Rows Removed by Filter: 13
+(13 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where payload = all(array['1', '10']);
+           QUERY PLAN           
+--------------------------------
+ Result (actual rows=0 loops=1)
+   One-Time Filter: false
+(2 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where payload < any(array['1', '10']);
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Append (actual rows=336 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=168 loops=1)
+         Filter: (payload < ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 49832
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=168 loops=1)
+         Filter: (payload < ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 49832
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
+(9 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where payload < all(array['1', '10']);
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Append (actual rows=268 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=134 loops=1)
+         Filter: (payload < ALL ('{1,10}'::text[]))
+         Rows Removed by Filter: 49866
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=134 loops=1)
+         Filter: (payload < ALL ('{1,10}'::text[]))
+         Rows Removed by Filter: 49866
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
+(9 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where payload = any(array[s, '10']);
+                                                                                   QUERY PLAN                                                                                    
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=249 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=125 loops=1)
+         Filter: (payload = ANY (ARRAY[s, '10'::text]))
+         Rows Removed by Filter: 45614
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=54 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, s) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, '10'::text))
+               Rows Removed by Filter: 15
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=124 loops=1)
+         Filter: (payload = ANY (ARRAY[s, '10'::text]))
+         Rows Removed by Filter: 47441
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=55 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, s) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, '10'::text))
+               Rows Removed by Filter: 14
+(13 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where payload = any(array[s, null]);
+                                                                                   QUERY PLAN                                                                                    
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=56 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=29 loops=1)
+         Filter: (payload = ANY (ARRAY[s, NULL::text]))
+         Rows Removed by Filter: 20493
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, s) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, NULL::text))
+               Rows Removed by Filter: 46
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=27 loops=1)
+         Filter: (payload = ANY (ARRAY[s, NULL::text]))
+         Rows Removed by Filter: 24147
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=25 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, s) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, NULL::text))
+               Rows Removed by Filter: 44
+(13 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where payload = any(array[null, null]);
+                                                                                        QUERY PLAN                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=0 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (payload = ANY ('{NULL,NULL}'::text[]))
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, NULL::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, NULL::text))
+               Rows Removed by Filter: 69
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (payload = ANY ('{NULL,NULL}'::text[]))
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, NULL::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, NULL::text))
+               Rows Removed by Filter: 69
+(11 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where s = any(array[payload, id]);
+                                                                     QUERY PLAN                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=3503 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1751 loops=1)
+         Filter: (s = ANY (ARRAY[payload, id]))
+         Rows Removed by Filter: 31119
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=37 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, s) OR ((_ts_meta_min_1 <= s) AND (_ts_meta_max_1 >= s)))
+               Rows Removed by Filter: 32
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=1752 loops=1)
+         Filter: (s = ANY (ARRAY[payload, id]))
+         Rows Removed by Filter: 31944
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=37 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, s) OR ((_ts_meta_min_1 <= s) AND (_ts_meta_max_1 >= s)))
+               Rows Removed by Filter: 32
+(13 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where s = all(array[payload, id]);
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2 loops=1)
+         Filter: (s = ALL (ARRAY[payload, id]))
+         Rows Removed by Filter: 10172
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=11 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, s) AND (_ts_meta_min_1 <= s) AND (_ts_meta_max_1 >= s))
+               Rows Removed by Filter: 58
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=0 loops=1)
+         Filter: (s = ALL (ARRAY[payload, id]))
+         Rows Removed by Filter: 13000
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=13 loops=1)
+               Filter: (_timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_payload, s) AND (_ts_meta_min_1 <= s) AND (_ts_meta_max_1 >= s))
+               Rows Removed by Filter: 56
+(13 rows)
+

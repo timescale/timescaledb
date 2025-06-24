@@ -575,6 +575,7 @@ modify_expression(Node *node, QualPushdownContext *context)
 				opexpr->opno = saop->opno;
 				opexpr->opfuncid = saop->opfuncid;
 				opexpr->opresulttype = BOOLOID;
+				opexpr->inputcollid = saop->inputcollid;
 				// ArrayExpr *array_expr = castNode(ArrayExpr, list_nth(saop->args, 1));
 
 				my_print(saop);

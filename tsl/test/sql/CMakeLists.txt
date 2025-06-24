@@ -23,9 +23,12 @@ set(TEST_FILES
     compress_bloom_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
+    compress_float8_corrupt.sql
+    compress_qualpushdown_saop.sql
+    compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
-    compress_float8_corrupt.sql
+    compression.sql
     compression_allocation.sql
     compression_conflicts.sql
     compression_constraints.sql
@@ -42,9 +45,7 @@ set(TEST_FILES
     compression_settings.sql
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
-    compression.sql
     compression_trigger.sql
-    compress_sort_transform.sql
     create_table_with.sql
     custom_hashagg.sql
     decompress_chunk_cost.sql
@@ -67,8 +68,8 @@ set(TEST_FILES
     hypercore_trigger.sql
     hypercore_types.sql
     hypercore_update.sql
-    hypercore_vacuum_full.sql
     hypercore_vacuum.sql
+    hypercore_vacuum_full.sql
     merge_append_partially_compressed.sql
     merge_chunks.sql
     merge_compress.sql
