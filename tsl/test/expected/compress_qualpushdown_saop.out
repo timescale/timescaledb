@@ -1,7 +1,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
---
 -- Planning tests for compressed chunk table filter pushdown with scalar array
 -- operations.
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -161,6 +160,23 @@ select * from saop where payload = any(array[s, null]);
                Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_payload, ARRAY[s, NULL::text])
                Rows Removed by Filter: 44
 (13 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where payload = any(null::text[]);
+                                                 QUERY PLAN                                                 
+------------------------------------------------------------------------------------------------------------
+ Append (actual rows=0 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (payload = ANY (NULL::text[]))
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_payload, NULL::text[])
+               Rows Removed by Filter: 69
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (payload = ANY (NULL::text[]))
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_payload, NULL::text[])
+               Rows Removed by Filter: 69
+(11 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where payload = any(array[null, null]);

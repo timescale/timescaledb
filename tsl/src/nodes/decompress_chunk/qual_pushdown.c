@@ -37,28 +37,25 @@ static Node *modify_expression(Node *node, QualPushdownContext *context);
 static List *
 deconstruct_array_const(Const *array_const)
 {
-	if (!array_const || !IsA(array_const, Const) || array_const->consttype == InvalidOid ||
-		array_const->constisnull)
-		return NIL;
+	/*
+	 * No way to represent that as a list (NIL is an empty array), so has to be
+	 * handled by the caller.
+	 */
+	Assert(!array_const->constisnull);
 
 	Oid array_type = array_const->consttype;
 	Datum array_datum = array_const->constvalue;
 
-	Oid element_type;
+	Oid element_type = get_element_type(array_type);
+
 	int16 typlen;
 	bool typbyval;
 	char typalign;
-
-	element_type = get_element_type(array_type);
-	if (!OidIsValid(element_type))
-		elog(ERROR, "Invalid array type: %u", array_type);
-
 	get_typlenbyvalalign(element_type, &typlen, &typbyval, &typalign);
 
 	int nelems;
 	Datum *elem_values;
 	bool *elem_nulls;
-
 	deconstruct_array(DatumGetArrayTypeP(array_datum),
 					  element_type,
 					  typlen,
@@ -652,8 +649,6 @@ modify_expression(Node *node, QualPushdownContext *context)
 		}
 		case T_ScalarArrayOpExpr:
 		{
-			fprintf(stderr, "saop!!!\n");
-
 			/*
 			 * It can be possible to push down the SAOP as is, if it references
 			 * only the segmentby columns. Check this case first.
@@ -662,8 +657,6 @@ modify_expression(Node *node, QualPushdownContext *context)
 			void *pushed_down = expression_tree_mutator(node, modify_expression, &tmp_context);
 			if (pushed_down != NULL && tmp_context.can_pushdown)
 			{
-				fprintf(stderr, "pushed down normally\n");
-				my_print(pushed_down);
 				context->needs_recheck |= tmp_context.needs_recheck;
 				return pushed_down;
 			}
@@ -683,8 +676,6 @@ modify_expression(Node *node, QualPushdownContext *context)
 
 				if (pushed_down != NULL && tmp_context.can_pushdown)
 				{
-					fprintf(stderr, "pushed down to bloom_contains_any\n");
-					my_print(pushed_down);
 					context->needs_recheck = true;
 					return pushed_down;
 				}
@@ -701,12 +692,10 @@ modify_expression(Node *node, QualPushdownContext *context)
 			opexpr->inputcollid = saop->inputcollid;
 			// ArrayExpr *array_expr = castNode(ArrayExpr, list_nth(saop->args, 1));
 
-			my_print(saop);
-
 			void *scalar_arg = linitial(saop->args);
 			void *array_arg = list_nth(saop->args, 1);
 			List *array_elements;
-			if (IsA(array_arg, Const))
+			if (IsA(array_arg, Const) && !castNode(Const, array_arg)->constisnull)
 			{
 				array_elements = deconstruct_array_const(castNode(Const, array_arg));
 			}
@@ -717,35 +706,21 @@ modify_expression(Node *node, QualPushdownContext *context)
 			else
 			{
 				/* Not sure anything else is allowed, but just skip it. */
-				fprintf(stderr, "wow! got this:\n");
-				my_print(array_arg);
 				break;
 			}
-
-			my_print(array_elements);
 
 			List *transformed_ops = NIL;
 			ListCell *lc;
 			foreach (lc, array_elements)
 			{
 				opexpr->args = list_make2(scalar_arg, lfirst(lc));
-				fprintf(stderr, "before transformation:\n");
-				my_print(opexpr);
 				void *transformed = modify_expression((Node *) opexpr, context);
 				if (transformed == NULL)
 				{
-					fprintf(stderr, "cannot transform:\n");
 					break;
-				}
-				else
-				{
-					fprintf(stderr, "transformed into:\n");
-					my_print(transformed);
 				}
 				transformed_ops = lappend(transformed_ops, transformed);
 			}
-			fprintf(stderr, "transformed:\n");
-			my_print(transformed_ops);
 
 			if (saop->useOr)
 			{

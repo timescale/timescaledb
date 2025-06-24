@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
---
+
 -- Planning tests for compressed chunk table filter pushdown with scalar array
 -- operations.
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -58,6 +58,9 @@ select * from saop where payload = any(array[s, '10']);
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where payload = any(array[s, null]);
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where payload = any(null::text[]);
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where payload = any(array[null, null]);
