@@ -1,0 +1,50 @@
+name: Release - Post Release Ceremony
+"on":
+  release:
+    types: [published]
+
+# The workflow needs the permission to a PR
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  post-release-ceremony:
+    name: Post Release Ceremony
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Forward port changes to main
+        run: |
+          ./scripts/release/build_post_release_artefacts.sh ${{ github.event.release.tag_name }}
+
+      - name: Create Pull Request for forward ported artefacts
+        id: cpr_fwdp
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          branch: "release/${{ github.event.release.tag_name }}--forwardport"
+          base: "main"
+          delete-branch: true
+          title: "Forwardport ${{ github.event.release.tag_name }}"
+          body: |
+              - CHANGELOG
+              - set previous_version in version.config
+              - adjust CMakeList.txt with up & down grade files
+              - TODO removed .unreleased files
+          labels: |
+            release
+          add-paths: |
+            .unreleased/*
+            CHANGELOG.md
+            version.config
+            sql/updates/*.sql
+            sql/CMakeLists.txt
+      
+      - name: "Validate next version PR"
+        if: ${{ steps.cpr_fwdp.outputs.pull-request-number }}
+        run: |
+          echo "Pull Request: ${{ steps.cpr_fwdp.outputs.pull-request-url }}"

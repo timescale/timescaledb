@@ -399,10 +399,33 @@ explain (analyze, verbose, costs off, timing off, summary off)
 select * from byref where x = float8tomacaddr8(mix(1));
 
 
+-- Test an array type.
+create table arraybloom(x int, value int[], ts timestamp);
+select create_hypertable('arraybloom', 'x');
+
+insert into arraybloom
+select x, array[x],
+    '2021-01-01'::timestamp + (interval '1 hour') * x
+from generate_series(1, 10000) x;
+
+create index on arraybloom(value);
+
+alter table arraybloom set (timescaledb.compress,
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x');
+select count(compress_chunk(x)) from show_chunks('arraybloom') x;
+vacuum full analyze arraybloom;
+
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from arraybloom where value = array[7248::int];
+
+select count(*) from arraybloom where value = array[7248::int];
+
+
 -- Cleanup
 drop table bloom;
 drop table corner;
 drop table badtable;
 drop table byref;
-
+drop table arraybloom;
 
