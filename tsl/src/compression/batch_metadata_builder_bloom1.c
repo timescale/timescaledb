@@ -400,8 +400,19 @@ bloom1_update_val(void *builder_, Datum needle)
  */
 typedef struct Bloom1ContainsContext
 {
-	Detoaster detoaster;
 	MemoryContextCallback memoryContextCallback;
+	Detoaster detoaster;
+
+	PGFunction hash_function_pointer;
+	FmgrInfo *hash_function_finfo;
+
+	Oid element_type;
+	int16 element_typlen;
+	bool element_typbyval;
+	char element_typalign;
+
+	/* This is per-row, here for convenience. */
+	struct varlena *current_row_bloom;
 } Bloom1ContainsContext;
 
 static void
@@ -411,19 +422,21 @@ bloom1_contains_context_reset_callback(void *arg)
 	detoaster_close(&context->detoaster);
 }
 
-static struct varlena*
-bloom1_contains_detoast_filter(FunctionCallInfo fcinfo)
+static Bloom1ContainsContext *
+bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 {
 	Bloom1ContainsContext *context = (Bloom1ContainsContext *) fcinfo->flinfo->fn_extra;
 	if (context == NULL)
 	{
+		Ensure(PG_NARGS() == 2, "bloom1_contains called with wrong number of arguments");
+
 		context = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(*context));
-		*context = (Bloom1ContainsContext)
-		{
-			.memoryContextCallback = (MemoryContextCallback) {
-				.func = bloom1_contains_context_reset_callback,
-				.arg = context,
-			},
+		*context = (Bloom1ContainsContext){
+			.memoryContextCallback =
+				(MemoryContextCallback){
+					.func = bloom1_contains_context_reset_callback,
+					.arg = context,
+				},
 		};
 
 		detoaster_init(&context->detoaster, fcinfo->flinfo->fn_mcxt);
@@ -431,15 +444,51 @@ bloom1_contains_detoast_filter(FunctionCallInfo fcinfo)
 		MemoryContextRegisterResetCallback(fcinfo->flinfo->fn_mcxt,
 										   &context->memoryContextCallback);
 
+		context->element_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+		if (use_element_type)
+		{
+			context->element_type = get_element_type(context->element_type);
+			Ensure(OidIsValid(context->element_type),
+				   "cannot determine array element type for bloom1_contains_any");
+		}
+
+		context->hash_function_pointer =
+			bloom1_get_hash_function(context->element_type, &context->hash_function_finfo);
+
+		/*
+		 * Technically this function is callable by user with arbitrary argument
+		 * that might not have an extended hash function, so report this error
+		 * gracefully.
+		 */
+		if (context->hash_function_pointer == NULL)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_EXCEPTION),
+					 errmsg("the argument type %s lacks an extended hash function",
+							format_type_be(context->element_type))));
+		}
+
+		get_typlenbyvalalign(context->element_type,
+							 &context->element_typlen,
+							 &context->element_typbyval,
+							 &context->element_typalign);
+
 		fcinfo->flinfo->fn_extra = context;
 	}
 
-	return detoaster_detoast_attr_copy(PG_GETARG_RAW_VARLENA_P(0),
-														&context->detoaster,
-														CurrentMemoryContext);
-}
+	if (PG_ARGISNULL(0))
+	{
+		context->current_row_bloom = NULL;
+	}
+	else
+	{
+		context->current_row_bloom = detoaster_detoast_attr_copy(PG_GETARG_RAW_VARLENA_P(0),
+																 &context->detoaster,
+																 CurrentMemoryContext);
+	}
 
-#define GETARG_FILTER() bloom1_contains_detoast_filter(fcinfo)
+	return context;
+}
 
 /*
  * Checks whether the given element can be present in the given bloom filter.
@@ -449,11 +498,15 @@ bloom1_contains_detoast_filter(FunctionCallInfo fcinfo)
 Datum
 bloom1_contains(PG_FUNCTION_ARGS)
 {
+	Bloom1ContainsContext *context =
+		bloom1_contains_context_prepare(fcinfo, /* use_element_type = */ false);
+
 	/*
 	 * This function is not strict, because if we don't have a bloom filter, this
 	 * means the condition can potentially be true.
 	 */
-	if (PG_ARGISNULL(0))
+	struct varlena *bloom = context->current_row_bloom;
+	if (bloom == NULL)
 	{
 		PG_RETURN_BOOL(true);
 	}
@@ -467,23 +520,9 @@ bloom1_contains(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(false);
 	}
 
-	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	FmgrInfo *finfo = NULL;
-	PGFunction fn = bloom1_get_hash_function(type_oid, &finfo);
 	/*
-	 * Technically this function is callable by user with arbitrary argument
-	 * that might not have an extended hash function, so report this error
-	 * gracefully.
+	 * Compute the bloom filter parameters.
 	 */
-	if (fn == NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_DATA_EXCEPTION),
-				 errmsg("the argument type %s lacks an extended hash function",
-						format_type_be(type_oid))));
-	}
-
-	struct varlena *bloom = GETARG_FILTER();
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
@@ -502,7 +541,8 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	Assert((word_mask >> num_word_bits) == 0);
 
 	Datum needle = PG_GETARG_DATUM(1);
-	const uint64 datum_hash_1 = calculate_hash(fn, finfo, needle);
+	const uint64 datum_hash_1 =
+		calculate_hash(context->hash_function_pointer, context->hash_function_finfo, needle);
 	const uint32 absolute_mask = num_bits - 1;
 	for (int i = 0; i < BLOOM1_BITS_PER_ELEMENT; i++)
 	{
@@ -527,11 +567,15 @@ bloom1_contains(PG_FUNCTION_ARGS)
 Datum
 bloom1_contains_any(PG_FUNCTION_ARGS)
 {
+	Bloom1ContainsContext *context =
+		bloom1_contains_context_prepare(fcinfo, /* use_element_type = */ true);
+
 	/*
 	 * This function is not strict, because if we don't have a bloom filter, this
 	 * means the condition can potentially be true.
 	 */
-	if (PG_ARGISNULL(0))
+	struct varlena *bloom = context->current_row_bloom;
+	if (bloom == NULL)
 	{
 		PG_RETURN_BOOL(true);
 	}
@@ -545,26 +589,17 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(false);
 	}
 
-	ArrayType *arr = PG_GETARG_ARRAYTYPE_P(1);
-
-	Oid elem_type = ARR_ELEMTYPE(arr);
-
-	FmgrInfo *finfo = NULL;
-	PGFunction hash_fn = bloom1_get_hash_function(elem_type, &finfo);
-	if (hash_fn == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_DATA_EXCEPTION),
-				 errmsg("type %s lacks an extended hash function", format_type_be(elem_type))));
-
-	int16 typlen;
-	bool typbyval;
-	char typalign;
-	get_typlenbyvalalign(elem_type, &typlen, &typbyval, &typalign);
-
 	int num_items;
 	Datum *items;
 	bool *nulls;
-	deconstruct_array(arr, elem_type, typlen, typbyval, typalign, &items, &nulls, &num_items);
+	deconstruct_array(PG_GETARG_ARRAYTYPE_P(1),
+					  context->element_type,
+					  context->element_typlen,
+					  context->element_typbyval,
+					  context->element_typalign,
+					  &items,
+					  &nulls,
+					  &num_items);
 
 	if (num_items == 0)
 	{
@@ -582,6 +617,9 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 #else
 	uint64 *item_base_hashes = palloc(sizeof(uint64) * num_items);
 #endif
+
+	FmgrInfo *finfo = context->hash_function_finfo;
+	PGFunction hash_fn = context->hash_function_pointer;
 
 	int valid = 0;
 	for (int i = 0; i < num_items; i++)
@@ -611,9 +649,8 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	sort_hashes(item_base_hashes, valid);
 
 	/*
-	 * Unpack the bloom filter argument.
+	 * Get the bloom filter parameters.
 	 */
-	struct varlena *bloom = GETARG_FILTER();
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
