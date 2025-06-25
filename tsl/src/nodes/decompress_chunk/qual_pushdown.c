@@ -600,6 +600,27 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			context->can_pushdown = false;
 			return orig_node;
 		}
+		case T_ScalarArrayOpExpr:
+		{
+			/*
+			 * It can be possible to push down the SAOP as is, if it references
+			 * only the segmentby columns. Check this case first.
+			 */
+			QualPushdownContext tmp_context = *context;
+			void *pushed_down =
+				expression_tree_mutator((Node *) orig_node, qual_pushdown_mutator, &tmp_context);
+			if (tmp_context.can_pushdown)
+			{
+				context->needs_recheck |= tmp_context.needs_recheck;
+				return pushed_down;
+			}
+
+			/*
+			 * No other ways to push it down, so consider it failed.
+			 */
+			context->can_pushdown = false;
+			return orig_node;
+		}
 		/*
 		 * These nodes do not influence the pushdown by themselves, so we
 		 * recurse.
