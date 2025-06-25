@@ -22,7 +22,7 @@ subtract_interval_from_now(Interval *lag, Oid time_dim_type)
 #ifdef TS_DEBUG
 	Datum res = ts_get_mock_time_or_current_time();
 #else
-	Datum res = TimestampTzGetDatum(GetCurrentTimestamp());
+	Datum res = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
 #endif
 
 	switch (time_dim_type)
