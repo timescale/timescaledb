@@ -1,0 +1,1 @@
+Fixes: #8294 The "vectorized predicate called for a null value" error for WHERE conditions like `x = any(null::int[])`.

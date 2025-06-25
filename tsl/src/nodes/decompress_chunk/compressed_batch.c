@@ -559,10 +559,22 @@ compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
 
 		/*
 		 * The vectorizable predicates should be STRICT, so we shouldn't see null
-		 * constants here.
+		 * constants here. However, a null constant can still come from a scalar
+		 * array expression like x = any(null::int[]). Such a predicate fails
+		 * for all rows.
 		 */
 		Const *constnode = castNode(Const, lsecond(args));
-		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
+		Ensure(saop != NULL || !constnode->constisnull,
+			   "vectorized predicate called for a null value");
+		if (constnode->constisnull)
+		{
+			const size_t n_batch_result_words = (vqstate->num_results + 63) / 64;
+			for (size_t i = 0; i < n_batch_result_words; i++)
+			{
+				result[i] = 0;
+			}
+			return;
+		}
 
 		/*
 		 * If the data is dictionary-encoded, we are going to compute the
