@@ -203,6 +203,11 @@ select * from corner where c = 'test'
 explain (costs off)
 select * from corner where c > s;
 
+-- Scalar array operation
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = any(array['short', 'nonexistent'])
+;
+
 
 -- Test a bad hash function.
 create type badint;

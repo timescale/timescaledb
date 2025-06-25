@@ -562,14 +562,14 @@ select * from saop, arrays where with_bloom = any(a);
 
 -- Array parameter of prepared statements.
 prepare array_param as select * from saop where with_bloom = any($1);
+set timescaledb.enable_chunk_append to off;
 -- Generic plans.
 set plan_cache_mode = force_generic_plan;
 explain (analyze, costs off, timing off, summary off)
 execute array_param(array['1', '10']);
                                              QUERY PLAN                                              
 -----------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on saop (actual rows=270 loops=1)
-   Chunks excluded during startup: 0
+ Append (actual rows=270 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=135 loops=1)
          Vectorized Filter: (with_bloom = ANY ($1))
          Rows Removed by Filter: 47604
@@ -582,22 +582,13 @@ execute array_param(array['1', '10']);
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56 loops=1)
                Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
                Rows Removed by Filter: 13
-(14 rows)
+(13 rows)
 
 explain (analyze, costs off, timing off, summary off)
 execute array_param(array[]::text[]);
-                        QUERY PLAN                         
------------------------------------------------------------
- Custom Scan (ChunkAppend) on saop (actual rows=0 loops=1)
-   Chunks excluded during startup: 2
-(2 rows)
-
-explain (analyze, costs off, timing off, summary off)
-execute array_param(null::text[]);
                                              QUERY PLAN                                              
 -----------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on saop (actual rows=0 loops=1)
-   Chunks excluded during startup: 0
+ Append (actual rows=0 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=1)
          Vectorized Filter: (with_bloom = ANY ($1))
          ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0 loops=1)
@@ -608,7 +599,24 @@ execute array_param(null::text[]);
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0 loops=1)
                Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
                Rows Removed by Filter: 69
-(12 rows)
+(11 rows)
+
+explain (analyze, costs off, timing off, summary off)
+execute array_param(null::text[]);
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Append (actual rows=0 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (with_bloom = ANY ($1))
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
+               Rows Removed by Filter: 69
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (with_bloom = ANY ($1))
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
+               Rows Removed by Filter: 69
+(11 rows)
 
 -- Custom plans.
 set plan_cache_mode = force_custom_plan;
@@ -656,3 +664,4 @@ execute array_param(null::text[]);
                Rows Removed by Filter: 69
 (11 rows)
 
+reset timescaledb.enable_chunk_append;

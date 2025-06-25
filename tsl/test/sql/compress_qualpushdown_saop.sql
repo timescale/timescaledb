@@ -137,6 +137,7 @@ select * from saop, arrays where with_bloom = any(a);
 
 -- Array parameter of prepared statements.
 prepare array_param as select * from saop where with_bloom = any($1);
+set timescaledb.enable_chunk_append to off;
 
 -- Generic plans.
 set plan_cache_mode = force_generic_plan;
@@ -161,3 +162,5 @@ execute array_param(array[]::text[]);
 
 explain (analyze, costs off, timing off, summary off)
 execute array_param(null::text[]);
+
+reset timescaledb.enable_chunk_append;

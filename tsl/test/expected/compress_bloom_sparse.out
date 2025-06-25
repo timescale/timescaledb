@@ -491,6 +491,24 @@ select * from corner where c > s;
    ->  Seq Scan on compress_hyper_4_4_chunk
 (3 rows)
 
+-- Scalar array operation
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = any(array['short', 'nonexistent'])
+;
+                                                                                                                                  QUERY PLAN                                                                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1 loops=1)
+   Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
+   Vectorized Filter: (_hyper_3_3_chunk.c = ANY ('{short,nonexistent}'::text[]))
+   Rows Removed by Filter: 1
+   Batches Removed by Filter: 1
+   Bulk Decompression: true
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=2 loops=1)
+         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
+         Filter: _timescaledb_functions.bloom1_contains_any(compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, '{short,nonexistent}'::text[])
+         Rows Removed by Filter: 2
+(10 rows)
+
 -- Test a bad hash function.
 create type badint;
 create or replace function badintin(cstring) returns badint
