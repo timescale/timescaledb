@@ -32,7 +32,7 @@ typedef struct QualPushdownContext
 	CompressionSettings *settings;
 } QualPushdownContext;
 
-static Node *modify_expression(Node *node, QualPushdownContext *context);
+static Expr *qual_pushdown_mutator(Expr *node, QualPushdownContext *context);
 
 static List *
 deconstruct_array_const(Const *array_const)
@@ -109,7 +109,7 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 
 		context.can_pushdown = true;
 		context.needs_recheck = false;
-		expr = (Expr *) modify_expression((Node *) ri->clause, &context);
+		expr = qual_pushdown_mutator(ri->clause, &context);
 
 		if (context.can_pushdown)
 		{
@@ -168,21 +168,6 @@ make_segment_meta_opexpr(QualPushdownContext *context, Oid opno, AttrNumber meta
 									uncompressed_var->varcollid);
 }
 
-static Expr *
-get_pushdownsafe_expr(const QualPushdownContext *input_context, Expr *input)
-{
-	/* do not mess up the input_context, so create a new one */
-	QualPushdownContext test_context;
-	Expr *expr;
-
-	memcpy(&test_context, input_context, sizeof(test_context));
-	test_context.can_pushdown = true;
-	expr = (Expr *) modify_expression((Node *) input, &test_context);
-	if (test_context.can_pushdown)
-		return expr;
-	return NULL;
-}
-
 static void
 expr_fetch_minmax_metadata(QualPushdownContext *context, Expr *expr, AttrNumber *min_attno,
 						   AttrNumber *max_attno)
@@ -218,18 +203,16 @@ expr_fetch_minmax_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 												  "max");
 }
 
-static Expr *
-pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_args, Oid op_oid,
-									Oid op_collation)
+static void *
+pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_opexpr)
 {
 	Expr *leftop, *rightop;
 	TypeCacheEntry *tce;
 	int strategy;
 	Oid expr_type_id;
 
-	if (list_length(expr_args) != 2)
-		return NULL;
-
+	List *expr_args = orig_opexpr->args;
+	Assert(list_length(expr_args) == 2);
 	leftop = linitial(expr_args);
 	rightop = lsecond(expr_args);
 
@@ -239,6 +222,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 		rightop = ((RelabelType *) rightop)->arg;
 
 	/* Find the side that has var with segment meta set expr to the other side */
+	Oid op_oid = orig_opexpr->opno;
 	AttrNumber min_attno;
 	AttrNumber max_attno;
 	expr_fetch_minmax_metadata(context, leftop, &min_attno, &max_attno);
@@ -256,40 +240,48 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
 	{
 		/* No metadata for either operand. */
-		return NULL;
+		context->can_pushdown = false;
+		return orig_opexpr;
 	}
 
 	Var *var_with_segment_meta = castNode(Var, leftop);
-	Expr *expr = rightop;
 
 	/* May be able to allow non-strict operations as well.
 	 * Next steps: Think through edge cases, either allow and write tests or figure out why we must
 	 * block strict operations
 	 */
 	if (!OidIsValid(op_oid) || !op_strict(op_oid))
-		return NULL;
+	{
+		context->can_pushdown = false;
+		return orig_opexpr;
+	}
 
 	/* If the collation to be used by the OP doesn't match the column's collation do not push down
 	 * as the materialized min/max value do not match the semantics of what we need here */
+	Oid op_collation = orig_opexpr->inputcollid;
 	if (var_with_segment_meta->varcollid != op_collation)
-		return NULL;
+	{
+		context->can_pushdown = false;
+		return orig_opexpr;
+	}
 
 	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_BTREE_OPFAMILY);
 
 	strategy = get_op_opfamily_strategy(op_oid, tce->btree_opf);
 	if (strategy == InvalidStrategy)
-		return NULL;
-
-	Expr *new_expr = get_pushdownsafe_expr(context, expr);
-
-	if (new_expr == NULL)
 	{
-		return NULL;
+		context->can_pushdown = false;
+		return orig_opexpr;
 	}
 
-	expr = new_expr;
+	Expr *pushed_down_rightop = qual_pushdown_mutator(rightop, context);
+	if (!context->can_pushdown)
+	{
+		return orig_opexpr;
+	}
+	Assert(pushed_down_rightop != NULL);
 
-	expr_type_id = exprType((Node *) expr);
+	expr_type_id = exprType((Node *) pushed_down_rightop);
 
 	switch (strategy)
 	{
@@ -306,20 +298,23 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 											  BTGreaterEqualStrategyNumber);
 
 			if (!OidIsValid(opno_le) || !OidIsValid(opno_ge))
-				return NULL;
+			{
+				context->can_pushdown = false;
+				return orig_opexpr;
+			}
 
 			return make_andclause(
 				list_make2(make_segment_meta_opexpr(context,
 													opno_le,
 													min_attno,
 													var_with_segment_meta,
-													expr,
+													pushed_down_rightop,
 													BTLessEqualStrategyNumber),
 						   make_segment_meta_opexpr(context,
 													opno_ge,
 													max_attno,
 													var_with_segment_meta,
-													expr,
+													pushed_down_rightop,
 													BTGreaterEqualStrategyNumber)));
 		}
 		case BTLessStrategyNumber:
@@ -330,13 +325,16 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 					get_opfamily_member(tce->btree_opf, tce->type_id, expr_type_id, strategy);
 
 				if (!OidIsValid(opno))
-					return NULL;
+				{
+					context->can_pushdown = false;
+					return orig_opexpr;
+				}
 
 				return (Expr *) make_segment_meta_opexpr(context,
 														 opno,
 														 min_attno,
 														 var_with_segment_meta,
-														 expr,
+														 pushed_down_rightop,
 														 strategy);
 			}
 
@@ -348,17 +346,21 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 					get_opfamily_member(tce->btree_opf, tce->type_id, expr_type_id, strategy);
 
 				if (!OidIsValid(opno))
-					return NULL;
+				{
+					context->can_pushdown = false;
+					return orig_opexpr;
+				}
 
 				return (Expr *) make_segment_meta_opexpr(context,
 														 opno,
 														 max_attno,
 														 var_with_segment_meta,
-														 expr,
+														 pushed_down_rightop,
 														 strategy);
 			}
 		default:
-			return NULL;
+			context->can_pushdown = false;
+			return orig_opexpr;
 	}
 }
 
@@ -390,18 +392,15 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 													 "bloom1");
 }
 
-static Expr *
-pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args, Oid op_oid,
-								   Oid op_collation)
+static void *
+pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_opexpr)
 {
 	Expr *original_leftop;
 	Expr *original_rightop;
 	TypeCacheEntry *tce;
 	int strategy;
 
-	if (list_length(expr_args) != 2)
-		return NULL;
-
+	List *expr_args = orig_opexpr->args;
 	original_leftop = linitial(expr_args);
 	original_rightop = lsecond(expr_args);
 
@@ -411,6 +410,7 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 		original_rightop = ((RelabelType *) original_rightop)->arg;
 
 	/* Find the side that has var with segment meta set expr to the other side */
+	Oid op_oid = orig_opexpr->opno;
 	AttrNumber bloom1_attno = InvalidAttrNumber;
 	expr_fetch_bloom1_metadata(context, original_leftop, &bloom1_attno);
 	if (bloom1_attno == InvalidAttrNumber)
@@ -427,7 +427,8 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	if (bloom1_attno == InvalidAttrNumber)
 	{
 		/* No metadata for either operand. */
-		return NULL;
+		context->can_pushdown = false;
+		return orig_opexpr;
 	}
 
 	Var *var_with_segment_meta = castNode(Var, original_leftop);
@@ -436,9 +437,11 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	 * Play it safe and don't push down if the operator collation doesn't match
 	 * the column collation.
 	 */
+	Oid op_collation = orig_opexpr->inputcollid;
 	if (var_with_segment_meta->varcollid != op_collation)
 	{
-		return NULL;
+		context->can_pushdown = false;
+		return orig_opexpr;
 	}
 
 	/*
@@ -446,7 +449,8 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	 */
 	if (OidIsValid(op_collation) && !get_collation_isdeterministic(op_collation))
 	{
-		return NULL;
+		context->can_pushdown = false;
+		return orig_opexpr;
 	}
 
 	/*
@@ -456,7 +460,8 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
 	if (strategy != HTEqualStrategyNumber)
 	{
-		return NULL;
+		context->can_pushdown = false;
+		return orig_opexpr;
 	}
 
 	/*
@@ -468,10 +473,10 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 	 * Check if the righthand expression is safe to push down.
 	 * functions.
 	 */
-	Expr *pushed_down_rightop = get_pushdownsafe_expr(context, original_rightop);
-	if (pushed_down_rightop == NULL)
+	Expr *pushed_down_rightop = qual_pushdown_mutator(original_rightop, context);
+	if (!context->can_pushdown)
 	{
-		return NULL;
+		return orig_opexpr;
 	}
 
 	/*
@@ -498,17 +503,29 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, List *expr_args
 								 COERCE_EXPLICIT_CALL);
 }
 
-static Expr *
-pushdown_op_to_segment_meta_bloom1_saop(QualPushdownContext *context, List *expr_args, Oid op_oid,
-										Oid op_collation)
+/*
+ * Try to transform x = any(array[]) into bloom1_contains_any(bloom_x, array[]).
+ */
+static void *
+pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 {
 	Expr *original_leftop;
 	Expr *original_rightop;
 	TypeCacheEntry *tce;
 	int strategy;
 
+	if (!orig_saop->useOr)
+	{
+		context->can_pushdown = false;
+		return orig_saop;
+	}
+
+	List *expr_args = orig_saop->args;
 	if (list_length(expr_args) != 2)
-		return NULL;
+	{
+		context->can_pushdown = false;
+		return orig_saop;
+	}
 
 	original_leftop = linitial(expr_args);
 	original_rightop = lsecond(expr_args);
@@ -526,7 +543,8 @@ pushdown_op_to_segment_meta_bloom1_saop(QualPushdownContext *context, List *expr
 	if (bloom1_attno == InvalidAttrNumber)
 	{
 		/* No metadata for left operand. */
-		return NULL;
+		context->can_pushdown = false;
+		return orig_saop;
 	}
 
 	Var *var_with_segment_meta = castNode(Var, original_leftop);
@@ -535,9 +553,11 @@ pushdown_op_to_segment_meta_bloom1_saop(QualPushdownContext *context, List *expr
 	 * Play it safe and don't push down if the operator collation doesn't match
 	 * the column collation.
 	 */
+	Oid op_collation = orig_saop->inputcollid;
 	if (var_with_segment_meta->varcollid != op_collation)
 	{
-		return NULL;
+		context->can_pushdown = false;
+		return orig_saop;
 	}
 
 	/*
@@ -545,17 +565,20 @@ pushdown_op_to_segment_meta_bloom1_saop(QualPushdownContext *context, List *expr
 	 */
 	if (OidIsValid(op_collation) && !get_collation_isdeterministic(op_collation))
 	{
-		return NULL;
+		context->can_pushdown = false;
+		return orig_saop;
 	}
 
 	/*
 	 * We only support hashable equality operators.
 	 */
+	Oid op_oid = orig_saop->opno;
 	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
 	strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
 	if (strategy != HTEqualStrategyNumber)
 	{
-		return NULL;
+		context->can_pushdown = false;
+		return orig_saop;
 	}
 
 	/*
@@ -566,10 +589,10 @@ pushdown_op_to_segment_meta_bloom1_saop(QualPushdownContext *context, List *expr
 	/*
 	 * Check if the righthand expression is safe to push down.
 	 */
-	Expr *pushed_down_rightop = get_pushdownsafe_expr(context, original_rightop);
-	if (pushed_down_rightop == NULL)
+	Expr *pushed_down_rightop = qual_pushdown_mutator(original_rightop, context);
+	if (!context->can_pushdown)
 	{
-		return NULL;
+		return orig_saop;
 	}
 
 	/*
@@ -588,63 +611,197 @@ pushdown_op_to_segment_meta_bloom1_saop(QualPushdownContext *context, List *expr
 							  /* argtypes = */ (void *) -1,
 							  /* missing_ok = */ false);
 
-	return (Expr *) makeFuncExpr(func,
-								 BOOLOID,
-								 list_make2(bloom_var, pushed_down_rightop),
-								 /* funccollid = */ InvalidOid,
-								 /* inputcollid = */ InvalidOid,
-								 COERCE_EXPLICIT_CALL);
+	return makeFuncExpr(func,
+						BOOLOID,
+						list_make2(bloom_var, pushed_down_rightop),
+						/* funccollid = */ InvalidOid,
+						/* inputcollid = */ InvalidOid,
+						COERCE_EXPLICIT_CALL);
 }
 
-static Node *
-modify_expression(Node *node, QualPushdownContext *context)
+static Expr *
+pushdown_saop_boolexpr(QualPushdownContext *context, ScalarArrayOpExpr *saop)
 {
-	if (node == NULL)
-		return NULL;
+	/*
+	 * Generic code for scalar array operation pushdown that transforms
+	 * them into a series of OR/AND clauses.
+	 */
+	OpExpr *opexpr = makeNode(OpExpr);
+	opexpr->opno = saop->opno;
+	opexpr->opfuncid = saop->opfuncid;
+	opexpr->opresulttype = BOOLOID;
+	opexpr->inputcollid = saop->inputcollid;
 
-	switch (nodeTag(node))
+	void *scalar_arg = linitial(saop->args);
+	void *array_arg = list_nth(saop->args, 1);
+	List *array_elements;
+	if (IsA(array_arg, Const) && !castNode(Const, array_arg)->constisnull)
 	{
+		array_elements = deconstruct_array_const(castNode(Const, array_arg));
+	}
+	else if (IsA(array_arg, ArrayExpr))
+	{
+		array_elements = castNode(ArrayExpr, array_arg)->elements;
+	}
+	else
+	{
+		/*
+		 * We can encounter an array-type Param here, and maybe something else.
+		 * This function has to deconstruct the array into elements now, so
+		 * these types of array argument are not suitable.
+		 */
+		context->can_pushdown = false;
+		return (Expr *) saop;
+	}
+
+	List *transformed_ops = NIL;
+	ListCell *lc;
+	foreach (lc, array_elements)
+	{
+		opexpr->args = list_make2(scalar_arg, lfirst(lc));
+		void *transformed = qual_pushdown_mutator((Expr *) opexpr, context);
+		if (!context->can_pushdown)
+		{
+			return (Expr *) saop;
+		}
+		transformed_ops = lappend(transformed_ops, transformed);
+	}
+
+	if (saop->useOr)
+	{
+		return make_orclause(transformed_ops);
+	}
+	else
+	{
+		return make_andclause(transformed_ops);
+	}
+}
+
+/*
+ * Push down the given expression node.
+ *
+ * This is used as a mutator for expression_tree_mutator().
+ *
+ * We return the original node if we cannot push it down, to be consistent with
+ * the expression_tree_mutator behavior. The caller must check
+ * context.can_pushdown.
+ */
+static Expr *
+qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
+{
+	if (orig_node == NULL)
+	{
+		/*
+		 * An expression node can have a NULL field and the mutator will be
+		 * still called for it, so we have to handle this.
+		 */
+		return NULL;
+	}
+
+	if (!context->can_pushdown)
+	{
+		/*
+		 * Stop early if we already know we can't push down this filter.
+		 */
+		return orig_node;
+	}
+
+	switch (nodeTag(orig_node))
+	{
+		case T_Var:
+		{
+			Var *var = castNode(Var, orig_node);
+			Assert((Index) var->varno == context->chunk_rel->relid);
+
+			if (var->varattno <= 0)
+			{
+				/* Can't do this for system columns such as whole-row var. */
+				context->can_pushdown = false;
+				return orig_node;
+			}
+
+			char *attname = get_attname(context->chunk_rte->relid, var->varattno, false);
+			/* we can only push down quals for segmentby columns */
+			if (!ts_array_is_member(context->settings->fd.segmentby, attname))
+			{
+				context->can_pushdown = false;
+				return orig_node;
+			}
+
+			var = copyObject(var);
+			var->varno = context->compressed_rel->relid;
+			var->varattno = get_attnum(context->compressed_rte->relid, attname);
+
+			return (Expr *) var;
+		}
 		case T_OpExpr:
 		{
-			OpExpr *opexpr = (OpExpr *) node;
-			if (opexpr->opresulttype == BOOLOID)
+			OpExpr *opexpr = (OpExpr *) orig_node;
+
+			/*
+			 * It might be possible to push down the OpExpr as is, if it
+			 * references only the segmentby columns. Check this case first.
+			 */
+			QualPushdownContext tmp_context = *context;
+			void *pushed_down =
+				expression_tree_mutator((Node *) orig_node, qual_pushdown_mutator, &tmp_context);
+			if (tmp_context.can_pushdown)
 			{
-				Expr *pd = NULL;
+				context->needs_recheck |= tmp_context.needs_recheck;
+				return pushed_down;
+			}
 
-				if (ts_guc_enable_sparse_index_bloom)
-				{
-					/*
-					 * Try bloom1 sparse index.
-					 */
-					pd = pushdown_op_to_segment_meta_bloom1(context,
-															opexpr->args,
-															opexpr->opno,
-															opexpr->inputcollid);
-				}
-
-				if (pd != NULL)
-				{
-					context->needs_recheck = true;
-					/* pd is on the compressed table so do not mutate further */
-					return (Node *) pd;
-				}
-
+			if (opexpr->opresulttype != BOOLOID)
+			{
 				/*
-				 * Try minmax sparse index.
+				 * The following pushdown options only support operators that
+				 * return bool.
 				 */
-				pd = pushdown_op_to_segment_meta_min_max(context,
-														 opexpr->args,
-														 opexpr->opno,
-														 opexpr->inputcollid);
-				if (pd != NULL)
+				context->can_pushdown = false;
+				return orig_node;
+			}
+
+			if (list_length(opexpr->args) != 2)
+			{
+				/*
+				 * The following pushdown options only support operators with
+				 * two operands.
+				 */
+				context->can_pushdown = false;
+				return orig_node;
+			}
+
+			/*
+			 * Try bloom1 sparse index.
+			 */
+			if (ts_guc_enable_sparse_index_bloom)
+			{
+				tmp_context = *context;
+				pushed_down = pushdown_op_to_segment_meta_bloom1(&tmp_context, opexpr);
+				if (tmp_context.can_pushdown)
 				{
 					context->needs_recheck = true;
-					/* pd is on the compressed table so do not mutate further */
-					return (Node *) pd;
+					return pushed_down;
 				}
 			}
-			/* opexpr will still be checked for segment by columns */
-			break;
+
+			/*
+			 * Try minmax sparse index.
+			 */
+			tmp_context = *context;
+			pushed_down = pushdown_op_to_segment_meta_min_max(&tmp_context, opexpr);
+			if (tmp_context.can_pushdown)
+			{
+				context->needs_recheck = true;
+				/* pd is on the compressed table so do not mutate further */
+				return pushed_down;
+			}
+
+			/*
+			 * No other options to push down the OpExpr.
+			 */
+			context->can_pushdown = false;
+			return orig_node;
 		}
 		case T_ScalarArrayOpExpr:
 		{
@@ -653,8 +810,9 @@ modify_expression(Node *node, QualPushdownContext *context)
 			 * only the segmentby columns. Check this case first.
 			 */
 			QualPushdownContext tmp_context = *context;
-			void *pushed_down = expression_tree_mutator(node, modify_expression, &tmp_context);
-			if (pushed_down != NULL && tmp_context.can_pushdown)
+			void *pushed_down =
+				expression_tree_mutator((Node *) orig_node, qual_pushdown_mutator, &tmp_context);
+			if (tmp_context.can_pushdown)
 			{
 				context->needs_recheck |= tmp_context.needs_recheck;
 				return pushed_down;
@@ -665,73 +823,39 @@ modify_expression(Node *node, QualPushdownContext *context)
 			 * bloom1_contains_any(bloom_x, array[]).
 			 */
 			tmp_context = *context;
-			ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, node);
-			if (saop->useOr)
+			ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, orig_node);
+			pushed_down = pushdown_saop_bloom1(&tmp_context, saop);
+			if (tmp_context.can_pushdown)
 			{
-				void *pushed_down = pushdown_op_to_segment_meta_bloom1_saop(&tmp_context,
-																			saop->args,
-																			saop->opno,
-																			saop->inputcollid);
-
-				if (pushed_down != NULL && tmp_context.can_pushdown)
-				{
-					context->needs_recheck = true;
-					return pushed_down;
-				}
+				context->needs_recheck = true;
+				return pushed_down;
 			}
 
 			/*
 			 * Generic code for scalar array operation pushdown that transforms
 			 * them into a series of OR/AND clauses.
 			 */
-			OpExpr *opexpr = makeNode(OpExpr);
-			opexpr->opno = saop->opno;
-			opexpr->opfuncid = saop->opfuncid;
-			opexpr->opresulttype = BOOLOID;
-			opexpr->inputcollid = saop->inputcollid;
-			// ArrayExpr *array_expr = castNode(ArrayExpr, list_nth(saop->args, 1));
-
-			void *scalar_arg = linitial(saop->args);
-			void *array_arg = list_nth(saop->args, 1);
-			List *array_elements;
-			if (IsA(array_arg, Const) && !castNode(Const, array_arg)->constisnull)
+			tmp_context = *context;
+			pushed_down = pushdown_saop_boolexpr(&tmp_context, saop);
+			if (tmp_context.can_pushdown)
 			{
-				array_elements = deconstruct_array_const(castNode(Const, array_arg));
-			}
-			else if (IsA(array_arg, ArrayExpr))
-			{
-				array_elements = castNode(ArrayExpr, array_arg)->elements;
-			}
-			else
-			{
-				/* Not sure anything else is allowed, but just skip it. */
-				break;
+				context->needs_recheck = true;
+				return pushed_down;
 			}
 
-			List *transformed_ops = NIL;
-			ListCell *lc;
-			foreach (lc, array_elements)
-			{
-				opexpr->args = list_make2(scalar_arg, lfirst(lc));
-				void *transformed = modify_expression((Node *) opexpr, context);
-				if (transformed == NULL)
-				{
-					break;
-				}
-				transformed_ops = lappend(transformed_ops, transformed);
-			}
-
-			if (saop->useOr)
-			{
-				return (Node *) make_orclause(transformed_ops);
-			}
-			else
-			{
-				return (Node *) make_andclause(transformed_ops);
-			}
-
-			break;
+			/*
+			 * No other ways to push it down, so consider it failed.
+			 */
+			context->can_pushdown = false;
+			return orig_node;
 		}
+		case T_FuncExpr:
+			/*
+			 * The caller should have checked that we don't have volatile
+			 * functions in this qual.
+			 */
+			Assert(!contain_volatile_functions((Node *) orig_node));
+			__attribute__((fallthrough));
 		case T_BoolExpr:
 		case T_CoerceViaIO:
 		case T_RelabelType:
@@ -743,45 +867,21 @@ modify_expression(Node *node, QualPushdownContext *context)
 		case T_CaseExpr:
 		case T_CaseWhen:
 		case T_ArrayExpr:
-			break;
-		case T_FuncExpr:
-			/*
-			 * The caller should have checked that we don't have volatile
-			 * functions in this qual.
-			 */
-			Assert(!contain_volatile_functions(node));
-			break;
-		case T_Var:
 		{
-			Var *var = castNode(Var, node);
-			Assert((Index) var->varno == context->chunk_rel->relid);
-
-			if (var->varattno <= 0)
-			{
-				/* Can't do this for system columns such as whole-row var. */
-				context->can_pushdown = false;
-				return NULL;
-			}
-
-			char *attname = get_attname(context->chunk_rte->relid, var->varattno, false);
-			/* we can only push down quals for segmentby columns */
-			if (!ts_array_is_member(context->settings->fd.segmentby, attname))
-			{
-				context->can_pushdown = false;
-				return NULL;
-			}
-
-			var = copyObject(var);
-			var->varno = context->compressed_rel->relid;
-			var->varattno = get_attnum(context->compressed_rte->relid, attname);
-
-			return (Node *) var;
+			/*
+			 * These nodes do not prevent the pushdown by themselves, so we
+			 * recurse.
+			 */
+			Node *pushed_down =
+				expression_tree_mutator((Node *) orig_node, qual_pushdown_mutator, context);
+			return (Expr *) pushed_down;
 		}
-		default:
-			context->can_pushdown = false;
-			return NULL;
-			break;
-	}
 
-	return expression_tree_mutator(node, modify_expression, context);
+		default:
+			/*
+			 * We don't know how to work with this node.
+			 */
+			context->can_pushdown = false;
+			return orig_node;
+	}
 }
