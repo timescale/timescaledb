@@ -394,6 +394,54 @@ bloom1_update_val(void *builder_, Datum needle)
 }
 
 /*
+ * We use a stateful detoaster to detoast the bloom filter arguments for the
+ * bloom1_contains() functions. It is initialized on first use and destroyed in
+ * the reset callback of the flinfo memory context (ExecutorState in practice).
+ */
+typedef struct Bloom1ContainsContext
+{
+	Detoaster detoaster;
+	MemoryContextCallback memoryContextCallback;
+} Bloom1ContainsContext;
+
+static void
+bloom1_contains_context_reset_callback(void *arg)
+{
+	Bloom1ContainsContext *context = (Bloom1ContainsContext *) arg;
+	detoaster_close(&context->detoaster);
+}
+
+static struct varlena*
+bloom1_contains_detoast_filter(FunctionCallInfo fcinfo)
+{
+	Bloom1ContainsContext *context = (Bloom1ContainsContext *) fcinfo->flinfo->fn_extra;
+	if (context == NULL)
+	{
+		context = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(*context));
+		*context = (Bloom1ContainsContext)
+		{
+			.memoryContextCallback = (MemoryContextCallback) {
+				.func = bloom1_contains_context_reset_callback,
+				.arg = context,
+			},
+		};
+
+		detoaster_init(&context->detoaster, fcinfo->flinfo->fn_mcxt);
+
+		MemoryContextRegisterResetCallback(fcinfo->flinfo->fn_mcxt,
+										   &context->memoryContextCallback);
+
+		fcinfo->flinfo->fn_extra = context;
+	}
+
+	return detoaster_detoast_attr_copy(PG_GETARG_RAW_VARLENA_P(0),
+														&context->detoaster,
+														CurrentMemoryContext);
+}
+
+#define GETARG_FILTER() bloom1_contains_detoast_filter(fcinfo)
+
+/*
  * Checks whether the given element can be present in the given bloom filter.
  * This is what we use in predicate pushdown. The SQL signature is:
  * _timescaledb_functions.bloom1_contains(bloom1, anyelement)
@@ -435,7 +483,7 @@ bloom1_contains(PG_FUNCTION_ARGS)
 						format_type_be(type_oid))));
 	}
 
-	struct varlena *bloom = PG_GETARG_VARLENA_P(0);
+	struct varlena *bloom = GETARG_FILTER();
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
@@ -565,7 +613,7 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	/*
 	 * Unpack the bloom filter argument.
 	 */
-	struct varlena *bloom = PG_GETARG_VARLENA_P(0);
+	struct varlena *bloom = GETARG_FILTER();
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
