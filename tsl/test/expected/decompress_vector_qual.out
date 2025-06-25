@@ -595,6 +595,30 @@ select count(*) from vectorqual where metric2 = all(array[22, null, 32]) /* all 
      0
 (1 row)
 
+select count(*) from vectorqual where metric2 = all(array[]::int[]);
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric2 = any(array[]::int[]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = all(null::int[]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = any(null::int[]);
+ count 
+-------
+     0
+(1 row)
+
 -- Check early exit.
 reset timescaledb.debug_require_vector_qual;
 create table singlebatch(like vectorqual);
