@@ -270,14 +270,27 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 			Assert(buffer->tupdesc->tdrefcount == -1);
 			break;
 		case TS_CIM_COMPRESSION:
-			buffer->compressor = ts_cm_functions->compressor_init(cis->rel, &buffer->bulk_writer);
-			if (!ts_guc_enable_compressed_copy_presorted)
+		{
+			bool sort = ts_guc_enable_direct_compress_copy_sort_batches &&
+						!ts_guc_enable_direct_compress_copy_client_sorted;
+			buffer->compressor =
+				ts_cm_functions->compressor_init(cis->rel, &buffer->bulk_writer, sort);
+
+			/*
+			 * The sorting done in the compressor is only a local sort for the
+			 * currently ingested batch and will produce overlapping batches for
+			 * multiple independent insert streams. Therefore we still need to
+			 * mark the chunk as unordered until we adjust the rest of the code to
+			 * be able to deal with overlapping batches.
+			 */
+			if (!ts_guc_enable_direct_compress_copy_client_sorted)
 			{
 				Chunk *chunk = ts_chunk_get_by_id(cis->chunk_id, true);
 				if (!ts_chunk_is_unordered(chunk))
 					ts_chunk_set_unordered(chunk);
 			}
 			break;
+		}
 	}
 
 	return buffer;
@@ -963,7 +976,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	}
 	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) &&
 			 !ts_indexing_relation_has_primary_or_unique_index(ccstate->rel) &&
-			 ts_guc_enable_compressed_copy)
+			 ts_guc_enable_direct_compress_copy)
 	{
 		insertMethod = TS_CIM_COMPRESSION;
 		ccstate->ctr->create_compressed_chunk = true;

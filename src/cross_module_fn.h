@@ -144,7 +144,7 @@ typedef struct CrossModuleFunctions
 											   ItemPointer new_tid);
 
 	void (*compression_enable)(Hypertable *ht, WithClauseResult *with_clause_options);
-	RowCompressor *(*compressor_init)(Relation in_rel, BulkWriter **bulk_writer);
+	RowCompressor *(*compressor_init)(Relation in_rel, BulkWriter **bulk_writer, bool sort);
 	void (*compressor_add_slot)(RowCompressor *compressor, BulkWriter *bulk_writer,
 								TupleTableSlot *slot);
 	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);
