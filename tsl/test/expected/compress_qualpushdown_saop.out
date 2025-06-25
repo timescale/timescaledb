@@ -52,6 +52,21 @@ select * from saop where segmentby = any(array['1', '10']);
 (7 rows)
 
 explain (analyze, costs off, timing off, summary off)
+select * from saop where '1' = any(array[segmentby, segmentby]);
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Append (actual rows=4348 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2174 loops=1)
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3 loops=1)
+               Filter: ('1'::text = ANY (ARRAY[segmentby, segmentby]))
+               Rows Removed by Filter: 66
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=2174 loops=1)
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+               Filter: ('1'::text = ANY (ARRAY[segmentby, segmentby]))
+               Rows Removed by Filter: 66
+(9 rows)
+
+explain (analyze, costs off, timing off, summary off)
 select * from saop where with_minmax = any(array['1', '10']);
                                                                             QUERY PLAN                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------

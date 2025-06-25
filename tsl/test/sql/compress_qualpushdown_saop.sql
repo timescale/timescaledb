@@ -45,6 +45,9 @@ explain (analyze, costs off, timing off, summary off)
 select * from saop where segmentby = any(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
+select * from saop where '1' = any(array[segmentby, segmentby]);
+
+explain (analyze, costs off, timing off, summary off)
 select * from saop where with_minmax = any(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
