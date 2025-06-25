@@ -90,6 +90,37 @@ explain (analyze, costs off, timing off, summary off)
 select * from saop where segmentby = all(array[with_bloom, with_minmax]);
 
 
+-- Partial pushdown of AND scalar array operation.
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = all(array[with_minmax, with_minmax]);
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = all(array['1', with_minmax]);
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where segmentby = '1' and with_bloom = all(array['1', with_minmax]);
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where segmentby = '1' or with_bloom = all(array['1', with_minmax]);
+
+
+-- Partial pushdown with volatile functions.
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = any(array[stable_lower(segmentby), volatile_lower(segmentby)]);
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = stable_lower(segmentby) or with_bloom = volatile_lower(segmentby);
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = all(array[stable_lower(segmentby), volatile_lower(segmentby)]);
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where segmentby = '1' or with_bloom = all(array[stable_lower('1'), volatile_lower('1')]);
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where segmentby = '1' or (with_bloom = stable_lower('1') and with_bloom = volatile_lower('1'));
+
+
 -- Some joins.
 explain (analyze, costs off, timing off, summary off)
 with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)

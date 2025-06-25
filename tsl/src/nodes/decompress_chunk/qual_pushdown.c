@@ -32,7 +32,7 @@ typedef struct QualPushdownContext
 	CompressionSettings *settings;
 } QualPushdownContext;
 
-static Expr *qual_pushdown_mutator(Expr *node, QualPushdownContext *context);
+static Node *qual_pushdown_mutator(Node *node, QualPushdownContext *context);
 
 static List *
 deconstruct_array_const(Const *array_const)
@@ -98,18 +98,10 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 	foreach (lc, chunk_rel->baserestrictinfo)
 	{
 		RestrictInfo *ri = lfirst(lc);
-		Expr *expr;
-
-		/* pushdown is not safe for volatile expressions */
-		if (contain_volatile_functions((Node *) ri->clause))
-		{
-			decompress_clauses = lappend(decompress_clauses, ri);
-			continue;
-		}
 
 		context.can_pushdown = true;
 		context.needs_recheck = false;
-		expr = qual_pushdown_mutator(ri->clause, &context);
+		Node *pushed_down = qual_pushdown_mutator((Node *) ri->clause, &context);
 
 		if (context.can_pushdown)
 		{
@@ -120,13 +112,13 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 			 * allowed to have nested AND boolexprs. They break some functions like
 			 * generate_bitmap_or_paths().
 			 */
-			expr = (Expr *) eval_const_expressions(root, (Node *) expr);
+			pushed_down = eval_const_expressions(root, pushed_down);
 
-			if (IsA(expr, BoolExpr) && ((BoolExpr *) expr)->boolop == AND_EXPR)
+			if (IsA(pushed_down, BoolExpr) && castNode(BoolExpr, pushed_down)->boolop == AND_EXPR)
 			{
 				/* have to separate out and expr into different restrict infos */
 				ListCell *lc_and;
-				BoolExpr *bool_expr = (BoolExpr *) expr;
+				BoolExpr *bool_expr = castNode(BoolExpr, pushed_down);
 				foreach (lc_and, bool_expr->args)
 				{
 					compressed_rel->baserestrictinfo =
@@ -136,7 +128,8 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 			}
 			else
 				compressed_rel->baserestrictinfo =
-					lappend(compressed_rel->baserestrictinfo, make_simple_restrictinfo(root, expr));
+					lappend(compressed_rel->baserestrictinfo,
+							make_simple_restrictinfo(root, (Expr *) pushed_down));
 		}
 		/* We need to check the restriction clause on the decompress node if the clause can't be
 		 * pushed down or needs re-checking */
@@ -206,6 +199,11 @@ expr_fetch_minmax_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 static void *
 pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_opexpr)
 {
+	/*
+	 * This always requires rechecking the decompressed data.
+	 */
+	context->needs_recheck = true;
+
 	Expr *leftop, *rightop;
 	TypeCacheEntry *tce;
 	int strategy;
@@ -274,7 +272,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 		return orig_opexpr;
 	}
 
-	Expr *pushed_down_rightop = qual_pushdown_mutator(rightop, context);
+	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) rightop, context);
 	if (!context->can_pushdown)
 	{
 		return orig_opexpr;
@@ -395,6 +393,11 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 static void *
 pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_opexpr)
 {
+	/*
+	 * This always requires rechecking the decompressed data.
+	 */
+	context->needs_recheck = true;
+
 	Expr *original_leftop;
 	Expr *original_rightop;
 	TypeCacheEntry *tce;
@@ -473,7 +476,7 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 	 * Check if the righthand expression is safe to push down.
 	 * functions.
 	 */
-	Expr *pushed_down_rightop = qual_pushdown_mutator(original_rightop, context);
+	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) original_rightop, context);
 	if (!context->can_pushdown)
 	{
 		return orig_opexpr;
@@ -509,6 +512,11 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 static void *
 pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 {
+	/*
+	 * This always requires rechecking the decompressed data.
+	 */
+	context->needs_recheck = true;
+
 	Expr *original_leftop;
 	Expr *original_rightop;
 	TypeCacheEntry *tce;
@@ -589,7 +597,7 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 	/*
 	 * Check if the righthand expression is safe to push down.
 	 */
-	Expr *pushed_down_rightop = qual_pushdown_mutator(original_rightop, context);
+	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) original_rightop, context);
 	if (!context->can_pushdown)
 	{
 		return orig_saop;
@@ -619,19 +627,13 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 						COERCE_EXPLICIT_CALL);
 }
 
+/*
+ * Push down the scalar array operation by transforming it into a series of
+ * OR/AND clauses.
+ */
 static Expr *
 pushdown_saop_boolexpr(QualPushdownContext *context, ScalarArrayOpExpr *saop)
 {
-	/*
-	 * Generic code for scalar array operation pushdown that transforms
-	 * them into a series of OR/AND clauses.
-	 */
-	OpExpr *opexpr = makeNode(OpExpr);
-	opexpr->opno = saop->opno;
-	opexpr->opfuncid = saop->opfuncid;
-	opexpr->opresulttype = BOOLOID;
-	opexpr->inputcollid = saop->inputcollid;
-
 	void *scalar_arg = linitial(saop->args);
 	void *array_arg = list_nth(saop->args, 1);
 	List *array_elements;
@@ -654,27 +656,75 @@ pushdown_saop_boolexpr(QualPushdownContext *context, ScalarArrayOpExpr *saop)
 		return (Expr *) saop;
 	}
 
-	List *transformed_ops = NIL;
+	/*
+	 * This will be the operation on the scalar value and an individual array
+	 * element.
+	 */
+	OpExpr *opexpr = makeNode(OpExpr);
+	opexpr->opno = saop->opno;
+	opexpr->opfuncid = saop->opfuncid;
+	opexpr->opresulttype = BOOLOID;
+	opexpr->inputcollid = saop->inputcollid;
+
+	/*
+	 * Try to apply the above operation for each array element.
+	 */
+	List *pushed_down_ops = NIL;
 	ListCell *lc;
 	foreach (lc, array_elements)
 	{
 		opexpr->args = list_make2(scalar_arg, lfirst(lc));
-		void *transformed = qual_pushdown_mutator((Expr *) opexpr, context);
-		if (!context->can_pushdown)
+
+		QualPushdownContext tmp_context = *context;
+		void *transformed = qual_pushdown_mutator((Node *) opexpr, &tmp_context);
+
+		/*
+		 * If the scalar array operation uses AND, it's correct and useful to
+		 * push down the check only for some array elements.
+		 *
+		 * For OR, we must be able to push down the checks for every element.
+		 */
+		if (!tmp_context.can_pushdown)
 		{
-			return (Expr *) saop;
+			if (saop->useOr)
+			{
+				context->can_pushdown = false;
+				return (Expr *) saop;
+			}
+
+			continue;
 		}
-		transformed_ops = lappend(transformed_ops, transformed);
+		context->needs_recheck |= tmp_context.needs_recheck;
+		pushed_down_ops = lappend(pushed_down_ops, transformed);
+	}
+
+	/*
+	 * We can have no pushed down clauses if:
+	 * 1) we had an AND scalar array operation, but failed to push down every
+	 * individual clause.
+	 * 2) we had an empty array argument, apparently it's not simplified by
+	 * Postgres' eval_const_expressions().
+	 */
+	if (pushed_down_ops == NIL)
+	{
+		context->can_pushdown = false;
+		return (Expr *) saop;
 	}
 
 	if (saop->useOr)
 	{
-		return make_orclause(transformed_ops);
+		return make_orclause(pushed_down_ops);
 	}
 	else
 	{
-		return make_andclause(transformed_ops);
+		return make_andclause(pushed_down_ops);
 	}
+}
+
+static bool
+contain_volatile_functions_checker(Oid func_id, void *context)
+{
+	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
 }
 
 /*
@@ -686,8 +736,8 @@ pushdown_saop_boolexpr(QualPushdownContext *context, ScalarArrayOpExpr *saop)
  * the expression_tree_mutator behavior. The caller must check
  * context.can_pushdown.
  */
-static Expr *
-qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
+static Node *
+qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 {
 	if (orig_node == NULL)
 	{
@@ -703,6 +753,15 @@ qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
 		/*
 		 * Stop early if we already know we can't push down this filter.
 		 */
+		return orig_node;
+	}
+
+	if (check_functions_in_node(orig_node,
+								contain_volatile_functions_checker,
+								/* context = */ NULL))
+	{
+		/* pushdown is not safe for volatile expressions */
+		context->can_pushdown = false;
 		return orig_node;
 	}
 
@@ -732,7 +791,7 @@ qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
 			var->varno = context->compressed_rel->relid;
 			var->varattno = get_attnum(context->compressed_rte->relid, attname);
 
-			return (Expr *) var;
+			return (Node *) var;
 		}
 		case T_OpExpr:
 		{
@@ -780,7 +839,7 @@ qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
 				pushed_down = pushdown_op_to_segment_meta_bloom1(&tmp_context, opexpr);
 				if (tmp_context.can_pushdown)
 				{
-					context->needs_recheck = true;
+					context->needs_recheck |= tmp_context.needs_recheck;
 					return pushed_down;
 				}
 			}
@@ -792,8 +851,7 @@ qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
 			pushed_down = pushdown_op_to_segment_meta_min_max(&tmp_context, opexpr);
 			if (tmp_context.can_pushdown)
 			{
-				context->needs_recheck = true;
-				/* pd is on the compressed table so do not mutate further */
+				context->needs_recheck |= tmp_context.needs_recheck;
 				return pushed_down;
 			}
 
@@ -827,7 +885,7 @@ qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
 			pushed_down = pushdown_saop_bloom1(&tmp_context, saop);
 			if (tmp_context.can_pushdown)
 			{
-				context->needs_recheck = true;
+				context->needs_recheck |= tmp_context.needs_recheck;
 				return pushed_down;
 			}
 
@@ -839,7 +897,7 @@ qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
 			pushed_down = pushdown_saop_boolexpr(&tmp_context, saop);
 			if (tmp_context.can_pushdown)
 			{
-				context->needs_recheck = true;
+				context->needs_recheck |= tmp_context.needs_recheck;
 				return pushed_down;
 			}
 
@@ -849,14 +907,58 @@ qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
 			context->can_pushdown = false;
 			return orig_node;
 		}
-		case T_FuncExpr:
-			/*
-			 * The caller should have checked that we don't have volatile
-			 * functions in this qual.
-			 */
-			Assert(!contain_volatile_functions((Node *) orig_node));
-			__attribute__((fallthrough));
 		case T_BoolExpr:
+		{
+			BoolExpr *orig_boolexpr = castNode(BoolExpr, orig_node);
+			List *pushed_down_args = NIL;
+			ListCell *lc;
+			foreach (lc, orig_boolexpr->args)
+			{
+				QualPushdownContext tmp_context = *context;
+				void *pushed_down = qual_pushdown_mutator(lfirst(lc), &tmp_context);
+
+				/*
+				 * If the bool operation uses AND, it's correct and useful to
+				 * push down only some arguments.
+				 *
+				 * For OR, we must be able to push down every argument.
+				 */
+				if (!tmp_context.can_pushdown)
+				{
+					if (orig_boolexpr->boolop != AND_EXPR)
+					{
+						context->can_pushdown = false;
+						return orig_node;
+					}
+
+					continue;
+				}
+
+				context->needs_recheck |= tmp_context.needs_recheck;
+				pushed_down_args = lappend(pushed_down_args, pushed_down);
+			}
+
+			/*
+			 * We can have no pushed down arguments if we had an AND bool
+			 * operation, but failed to push down every individual argument.
+			 */
+			if (pushed_down_args == NIL)
+			{
+				context->can_pushdown = false;
+				return orig_node;
+			}
+
+			BoolExpr *boolexpr_copy = makeNode(BoolExpr);
+			*boolexpr_copy = *orig_boolexpr;
+			boolexpr_copy->args = pushed_down_args;
+			return (Node *) boolexpr_copy;
+		}
+
+		/*
+		 * These nodes do not influence the pushdown by themselves, so we
+		 * recurse.
+		 */
+		case T_FuncExpr:
 		case T_CoerceViaIO:
 		case T_RelabelType:
 		case T_List:
@@ -868,19 +970,15 @@ qual_pushdown_mutator(Expr *orig_node, QualPushdownContext *context)
 		case T_CaseWhen:
 		case T_ArrayExpr:
 		{
-			/*
-			 * These nodes do not prevent the pushdown by themselves, so we
-			 * recurse.
-			 */
 			Node *pushed_down =
 				expression_tree_mutator((Node *) orig_node, qual_pushdown_mutator, context);
-			return (Expr *) pushed_down;
+			return pushed_down;
 		}
 
+		/*
+		 * We don't know how to work with other nodes.
+		 */
 		default:
-			/*
-			 * We don't know how to work with this node.
-			 */
 			context->can_pushdown = false;
 			return orig_node;
 	}

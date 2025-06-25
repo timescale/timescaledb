@@ -304,6 +304,174 @@ select * from saop where segmentby = all(array[with_bloom, with_minmax]);
                Rows Removed by Filter: 56
 (13 rows)
 
+-- Partial pushdown of AND scalar array operation.
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = all(array[with_minmax, with_minmax]);
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Append (actual rows=61 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=31 loops=1)
+         Filter: (with_bloom = ALL (ARRAY[with_minmax, with_minmax]))
+         Rows Removed by Filter: 49969
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=30 loops=1)
+         Filter: (with_bloom = ALL (ARRAY[with_minmax, with_minmax]))
+         Rows Removed by Filter: 49970
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
+(9 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = all(array['1', with_minmax]);
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Append (actual rows=3 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2 loops=1)
+         Filter: (with_bloom = ALL (ARRAY['1'::text, with_minmax]))
+         Rows Removed by Filter: 29519
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=32 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, '1'::text)
+               Rows Removed by Filter: 37
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=1 loops=1)
+         Filter: (with_bloom = ALL (ARRAY['1'::text, with_minmax]))
+         Rows Removed by Filter: 29346
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=31 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, '1'::text)
+               Rows Removed by Filter: 38
+(13 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where segmentby = '1' and with_bloom = all(array['1', with_minmax]);
+                                                                    QUERY PLAN                                                                    
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=0 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=0 loops=1)
+         Filter: (with_bloom = ALL (ARRAY['1'::text, with_minmax]))
+         Rows Removed by Filter: 2000
+         ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk (actual rows=2 loops=1)
+               Index Cond: (segmentby = '1'::text)
+               Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, '1'::text)
+               Rows Removed by Filter: 1
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=0 loops=1)
+         Filter: (with_bloom = ALL (ARRAY['1'::text, with_minmax]))
+         Rows Removed by Filter: 1000
+         ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk (actual rows=1 loops=1)
+               Index Cond: (segmentby = '1'::text)
+               Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, '1'::text)
+               Rows Removed by Filter: 2
+(15 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where segmentby = '1' or with_bloom = all(array['1', with_minmax]);
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=4351 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2176 loops=1)
+         Filter: ((segmentby = '1'::text) OR (with_bloom = ALL (ARRAY['1'::text, with_minmax])))
+         Rows Removed by Filter: 27519
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=33 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, '1'::text))
+               Rows Removed by Filter: 36
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=2175 loops=1)
+         Filter: ((segmentby = '1'::text) OR (with_bloom = ALL (ARRAY['1'::text, with_minmax])))
+         Rows Removed by Filter: 28346
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=33 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, '1'::text))
+               Rows Removed by Filter: 36
+(13 rows)
+
+-- Partial pushdown with volatile functions.
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = any(array[stable_lower(segmentby), volatile_lower(segmentby)]);
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on saop (actual rows=56 loops=1)
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=29 loops=1)
+         Filter: (with_bloom = ANY (ARRAY[stable_lower(segmentby), volatile_lower(segmentby)]))
+         Rows Removed by Filter: 49971
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=27 loops=1)
+         Filter: (with_bloom = ANY (ARRAY[stable_lower(segmentby), volatile_lower(segmentby)]))
+         Rows Removed by Filter: 49973
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
+(10 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = stable_lower(segmentby) or with_bloom = volatile_lower(segmentby);
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on saop (actual rows=56 loops=1)
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=29 loops=1)
+         Filter: ((with_bloom = stable_lower(segmentby)) OR (with_bloom = volatile_lower(segmentby)))
+         Rows Removed by Filter: 49971
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=27 loops=1)
+         Filter: ((with_bloom = stable_lower(segmentby)) OR (with_bloom = volatile_lower(segmentby)))
+         Rows Removed by Filter: 49973
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
+(10 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = all(array[stable_lower(segmentby), volatile_lower(segmentby)]);
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on saop (actual rows=56 loops=1)
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=29 loops=1)
+         Filter: (with_bloom = ALL (ARRAY[stable_lower(segmentby), volatile_lower(segmentby)]))
+         Rows Removed by Filter: 20493
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, stable_lower(segmentby))
+               Rows Removed by Filter: 46
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=27 loops=1)
+         Filter: (with_bloom = ALL (ARRAY[stable_lower(segmentby), volatile_lower(segmentby)]))
+         Rows Removed by Filter: 24147
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=25 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, stable_lower(segmentby))
+               Rows Removed by Filter: 44
+(14 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where segmentby = '1' or with_bloom = all(array[stable_lower('1'), volatile_lower('1')]);
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on saop (actual rows=4413 loops=1)
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2206 loops=1)
+         Filter: ((segmentby = '1'::text) OR (with_bloom = ALL (ARRAY[stable_lower('1'::text), volatile_lower('1'::text)])))
+         Rows Removed by Filter: 27489
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=33 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, stable_lower('1'::text)))
+               Rows Removed by Filter: 36
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=2207 loops=1)
+         Filter: ((segmentby = '1'::text) OR (with_bloom = ALL (ARRAY[stable_lower('1'::text), volatile_lower('1'::text)])))
+         Rows Removed by Filter: 28314
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=33 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, stable_lower('1'::text)))
+               Rows Removed by Filter: 36
+(14 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where segmentby = '1' or (with_bloom = stable_lower('1') and with_bloom = volatile_lower('1'));
+                                                                    QUERY PLAN                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on saop (actual rows=4413 loops=1)
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2206 loops=1)
+         Filter: ((segmentby = '1'::text) OR ((with_bloom = stable_lower('1'::text)) AND (with_bloom = volatile_lower('1'::text))))
+         Rows Removed by Filter: 27489
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=33 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, stable_lower('1'::text)))
+               Rows Removed by Filter: 36
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=2207 loops=1)
+         Filter: ((segmentby = '1'::text) OR ((with_bloom = stable_lower('1'::text)) AND (with_bloom = volatile_lower('1'::text))))
+         Rows Removed by Filter: 28314
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=33 loops=1)
+               Filter: ((segmentby = '1'::text) OR _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_with_bloom, stable_lower('1'::text)))
+               Rows Removed by Filter: 36
+(14 rows)
+
 -- Some joins.
 explain (analyze, costs off, timing off, summary off)
 with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
