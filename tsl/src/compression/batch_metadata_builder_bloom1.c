@@ -469,13 +469,12 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(true);
 }
 
-static int
-uint64_qsort_cmp(const void *a_, const void *b_)
-{
-	const uint64 a = *(const uint64 *) a_;
-	const uint64 b = *(const uint64 *) b_;
-	return (a > b) - (a < b);
-}
+#define ST_SORT sort_hashes
+#define ST_ELEMENT_TYPE uint64
+#define ST_COMPARE(a, b) ((*(a) > *(b)) - (*(a) < *(b)))
+#define ST_SCOPE static
+#define ST_DEFINE
+#include <lib/sort_template.h>
 
 Datum
 bloom1_contains_any(PG_FUNCTION_ARGS)
@@ -561,7 +560,7 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 	/*
 	 * Sort the hashes for cache-friendly probing.
 	 */
-	pg_qsort(item_base_hashes, valid, sizeof(uint64), uint64_qsort_cmp);
+	sort_hashes(item_base_hashes, valid);
 
 	/*
 	 * Unpack the bloom filter argument.
