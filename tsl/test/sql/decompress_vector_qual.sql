@@ -223,6 +223,10 @@ select count(*) from vectorqual where metric2 = all(array[null::int]) /* all wit
 select count(*) from vectorqual where metric2 = all(array[22, null]) /* all with null element */;
 select count(*) from vectorqual where metric2 = all(array[null, 32]) /* all with null element */;
 select count(*) from vectorqual where metric2 = all(array[22, null, 32]) /* all with null element */;
+select count(*) from vectorqual where metric2 = all(array[]::int[]);
+select count(*) from vectorqual where metric2 = any(array[]::int[]);
+select count(*) from vectorqual where metric2 = all(null::int[]);
+select count(*) from vectorqual where metric2 = any(null::int[]);
 
 -- Check early exit.
 reset timescaledb.debug_require_vector_qual;
