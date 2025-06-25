@@ -876,17 +876,21 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 				return pushed_down;
 			}
 
+			ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, orig_node);
+
 			/*
 			 * Try to transform x = any(array[]) into
 			 * bloom1_contains_any(bloom_x, array[]).
 			 */
-			tmp_context = *context;
-			ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, orig_node);
-			pushed_down = pushdown_saop_bloom1(&tmp_context, saop);
-			if (tmp_context.can_pushdown)
+			if (ts_guc_enable_sparse_index_bloom)
 			{
-				context->needs_recheck |= tmp_context.needs_recheck;
-				return pushed_down;
+				tmp_context = *context;
+				pushed_down = pushdown_saop_bloom1(&tmp_context, saop);
+				if (tmp_context.can_pushdown)
+				{
+					context->needs_recheck |= tmp_context.needs_recheck;
+					return pushed_down;
+				}
 			}
 
 			/*
