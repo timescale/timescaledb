@@ -792,8 +792,56 @@ select * from byref where x = float8tomacaddr8(mix(1));
          Rows Removed by Filter: 9
 (9 rows)
 
+-- Test an array type.
+create table arraybloom(x int, value int[], ts timestamp);
+select create_hypertable('arraybloom', 'x');
+WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
+NOTICE:  adding not-null constraint to column "x"
+    create_hypertable    
+-------------------------
+ (9,public,arraybloom,t)
+(1 row)
+
+insert into arraybloom
+select x, array[x],
+    '2021-01-01'::timestamp + (interval '1 hour') * x
+from generate_series(1, 10000) x;
+create index on arraybloom(value);
+alter table arraybloom set (timescaledb.compress,
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x');
+select count(compress_chunk(x)) from show_chunks('arraybloom') x;
+ count 
+-------
+     1
+(1 row)
+
+vacuum full analyze arraybloom;
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from arraybloom where value = array[7248::int];
+                                                                                                                                                QUERY PLAN                                                                                                                                                 
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   Output: count(*)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_9_11_chunk (actual rows=1 loops=1)
+         Filter: (_hyper_9_11_chunk.value = '{7248}'::integer[])
+         Rows Removed by Filter: 999
+         Bulk Decompression: false
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_10_12_chunk (actual rows=1 loops=1)
+               Output: compress_hyper_10_12_chunk._ts_meta_count, compress_hyper_10_12_chunk._ts_meta_min_1, compress_hyper_10_12_chunk._ts_meta_max_1, compress_hyper_10_12_chunk.x, compress_hyper_10_12_chunk._ts_meta_v2_bloom1_value, compress_hyper_10_12_chunk.value, compress_hyper_10_12_chunk.ts
+               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_10_12_chunk._ts_meta_v2_bloom1_value, '{7248}'::integer[])
+               Rows Removed by Filter: 9
+(10 rows)
+
+select count(*) from arraybloom where value = array[7248::int];
+ count 
+-------
+     1
+(1 row)
+
 -- Cleanup
 drop table bloom;
 drop table corner;
 drop table badtable;
 drop table byref;
+drop table arraybloom;

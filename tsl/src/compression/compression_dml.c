@@ -1313,7 +1313,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 																 var->varattno,
 																 settings->fd.compress_relid,
 																 "max");
-				if (min_attno == InvalidAttrNumber)
+				if (max_attno == InvalidAttrNumber)
 					continue;
 
 				/* Need both min and max metadata attributes to build heap filters */

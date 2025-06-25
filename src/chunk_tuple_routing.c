@@ -10,12 +10,13 @@
 #include "debug_point.h"
 #include "hypercube.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
+#include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
 static ChunkInsertState *chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr);
 
 ChunkTupleRouting *
-ts_chunk_tuple_routing_create(EState *estate, Relation rel)
+ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 {
 	ChunkTupleRouting *ctr;
 
@@ -27,14 +28,16 @@ ts_chunk_tuple_routing_create(EState *estate, Relation rel)
 	 * single tuple into a partitioned table and this must be fast.
 	 */
 	ctr = (ChunkTupleRouting *) palloc0(sizeof(ChunkTupleRouting));
-	ctr->partition_root = rel;
+	ctr->hypertable_rri = rri;
+	ctr->partition_root = rri->ri_RelationDesc;
 	ctr->memcxt = CurrentMemoryContext;
 	ctr->estate = estate;
 	ctr->counters = palloc0(sizeof(SharedCounters));
 
-	ctr->hypertable = ts_hypertable_cache_get_cache_and_entry(RelationGetRelid(rel),
-															  CACHE_FLAG_NONE,
-															  &ctr->hypertable_cache);
+	ctr->hypertable =
+		ts_hypertable_cache_get_cache_and_entry(RelationGetRelid(rri->ri_RelationDesc),
+												CACHE_FLAG_NONE,
+												&ctr->hypertable_cache);
 	ctr->subspace = ts_subspace_store_init(ctr->hypertable->space,
 										   estate->es_query_cxt,
 										   ts_guc_max_open_chunks_per_insert);
@@ -247,4 +250,43 @@ chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr)
 	MemoryContextSwitchTo(old_mcxt);
 
 	return state;
+}
+
+extern void
+ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, TupleTableSlot *slot,
+											 EState *estate, bool update_counter)
+{
+	if (!cis->chunk_compressed || (cis->cached_decompression_state &&
+								   !cis->cached_decompression_state->has_primary_or_unique_index))
+		return;
+
+	/*
+	 * If this is an INSERT into a compressed chunk with UNIQUE or
+	 * PRIMARY KEY constraints we need to make sure any batches that could
+	 * potentially lead to a conflict are in the decompressed chunk so
+	 * postgres can do proper constraint checking.
+	 */
+
+	ts_cm_functions->init_decompress_state_for_insert(cis, slot);
+	ts_cm_functions->decompress_batches_for_insert(cis, slot);
+
+	/* mark rows visible */
+	if (update_counter)
+		estate->es_output_cid = GetCurrentCommandId(true);
+
+	if (ts_guc_max_tuples_decompressed_per_dml > 0)
+	{
+		if (cis->counters->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+					 errmsg("tuple decompression limit exceeded by operation"),
+					 errdetail("current limit: %d, tuples decompressed: %lld",
+							   ts_guc_max_tuples_decompressed_per_dml,
+							   (long long int) cis->counters->tuples_decompressed),
+					 errhint("Consider increasing "
+							 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
+							 "to 0 (unlimited).")));
+		}
+	}
 }
