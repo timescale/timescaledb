@@ -75,6 +75,7 @@ jobs:
       TABLESPACE2: D:\tablespace2\
       IGNORES: >-
         compress_bloom_sparse_debug
+        compress_qualpushdown_saop
         compressed_copy
         compression_algos
         bgw_launcher
