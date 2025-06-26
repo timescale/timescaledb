@@ -95,7 +95,6 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
 	const int data_algo = pq_getmsgbyte(&si);
-
 	CheckCompressedData(data_algo > 0 && data_algo < _END_COMPRESSION_ALGORITHMS);
 
 	if (data_algo != requested_algo)

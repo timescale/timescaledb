@@ -31,6 +31,7 @@
 #include "algorithms/dictionary.h"
 #include "algorithms/gorilla.h"
 #include "algorithms/null.h"
+#include "algorithms/uuid_compress.h"
 #include "batch_metadata_builder.h"
 #include "compression.h"
 #include "create.h"
@@ -66,6 +67,7 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_BOOL] = BOOL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_NULL] = NULL_COMPRESS_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_UUID] = UUID_COMPRESS_ALGORITHM_DEFINITION,
 };
 
 static NameData compression_algorithm_name[] = {
@@ -76,6 +78,7 @@ static NameData compression_algorithm_name[] = {
 	[COMPRESSION_ALGORITHM_DELTADELTA] = { "DELTADELTA" },
 	[COMPRESSION_ALGORITHM_BOOL] = { "BOOL" },
 	[COMPRESSION_ALGORITHM_NULL] = { "NULL" },
+	[COMPRESSION_ALGORITHM_UUID] = { "UUID" },
 };
 
 Name
@@ -2328,6 +2331,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 		case COMPRESSION_ALGORITHM_NULL:
 			has_nulls = true;
 			break;
+		case COMPRESSION_ALGORITHM_UUID:
+			has_nulls = uuid_compressed_has_nulls(header);
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -2371,6 +2377,9 @@ tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
 			break;
 		case COMPRESSION_ALGORITHM_NULL:
 			has_nulls = true;
+			break;
+		case COMPRESSION_ALGORITHM_UUID:
+			has_nulls = uuid_compressed_has_nulls(header);
 			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
@@ -2421,6 +2430,12 @@ compression_get_default_algorithm(Oid typeoid)
 				return COMPRESSION_ALGORITHM_BOOL;
 			else
 				return COMPRESSION_ALGORITHM_ARRAY;
+
+		case UUIDOID:
+			if (ts_guc_enable_uuid_compression)
+				return COMPRESSION_ALGORITHM_UUID;
+			else
+				return COMPRESSION_ALGORITHM_DICTIONARY;
 
 		default:
 		{

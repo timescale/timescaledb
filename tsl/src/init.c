@@ -22,6 +22,7 @@
 #include "compression/algorithms/deltadelta.h"
 #include "compression/algorithms/dictionary.h"
 #include "compression/algorithms/gorilla.h"
+#include "compression/algorithms/uuid_compress.h"
 #include "compression/api.h"
 #include "compression/compression.h"
 #include "compression/create.h"
@@ -178,6 +179,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.array_compressor_finish = tsl_array_compressor_finish,
 	.bool_compressor_append = tsl_bool_compressor_append,
 	.bool_compressor_finish = tsl_bool_compressor_finish,
+	.uuid_compressor_append = tsl_uuid_compressor_append,
+	.uuid_compressor_finish = tsl_uuid_compressor_finish,
 	.bloom1_contains = bloom1_contains,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,

@@ -40,6 +40,10 @@ get_compression_algorithm(char *name)
 	{
 		return COMPRESSION_ALGORITHM_BOOL;
 	}
+	else if (pg_strcasecmp(name, "uuid") == 0)
+	{
+		return COMPRESSION_ALGORITHM_UUID;
+	}
 
 	ereport(ERROR, (errmsg("unknown compression algorithm %s", name)));
 	return _INVALID_COMPRESSION_ALGORITHM;

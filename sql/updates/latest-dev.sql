@@ -55,3 +55,7 @@ CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
     force                    BOOLEAN = FALSE,
     options                  JSONB = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+INSERT INTO _timescaledb_catalog.compression_algorithm( id, version, name, description) values
+( 7, 1, 'COMPRESSION_ALGORITHM_UUID', 'uuid');
+

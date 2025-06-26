@@ -345,6 +345,39 @@ delta_delta_from_parts(uint64 last_value, uint64 last_delta, Simple8bRleSerializ
 	return compressed;
 }
 
+size_t
+delta_delta_compressor_compressed_size(DeltaDeltaCompressor *compressor, size_t *nulls_size_out)
+{
+	bool flush_before_size = true;
+	size_t compressed_size = sizeof(DeltaDeltaCompressed);
+	size_t nulls_size_actual;
+
+	/* If there are no elements, the compressed size is 0 even if there are nulls */
+	if ((compressor->delta_delta.num_elements +
+		 compressor->delta_delta.num_uncompressed_elements) == 0)
+	{
+		if (nulls_size_out != NULL)
+			*nulls_size_out = 0;
+		return 0;
+	}
+
+	compressed_size +=
+		simple8brle_compressor_compressed_size(&compressor->delta_delta, flush_before_size);
+
+	if (compressor->has_nulls)
+	{
+		nulls_size_actual =
+			simple8brle_compressor_compressed_size(&compressor->nulls, flush_before_size);
+		compressed_size += nulls_size_actual;
+		if (nulls_size_out != NULL)
+			*nulls_size_out = nulls_size_actual;
+	}
+	else if (nulls_size_out != NULL)
+		*nulls_size_out = 0;
+
+	return compressed_size;
+}
+
 void *
 delta_delta_compressor_finish(DeltaDeltaCompressor *compressor)
 {
@@ -362,6 +395,41 @@ delta_delta_compressor_finish(DeltaDeltaCompressor *compressor)
 
 	Assert(compressed->compression_algorithm == COMPRESSION_ALGORITHM_DELTADELTA);
 	return compressed;
+}
+
+void *
+delta_delta_compressor_finish_into(DeltaDeltaCompressor *compressor, void *dest)
+{
+	size_t delta_size;
+	size_t nulls_size;
+	size_t compressed_size;
+	char *result;
+	DeltaDeltaCompressed *compressed;
+
+	compressed_size = delta_delta_compressor_compressed_size(compressor, &nulls_size);
+	if (compressed_size == 0)
+		return dest;
+
+	Assert(compressed_size >= sizeof(*compressed) + nulls_size);
+
+	compressed = (DeltaDeltaCompressed *) dest;
+	SET_VARSIZE(&compressed->vl_len_, compressed_size);
+	compressed->compression_algorithm = COMPRESSION_ALGORITHM_DELTADELTA;
+	compressed->last_value = compressor->prev_val;
+	compressed->last_delta = compressor->prev_delta;
+	compressed->has_nulls = compressor->has_nulls ? 1 : 0;
+
+	result = (char *) compressed + sizeof(*compressed);
+	delta_size = compressed_size - sizeof(*compressed) - nulls_size;
+	result = simple8brle_compressor_finish_into(&compressor->delta_delta, result, delta_size);
+
+	if (compressed->has_nulls)
+	{
+		Assert(nulls_size > 0);
+		result = simple8brle_compressor_finish_into(&compressor->nulls, result, nulls_size);
+	}
+
+	return result;
 }
 
 Datum
@@ -423,7 +491,11 @@ int64_decompression_iterator_init_forward(DeltaDeltaDecompressionIterator *iter,
 										  Oid element_type)
 {
 	StringInfoData si = { .data = compressed, .len = VARSIZE(compressed) };
+	CheckCompressedData(VARSIZE(compressed) >= sizeof(DeltaDeltaCompressed));
+	CheckCompressedData(((DeltaDeltaCompressed *) compressed)->compression_algorithm ==
+						COMPRESSION_ALGORITHM_DELTADELTA);
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
+
 	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&si);
 
 	const bool has_nulls = header->has_nulls == 1;
@@ -456,6 +528,9 @@ int64_decompression_iterator_init_reverse(DeltaDeltaDecompressionIterator *iter,
 										  Oid element_type)
 {
 	StringInfoData si = { .data = compressed, .len = VARSIZE(compressed) };
+	CheckCompressedData(VARSIZE(compressed) >= sizeof(DeltaDeltaCompressed));
+	CheckCompressedData(((DeltaDeltaCompressed *) compressed)->compression_algorithm ==
+						COMPRESSION_ALGORITHM_DELTADELTA);
 	DeltaDeltaCompressed *header = consumeCompressedData(&si, sizeof(DeltaDeltaCompressed));
 	Simple8bRleSerialized *deltas = bytes_deserialize_simple8b_and_advance(&si);
 

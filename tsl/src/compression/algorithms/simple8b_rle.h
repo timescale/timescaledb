@@ -138,6 +138,9 @@ typedef struct Simple8bRleDecompressResult
 static inline void simple8brle_compressor_init(Simple8bRleCompressor *compressor);
 static inline Simple8bRleSerialized *
 simple8brle_compressor_finish(Simple8bRleCompressor *compressor);
+static inline char *simple8brle_compressor_finish_into(Simple8bRleCompressor *compressor,
+													   char *dest, size_t expected_size);
+
 static inline void simple8brle_compressor_append(Simple8bRleCompressor *compressor, uint64 val);
 static inline bool simple8brle_compressor_is_empty(Simple8bRleCompressor *compressor);
 
@@ -159,7 +162,8 @@ static inline char *bytes_serialize_simple8b_and_advance(char *dest, size_t expe
 static inline Simple8bRleSerialized *bytes_deserialize_simple8b_and_advance(StringInfo si);
 static inline size_t simple8brle_serialized_slot_size(const Simple8bRleSerialized *data);
 static inline size_t simple8brle_serialized_total_size(const Simple8bRleSerialized *data);
-static inline size_t simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor);
+static inline size_t simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor,
+															bool flush_before_size);
 
 /*********************
  ***  Private API  ***
@@ -343,15 +347,36 @@ simple8brle_compressor_is_empty(Simple8bRleCompressor *compressor)
 }
 
 static size_t
-simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor)
+simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor, bool flush_before_size)
 {
+	size_t yet_to_be_pushed = 0;
+	if (flush_before_size)
+	{
+		/* This compresses the uncompressed data into the last block but doesn't push it into the
+		 * compressed data */
+		simple8brle_compressor_flush(compressor);
+
+		/* I intentionally don't call simple8brle_compressor_push_block here because it is not
+		 * idempotent and it will mess up simple8brle_compressor_finish */
+		if (compressor->last_block_set && compressor->last_block.num_elements_compressed > 0)
+		{
+			yet_to_be_pushed = sizeof(*compressor->compressed_data.data);
+			if (bit_array_num_buckets(&compressor->selectors) == 0 ||
+				compressor->selectors.bits_used_in_last_bucket == BITS_PER_BUCKET)
+			{
+				/* The last block's data will require an additional selector slot */
+				yet_to_be_pushed += sizeof(*compressor->selectors.buckets.data);
+			}
+		}
+	}
+
 	/* we store 16 selectors per selector_slot, and one selector_slot per compressed_data_slot.
 	 * use num_compressed_data_slots / 16 + 1 to ensure that rounding doesn't truncate our slots
 	 * and that we always have a 0 slot at the end.
 	 */
 	return sizeof(Simple8bRleSerialized) +
 		   compressor->compressed_data.num_elements * sizeof(*compressor->compressed_data.data) +
-		   bit_array_data_bytes_used(&compressor->selectors);
+		   bit_array_data_bytes_used(&compressor->selectors) + yet_to_be_pushed;
 }
 
 static void
@@ -400,7 +425,9 @@ simple8brle_compressor_finish(Simple8bRleCompressor *compressor)
 	Assert(compressor->last_block_set);
 	simple8brle_compressor_push_block(compressor, compressor->last_block);
 
-	compressed_size = simple8brle_compressor_compressed_size(compressor);
+	/* No need to flush here, it is done above */
+	bool flush_before_size = false;
+	compressed_size = simple8brle_compressor_compressed_size(compressor, flush_before_size);
 	/* we use palloc0 despite initializing the entire structure,
 	 * to ensure padding bits are zeroed, and that there's a 0 selector at the end.
 	 * It would be more efficient to ensure there are no padding bits in the struct,
@@ -431,6 +458,64 @@ simple8brle_compressor_finish(Simple8bRleCompressor *compressor)
 		   size_left);
 
 	return compressed;
+}
+
+static char *
+simple8brle_compressor_finish_into(Simple8bRleCompressor *compressor, char *dest,
+								   size_t expected_size)
+{
+	size_t size_left;
+	size_t selector_size;
+	size_t compressed_size;
+	char *end_ptr;
+	Simple8bRleSerialized *compressed;
+	uint64 bits;
+
+	simple8brle_compressor_flush(compressor);
+	if (compressor->num_elements == 0)
+		return dest;
+
+	Assert(compressor->last_block_set);
+	simple8brle_compressor_push_block(compressor, compressor->last_block);
+
+	/* No need to flush here, it is done above */
+	bool flush_before_size = false;
+	compressed_size = simple8brle_compressor_compressed_size(compressor, flush_before_size);
+
+	Ensure(expected_size == compressed_size,
+		   "expected_size: %zu, compressed_size: %zu",
+		   expected_size,
+		   compressed_size);
+
+	compressed = (Simple8bRleSerialized *) dest;
+	Assert(bit_array_num_buckets(&compressor->selectors) > 0);
+	Assert(compressor->compressed_data.num_elements > 0);
+	Assert(compressor->compressed_data.num_elements ==
+		   simple8brle_compressor_num_selectors(compressor));
+
+	*compressed = (Simple8bRleSerialized){
+		.num_elements = compressor->num_elements,
+		.num_blocks = compressor->compressed_data.num_elements,
+	};
+
+	size_left = compressed_size - sizeof(*compressed);
+	Assert(size_left >= bit_array_data_bytes_used(&compressor->selectors));
+	selector_size = bit_array_output(&compressor->selectors, compressed->slots, size_left, &bits);
+
+	size_left -= selector_size;
+	Assert(size_left ==
+		   (compressor->compressed_data.num_elements * sizeof(*compressor->compressed_data.data)));
+	Assert(compressor->selectors.buckets.num_elements ==
+		   simple8brle_num_selector_slots_for_num_blocks(compressor->compressed_data.num_elements));
+
+	memcpy(compressed->slots + compressor->selectors.buckets.num_elements,
+		   compressor->compressed_data.data,
+		   size_left);
+
+	end_ptr = (char *) (compressed->slots + compressor->selectors.buckets.num_elements) + size_left;
+	Assert(end_ptr == dest + expected_size);
+
+	return end_ptr;
 }
 
 static void

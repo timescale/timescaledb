@@ -31,6 +31,7 @@
 #include "compression/algorithms/float_utils.h"
 #include "compression/algorithms/gorilla.h"
 #include "compression/algorithms/null.h"
+#include "compression/algorithms/uuid_compress.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/batch_metadata_builder_minmax.h"
 
@@ -437,6 +438,7 @@ test_delta()
 	for (i = 0; i < TEST_ELEMENTS; i++)
 		delta_delta_compressor_append_value(compressor, i);
 
+	TestAssertInt64Eq(delta_delta_compressor_compressed_size(compressor, NULL), 56);
 	compressed = DirectFunctionCall1(tsl_deltadelta_compressor_finish, PointerGetDatum(compressor));
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
 	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 56);
@@ -469,9 +471,11 @@ test_delta2()
 			delta_delta_compressor_append_value(compressor, i);
 	}
 
+	size_t calc_size = delta_delta_compressor_compressed_size(compressor, NULL);
 	compressed = DirectFunctionCall1(tsl_deltadelta_compressor_finish, PointerGetDatum(compressor));
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
 	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 1664);
+	TestAssertInt64Eq(calc_size, 1664);
 
 	i = 0;
 	iter = delta_delta_decompression_iterator_from_datum_forward(compressed, INT8OID);
@@ -493,6 +497,7 @@ test_delta3(bool have_nulls, bool have_random)
 {
 	DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
 	Datum compressed;
+	size_t compressed_size;
 
 	int64 values[TEST_ELEMENTS];
 	bool nulls[TEST_ELEMENTS];
@@ -537,8 +542,12 @@ test_delta3(bool have_nulls, bool have_random)
 		}
 	}
 
+	size_t nulls_size;
+	compressed_size = delta_delta_compressor_compressed_size(compressor, &nulls_size);
+	TestAssertInt64Eq(compressed_size, delta_delta_compressor_compressed_size(compressor, NULL));
 	compressed = PointerGetDatum(delta_delta_compressor_finish(compressor));
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), compressed_size);
 
 	/* Forward decompression. */
 	DecompressionIterator *iter =
@@ -1009,9 +1018,503 @@ test_null()
 	}
 }
 
+static Datum *
+generate_uuidv7(int n)
+{
+	Assert(n > 0);
+	Datum *uuids = palloc(n * sizeof(Datum));
+
+	/* seed the random number generator */
+	srand(1);
+
+	/* Start with current timestamp in milliseconds */
+	uint64_t base_timestamp = (uint64_t) time(NULL) * 1000;
+	uint64_t current_timestamp = base_timestamp;
+
+	for (int i = 0; i < n; ++i)
+	{
+		pg_uuid_t *uuid = palloc(sizeof(pg_uuid_t));
+
+		/* Add random seconds between 1-120 to the timestamp */
+		if (i > 0)
+		{
+			int random_seconds = (rand() % 120) + 1;
+			current_timestamp += random_seconds * 1000;
+		}
+
+		/* First, fill the entire UUID with random data using a few rand() calls */
+		uint64_t rand1 = (uint64_t) rand() << 32 | rand();
+		uint64_t rand2 = (uint64_t) rand() << 32 | rand();
+		memcpy(uuid->data, &rand1, 8);
+		memcpy(uuid->data + 8, &rand2, 8);
+
+		/* UUIDv7 format:
+		 * - First 6 bytes: timestamp (48 bits, Unix timestamp in milliseconds)
+		 * - Next 2 bits: version (7)
+		 * - Next 6 bits: random (keep existing random data)
+		 * - Next 4 bits: variant (10)
+		 * - Next 2 bits: random (keep existing random data)
+		 * - Last 6 bytes: random data (keep existing random data)
+		 */
+
+		/* Overwrite first 6 bytes with timestamp (big-endian) */
+		uint64_t timestamp_be = pg_hton64(current_timestamp);
+		memcpy(uuid->data, &timestamp_be, 6);
+
+		/* Set version 7 (0111) in bits 6-7 of byte 6, keep random bits 0-5 */
+		uuid->data[6] = (uuid->data[6] & 0x0F) | 0x70;
+
+		/* Set variant (10) in bits 4-5 of byte 8, keep random bits 0-3 and 6-7 */
+		uuid->data[8] = (uuid->data[8] & 0x3F) | 0x80;
+
+		uuids[i] = UUIDPGetDatum(uuid);
+	}
+
+	return uuids;
+}
+
+static void
+test_uuid_dictionary_simple()
+{
+	/* Make sure dictionary makes sense by only compressing 1/4 of the elements */
+	Datum *uuids = generate_uuidv7((TEST_ELEMENTS + 3) / 4);
+	Compressor *compressor = dictionary_compressor_for_type(UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		compressor->append_val(compressor, uuids[i / 4]);
+	}
+
+	Datum compressed = (Datum) compressor->finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	/* The dictionary compression may recompress the data id Array compression would save space.
+	 * Make sure it is not the case here. */
+	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
+
+	DecompressionIterator *iter =
+		tsl_dictionary_decompression_iterator_from_datum_forward(compressed, UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = dictionary_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i / 4])));
+	}
+}
+
+static void
+test_uuid_array_simple()
+{
+	Datum *uuids = generate_uuidv7(TEST_ELEMENTS);
+	Compressor *compressor = array_compressor_for_type(UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		compressor->append_val(compressor, uuids[i]);
+	}
+
+	Datum compressed = (Datum) compressor->finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
+
+	DecompressionIterator *iter =
+		tsl_array_decompression_iterator_from_datum_forward(compressed, UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = array_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
+	}
+}
+
+static void
+test_uuid_compressor_simple(int null_modulo, int value_modulo)
+{
+	Datum *uuids = generate_uuidv7(TEST_ELEMENTS);
+	UuidCompressor *compressor = uuid_compressor_alloc();
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		if ((null_modulo > 0 && i % null_modulo == 0) ||
+			(value_modulo > 0 && i % value_modulo != 0))
+		{
+			uuid_compressor_append_null(compressor);
+			continue;
+		}
+
+		pg_uuid_t *uuid = DatumGetUUIDP(uuids[i]);
+		uuid_compressor_append_value(compressor, *uuid);
+	}
+
+	Datum compressed = (Datum) uuid_compressor_finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_UUID);
+
+	DecompressionIterator *iter =
+		uuid_decompression_iterator_from_datum_forward(compressed, UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = uuid_decompression_iterator_try_next_forward(iter);
+		if ((null_modulo > 0 && i % null_modulo == 0) ||
+			(value_modulo > 0 && i % value_modulo != 0))
+		{
+			TestAssertTrue(r.is_null);
+			continue;
+		}
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
+	}
+	TestAssertTrue(uuid_decompression_iterator_try_next_forward(iter).is_done);
+
+	iter = uuid_decompression_iterator_from_datum_reverse(compressed, UUIDOID);
+
+	for (int i = TEST_ELEMENTS - 1; i >= 0; --i)
+	{
+		DecompressResult r = uuid_decompression_iterator_try_next_reverse(iter);
+		if ((null_modulo > 0 && i % null_modulo == 0) ||
+			(value_modulo > 0 && i % value_modulo != 0))
+		{
+			TestAssertTrue(r.is_null);
+			continue;
+		}
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
+	}
+	TestAssertTrue(uuid_decompression_iterator_try_next_reverse(iter).is_done);
+
+	{
+		StringInfoData buf;
+		bytea *sent;
+		StringInfoData transmission;
+		UuidCompressed *compressed_recv;
+
+		pq_begintypsend(&buf);
+		uuid_compressed_send((CompressedDataHeader *) compressed, &buf);
+		sent = pq_endtypsend(&buf);
+
+		transmission = (StringInfoData){
+			.data = VARDATA(sent),
+			.len = VARSIZE(sent),
+			.maxlen = VARSIZE(sent),
+		};
+
+		compressed_recv = (UuidCompressed *) DatumGetPointer(uuid_compressed_recv(&transmission));
+		DecompressionIterator *iter =
+			uuid_decompression_iterator_from_datum_forward(PointerGetDatum(compressed_recv),
+														   UUIDOID);
+		int i = 0;
+		for (DecompressResult r = uuid_decompression_iterator_try_next_forward(iter); !r.is_done;
+			 r = uuid_decompression_iterator_try_next_forward(iter))
+		{
+			if ((null_modulo > 0 && i % null_modulo == 0) ||
+				(value_modulo > 0 && i % value_modulo != 0))
+			{
+				TestAssertTrue(r.is_null);
+				i++;
+				continue;
+			}
+			TestAssertTrue(!r.is_done);
+			TestAssertTrue(DatumGetPointer(r.val) != NULL);
+			TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
+			i++;
+		}
+		TestAssertTrue(uuid_decompression_iterator_try_next_forward(iter).is_done);
+		TestAssertInt64Eq(i, TEST_ELEMENTS);
+	}
+}
+
+static void
+test_uuid_compressor_switch_to_dictionary(int modulo)
+{
+	/* Make sure the compressor switches to dictionary compression when the cardinality is
+	 * not high enough to justify the overhead of the uuid compressor.
+	 */
+	Datum *uuids = generate_uuidv7(TEST_ELEMENTS);
+	UuidCompressor *compressor = uuid_compressor_alloc();
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		pg_uuid_t *uuid = DatumGetUUIDP(uuids[i % modulo]);
+		uuid_compressor_append_value(compressor, *uuid);
+	}
+
+	Datum compressed = (Datum) uuid_compressor_finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
+
+	DecompressionIterator *iter =
+		tsl_dictionary_decompression_iterator_from_datum_forward(compressed, UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = dictionary_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i % modulo])));
+	}
+}
+
+static void
+test_uuid()
+{
+	bool old_value = ts_guc_enable_uuid_compression;
+	ts_guc_enable_uuid_compression = true;
+	test_uuid_dictionary_simple();
+	test_uuid_array_simple();
+	test_uuid_compressor_simple(0, 0);
+	test_uuid_compressor_simple(0, 5);
+	test_uuid_compressor_simple(0, 10);
+	test_uuid_compressor_simple(0, 100);
+	test_uuid_compressor_simple(2, 0);
+	test_uuid_compressor_simple(5, 0);
+	test_uuid_compressor_simple(10, 0);
+	test_uuid_compressor_simple(100, 0);
+	test_uuid_compressor_switch_to_dictionary(2);
+	test_uuid_compressor_switch_to_dictionary(20);
+	test_uuid_compressor_switch_to_dictionary(200);
+	test_uuid_compressor_switch_to_dictionary(500);
+	ts_guc_enable_uuid_compression = old_value;
+}
+
+static void
+test_delta_size_and_placement(const int32 *values, int n, int expected_size)
+{
+	size_t var_size;
+	size_t calc_size;
+
+	Datum pass1 = (Datum) 0;
+	Datum pass2 = (Datum) 0;
+	Datum pass3 = (Datum) 0;
+
+	/* First pass, obtain a reference and verify expected size is legit */
+	{
+		DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
+		for (int i = 0; i < n; i++)
+		{
+			/* Zero values are treated as nulls */
+			if (values[i] == 0)
+				delta_delta_compressor_append_null(compressor);
+			else
+				delta_delta_compressor_append_value(compressor, values[i]);
+		}
+		pass1 = (Datum) delta_delta_compressor_finish(compressor);
+		var_size = DatumGetPointer(pass1) == NULL ? 0 : VARSIZE(DatumGetPointer(pass1));
+		TestAssertInt64Eq((int64) var_size, (int64) expected_size);
+
+		if (expected_size > 0)
+		{
+			StringInfoData buf;
+			bytea *sent;
+			StringInfoData transmission;
+			DeltaDeltaCompressed *compressed_recv;
+
+			pq_begintypsend(&buf);
+			deltadelta_compressed_send((CompressedDataHeader *) pass1, &buf);
+			sent = pq_endtypsend(&buf);
+
+			transmission = (StringInfoData){
+				.data = VARDATA(sent),
+				.len = VARSIZE(sent),
+				.maxlen = VARSIZE(sent),
+			};
+
+			compressed_recv =
+				(DeltaDeltaCompressed *) DatumGetPointer(deltadelta_compressed_recv(&transmission));
+			DecompressionIterator *iter =
+				delta_delta_decompression_iterator_from_datum_forward(PointerGetDatum(
+																		  compressed_recv),
+																	  INT8OID);
+			int i = 0;
+			for (DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter);
+				 !r.is_done;
+				 r = delta_delta_decompression_iterator_try_next_forward(iter))
+			{
+				if (values[i] == 0)
+					TestAssertTrue(r.is_null);
+				else
+				{
+					TestAssertTrue(!r.is_null);
+					TestAssertInt64Eq(DatumGetInt64(r.val), values[i]);
+				}
+				i += 1;
+			}
+			TestAssertInt64Eq(i, n);
+		}
+	}
+
+	/* Second pass, verify that the compressed data size calculation is idempotent and
+	 * produces a valid result */
+	{
+		DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
+		bool has_nulls = false;
+		for (int i = 0; i < n; i++)
+		{
+			/* Zero values are treated as nulls */
+			if (values[i] == 0)
+			{
+				delta_delta_compressor_append_null(compressor);
+				has_nulls = true;
+			}
+			else
+				delta_delta_compressor_append_value(compressor, values[i]);
+		}
+		size_t nulls_size = 0;
+		calc_size = delta_delta_compressor_compressed_size(compressor, &nulls_size);
+		TestAssertTrue((has_nulls && calc_size > 0) == (nulls_size > 0));
+		TestAssertInt64Eq(calc_size, expected_size);
+		pass2 = (Datum) delta_delta_compressor_finish(compressor);
+		/* Make sure the compressed data size is the same as the var size */
+		TestAssertInt64Eq((int64) calc_size, (int64) var_size);
+		/* And the var size is the same as in the previous calculation */
+		var_size = DatumGetPointer(pass2) == NULL ? 0 : VARSIZE(DatumGetPointer(pass2));
+		TestAssertInt64Eq((int64) var_size, (int64) var_size);
+	}
+
+	/* Third pass, verify that we can use the calculated size and serialize the
+	 * compressed data into a buffer which results the same data as in the previous
+	 * passes */
+	{
+		DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
+		for (int i = 0; i < n; i++)
+		{
+			/* Zero values are treated as nulls */
+			if (values[i] == 0)
+			{
+				delta_delta_compressor_append_null(compressor);
+			}
+			else
+				delta_delta_compressor_append_value(compressor, values[i]);
+		}
+
+		size_t est_size = delta_delta_compressor_compressed_size(compressor, NULL);
+		TestAssertInt64Eq(est_size, expected_size);
+		if (expected_size > 0)
+		{
+			pass3 = (Datum) palloc0(est_size+4);
+			char* pass3_ptr = DatumGetPointer(pass3);
+			pass3_ptr[est_size] = 0xDE;
+			pass3_ptr[est_size+1] = 0xAD;
+			pass3_ptr[est_size+2] = 0xBE;
+			pass3_ptr[est_size+3] = 0xEF;
+
+			char* result = (char *)delta_delta_compressor_finish_into(compressor, DatumGetPointer(pass3));
+			TestAssertTrue(DatumGetPointer(pass3) != NULL);
+			TestAssertTrue(result != NULL);
+			TestAssertTrue(result != DatumGetPointer(pass3));
+			TestAssertTrue(result == pass3_ptr+est_size);
+			size_t pass3_size = VARSIZE(DatumGetPointer(pass3));
+			TestAssertInt64Eq(pass3_size, est_size);
+			TestAssertInt64Eq(pass3_size, VARSIZE(DatumGetPointer(pass1)));
+			TestAssertInt64Eq(pass3_size, VARSIZE(DatumGetPointer(pass2)));
+
+			TestAssertInt64Eq((unsigned char)result[0], 0xDE);
+			TestAssertInt64Eq((unsigned char)result[1], 0xAD);
+			TestAssertInt64Eq((unsigned char)result[2], 0xBE);
+			TestAssertInt64Eq((unsigned char)result[3], 0xEF);
+
+			TestAssertTrue(memcmp(DatumGetPointer(pass3),
+								  DatumGetPointer(pass1),
+								  VARSIZE(DatumGetPointer(pass1))) == 0);
+			TestAssertTrue(memcmp(DatumGetPointer(pass3),
+								  DatumGetPointer(pass2),
+								  VARSIZE(DatumGetPointer(pass2))) == 0);
+		}
+	}
+}
+
+static void
+test_delta_size_and_placements()
+{
+	int32 single_value[] = { 1 };
+	int32 triple[] = { 1, 2, 3 };
+	int32 nulls[] = { 0, 0 };
+	int32 mixed[] = { 1, 0, 100 };
+	int32 large[] = { 0, 1,	 10,  100,	1000,  10000,  100000,	1000000,  10000000,	 100000000,
+					  0, 2,	 20,  200,	2000,  20000,  200000,	2000000,  20000000,	 200000000,
+					  0, 3,	 30,  300,	3000,  30000,  300000,	3000000,  30000000,	 300000000,
+					  0, 4,	 40,  400,	4000,  40000,  400000,	4000000,  40000000,	 400000000,
+					  0, 5,	 50,  500,	5000,  50000,  500000,	5000000,  50000000,	 500000000,
+					  0, 6,	 60,  600,	6000,  60000,  600000,	6000000,  60000000,	 600000000,
+					  0, 7,	 70,  700,	7000,  70000,  700000,	7000000,  70000000,	 700000000,
+					  0, 8,	 80,  800,	8000,  80000,  800000,	8000000,  80000000,	 800000000,
+					  0, 9,	 90,  900,	9000,  90000,  900000,	9000000,  90000000,	 900000000,
+					  0, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
+					  0, 11, 110, 1100, 11000, 110000, 1100000, 11000000, 110000000, 1100000000,
+					  0, 12, 120, 1200, 12000, 120000, 1200000, 12000000, 120000000, 1200000000,
+					  0, 13, 130, 1300, 13000, 130000, 1300000, 13000000, 130000000, 1300000000,
+					  0, 14, 140, 1400, 14000, 140000, 1400000, 14000000, 140000000, 1400000000,
+					  0, 15, 150, 1500, 15000, 150000, 1500000, 15000000, 150000000, 1500000000,
+					  0, 16, 160, 1600, 16000, 160000, 1600000, 16000000, 160000000, 1600000000,
+					  0, 17, 170, 1700, 17000, 170000, 1700000, 17000000, 170000000, 1700000000,
+					  0, 18, 180, 1800, 18000, 180000, 1800000, 18000000, 180000000, 1800000000,
+					  0, 19, 190, 1900, 19000, 190000, 1900000, 19000000, 190000000, 1900000000 };
+
+	test_delta_size_and_placement(single_value, sizeof(single_value) / sizeof(*single_value), 48);
+	test_delta_size_and_placement(triple, sizeof(triple) / sizeof(*triple), 48);
+	test_delta_size_and_placement(nulls, sizeof(nulls) / sizeof(*nulls), 0);
+	test_delta_size_and_placement(mixed, sizeof(mixed) / sizeof(*mixed), 72);
+	test_delta_size_and_placement(large, 2, 72);
+	test_delta_size_and_placement(large, 3, 72);
+	test_delta_size_and_placement(large, 4, 72);
+	test_delta_size_and_placement(large, 5, 72);
+	test_delta_size_and_placement(large, 6, 80);
+	test_delta_size_and_placement(large, 7, 80);
+	test_delta_size_and_placement(large, 8, 80);
+	test_delta_size_and_placement(large, 9, 88);
+	test_delta_size_and_placement(large, 10, 88);
+	test_delta_size_and_placement(large, 13, 96);
+	test_delta_size_and_placement(large, 20, 120);
+	test_delta_size_and_placement(large, 24, 136);
+	test_delta_size_and_placement(large, 30, 152);
+	test_delta_size_and_placement(large, 35, 168);
+	test_delta_size_and_placement(large, 40, 184);
+	test_delta_size_and_placement(large, 46, 208);
+	test_delta_size_and_placement(large, 50, 224);
+	test_delta_size_and_placement(large, 57, 248);
+	test_delta_size_and_placement(large, 60, 256);
+	test_delta_size_and_placement(large, 68, 288);
+	test_delta_size_and_placement(large, 70, 296);
+	test_delta_size_and_placement(large, 79, 328);
+	test_delta_size_and_placement(large, 80, 328);
+	test_delta_size_and_placement(large, 90, 368);
+	test_delta_size_and_placement(large, 100, 400);
+	test_delta_size_and_placement(large, 102, 408);
+	test_delta_size_and_placement(large, 110, 432);
+	test_delta_size_and_placement(large, 113, 440);
+	test_delta_size_and_placement(large, 120, 464);
+	test_delta_size_and_placement(large, 124, 488);
+	test_delta_size_and_placement(large, 130, 520);
+	test_delta_size_and_placement(large, 135, 544);
+	test_delta_size_and_placement(large, 140, 560);
+	test_delta_size_and_placement(large, 146, 584);
+	test_delta_size_and_placement(large, 150, 600);
+	test_delta_size_and_placement(large, 157, 640);
+	test_delta_size_and_placement(large, 160, 648);
+	test_delta_size_and_placement(large, 168, 680);
+	test_delta_size_and_placement(large, 170, 688);
+	test_delta_size_and_placement(large, 180, 728);
+}
+
 Datum
 ts_test_compression(PG_FUNCTION_ARGS)
 {
+	/* Some tests to verify the size of the compressed data with the delta delta compressor */
+	test_delta_size_and_placements();
+
 	test_int_array();
 	test_string_array();
 	test_int_dictionary();
@@ -1030,6 +1533,7 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_delta3(/* have_nulls = */ true, /* have_random = */ true);
 	test_bool();
 	test_null();
+	test_uuid();
 
 	/* Some tests for zig-zag encoding overflowing the original element width. */
 	test_delta4(test_delta4_case1, sizeof(test_delta4_case1) / sizeof(*test_delta4_case1));
