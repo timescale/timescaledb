@@ -23,7 +23,7 @@ jobs:
         ref: ${{ github.event.inputs.ref }}
         token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
     
-    - name: Push to pre-release branch
+    - name: Push to package_test branch
       env:
         GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       run: |
