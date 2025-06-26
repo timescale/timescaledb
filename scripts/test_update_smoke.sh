@@ -34,7 +34,7 @@ CONNECTION_STRING=$3
 
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
-SCRATCHDIR=$(mktemp -d -t 'smoketest-XXXX')
+SCRATCHDIR=$(mktemp -d --tmpdir=/tmp "smoketest-${CURRENT_VERSION}-${NEXT_VERSION}")
 LOGFILE="$SCRATCHDIR/update-test.log"
 DUMPFILE="$SCRATCHDIR/smoke.dump"
 UPGRADE_OUT="$SCRATCHDIR/upgrade.out"
