@@ -36,7 +36,7 @@ echo "testing upgrade path from v${CURRENT_VERSION} to ${NEXT_VERSION} .."
 
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
-SCRATCHDIR=$(mktemp -d --tmpdir=/tmp "smoketest-${CURRENT_VERSION}-${NEXT_VERSION}")
+SCRATCHDIR=$(mktemp -d -t "smoketest-${CURRENT_VERSION}-${NEXT_VERSION}-XXXX")
 LOGFILE="$SCRATCHDIR/update-test.log"
 DUMPFILE="$SCRATCHDIR/smoke.dump"
 UPGRADE_OUT="$SCRATCHDIR/upgrade.out"
