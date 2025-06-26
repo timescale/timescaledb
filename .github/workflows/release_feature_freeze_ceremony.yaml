@@ -10,7 +10,7 @@ permissions:
 jobs:
   release-feature-freeze-ceremony:
     name: Release - Feature Freeze & CHANGELOG
-    runs-on: ubuntu-latest
+    runs-on: timescaledb-runner-arm64
     environment:
       name: Release Ceremonies
 
