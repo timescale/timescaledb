@@ -215,6 +215,7 @@ TRUNCATE custom_log;
 
 -- Forced Exception
 SELECT add_job('custom_proc4', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_3 \gset
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:job_id_3, 1);
 
 -- Check results
@@ -247,6 +248,7 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
 
 -- Compression policy
 SELECT add_compression_policy('conditions', interval '1 day') AS job_id_4 \gset
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:job_id_4, 1);
 
 -- Chunk compress stats
@@ -263,6 +265,7 @@ order by id;
 
 --running job second time, wait for it to complete
 select t.schedule_interval FROM alter_job(:job_id_4, next_start=> now() ) t;
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:job_id_4, 2);
 
 SELECT id, table_name, status from _timescaledb_catalog.chunk
@@ -290,6 +293,7 @@ WITH NO DATA;
 
 -- Refresh Continous Aggregate by Job
 SELECT add_job('custom_proc5', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_5 \gset
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:job_id_5, 1);
 SELECT count(*) FROM conditions_summary_daily;
 
@@ -510,6 +514,7 @@ $$;
 
 select add_job('add_scheduled_jobs_with_check', schedule_interval => '1 hour') as last_job_id \gset
 -- wait for enough time
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT test.wait_for_job_to_run(:last_job_id, 1);
 select total_runs, total_successes, last_run_status from timescaledb_information.job_stats where job_id = :last_job_id;
 
@@ -660,6 +665,7 @@ $$;
 SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz + interval '2s') AS job_id_1 \gset
 SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz - interval '2s') AS job_id_2 \gset
 
+SELECT _timescaledb_functions.restart_background_workers();
 -- wait for the jobs to start running job_2 will start running first
 CALL wait_for_job_status(:job_id_2, 'Running');
 CALL wait_for_job_status(:job_id_1, 'Running');

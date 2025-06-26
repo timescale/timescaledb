@@ -151,20 +151,6 @@ typedef struct MultiInsertBufferEntry
 	TSCopyMultiInsertBuffer *buffer;
 } MultiInsertBufferEntry;
 
-/*
- * Change to another chunk for inserts.
- *
- * Called every time we switch to another chunk for inserts.
- */
-static void
-on_chunk_insert_state_changed(ChunkInsertState *state, void *data)
-{
-	BulkInsertState bistate = data;
-
-	/* Chunk changed, so release the buffer held in BulkInsertState */
-	ReleaseBulkInsertStatePin(bistate);
-}
-
 static CopyChunkState *
 copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, CopyFromState cstate,
 						TableScanDesc scandesc)
@@ -175,12 +161,6 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
 	ccstate = palloc(sizeof(CopyChunkState));
 	ccstate->rel = rel;
 	ccstate->estate = estate;
-	ccstate->dispatch = ts_chunk_dispatch_create(ht, estate);
-
-	/* In the copy path, no chunk dispatch node and no chunk dispatch state is available. Create an
-	 * empty state to be able to count decompressed tuples. */
-	ccstate->dispatch->dispatch_state = palloc0(sizeof(ChunkDispatchState));
-
 	ccstate->cstate = cstate;
 	ccstate->scandesc = scandesc;
 	ccstate->next_copy_from = from_func;
@@ -290,14 +270,27 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 			Assert(buffer->tupdesc->tdrefcount == -1);
 			break;
 		case TS_CIM_COMPRESSION:
-			buffer->compressor = ts_cm_functions->compressor_init(cis->rel, &buffer->bulk_writer);
-			if (!ts_guc_enable_compressed_copy_presorted)
+		{
+			bool sort = ts_guc_enable_direct_compress_copy_sort_batches &&
+						!ts_guc_enable_direct_compress_copy_client_sorted;
+			buffer->compressor =
+				ts_cm_functions->compressor_init(cis->rel, &buffer->bulk_writer, sort);
+
+			/*
+			 * The sorting done in the compressor is only a local sort for the
+			 * currently ingested batch and will produce overlapping batches for
+			 * multiple independent insert streams. Therefore we still need to
+			 * mark the chunk as unordered until we adjust the rest of the code to
+			 * be able to deal with overlapping batches.
+			 */
+			if (!ts_guc_enable_direct_compress_copy_client_sorted)
 			{
 				Chunk *chunk = ts_chunk_get_by_id(cis->chunk_id, true);
 				if (!ts_chunk_is_unordered(chunk))
 					ts_chunk_set_unordered(chunk);
 			}
 			break;
+		}
 	}
 
 	return buffer;
@@ -415,11 +408,7 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	 * No callback on changed chunk is needed, the bulk insert state buffer is
 	 * freed in TSCopyMultiInsertBufferCleanup().
 	 */
-	ChunkInsertState *cis =
-		ts_chunk_dispatch_get_chunk_insert_state(miinfo->ccstate->dispatch,
-												 buffer->point,
-												 NULL /* on chunk changed function */,
-												 NULL /* payload for on chunk changed function */);
+	ChunkInsertState *cis = ts_chunk_tuple_routing_find_chunk(miinfo->ccstate->ctr, buffer->point);
 
 	ResultRelInfo *resultRelInfo = cis->result_relation_info;
 
@@ -729,7 +718,7 @@ TSCopyMultiInsertInfoStore(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 static void
 copy_chunk_state_destroy(CopyChunkState *ccstate)
 {
-	ts_chunk_dispatch_destroy(ccstate->dispatch);
+	ts_chunk_tuple_routing_destroy(ccstate->ctr);
 	FreeExecutorState(ccstate->estate);
 }
 
@@ -813,7 +802,6 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	bool has_instead_insert_row_trig;
 	bool has_after_insert_statement_trig;
 	ExprState *qualexpr = NULL;
-	ChunkDispatch *dispatch = ccstate->dispatch;
 
 	Assert(pstate->p_rtable);
 
@@ -914,8 +902,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 	ExecOpenIndices(resultRelInfo, false);
 
-	if (!dispatch->hypertable_result_rel_info)
-		dispatch->hypertable_result_rel_info = resultRelInfo;
+	ccstate->ctr = ts_chunk_tuple_routing_create(estate, resultRelInfo);
 
 	singleslot = table_slot_create(resultRelInfo->ri_RelationDesc, &estate->es_tupleTable);
 
@@ -989,10 +976,10 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	}
 	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) &&
 			 !ts_indexing_relation_has_primary_or_unique_index(ccstate->rel) &&
-			 ts_guc_enable_compressed_copy)
+			 ts_guc_enable_direct_compress_copy)
 	{
 		insertMethod = TS_CIM_COMPRESSION;
-		ccstate->dispatch->create_compressed_chunk = true;
+		ccstate->ctr->create_compressed_chunk = true;
 		ereport(DEBUG1, (errmsg("Using compressed copy operation (TS_CIM_COMPRESSION).")));
 	}
 	else
@@ -1011,7 +998,8 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 							  ht);
 
 	TSCopyMultiInsertBuffer *buffer = NULL;
-	int reset_count = 0; /* Reset the per-tuple exprcontext every 100 tuples */
+	int reset_count = 0;			 /* Reset the per-tuple exprcontext every 100 tuples */
+	Oid prev_chunk_oid = InvalidOid; /* Previous chunk OID to detect chunk changes */
 	for (;;)
 	{
 		TupleTableSlot *myslot = NULL;
@@ -1050,14 +1038,17 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		point = ts_hyperspace_calculate_point(ht->space, myslot);
 
 		/* Find or create the insert state matching the point */
-		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
-													   point,
-													   on_chunk_insert_state_changed,
-													   bistate);
+		cis = ts_chunk_tuple_routing_find_chunk(ccstate->ctr, point);
+		if (OidIsValid(prev_chunk_oid) && prev_chunk_oid != cis->rel->rd_id)
+		{
+			ReleaseBulkInsertStatePin(bistate);
+		}
+
+		prev_chunk_oid = cis->rel->rd_id;
 
 		Assert(cis != NULL);
 
-		ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, myslot);
+		ts_chunk_tuple_routing_decompress_for_insert(cis, myslot, ccstate->ctr->estate, false);
 
 		/* Triggers and stuff need to be invoked in query context. */
 		MemoryContextSwitchTo(oldcontext);

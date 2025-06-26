@@ -50,12 +50,22 @@ typedef struct CachedDecompressionState
 	Oid index_relid;
 } CachedDecompressionState;
 
+typedef struct SharedCounters
+{
+	/* Number of batches deleted */
+	int64 batches_deleted;
+	/* Number of batches filtered */
+	int64 batches_filtered;
+	/* Number of batches decompressed */
+	int64 batches_decompressed;
+	/* Number of tuples decompressed */
+	int64 tuples_decompressed;
+} SharedCounters;
+
 typedef struct ChunkInsertState
 {
 	Relation rel;
 	ResultRelInfo *result_relation_info;
-	/* Per-chunk arbiter indexes for ON CONFLICT handling */
-	List *arbiter_indexes;
 	ChunkDispatchState *cds;
 
 	/* When the tuple descriptors for the main hypertable (root) and a chunk
@@ -92,6 +102,10 @@ typedef struct ChunkInsertState
 	/* To speedup repeated calls of `decompress_batches_for_insert` */
 	CachedDecompressionState *cached_decompression_state;
 
+	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
+	bool skip_current_tuple;
+	SharedCounters *counters;
+
 	/* Chunk uses our own table access method */
 	bool use_tam;
 } ChunkInsertState;
@@ -101,6 +115,8 @@ typedef struct ChunkDispatch ChunkDispatch;
 extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,
 													  const ChunkDispatch *dispatch);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
+ResultRelInfo *create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel,
+												 EState *estate);
 
 TSDLLEXPORT OnConflictAction
 ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);

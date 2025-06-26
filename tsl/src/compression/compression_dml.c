@@ -307,16 +307,15 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	if (index_rel)
 		index_close(index_rel, AccessShareLock);
 
-	Assert(cis->cds != NULL);
 	if (skip_current_tuple)
 	{
-		cis->cds->skip_current_tuple = true;
+		cis->skip_current_tuple = true;
 	}
 
-	cis->cds->batches_deleted += stats.batches_deleted;
-	cis->cds->batches_filtered += stats.batches_filtered;
-	cis->cds->batches_decompressed += stats.batches_decompressed;
-	cis->cds->tuples_decompressed += stats.tuples_decompressed;
+	cis->counters->batches_deleted += stats.batches_deleted;
+	cis->counters->batches_filtered += stats.batches_filtered;
+	cis->counters->batches_decompressed += stats.batches_decompressed;
+	cis->counters->tuples_decompressed += stats.tuples_decompressed;
 
 	if (index_scankeys)
 		pfree(index_scankeys);
@@ -1174,7 +1173,7 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 			return constraints;
 	}
 
-	if (constraints->covered && cis->cds->dispatch)
+	if (constraints->covered && cis->cds && cis->cds->dispatch)
 	{
 		constraints->on_conflict = ts_chunk_dispatch_get_on_conflict_action(cis->cds->dispatch);
 	}
@@ -1314,7 +1313,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 																 var->varattno,
 																 settings->fd.compress_relid,
 																 "max");
-				if (min_attno == InvalidAttrNumber)
+				if (max_attno == InvalidAttrNumber)
 					continue;
 
 				/* Need both min and max metadata attributes to build heap filters */
