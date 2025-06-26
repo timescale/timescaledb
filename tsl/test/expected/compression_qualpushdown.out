@@ -75,6 +75,12 @@ WHERE time = 3::bigint;
     3 |         3 |   1
 (1 row)
 
+SELECT * FROM hyper where time = val + 1;
+ time | device_id | val 
+------+-----------+-----
+    2 |         2 |   1
+(1 row)
+
 -- Test some volatile and stable functions
 SET timescaledb.enable_chunk_append TO OFF;
 SET timescaledb.enable_constraint_aware_append TO OFF;
@@ -637,3 +643,95 @@ LATERAL(
 (1 row)
 
 DROP TABLE svf_pushdown;
+-- Test bool segmentby column to cover bool-returning operator deeper in the
+-- expression tree.
+create table booltab(ts int, segmentby bool, flag bool, value int);
+select create_hypertable('booltab', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+   create_hypertable   
+-----------------------
+ (13,public,booltab,t)
+(1 row)
+
+alter table booltab set (timescaledb.compress, timescaledb.compress_segmentby = 'segmentby',
+    timescaledb.compress_orderby = 'ts, flag');
+insert into booltab values
+    (  1,  true,  true,   1),
+    ( 99, false, false,  99),
+    (100, false, false, 100),
+    (101, false, false, 101)
+;
+select count(compress_chunk(x)) from show_chunks('booltab') x;
+ count 
+-------
+     1
+(1 row)
+
+vacuum analyze booltab;
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where segmentby = (value = 1);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=4 loops=1)
+   Filter: (segmentby = (value = 1))
+   ->  Seq Scan on compress_hyper_14_15_chunk (actual rows=2 loops=1)
+(3 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where segmentby = (ts = 1);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=4 loops=1)
+   Filter: (segmentby = (ts = 1))
+   ->  Seq Scan on compress_hyper_14_15_chunk (actual rows=2 loops=1)
+(3 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where segmentby != (ts = 1);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=0 loops=1)
+   Filter: (segmentby <> (ts = 1))
+   Rows Removed by Filter: 4
+   ->  Seq Scan on compress_hyper_14_15_chunk (actual rows=2 loops=1)
+(4 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where (value = 1) = (ts = 1);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=4 loops=1)
+   Filter: ((value = 1) = (ts = 1))
+   ->  Seq Scan on compress_hyper_14_15_chunk (actual rows=2 loops=1)
+(3 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where flag = (ts = 1);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=4 loops=1)
+   Filter: (flag = (ts = 1))
+   ->  Seq Scan on compress_hyper_14_15_chunk (actual rows=2 loops=1)
+(3 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where flag = (ts = 99);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=2 loops=1)
+   Filter: (flag = (ts = 99))
+   Rows Removed by Filter: 2
+   ->  Seq Scan on compress_hyper_14_15_chunk (actual rows=2 loops=1)
+(4 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where flag = (ts = 99);
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=2 loops=1)
+   Filter: (flag = (ts = 99))
+   Rows Removed by Filter: 2
+   ->  Seq Scan on compress_hyper_14_15_chunk (actual rows=2 loops=1)
+(4 rows)
+
+drop table booltab;

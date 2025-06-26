@@ -249,6 +249,68 @@ select * from saop where segmentby = all(array[with_bloom, with_minmax]);
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
 (9 rows)
 
+-- If the arguments of an operator can pushed down but require recheck, combining
+-- them is wrong.
+explain (analyze, costs off, timing off, summary off)
+select * from saop where (with_bloom = '1') = (with_minmax = '1');
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Append (actual rows=96489 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=48245 loops=1)
+         Filter: ((with_bloom = '1'::text) = (with_minmax = '1'::text))
+         Rows Removed by Filter: 1755
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=48244 loops=1)
+         Filter: ((with_bloom = '1'::text) = (with_minmax = '1'::text))
+         Rows Removed by Filter: 1756
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
+(9 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where (with_bloom = any(array['1', '10'])) = (with_minmax = any(array['1', '10']));
+                                            QUERY PLAN                                            
+--------------------------------------------------------------------------------------------------
+ Append (actual rows=92869 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=46434 loops=1)
+         Filter: ((with_bloom = ANY ('{1,10}'::text[])) = (with_minmax = ANY ('{1,10}'::text[])))
+         Rows Removed by Filter: 3566
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=46435 loops=1)
+         Filter: ((with_bloom = ANY ('{1,10}'::text[])) = (with_minmax = ANY ('{1,10}'::text[])))
+         Rows Removed by Filter: 3565
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
+(9 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where (segmentby = '1') = (segmentby = '2');
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Append (actual rows=91304 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=45652 loops=1)
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=63 loops=1)
+               Filter: ((segmentby = '1'::text) = (segmentby = '2'::text))
+               Rows Removed by Filter: 6
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=45652 loops=1)
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=63 loops=1)
+               Filter: ((segmentby = '1'::text) = (segmentby = '2'::text))
+               Rows Removed by Filter: 6
+(9 rows)
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where (segmentby = any(array['1', '2'])) = (segmentby = any(array['3', '4']));
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
+ Append (actual rows=82608 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=41304 loops=1)
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=57 loops=1)
+               Filter: ((segmentby = ANY ('{1,2}'::text[])) = (segmentby = ANY ('{3,4}'::text[])))
+               Rows Removed by Filter: 12
+   ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=41304 loops=1)
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=57 loops=1)
+               Filter: ((segmentby = ANY ('{1,2}'::text[])) = (segmentby = ANY ('{3,4}'::text[])))
+               Rows Removed by Filter: 12
+(9 rows)
+
 -- Partial pushdown of AND scalar array operation.
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = all(array[with_minmax, with_minmax]);
