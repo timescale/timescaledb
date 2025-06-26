@@ -384,8 +384,8 @@ extern void row_compressor_close(RowCompressor *row_compressor);
 extern HeapTuple row_compressor_build_tuple(RowCompressor *row_compressor);
 extern void row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
-											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
-											  Relation in_rel, BulkWriter *writer);
+											  Tuplesortstate *sorted_rel, Relation in_rel,
+											  BulkWriter *writer);
 extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
 									  const CompressionSettings *settings);
 
