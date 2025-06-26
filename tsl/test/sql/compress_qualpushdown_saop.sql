@@ -93,6 +93,21 @@ explain (analyze, costs off, timing off, summary off)
 select * from saop where segmentby = all(array[with_bloom, with_minmax]);
 
 
+-- If the arguments of an operator can pushed down but require recheck, combining
+-- them is wrong.
+explain (analyze, costs off, timing off, summary off)
+select * from saop where (with_bloom = '1') = (with_minmax = '1');
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where (with_bloom = any(array['1', '10'])) = (with_minmax = any(array['1', '10']));
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where (segmentby = '1') = (segmentby = '2');
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where (segmentby = any(array['1', '2'])) = (segmentby = any(array['3', '4']));
+
+
 -- Partial pushdown of AND scalar array operation.
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = all(array[with_minmax, with_minmax]);
