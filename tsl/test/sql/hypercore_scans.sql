@@ -41,6 +41,8 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk
 
 alter table :chunk set access method hypercore;
 
+vacuum analyze readings;
+
 --
 -- Check that TID scan works for both compressed and non-compressed
 -- rows.
@@ -206,6 +208,8 @@ select time, device+device as device_x2 from :chunk limit 1;
 --
 -- Need to convert all chunks to Hypercore TAM.
 select compress_chunk(ch, hypercore_use_access_method=>true) from show_chunks('readings') ch;
+
+vacuum analyze readings;
 
 -- Just test that this query doesn't fail with an error about Bump
 -- allocator not supporting pfree. Redirect output to a temporary
