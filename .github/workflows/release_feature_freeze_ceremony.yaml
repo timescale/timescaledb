@@ -60,6 +60,10 @@ jobs:
           branch: "release/${{ env.NEXT_VERSION }}--changelog"
           base: ${{ env.RELEASE_BRANCH }}
           delete-branch: true
+          reviewers: |
+            @philkra
+            @brandonpurcell-dev
+            @atovpeko
           title: "Release ${{ env.NEXT_VERSION }}"
           labels: |
             release
