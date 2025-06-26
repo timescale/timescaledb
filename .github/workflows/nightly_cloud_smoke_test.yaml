@@ -60,7 +60,7 @@ jobs:
         ./scripts/test_update_smoke.sh \
             ${{ steps.versions.outputs.prev_version }} \
             ${{ steps.versions.outputs.version }} \
-            "${{ secrets.CLOUD_SMOKE_INSTANCE }}"
+            "${{ secrets.DB_TEAM_QA_SERVICE_CONNECTION_STRING }}"
 
     - name: Show logs
       if: always()
