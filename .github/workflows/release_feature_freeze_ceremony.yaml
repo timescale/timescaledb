@@ -43,6 +43,7 @@ jobs:
           if git ls-remote --heads origin ${{ env.RELEASE_BRANCH }} | grep -q ${{ env.RELEASE_BRANCH }}; then
             echo "branch_exists=true" >> $GITHUB_OUTPUT
           else
+            echo "Branch ${{ env.RELEASE_BRANCH }} already exists."
             echo "branch_exists=false" >> $GITHUB_OUTPUT
           fi
 
