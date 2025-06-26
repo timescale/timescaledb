@@ -550,11 +550,6 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 	 */
 	context->needs_recheck = true;
 
-	Expr *original_leftop;
-	Expr *original_rightop;
-	TypeCacheEntry *tce;
-	int strategy;
-
 	if (!orig_saop->useOr)
 	{
 		context->can_pushdown = false;
@@ -568,19 +563,19 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 		return orig_saop;
 	}
 
-	original_leftop = linitial(expr_args);
-	original_rightop = lsecond(expr_args);
+	Expr *orig_leftop = linitial(expr_args);
+	Expr *orig_rightop = lsecond(expr_args);
 
-	if (IsA(original_leftop, RelabelType))
-		original_leftop = ((RelabelType *) original_leftop)->arg;
-	if (IsA(original_rightop, RelabelType))
-		original_rightop = ((RelabelType *) original_rightop)->arg;
+	if (IsA(orig_leftop, RelabelType))
+		orig_leftop = ((RelabelType *) orig_leftop)->arg;
+	if (IsA(orig_rightop, RelabelType))
+		orig_rightop = ((RelabelType *) orig_rightop)->arg;
 
 	/*
 	 * For scalar array operation, we expect a var on the left side.
 	 */
 	AttrNumber bloom1_attno = InvalidAttrNumber;
-	expr_fetch_bloom1_metadata(context, original_leftop, &bloom1_attno);
+	expr_fetch_bloom1_metadata(context, orig_leftop, &bloom1_attno);
 	if (bloom1_attno == InvalidAttrNumber)
 	{
 		/* No metadata for left operand. */
@@ -588,7 +583,7 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 		return orig_saop;
 	}
 
-	Var *var_with_segment_meta = castNode(Var, original_leftop);
+	Var *var_with_segment_meta = castNode(Var, orig_leftop);
 
 	/*
 	 * Play it safe and don't push down if the operator collation doesn't match
@@ -613,9 +608,9 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 	/*
 	 * We only support hashable equality operators.
 	 */
-	Oid op_oid = orig_saop->opno;
-	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
-	strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
+	const Oid op_oid = orig_saop->opno;
+	TypeCacheEntry *tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
+	const int strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
 	if (strategy != HTEqualStrategyNumber)
 	{
 		context->can_pushdown = false;
@@ -628,13 +623,17 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 	Assert(op_strict(op_oid));
 
 	/*
-	 * Check if the righthand expression is safe to push down.
+	 * Check if the righthand expression is safe to push down. We cannot combine
+	 * it with the original operator if there can be false negatives.
 	 */
-	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) original_rightop, context);
-	if (!context->can_pushdown)
+	QualPushdownContext tmp_context = copy_context(context);
+	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) orig_rightop, &tmp_context);
+	if (!tmp_context.can_pushdown || tmp_context.needs_recheck)
 	{
+		context->can_pushdown = false;
 		return orig_saop;
 	}
+	Assert(pushed_down_rightop != NULL);
 
 	/*
 	 * var = any(array) implies bloom1_contains_any(var_bloom, array).
@@ -708,7 +707,7 @@ pushdown_saop_boolexpr(QualPushdownContext *context, ScalarArrayOpExpr *saop)
 	{
 		opexpr->args = list_make2(scalar_arg, lfirst(lc));
 
-		QualPushdownContext tmp_context = *context;
+		QualPushdownContext tmp_context = copy_context(context);
 		void *transformed = qual_pushdown_mutator((Node *) opexpr, &tmp_context);
 
 		/*
