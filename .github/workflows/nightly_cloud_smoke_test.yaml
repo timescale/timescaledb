@@ -1,21 +1,23 @@
-name: Cloud Update smoke test
+name: Nightly - Update smoke test on release branch
+
+# Requires private GitHub action to deploy the last commit
+# from the release branch to the QA service in Cloud
+
 "on":
-  # Going to run the scripts/test_update_smoke.sh once each night at midnight
-  # Currently staying with Postgres 17
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
   pull_request:
     paths:
-      - .github/workflows/cloud_update_smoke_test.yaml
+      - .github/workflows/nightly_cloud_smoke_test.yaml
 
 jobs:
   update_test:
     # We'll run the test against an instance in the cloud
     # The previous version of TimescaleDB is installed
     # and then we upgrade to the current version
-    name: Cloud Update test smoke 
-    runs-on: 'ubuntu-latest'
+    name: Cloud - Update test smoke 
+    runs-on: timescaledb-runner-arm64
     steps:
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
@@ -74,5 +76,3 @@ jobs:
       with:
         name: Cloud Update test smoke
         path: /tmp/smoketest*/* 
-
-
