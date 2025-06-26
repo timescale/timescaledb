@@ -306,8 +306,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	Ensure(in_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
 	Ensure(out_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
 
-	TupleDesc in_desc = RelationGetDescr(in_rel);
-
 	/* Before calling row compressor relation should be segmented and sorted as configured
 	 * by compress_segmentby and compress_orderby.
 	 * Cost of sorting can be mitigated if we find an existing BTREE index defined for
@@ -510,7 +508,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			 RelationGetRelationName(in_rel));
 
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(settings, in_rel);
-		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_desc, in_rel, &writer);
+		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_rel, &writer);
 		tuplesort_end(sorted_rel);
 	}
 
@@ -1010,26 +1008,19 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 
 void
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
-								  TupleDesc sorted_desc, Relation in_rel, BulkWriter *writer)
+								  Relation in_rel, BulkWriter *writer)
 {
 	TupleTableSlot *slot = MakeTupleTableSlot(row_compressor->in_desc, &TTSOpsMinimalTuple);
-	bool got_tuple;
 	int64 nrows_processed = 0;
 	int64 report_reltuples;
 
 	report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);
 
-	for (got_tuple = tuplesort_gettupleslot(sorted_rel,
-											true /*=forward*/,
-											false /*=copy*/,
-											slot,
-											NULL /*=abbrev*/);
-		 got_tuple;
-		 got_tuple = tuplesort_gettupleslot(sorted_rel,
-											true /*=forward*/,
-											false /*=copy*/,
-											slot,
-											NULL /*=abbrev*/))
+	while (tuplesort_gettupleslot(sorted_rel,
+								  true /*=forward*/,
+								  false /*=copy*/,
+								  slot,
+								  NULL /*=abbrev*/))
 	{
 		row_compressor_process_ordered_slot(row_compressor, slot, writer);
 		if ((++nrows_processed % report_reltuples) == 0)
