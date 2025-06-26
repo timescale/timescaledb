@@ -27,10 +27,26 @@ typedef struct QualPushdownContext
 	RelOptInfo *compressed_rel;
 	RangeTblEntry *chunk_rte;
 	RangeTblEntry *compressed_rte;
+	CompressionSettings *settings;
+
+	/*
+	 * This is actually the result, not the static input context like above, but
+	 * there's no way to separate this properly using the expression tree mutator
+	 * interface.
+	 */
 	bool can_pushdown;
 	bool needs_recheck;
-	CompressionSettings *settings;
 } QualPushdownContext;
+
+static QualPushdownContext
+copy_context(const QualPushdownContext *source)
+{
+	QualPushdownContext copy;
+	copy = *source;
+	copy.can_pushdown = true;
+	copy.needs_recheck = false;
+	return copy;
+}
 
 static Node *qual_pushdown_mutator(Node *node, QualPushdownContext *context);
 
@@ -40,7 +56,7 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 {
 	ListCell *lc;
 	List *decompress_clauses = NIL;
-	QualPushdownContext context = {
+	QualPushdownContext base_context = {
 		.chunk_rel = chunk_rel,
 		.compressed_rel = compressed_rel,
 		.chunk_rte = planner_rt_fetch(chunk_rel->relid, root),
@@ -52,11 +68,10 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 	{
 		RestrictInfo *ri = lfirst(lc);
 
-		context.can_pushdown = true;
-		context.needs_recheck = false;
-		Node *pushed_down = qual_pushdown_mutator((Node *) ri->clause, &context);
+		QualPushdownContext clause_context = copy_context(&base_context);
+		Node *pushed_down = qual_pushdown_mutator((Node *) ri->clause, &clause_context);
 
-		if (context.can_pushdown)
+		if (clause_context.can_pushdown)
 		{
 			/*
 			 * We have to call eval_const_expressions after pushing down
@@ -84,9 +99,12 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 					lappend(compressed_rel->baserestrictinfo,
 							make_simple_restrictinfo(root, (Expr *) pushed_down));
 		}
-		/* We need to check the restriction clause on the decompress node if the clause can't be
-		 * pushed down or needs re-checking */
-		if (!context.can_pushdown || context.needs_recheck || chunk_partial)
+
+		/*
+		 * We need to check the restriction clause on the decompress node if the clause can't be
+		 * pushed down or needs re-checking.
+		 */
+		if (!clause_context.can_pushdown || clause_context.needs_recheck || chunk_partial)
 		{
 			decompress_clauses = lappend(decompress_clauses, ri);
 		}
@@ -157,35 +175,30 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 	 */
 	context->needs_recheck = true;
 
-	Expr *leftop, *rightop;
-	TypeCacheEntry *tce;
-	int strategy;
-	Oid expr_type_id;
-
 	List *expr_args = orig_opexpr->args;
 	Assert(list_length(expr_args) == 2);
-	leftop = linitial(expr_args);
-	rightop = lsecond(expr_args);
+	Expr *orig_leftop = linitial(expr_args);
+	Expr *orig_rightop = lsecond(expr_args);
 
-	if (IsA(leftop, RelabelType))
-		leftop = ((RelabelType *) leftop)->arg;
-	if (IsA(rightop, RelabelType))
-		rightop = ((RelabelType *) rightop)->arg;
+	if (IsA(orig_leftop, RelabelType))
+		orig_leftop = ((RelabelType *) orig_leftop)->arg;
+	if (IsA(orig_rightop, RelabelType))
+		orig_rightop = ((RelabelType *) orig_rightop)->arg;
 
 	/* Find the side that has var with segment meta set expr to the other side */
 	Oid op_oid = orig_opexpr->opno;
 	AttrNumber min_attno;
 	AttrNumber max_attno;
-	expr_fetch_minmax_metadata(context, leftop, &min_attno, &max_attno);
+	expr_fetch_minmax_metadata(context, orig_leftop, &min_attno, &max_attno);
 	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
 	{
 		/* No metadata for the left operand, try to commute the operator. */
 		op_oid = get_commutator(op_oid);
-		Expr *tmp = leftop;
-		leftop = rightop;
-		rightop = tmp;
+		Expr *tmp = orig_leftop;
+		orig_leftop = orig_rightop;
+		orig_rightop = tmp;
 
-		expr_fetch_minmax_metadata(context, leftop, &min_attno, &max_attno);
+		expr_fetch_minmax_metadata(context, orig_leftop, &min_attno, &max_attno);
 	}
 
 	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
@@ -195,7 +208,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 		return orig_opexpr;
 	}
 
-	Var *var_with_segment_meta = castNode(Var, leftop);
+	Var *var_with_segment_meta = castNode(Var, orig_leftop);
 
 	/* May be able to allow non-strict operations as well.
 	 * Next steps: Think through edge cases, either allow and write tests or figure out why we must
@@ -216,23 +229,30 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 		return orig_opexpr;
 	}
 
-	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_BTREE_OPFAMILY);
+	TypeCacheEntry *tce =
+		lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_BTREE_OPFAMILY);
 
-	strategy = get_op_opfamily_strategy(op_oid, tce->btree_opf);
+	const int strategy = get_op_opfamily_strategy(op_oid, tce->btree_opf);
 	if (strategy == InvalidStrategy)
 	{
 		context->can_pushdown = false;
 		return orig_opexpr;
 	}
 
-	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) rightop, context);
-	if (!context->can_pushdown)
+	/*
+	 * Check if the righthand expression is safe to push down. We cannot combine
+	 * it with the original operator if there can be false negatives.
+	 */
+	QualPushdownContext tmp_context = copy_context(context);
+	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) orig_rightop, &tmp_context);
+	if (!tmp_context.can_pushdown || tmp_context.needs_recheck)
 	{
+		context->can_pushdown = false;
 		return orig_opexpr;
 	}
 	Assert(pushed_down_rightop != NULL);
 
-	expr_type_id = exprType((Node *) pushed_down_rightop);
+	const Oid expr_type_id = exprType((Node *) pushed_down_rightop);
 
 	switch (strategy)
 	{
@@ -250,6 +270,10 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 
 			if (!OidIsValid(opno_le) || !OidIsValid(opno_ge))
 			{
+				/*
+				 * Shouldn't be possible if we managed to create the min/max
+				 * sparse index, but defend against catalog corruption.
+				 */
 				context->can_pushdown = false;
 				return orig_opexpr;
 			}
@@ -277,6 +301,10 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 
 				if (!OidIsValid(opno))
 				{
+					/*
+					 * Shouldn't be possible if we managed to create the min/max
+					 * sparse index, but defend against catalog corruption.
+					 */
 					context->can_pushdown = false;
 					return orig_opexpr;
 				}
@@ -298,6 +326,10 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, OpExpr *orig_o
 
 				if (!OidIsValid(opno))
 				{
+					/*
+					 * Shouldn't be possible if we managed to create the min/max
+					 * sparse index, but defend against catalog corruption.
+					 */
 					context->can_pushdown = false;
 					return orig_opexpr;
 				}
@@ -351,34 +383,29 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 	 */
 	context->needs_recheck = true;
 
-	Expr *original_leftop;
-	Expr *original_rightop;
-	TypeCacheEntry *tce;
-	int strategy;
-
 	List *expr_args = orig_opexpr->args;
 	Assert(list_length(expr_args) == 2);
-	original_leftop = linitial(expr_args);
-	original_rightop = lsecond(expr_args);
+	Expr *orig_leftop = linitial(expr_args);
+	Expr *orig_rightop = lsecond(expr_args);
 
-	if (IsA(original_leftop, RelabelType))
-		original_leftop = ((RelabelType *) original_leftop)->arg;
-	if (IsA(original_rightop, RelabelType))
-		original_rightop = ((RelabelType *) original_rightop)->arg;
+	if (IsA(orig_leftop, RelabelType))
+		orig_leftop = ((RelabelType *) orig_leftop)->arg;
+	if (IsA(orig_rightop, RelabelType))
+		orig_rightop = ((RelabelType *) orig_rightop)->arg;
 
 	/* Find the side that has var with segment meta set expr to the other side */
 	Oid op_oid = orig_opexpr->opno;
 	AttrNumber bloom1_attno = InvalidAttrNumber;
-	expr_fetch_bloom1_metadata(context, original_leftop, &bloom1_attno);
+	expr_fetch_bloom1_metadata(context, orig_leftop, &bloom1_attno);
 	if (bloom1_attno == InvalidAttrNumber)
 	{
 		/* No metadata for the left operand, try to commute the operator. */
 		op_oid = get_commutator(op_oid);
-		Expr *tmp = original_leftop;
-		original_leftop = original_rightop;
-		original_rightop = tmp;
+		Expr *tmp = orig_leftop;
+		orig_leftop = orig_rightop;
+		orig_rightop = tmp;
 
-		expr_fetch_bloom1_metadata(context, original_leftop, &bloom1_attno);
+		expr_fetch_bloom1_metadata(context, orig_leftop, &bloom1_attno);
 	}
 
 	if (bloom1_attno == InvalidAttrNumber)
@@ -388,7 +415,7 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 		return orig_opexpr;
 	}
 
-	Var *var_with_segment_meta = castNode(Var, original_leftop);
+	Var *var_with_segment_meta = castNode(Var, orig_leftop);
 
 	/*
 	 * Play it safe and don't push down if the operator collation doesn't match
@@ -413,8 +440,9 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 	/*
 	 * We only support hashable equality operators.
 	 */
-	tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
-	strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
+	TypeCacheEntry *tce =
+		lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
+	const int strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
 	if (strategy != HTEqualStrategyNumber)
 	{
 		context->can_pushdown = false;
@@ -427,14 +455,17 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 	Assert(op_strict(op_oid));
 
 	/*
-	 * Check if the righthand expression is safe to push down.
-	 * functions.
+	 * Check if the righthand expression is safe to push down. We cannot combine
+	 * it with the original operator if there can be false negatives.
 	 */
-	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) original_rightop, context);
-	if (!context->can_pushdown)
+	QualPushdownContext tmp_context = copy_context(context);
+	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) orig_rightop, &tmp_context);
+	if (!tmp_context.can_pushdown || tmp_context.needs_recheck)
 	{
+		context->can_pushdown = false;
 		return orig_opexpr;
 	}
+	Assert(pushed_down_rightop != NULL);
 
 	/*
 	 * var = expr implies bloom1_contains(var_bloom, expr).
@@ -539,13 +570,20 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			/*
 			 * It might be possible to push down the OpExpr as is, if it
 			 * references only the segmentby columns. Check this case first.
+			 *
+			 * Note that we can't push down the entire operator if we pushed
+			 * down both sides inexactly, i.e. they require recheck. This means
+			 * we can have false positives there, and combining false positives
+			 * with the original operator could lead to false negatives, which
+			 * would be a bug. Consider for example (x = 1) = (y = 1) in case
+			 * where both sides are false, but there's a false posistive for the
+			 * pushed down version of the left side but not the right side.
 			 */
-			QualPushdownContext tmp_context = *context;
+			QualPushdownContext tmp_context = copy_context(context);
 			void *pushed_down =
 				expression_tree_mutator((Node *) orig_node, qual_pushdown_mutator, &tmp_context);
-			if (tmp_context.can_pushdown)
+			if (tmp_context.can_pushdown && !tmp_context.needs_recheck)
 			{
-				context->needs_recheck |= tmp_context.needs_recheck;
 				return pushed_down;
 			}
 
@@ -574,7 +612,7 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			 */
 			if (ts_guc_enable_sparse_index_bloom)
 			{
-				tmp_context = *context;
+				tmp_context = copy_context(context);
 				pushed_down = pushdown_op_to_segment_meta_bloom1(&tmp_context, opexpr);
 				if (tmp_context.can_pushdown)
 				{
@@ -586,7 +624,7 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			/*
 			 * Try minmax sparse index.
 			 */
-			tmp_context = *context;
+			tmp_context = copy_context(context);
 			pushed_down = pushdown_op_to_segment_meta_min_max(&tmp_context, opexpr);
 			if (tmp_context.can_pushdown)
 			{
@@ -603,15 +641,17 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 		case T_ScalarArrayOpExpr:
 		{
 			/*
-			 * It can be possible to push down the SAOP as is, if it references
-			 * only the segmentby columns. Check this case first.
+			 * It can be possible to push down the scalar array operation as is,
+			 * if it references only the segmentby columns. Check this case
+			 * first.
+			 *
+			 * See the comment for OpExpr about needs_recheck handling.
 			 */
-			QualPushdownContext tmp_context = *context;
+			QualPushdownContext tmp_context = copy_context(context);
 			void *pushed_down =
 				expression_tree_mutator((Node *) orig_node, qual_pushdown_mutator, &tmp_context);
-			if (tmp_context.can_pushdown)
+			if (tmp_context.can_pushdown && !tmp_context.needs_recheck)
 			{
-				context->needs_recheck |= tmp_context.needs_recheck;
 				return pushed_down;
 			}
 
