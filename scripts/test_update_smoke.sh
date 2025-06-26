@@ -32,6 +32,8 @@ CURRENT_VERSION=$1
 NEXT_VERSION=$2
 CONNECTION_STRING=$3
 
+echo "testing upgrade path from v${CURRENT_VERSION} to ${NEXT_VERSION} .."
+
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
 SCRATCHDIR=$(mktemp -d --tmpdir=/tmp "smoketest-${CURRENT_VERSION}-${NEXT_VERSION}")
