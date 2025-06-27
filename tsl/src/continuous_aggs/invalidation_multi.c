@@ -302,3 +302,202 @@ multi_invalidation_range_write_all(MultiInvalidationState *state)
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
 		multi_invalidation_range_write(state, entry);
 }
+
+/*
+ * Get array of hypertables to collect changes.
+ *
+ * The array consists of interleaving table names and attribute names. The
+ * attribute name is the name of the primary partition column for the table.
+
+ * This array is intended to be used as the variadic array for
+ * pg_logical_slot_get_binary_changes().
+ */
+static ArrayType *
+get_array_for_changes(MultiInvalidationState *state)
+{
+	HASH_SEQ_STATUS hash_seq;
+	MultiInvalidationEntry *entry;
+	const long tables_count = hash_get_num_entries(state->hypertables);
+	const size_t values_count = 2 * tables_count;
+	Datum *values = palloc(values_count * sizeof(Datum));
+
+	hash_seq_init(&hash_seq, state->hypertables);
+	for (int i = 0; (entry = hash_seq_search(&hash_seq)) != NULL; i += 2)
+	{
+		const Hypertable *ht = ts_hypertable_get_by_id(entry->hypertable_id);
+		const Dimension *dim = hyperspace_get_open_dimension(ht->space, 0);
+		const char *qual_table_name =
+			quote_qualified_identifier(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name));
+		const char *column_name = NameStr(dim->fd.column_name);
+		TS_DEBUG_LOG("hypertable=%s, attribute=%s", qual_table_name, column_name);
+		values[i + 0] = PointerGetDatum(cstring_to_text(qual_table_name));
+		values[i + 1] = PointerGetDatum(cstring_to_text(column_name));
+	}
+
+	/* Not sure we need the array of values after this. It seems like the
+	 * datums are actually copied, but it is not entirely clear. */
+#if PG16_GE
+	return construct_array_builtin(values, values_count, TEXTOID);
+#else
+	return construct_array(values, values_count, TEXTOID, -1, false, TYPALIGN_INT);
+#endif
+}
+
+/*
+ * Move invalidations for multiple hypertables in one pass.
+ *
+ * We process the invalidation in batches to avoid eating up too much
+ * memory. Right now the batch size is hard-coded, but we should probably add
+ * a GUC to control the batch size for processing.
+ */
+void
+multi_invalidation_move_invalidations(MultiInvalidationState *state)
+{
+	static SPIPlanPtr plan_get_invalidations = NULL;
+	static const char *query_get_invalidations =
+		"SELECT data FROM pg_logical_slot_get_binary_changes($1, NULL, $2, variadic $3)";
+	char nulls[3];
+	Datum args[3];
+
+	SPI_connect();
+
+	/* Set up plan if not already set up */
+	if (plan_get_invalidations == NULL)
+	{
+		Oid argtypes[3] = { NAMEOID, INT4OID, TEXTARRAYOID };
+		TS_DEBUG_LOG("setting up plan for query \"%s\"", query_get_invalidations);
+		SPIPlanPtr plan = SPI_prepare(query_get_invalidations, 3, argtypes);
+		if (plan == NULL)
+			elog(ERROR, "SPI_prepare failed for \"%s\"", query_get_invalidations);
+		SPI_keepplan(plan);
+		plan_get_invalidations = plan;
+	}
+
+	/* Collect all hypertables with corresponding attributes in an array. We
+	 * will use this for the call. The array consists of interleaving table
+	 * name and attribute name. */
+	ArrayType *array = get_array_for_changes(state);
+
+	/*
+	 * Set up arguments for the prepared statement to get a batch of ranges to
+	 * process.
+	 */
+	memset(nulls, ' ', sizeof(nulls) / sizeof(*nulls));
+	args[0] = NameGetDatum(&state->slot_name);
+	args[1] = Int32GetDatum(1000); /* !!! Hard-coded for now. We should probably have a GUC. */
+	args[2] = PointerGetDatum(array);
+
+	while (true)
+	{
+		CatalogSecurityContext sec_ctx;
+
+		TS_DEBUG_LOG("executing plan for query \"%s\"", query_get_invalidations);
+
+		/* Fetch batches and add them to the multi-table state */
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		int rc = SPI_execute_plan(plan_get_invalidations, args, nulls, true, 1);
+		ts_catalog_restore_user(&sec_ctx);
+
+		if (rc < 0)
+			elog(ERROR,
+				 "SPI_execute_plan_extended failed executing query \"%s\": %s",
+				 query_get_invalidations,
+				 SPI_result_code_string(rc));
+
+		TS_DEBUG_LOG("got %lu rows to process", (unsigned long) SPI_processed);
+
+		if (SPI_processed == 0)
+			break; /* No more batches to read */
+
+		/* Process batch of rows and add invalidation ranges to state. */
+		for (uint64 i = 0; i < SPI_processed; i++)
+		{
+			Datum data;
+			bool isnull;
+
+			TS_DEBUG_LOG("processing row %lu", (unsigned long) i);
+
+			data = SPI_getbinval(SPI_tuptable->vals[i], SPI_tuptable->tupdesc, 1, &isnull);
+
+			if (isnull)
+				continue;
+
+			bytea *raw_record = DatumGetByteaP(data);
+
+			StringInfoData info;
+			initReadOnlyStringInfo(&info, VARDATA_ANY(raw_record), VARSIZE_ANY_EXHDR(raw_record));
+
+			InvalidationMessage msg;
+			ts_invalidation_record_decode(&info, &msg);
+
+			Invalidation invalidation = {
+				.hyper_id = ts_hypertable_relid_to_id(msg.ver1.hypertable_relid),
+				.lowest_modified_value = msg.ver1.lowest_modified,
+				.greatest_modified_value = msg.ver1.highest_modified,
+			};
+			multi_invalidation_range_add(state, &invalidation);
+		}
+	}
+
+	SPI_finish();
+
+	/* Add invalidations to the materialization log. */
+	multi_invalidation_range_write_all(state);
+}
+
+void
+multi_invalidation_process_hypertable_log(List *hypertables)
+{
+	MultiInvalidationState state;
+	ListCell *lc;
+	char slotname[TS_INVALIDATION_SLOT_NAME_MAX];
+
+	ts_get_invalidation_replication_slot_name(slotname, sizeof(slotname));
+	multi_invalidation_state_init(&state, slotname, CurrentMemoryContext);
+
+	foreach (lc, hypertables)
+		(void) multi_invalidation_state_hypertable_entry_get_for_update(&state, lfirst_int(lc));
+
+	multi_invalidation_move_invalidations(&state);
+
+	multi_invalidation_state_cleanup(&state);
+}
+
+/*
+ * PostgreSQL function to move hypertable invalidations to materialization
+ * invalidation log.
+ */
+Datum
+continuous_agg_process_multi_hypertable_invalidations(PG_FUNCTION_ARGS)
+{
+	Datum value;
+	bool isnull;
+
+	ts_feature_flag_check(FEATURE_CAGG);
+
+	TS_PREVENT_IN_TRANSACTION_BLOCK(get_func_name(FC_FN_OID(fcinfo)));
+
+	Ensure(!PG_ARGISNULL(0), "NULL value not expected");
+
+	ArrayType *hypertable_array = PG_GETARG_ARRAYTYPE_P(0);
+
+	ArrayIterator array_iterator = array_create_iterator(hypertable_array, 0, NULL);
+
+	List *hypertables = NIL;
+	while (array_iterate(array_iterator, &value, &isnull))
+	{
+		Oid hypertable_relid = DatumGetObjectId(value);
+		int32 hypertable_id = ts_hypertable_relid_to_id(hypertable_relid);
+		TS_DEBUG_LOG("add relation \"%s\" to list: hypertable_id=%d",
+					 get_rel_name(hypertable_relid),
+					 hypertable_id);
+		ts_hypertable_permissions_check(hypertable_relid, GetUserId());
+		hypertables = lappend_int(hypertables, hypertable_id);
+	}
+
+	array_free_iterator(array_iterator);
+
+	multi_invalidation_process_hypertable_log(hypertables);
+
+	PG_RETURN_VOID();
+}
