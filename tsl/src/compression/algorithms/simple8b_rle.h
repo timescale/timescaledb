@@ -159,7 +159,20 @@ static inline char *bytes_serialize_simple8b_and_advance(char *dest, size_t expe
 static inline Simple8bRleSerialized *bytes_deserialize_simple8b_and_advance(StringInfo si);
 static inline size_t simple8brle_serialized_slot_size(const Simple8bRleSerialized *data);
 static inline size_t simple8brle_serialized_total_size(const Simple8bRleSerialized *data);
-static inline size_t simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor);
+
+/*
+ * Calculate the size of the compressed data with the assumption that all uncompressed
+ * data is flushed and pushed already.
+ */
+static inline size_t
+simple8brle_compressor_compressed_size(const Simple8bRleCompressor *compressor);
+
+/*
+ * Calculate the size of the compressed data without modifying the compressor and without
+ * making assumptions about the compressor state.
+ */
+static inline size_t
+simple8brle_compressor_compressed_const_size(const Simple8bRleCompressor *compressor);
 
 /*********************
  ***  Private API  ***
@@ -205,7 +218,7 @@ static uint32 simple8brle_num_selector_slots_for_num_blocks(uint32 num_blocks);
  ***  Simple8bRleSerialized  ***
  *******************************/
 
-static Simple8bRleSerialized *
+static inline Simple8bRleSerialized *
 simple8brle_serialized_recv(StringInfo buffer)
 {
 	uint32 i;
@@ -300,10 +313,7 @@ simple8brle_serialized_total_size(const Simple8bRleSerialized *data)
 static void
 simple8brle_compressor_init(Simple8bRleCompressor *compressor)
 {
-	*compressor = (Simple8bRleCompressor){
-		.num_elements = 0,
-		.num_uncompressed_elements = 0,
-	};
+	*compressor = (Simple8bRleCompressor){ .num_elements = 0, .num_uncompressed_elements = 0 };
 	/*
 	 * It is good to have some estimate of the resulting size of compressed
 	 * data, because it helps to allocate memory in advance to avoid frequent
@@ -343,7 +353,7 @@ simple8brle_compressor_is_empty(Simple8bRleCompressor *compressor)
 }
 
 static size_t
-simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor)
+simple8brle_compressor_compressed_size(const Simple8bRleCompressor *compressor)
 {
 	/* we store 16 selectors per selector_slot, and one selector_slot per compressed_data_slot.
 	 * use num_compressed_data_slots / 16 + 1 to ensure that rounding doesn't truncate our slots
@@ -352,6 +362,66 @@ simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor)
 	return sizeof(Simple8bRleSerialized) +
 		   compressor->compressed_data.num_elements * sizeof(*compressor->compressed_data.data) +
 		   bit_array_data_bytes_used(&compressor->selectors);
+}
+
+static size_t
+simple8brle_compressor_compressed_const_size(const Simple8bRleCompressor *compressor)
+{
+	/* Allocate temp space where the temp_compressor will put the data.
+	 * The temp sizes are set to accommodate for the worst case scenario of
+	 * both the last block and the uncompressed data.
+	 */
+#define TEMP_DATA_SIZE (SIMPLE8B_MAX_VALUES_PER_SLOT * 2)
+#define TEMP_SELECTORS_SIZE (TEMP_DATA_SIZE / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT)
+
+	uint64 temp_data[TEMP_DATA_SIZE];
+	uint64 temp_selectors[TEMP_SELECTORS_SIZE];
+
+	Simple8bRleCompressor temp_compressor = *compressor;
+
+	/* Replace the data and selectors with the temp space.*/
+	temp_compressor.compressed_data.data = temp_data;
+	temp_compressor.compressed_data.num_elements = 0;
+	temp_compressor.compressed_data.max_elements = TEMP_DATA_SIZE;
+	temp_compressor.selectors.buckets.data = temp_selectors;
+	temp_compressor.selectors.buckets.num_elements = 0;
+	temp_compressor.selectors.buckets.max_elements = TEMP_SELECTORS_SIZE;
+	temp_compressor.selectors.bits_used_in_last_bucket = 0;
+
+	/*
+	 * If the compressor has no uncompressed data, we can use the original size calculation.
+	 * Note that after every append, it is guaranteed that we have at least one uncompressed
+	 * element. Not having uncompressed elements can only happen if the compressor is empty
+	 * or finish was called, so we can use the original size calculation.
+	 */
+	if (compressor->num_uncompressed_elements == 0 && compressor->num_elements > 0)
+		return simple8brle_compressor_compressed_size(compressor);
+
+	/* Flush the compressor to ensure all uncompressed data is placed into the last_block.*/
+	simple8brle_compressor_flush(&temp_compressor);
+
+	/* If the compressor is empty, we can return 0, similar to finish. */
+	if (temp_compressor.num_elements == 0)
+		return 0;
+
+	Assert(temp_compressor.last_block_set);
+	simple8brle_compressor_push_block(&temp_compressor, temp_compressor.last_block);
+
+	size_t num_data_blocks =
+		compressor->compressed_data.num_elements + temp_compressor.compressed_data.num_elements;
+
+	/* Add up the size of the compressed data blocks and the header. */
+	size_t result = sizeof(Simple8bRleSerialized) +
+					num_data_blocks * sizeof(*temp_compressor.compressed_data.data);
+
+	/* Add up the selector bits. */
+	size_t selector_bits = num_data_blocks * SIMPLE8B_BITS_PER_SELECTOR;
+	result += ((selector_bits + 63) / 64) * sizeof(uint64);
+
+#undef TEMP_DATA_SIZE
+#undef TEMP_SELECTORS_SIZE
+
+	return result;
 }
 
 static void
