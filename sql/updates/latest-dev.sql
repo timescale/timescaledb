@@ -63,3 +63,12 @@ INSERT INTO _timescaledb_catalog.compression_algorithm( id, version, name, descr
 ( 6, 1, 'COMPRESSION_ALGORITHM_NULL', 'null') ON CONFLICT (id) DO NOTHING
 ;
 
+CREATE PROCEDURE @extschema@.detach_chunk(
+  chunk REGCLASS
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+
+CREATE PROCEDURE @extschema@.attach_chunk(
+  hypertable REGCLASS,
+  chunk REGCLASS,
+  slices JSONB
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';

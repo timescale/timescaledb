@@ -244,6 +244,7 @@ extern bool ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode);
 int ts_chunk_get_osm_chunk_id(int hypertable_id);
 extern TSDLLEXPORT void ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk,
 													const Chunk *merge_chunk, int32 dimension_id);
+extern TSDLLEXPORT void ts_chunk_detach_by_relid(Oid relid);
 
 #define chunk_get_by_name(schema_name, table_name, fail_if_not_found)                              \
 	ts_chunk_get_by_name_with_memory_context(schema_name,                                          \

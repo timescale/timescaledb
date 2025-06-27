@@ -31,6 +31,7 @@
 #include "chunk_index.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "indexing.h"
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "ts_catalog/catalog.h"
@@ -364,6 +365,25 @@ ts_chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constr
 					   get_rel_name(hypertable_indexrelid));
 }
 
+static Oid
+chunk_index_find_matching(Relation chunk_rel, Oid ht_indexoid)
+{
+	List *indexlist = RelationGetIndexList(chunk_rel);
+	ListCell *lc;
+	foreach (lc, indexlist)
+	{
+		Oid indexoid = lfirst_oid(lc);
+		ChunkIndexMapping cim;
+		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(chunk_rel), true);
+
+		if (ts_indexing_compare(indexoid, ht_indexoid) &&
+			ts_chunk_index_get_by_indexrelid(chunk, indexoid, &cim) == 0)
+			return indexoid;
+	}
+	list_free(indexlist);
+	return InvalidOid;
+}
+
 /*
  * Create a new chunk index as a child of a parent hypertable index.
  *
@@ -386,11 +406,15 @@ chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypert
 		return;
 	}
 
-	chunk_indexrelid = chunk_relation_index_create(hypertable_rel,
-												   hypertable_idxrel,
-												   chunkrel,
-												   false,
-												   index_tblspc);
+	chunk_indexrelid = chunk_index_find_matching(chunkrel, RelationGetRelid(hypertable_idxrel));
+	if (!OidIsValid(chunk_indexrelid))
+	{
+		chunk_indexrelid = chunk_relation_index_create(hypertable_rel,
+													   hypertable_idxrel,
+													   chunkrel,
+													   false,
+													   index_tblspc);
+	}
 
 	chunk_index_insert(chunk_id,
 					   get_rel_name(chunk_indexrelid),
