@@ -4,31 +4,30 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include "continuous_aggs/invalidation_multi.h"
+
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <extension.h>
+#include <fmgr.h>
+#include <funcapi.h>
+#include <hypertable_cache.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/memnodes.h>
+#include <parser/parse_func.h>
+#include <scan_iterator.h>
+#include <scanner.h>
 #include <storage/lockdefs.h>
+#include <time_bucket.h>
+#include <time_utils.h>
+#include <utils.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
-
-#include <extension.h>
-#include <fmgr.h>
-#include <funcapi.h>
-#include <hypertable_cache.h>
-#include <parser/parse_func.h>
-#include <scan_iterator.h>
-#include <scanner.h>
-#include <time_bucket.h>
-#include <time_utils.h>
-#include <utils.h>
 
 #include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"

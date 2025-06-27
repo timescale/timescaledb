@@ -11,6 +11,7 @@ set(TEST_FILES
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
+    cagg_invalidation_multi.sql
     cagg_policy.sql
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
@@ -204,6 +205,7 @@ set(SOLO_TESTS
     cagg_dump
     cagg_invalidation
     cagg_plugin
+    cagg_invalidation_multi
     cagg_policy_incremental
     move
     reorder
