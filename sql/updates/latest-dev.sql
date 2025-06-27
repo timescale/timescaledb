@@ -15,6 +15,11 @@ CREATE PROCEDURE @extschema@.remove_process_hypertable_invalidations_policy(
        if_exists BOOL = false
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
 
+CREATE FUNCTION _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.bloom1, anyarray)
+RETURNS bool
+AS '@MODULE_PATHNAME@', 'ts_update_placeholder'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
 
 DROP PROCEDURE IF EXISTS _timescaledb_internal.policy_compression_execute(
