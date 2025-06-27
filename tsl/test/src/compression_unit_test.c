@@ -31,6 +31,7 @@
 #include "compression/algorithms/float_utils.h"
 #include "compression/algorithms/gorilla.h"
 #include "compression/algorithms/null.h"
+#include "compression/algorithms/simple8b_rle.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/batch_metadata_builder_minmax.h"
 
@@ -1009,6 +1010,65 @@ test_null()
 	}
 }
 
+static void
+test_simple8b_rle_compressed_size(uint64 *elements, int num_elements)
+{
+	Simple8bRleCompressor compressor;
+	simple8brle_compressor_init(&compressor);
+
+	for (int i = 0; i < num_elements; i++)
+	{
+		simple8brle_compressor_append(&compressor, elements[i]);
+	}
+
+	size_t compressed_size = simple8brle_compressor_compressed_const_size(&compressor);
+	if (num_elements == 0)
+	{
+		TestAssertInt64Eq(compressed_size, 0);
+		return;
+	}
+
+	Simple8bRleSerialized *serialized = simple8brle_compressor_finish(&compressor);
+	size_t serialized_size = simple8brle_serialized_total_size(serialized);
+	TestAssertInt64Eq(compressed_size, serialized_size);
+
+	/* Check the const size function after the compressor is finished,
+	 * this may happen accidentally, not on purpose.
+	 */
+	compressed_size = simple8brle_compressor_compressed_const_size(&compressor);
+	TestAssertInt64Eq(compressed_size, serialized_size);
+
+	pfree(serialized);
+}
+
+static void
+test_simple8b_rle()
+{
+	/* clang-format off */
+	/* clang would place all the elements on a single line otherwise */
+	uint64 elements[] = {
+		1, 2, 4, 8, 16, 7, 3, 32, 64, 63, 31, 15, 7, 3, 1, 0,
+		128, 127, 63, 31, 15, 7, 3, 1, 0, 256, 255, 127, 63, 31, 15, 7,
+		3, 1, 0, 512, 511, 126, 63, 31, 15, 7, 3, 1, 0, 1024, 1023, 511,
+		255, 127, 63, 31, 15, 7, 3, 1, 0, 2048, 2047, 1023, 511, 255, 127,
+		63, 31, 15, 7, 3, 1, 0, 4096, 4095, 2047, 1023, 511, 255, 127, 63,
+		31, 15, 7, 3, 1, 0, 8192, 8191, 4095, 2047, 1023, 511, 255, 127,
+		63, 31, 15, 7, 3, 1, 0, 16384, 16383, 8191, 4095, 2047, 1023, 511,
+		255, 127, 63, 31, 15, 7, 3, 1, 0, 32768, 32767, 16383, 8191, 4095,
+		2047, 1023, 511, 255, 127, 63, 31, 15, 7, 3, 1, 0, 65536, 65535,
+		32767, 16383, 8191, 4095, 2047, 1023, 511, 255, 127, 63, 31, 15,
+		131072, 131071, 65535, 16777216, 16777211, 16777215, 4294967296ULL,
+		12884901888ULL
+	};
+	/* clang-format on */
+
+	int n = sizeof(elements) / sizeof(*elements);
+	for (int i = 0; i < n; i++)
+	{
+		test_simple8b_rle_compressed_size(elements, i);
+	}
+}
+
 Datum
 ts_test_compression(PG_FUNCTION_ARGS)
 {
@@ -1030,6 +1090,7 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_delta3(/* have_nulls = */ true, /* have_random = */ true);
 	test_bool();
 	test_null();
+	test_simple8b_rle();
 
 	/* Some tests for zig-zag encoding overflowing the original element width. */
 	test_delta4(test_delta4_case1, sizeof(test_delta4_case1) / sizeof(*test_delta4_case1));
