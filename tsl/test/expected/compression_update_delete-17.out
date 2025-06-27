@@ -2854,28 +2854,22 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
                ->  Sort
                      Sort Key: compress_hyper_36_71_chunk._ts_meta_min_1, compress_hyper_36_71_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_71_chunk
-         ->  Sort
-               Sort Key: _hyper_35_68_chunk."time"
-               ->  Seq Scan on _hyper_35_68_chunk
+         ->  Index Scan Backward using _hyper_35_68_chunk_test_partials_time_idx on _hyper_35_68_chunk
    ->  Merge Append
          Sort Key: _hyper_35_69_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_69_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_72_chunk._ts_meta_min_1, compress_hyper_36_72_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_72_chunk
-         ->  Sort
-               Sort Key: _hyper_35_69_chunk."time"
-               ->  Seq Scan on _hyper_35_69_chunk
+         ->  Index Scan Backward using _hyper_35_69_chunk_test_partials_time_idx on _hyper_35_69_chunk
    ->  Merge Append
          Sort Key: _hyper_35_70_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_70_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_73_chunk._ts_meta_min_1, compress_hyper_36_73_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_73_chunk
-         ->  Sort
-               Sort Key: _hyper_35_70_chunk."time"
-               ->  Seq Scan on _hyper_35_70_chunk
-(29 rows)
+         ->  Index Scan Backward using _hyper_35_70_chunk_test_partials_time_idx on _hyper_35_70_chunk
+(23 rows)
 
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
