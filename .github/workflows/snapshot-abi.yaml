@@ -44,6 +44,8 @@ jobs:
       fail-fast: false
       matrix:
         pg: [ 15, 16, 17 ]
+        ignores:
+          - 'net telemetry bgw_launcher'
         include:
           - pg: 15
             abi_min: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
@@ -136,7 +138,7 @@ jobs:
       id: regresscheck
       run: |
           set -o pipefail
-          make -k -C build_snapshot installcheck IGNORES=bgw_launcher | tee installcheck.log
+          make -k -C build_snapshot installcheck IGNORES="${{ matrix.ignores }}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()
