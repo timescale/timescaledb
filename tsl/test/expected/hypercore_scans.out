@@ -370,19 +370,18 @@ insert into readings (time, location, device, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t
 on conflict (location, device, time) do nothing;
-                                      QUERY PLAN                                       
----------------------------------------------------------------------------------------
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
    ->  Insert on readings (actual rows=0 loops=1)
          Conflict Resolution: NOTHING
          Conflict Arbiter Indexes: readings_device_location_time_key
          Tuples Inserted: 8608
          Conflicting Tuples: 33
-         ->  Custom Scan (ChunkDispatch) (actual rows=8641 loops=1)
-               ->  Subquery Scan on "*SELECT*" (actual rows=8641 loops=1)
-                     ->  Function Scan on generate_series t (actual rows=8641 loops=1)
+         ->  Subquery Scan on "*SELECT*" (actual rows=8641 loops=1)
+               ->  Function Scan on generate_series t (actual rows=8641 loops=1)
  Array: cache misses=2, decompress count=4 calls=4
-(10 rows)
+(9 rows)
 
 -- This should show values for all columns
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)

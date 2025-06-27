@@ -56,7 +56,6 @@
 #include "dimension.h"
 #include "hypertable.h"
 #include "indexing.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "subspace_store.h"
 
