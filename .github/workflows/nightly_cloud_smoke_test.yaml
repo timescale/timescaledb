@@ -12,67 +12,88 @@ name: Nightly - Update smoke test on release branch
       - .github/workflows/nightly_cloud_smoke_test.yaml
 
 jobs:
-  update_test:
-    # We'll run the test against an instance in the cloud
-    # The previous version of TimescaleDB is installed
-    # and then we upgrade to the current version
-    name: Cloud - Update test smoke 
-    runs-on: timescaledb-runner-arm64
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-    - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      - name: Fetch TimescaleDB releases
+        id: fetch-releases
+        run: |
+          releases=$(curl -s \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/timescale/timescaledb/releases?per_page=10" \
+            | jq -r '.[].tag_name')
+          
+          # Convert to JSON array format for matrix
+          matrix_json=$(echo "$releases" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "releases=$matrix_json" >> $GITHUB_OUTPUT
+          
+          # Also output for debugging
+          echo "Found releases:"
+          echo "$releases"
 
-    - name: Install Dependencies
-      # we want the right version of Postgres for handling any dump file
-      run: |
-        sudo apt-get update
-        sudo apt-get install gnupg postgresql-common 
-        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
-        sudo apt-get update
-        sudo apt-get install postgresql-17 
+      - name: Set matrix output
+        id: set-matrix
+        run: |
+          matrix='{"version": ${{ steps.fetch-releases.outputs.releases }}}'
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+          echo $matrix
 
-    - name: Read versions
-      # Get two of the version parameters for test_update_smoke.sh
-      id: versions
-      run: |
-        # Read current version of TimescaleDB from version.config
-        # version will only be a proper version in a release branch 
-        # so we use previous_version as fallback for main
-        if grep '^version = [0-9.]\+$' version.config; then
-          version=$(sed -ne 's!^version = !!p' version.config)
-        else
-          version=$(sed -ne 's!^previous_version = !!p' version.config)
-        fi
-        echo "version=${version}" >>$GITHUB_OUTPUT
-        # Now get the previous version
-        prev_version=$(wget --quiet -O - \
-        https://raw.githubusercontent.com/timescale/timescaledb/${version}/version.config \
-          | sed -ne 's!previous_version = !!p')
-        echo "prev_version=${prev_version}" >>$GITHUB_OUTPUT
-        # And report what we found
-        echo "version=${version}"  "prev_version=${prev_version}"
+  test-version:
+    needs: generate-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      # run sequentially
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+      max-parallel: 1
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
 
-    - name: Update smoke 
-      # Now run the test.  Currently the cloud instance is always up.
-      # We might want to have a more flexible approach
-      run: |
-        PATH="/usr/lib/postgresql/17/bin:$PATH"
-        ./scripts/test_update_smoke.sh \
-            ${{ steps.versions.outputs.prev_version }} \
-            ${{ steps.versions.outputs.version }} \
-            "${{ secrets.DB_TEAM_QA_SERVICE_CONNECTION_STRING }}"
+      - name: Install Dependencies
+        # we want the right version of Postgres for handling any dump file
+        run: |
+          sudo apt-get update
+          sudo apt-get install gnupg postgresql-common 
+          yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+          sudo apt-get update
+          sudo apt-get install postgresql-17 
 
-    - name: Show logs
-      if: always()
-      run: |
-        ls -l /tmp/smoketest*/*
-        cat /tmp/smoketest*/*
+      - name: Read versions
+        # Get two of the version parameters for test_update_smoke.sh
+        id: versions
+        run: |
+          # Read current version of TimescaleDB from version.config
+          # version will only be a proper version in a release branch 
+          if grep '^version = [0-9.]\+$' version.config; then
+            version=$(sed -ne 's!^version = !!p' version.config)
+          else
+            version=$(sed -ne 's!^previous_version = !!p' version.config)
+          fi
+          echo "version=${version}" >>$GITHUB_OUTPUT
+    
+      - name: "Run update smoke test with v${{ matrix.version }} to ${{ steps.versions.outputs.version }}"
+        # Now run the test.  Currently the cloud instance is always up.
+        # only run the test if the versions are not equal
+        run: |
+          PATH="/usr/lib/postgresql/17/bin:$PATH"
+          ./scripts/test_update_smoke.sh \
+              ${{ matrix.version }} \
+              ${{ steps.versions.outputs.version }} \
+              "${{ secrets.DB_TEAM_QA_SERVICE_CONNECTION_STRING }}"
+      
+      - name: Show logs
+        if: always()
+        run: |
+          ls -l /tmp/smoketest*/*
+          cat /tmp/smoketest*/*
         
-    - name: Upload Artifacts
-      # Save the logs, so if there is a failure we'll have a better
-      # chance to understand what went wrong.
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: Cloud Update test smoke
-        path: /tmp/smoketest*/* 
+      - name: Upload Artifacts
+        # Save the logs, so if there is a failure we'll have a better
+        # chance to understand what went wrong.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cloud Update test smoke
+          path: /tmp/smoketest*/*
