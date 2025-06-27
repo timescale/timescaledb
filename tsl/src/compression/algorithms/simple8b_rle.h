@@ -99,6 +99,10 @@ typedef struct Simple8bRleBlock
 	uint8 selector;
 } Simple8bRleBlock;
 
+typedef struct Simple8bRleCompressor Simple8bRleCompressor;
+typedef void (*simple8brle_compressor_push_block_fn)(Simple8bRleCompressor *compressor,
+													 Simple8bRleBlock block);
+
 typedef struct Simple8bRleCompressor
 {
 	BitArray selectors;
@@ -112,6 +116,14 @@ typedef struct Simple8bRleCompressor
 
 	uint32 num_uncompressed_elements;
 	uint64 uncompressed_elements[SIMPLE8B_MAX_VALUES_PER_SLOT];
+
+	/* This function normally calls simple8brle_compressor_push_block
+	 * to push the last_block into the compressed_data+selectors. When
+	 * we want to calculate the compressed size without modifying the
+	 * compressor, we need a special function to count the yet to be
+	 * compressed data: simple8brle_compressor_fake_push_block.
+	 */
+	simple8brle_compressor_push_block_fn push_block_fn;
 } Simple8bRleCompressor;
 
 typedef struct Simple8bRleDecompressionIterator
@@ -159,7 +171,19 @@ static inline char *bytes_serialize_simple8b_and_advance(char *dest, size_t expe
 static inline Simple8bRleSerialized *bytes_deserialize_simple8b_and_advance(StringInfo si);
 static inline size_t simple8brle_serialized_slot_size(const Simple8bRleSerialized *data);
 static inline size_t simple8brle_serialized_total_size(const Simple8bRleSerialized *data);
+
+/*
+ * Calculate the size of the compressed data with the assumption that all uncompressed
+ * data is flushed and pushed already.
+ */
 static inline size_t simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor);
+
+/*
+ * Calculate the size of the compressed data without modifying the compressor and without
+ * making assumptions about the compressor state.
+ */
+static inline size_t
+simple8brle_compressor_compressed_const_size(const Simple8bRleCompressor *compressor);
 
 /*********************
  ***  Private API  ***
@@ -175,6 +199,14 @@ typedef struct Simple8bRlePartiallyCompressedData
 /* compressor */
 static void simple8brle_compressor_push_block(Simple8bRleCompressor *compressor,
 											  Simple8bRleBlock block);
+
+/*
+ * The purpose of this function is to count the number of blocks that would be pushed
+ * if we were to flush the compressor.
+ */
+static void simple8brle_compressor_fake_push_block(Simple8bRleCompressor *compressor,
+												   Simple8bRleBlock block);
+
 static void simple8brle_compressor_flush(Simple8bRleCompressor *compressor);
 static void simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 											  const Simple8bRlePartiallyCompressedData *new_data);
@@ -300,10 +332,9 @@ simple8brle_serialized_total_size(const Simple8bRleSerialized *data)
 static void
 simple8brle_compressor_init(Simple8bRleCompressor *compressor)
 {
-	*compressor = (Simple8bRleCompressor){
-		.num_elements = 0,
-		.num_uncompressed_elements = 0,
-	};
+	*compressor = (Simple8bRleCompressor){ .num_elements = 0,
+										   .num_uncompressed_elements = 0,
+										   .push_block_fn = simple8brle_compressor_push_block };
 	/*
 	 * It is good to have some estimate of the resulting size of compressed
 	 * data, because it helps to allocate memory in advance to avoid frequent
@@ -354,6 +385,66 @@ simple8brle_compressor_compressed_size(Simple8bRleCompressor *compressor)
 		   bit_array_data_bytes_used(&compressor->selectors);
 }
 
+static size_t
+simple8brle_compressor_compressed_const_size(const Simple8bRleCompressor *compressor)
+{
+	Simple8bRleCompressor temp_compressor = *compressor;
+
+	/*
+	 * Replace the push_block_fn with a function that only increments the number of blocks.
+	 * This is to ensure we don't allocate more memory just to calculate the size.
+	 */
+	temp_compressor.push_block_fn = simple8brle_compressor_fake_push_block;
+
+	/*
+	 * If the compressor has no uncompressed data, we can use the original size calculation.
+	 * Note that after every append, it is guaranteed that we have at least one uncompressed
+	 * element. Not having uncompressed elements can only happen if the compressor is empty
+	 * or finish was called, so we can use the original size calculation.
+	 */
+	if (compressor->num_uncompressed_elements == 0 && temp_compressor.num_elements > 0)
+		return simple8brle_compressor_compressed_size(&temp_compressor);
+
+	/* Flush the compressor to ensure all uncompressed data is placed into the last_block.*/
+	simple8brle_compressor_flush(&temp_compressor);
+
+	/* If the compressor is empty, we can return 0, similar to finish. */
+	if (temp_compressor.num_elements == 0)
+		return 0;
+
+	Assert(temp_compressor.last_block_set);
+	temp_compressor.push_block_fn(&temp_compressor, temp_compressor.last_block);
+
+	/* Add up the size of the compressed data blocks and the header. */
+	size_t result =
+		sizeof(Simple8bRleSerialized) + temp_compressor.compressed_data.num_elements *
+											sizeof(*temp_compressor.compressed_data.data);
+
+	/* Add up the selector bits. */
+	size_t selector_bits =
+		temp_compressor.compressed_data.num_elements * SIMPLE8B_BITS_PER_SELECTOR;
+	result += ((selector_bits + 63) / 64) * sizeof(uint64);
+
+	return result;
+}
+
+/*
+ * The purpose of this function is to count the number of blocks that would be pushed
+ * if we were to flush the compressor.
+ */
+static void
+simple8brle_compressor_fake_push_block(Simple8bRleCompressor *compressor, Simple8bRleBlock block)
+{
+	if (compressor->last_block_set)
+	{
+		/* Only count the extra blocks, because the selector slots can be calculated from it. */
+		compressor->compressed_data.num_elements++;
+	}
+
+	compressor->last_block = block;
+	compressor->last_block_set = true;
+}
+
 static void
 simple8brle_compressor_push_block(Simple8bRleCompressor *compressor, Simple8bRleBlock block)
 {
@@ -398,7 +489,7 @@ simple8brle_compressor_finish(Simple8bRleCompressor *compressor)
 		return NULL;
 
 	Assert(compressor->last_block_set);
-	simple8brle_compressor_push_block(compressor, compressor->last_block);
+	compressor->push_block_fn(compressor, compressor->last_block);
 
 	compressed_size = simple8brle_compressor_compressed_size(compressor);
 	/* we use palloc0 despite initializing the entire structure,
@@ -461,7 +552,7 @@ simple8brle_compressor_flush(Simple8bRleCompressor *compressor)
 										 compressor->uncompressed_elements,
 										 compressor->num_uncompressed_elements);
 
-		simple8brle_compressor_push_block(compressor, last_block);
+		compressor->push_block_fn(compressor, last_block);
 
 		new_data = (Simple8bRlePartiallyCompressedData){
 			.data = compressor->uncompressed_elements + appended_to_rle,
@@ -520,7 +611,7 @@ simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 				Assert(bits_per_int <= SIMPLE8B_RLE_MAX_VALUE_BITS);
 				Assert(simple8brle_rledata_repeatcount(block.data) == rle_count);
 				Assert(simple8brle_rledata_value(block.data) == rle_val);
-				simple8brle_compressor_push_block(compressor, block);
+				compressor->push_block_fn(compressor, block);
 				idx += rle_count;
 				continue;
 			}
@@ -553,7 +644,7 @@ simple8brle_compressor_append_pcd(Simple8bRleCompressor *compressor,
 			simple8brle_block_append_element(&block, new_val);
 			num_packed += 1;
 		}
-		simple8brle_compressor_push_block(compressor, block);
+		compressor->push_block_fn(compressor, block);
 		idx += num_packed;
 	}
 }
@@ -904,4 +995,11 @@ simple8brle_bits_for_value(uint64 v)
 		r += 1;
 	}
 	return r;
+}
+
+/* Allow including this header directly without barking about unused functions. */
+static void
+pg_attribute_unused() simple8brle_unused_function()
+{
+	simple8brle_serialized_recv(NULL);
 }
