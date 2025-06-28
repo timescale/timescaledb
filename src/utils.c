@@ -1708,7 +1708,7 @@ ts_makeaclitem(PG_FUNCTION_ARGS)
 		{ "MAINTAIN", ACL_MAINTAIN },
 #endif
 		{ "RULE", 0 }, /* ignore old RULE privileges */
-		{ NULL, 0 }
+		{ NULL, 0 },
 	};
 
 	priv = ts_convert_any_priv_string(privtext, any_priv_map);
@@ -1992,4 +1992,35 @@ ts_get_attr_expr(Relation rel, AttrNumber attno)
 	}
 
 	return expr;
+}
+
+/*
+ * Convert range in microseconds since Epoch to range.
+ *
+ * Note that the dimension type is the type of the elements, not the type of
+ * the range. It is used to look up ranges for the type.
+ */
+RangeType *
+ts_internal_to_range(int64 lower, int64 upper, Oid dimtype, Oid rngtype)
+{
+	Assert(lower < upper);
+	RangeBound lbound = {
+		.val = ts_internal_to_time_value(lower, dimtype),
+		.infinite = TS_TIME_IS_NOBEGIN(lower, dimtype),
+		.inclusive = false,
+		.lower = true,
+	};
+	RangeBound ubound = {
+		.val = ts_internal_to_time_value(upper, dimtype),
+		.infinite = TS_TIME_IS_NOEND(upper, dimtype),
+		.inclusive = false,
+		.lower = false,
+	};
+
+	TypeCacheEntry *typcache = lookup_type_cache(rngtype, TYPECACHE_RANGE_INFO);
+#if PG16_LT
+	return make_range(typcache, &lbound, &ubound, false);
+#else
+	return make_range(typcache, &lbound, &ubound, false, NULL);
+#endif
 }

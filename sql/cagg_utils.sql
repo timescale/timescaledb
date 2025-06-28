@@ -27,3 +27,12 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_get_bucket_function_info(
     -- fixed or variable sized bucket
     OUT bucket_fixed_width BOOLEAN
 ) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_continuous_agg_get_bucket_function_info' LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_parse_invalidation_record(
+    invalidation_record BYTEA,
+    OUT hypertable_id INTEGER,
+    OUT lowest_modified_value BIGINT,
+    OUT greatest_modified_value BIGINT)
+RETURNS RECORD
+AS '@MODULE_PATHNAME@', 'ts_continuous_agg_read_invalidation_record'
+LANGUAGE C STRICT IMMUTABLE;

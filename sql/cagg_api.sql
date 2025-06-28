@@ -342,4 +342,10 @@ SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.process_hypertable_invalidations(
     hypertable REGCLASS
-) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_process_hypertable_invalidations';
+) LANGUAGE C
+AS '@MODULE_PATHNAME@', 'ts_continuous_agg_process_hypertable_invalidations';
+
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.process_multi_hypertable_invalidations(
+    hypertables REGCLASS[]
+) LANGUAGE C
+AS '@MODULE_PATHNAME@', 'ts_continuous_agg_process_multi_hypertable_invalidations';
