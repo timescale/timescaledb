@@ -566,7 +566,7 @@ ts_get_mock_time_or_current_time(void)
 								  Int32GetDatum(-1));
 		return res;
 	}
-	res = TimestampTzGetDatum(GetCurrentTimestamp());
+	res = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
 	return res;
 }
 #endif
