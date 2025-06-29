@@ -958,7 +958,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 										true,  /* end_isnull */
 										true,  /* bucketing_refresh_window */
 										false, /* force */
-										true /* process_hypertable_invalidations */);
+										true,  /* process_hypertable_invalidations */
+										false /*extend_last_bucket*/);
 	}
 
 	return DDL_DONE;

@@ -10,8 +10,8 @@
 #include <miscadmin.h>
 #include <parser/parse_coerce.h>
 #include <utils/acl.h>
-
 #include <utils/builtins.h>
+#include <utils/rangetypes.h>
 
 #include "bgw/job.h"
 #include "bgw/job_stat.h"
@@ -206,8 +206,6 @@ policy_refresh_cagg_exists(int32 materialization_id)
 	if (jobs == NIL)
 		return false;
 
-	/* only 1 cont. aggregate policy job allowed */
-	Assert(list_length(jobs) == 1);
 	return true;
 }
 
@@ -484,6 +482,160 @@ parse_cagg_policy_config(const ContinuousAgg *cagg, Oid start_offset_type,
 	validate_window_size(cagg, config);
 }
 
+bool
+policy_refresh_cagg_check_if_last_policy(PolicyContinuousAggData *policy_data)
+{
+	ContinuousAgg *cagg = policy_data->cagg;
+	int64 end_offset = policy_data->refresh_window.end;
+	bool end_isnull = policy_data->refresh_window.end_isnull;
+
+	if (end_isnull)
+		return true;
+
+	Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+	const Dimension *dim = get_open_dimension_for_hypertable(mat_ht, true);
+
+	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
+														   cagg->data.mat_hypertable_id);
+
+	ListCell *lc;
+
+	/* We need to go through all jobs in order to determine if there is a job which starts after
+	 * this one */
+	foreach (lc, jobs)
+	{
+		BgwJob *job = (BgwJob *) lfirst(lc);
+
+		bool end_offset_job_isnull;
+		int64 end_offset_job =
+			policy_refresh_cagg_get_refresh_end(dim, job->fd.config, &end_offset_job_isnull);
+
+		if (end_offset_job_isnull || end_offset < end_offset_job)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/* Ensures the refresh range of the new policy doesn't overlap with an existing one*/
+PolicyRefreshOffsetOverlapResult
+policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config,
+									   int32 existing_job_id)
+{
+	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
+														   cagg->data.mat_hypertable_id);
+	PolicyRefreshOffsetOverlapResult overlap_result = POLICY_REFRESH_OFFSET_OVERLAP_NONE;
+
+	if (jobs == NIL)
+		return overlap_result;
+
+	Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
+	const Dimension *dim = get_open_dimension_for_hypertable(mat_ht, true);
+
+	bool start_offset_isnull, end_offset_isnull;
+	int64 start_offset =
+		policy_refresh_cagg_get_refresh_start(cagg, dim, policy_config, &start_offset_isnull);
+	int64 end_offset = policy_refresh_cagg_get_refresh_end(dim, policy_config, &end_offset_isnull);
+
+	RangeBound lower = {
+		.val = Int64GetDatum(start_offset),
+		.infinite = start_offset_isnull,
+		.inclusive = true,
+		.lower = true,
+	};
+
+	RangeBound upper = {
+		.val = Int64GetDatum(end_offset),
+		.infinite = end_offset_isnull,
+		.inclusive = false,
+		.lower = false,
+	};
+
+	TypeCacheEntry *typcache = lookup_type_cache(INT8RANGEOID, TYPECACHE_RANGE_INFO);
+	if (typcache == NULL || typcache->rngelemtype == NULL)
+		elog(ERROR, "cache lookup failed");
+
+#if PG16_LT
+	RangeType *range = make_range(typcache, &lower, &upper, false);
+#else
+	RangeType *range = make_range(typcache, &lower, &upper, false, NULL);
+#endif
+
+	ListCell *lc;
+
+	elog(DEBUG1,
+		 "start_offset: " INT64_FORMAT ", end_offset: " INT64_FORMAT,
+		 start_offset,
+		 end_offset);
+
+	/* We need to go through all jobs in order to determine if there is an existing job with the
+	 * exact same offsets */
+	foreach (lc, jobs)
+	{
+		BgwJob *job = (BgwJob *) lfirst(lc);
+
+		if (existing_job_id == job->fd.id)
+		{
+			continue;
+		}
+
+		bool start_offset_job_isnull, end_offset_job_isnull;
+		int64 start_offset_job = policy_refresh_cagg_get_refresh_start(cagg,
+																	   dim,
+																	   job->fd.config,
+																	   &start_offset_job_isnull);
+
+		int64 end_offset_job =
+			policy_refresh_cagg_get_refresh_end(dim, job->fd.config, &end_offset_job_isnull);
+
+		RangeBound lower_job = {
+			.val = Int64GetDatum(start_offset_job),
+			.infinite = start_offset_job_isnull,
+			.inclusive = true,
+			.lower = true,
+		};
+
+		RangeBound upper_job = {
+			.val = Int64GetDatum(end_offset_job),
+			.infinite = end_offset_job_isnull,
+			.inclusive = false,
+			.lower = false,
+		};
+
+#if PG16_LT
+		RangeType *range_job = make_range(typcache, &lower_job, &upper_job, false);
+#else
+		RangeType *range_job = make_range(typcache, &lower_job, &upper_job, false, NULL);
+#endif
+
+		elog(DEBUG1,
+			 "start_offset_job: " INT64_FORMAT ", end_offset_job: " INT64_FORMAT,
+			 start_offset_job,
+			 end_offset_job);
+
+		/* Check if exact same job exists, in which case throw an error or notice depending on
+		 * `if_not_exists` */
+		if (start_offset == start_offset_job && end_offset == end_offset_job)
+		{
+			/* If all arguments are the same, do nothing */
+			return POLICY_REFRESH_OFFSET_OVERLAP_EQUAL;
+		}
+		/* We need to first check all other jobs to see if there is an exact match, since we prefer
+		 * returning an exact match over an overlap, and the list of jobs isn't guaranteed to be
+		 * sorted by start/end offset. */
+		else if (range_overlaps_internal(typcache, range_job, range))
+		{
+			overlap_result = POLICY_REFRESH_OFFSET_OVERLAP;
+		}
+	}
+
+	return overlap_result;
+}
+
 Datum
 policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDatum start_offset,
 								 Oid end_offset_type, NullableDatum end_offset,
@@ -499,7 +651,6 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	CaggPolicyConfig policyconf;
 	int32 job_id;
 	Oid owner_id;
-	List *jobs;
 	JsonbParseState *parse_state = NULL;
 
 	/* Verify that the owner can create a background worker */
@@ -526,57 +677,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 							 end_offset,
 							 &policyconf);
 
-	/* Make sure there is only 1 refresh policy on the cagg */
-	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
-													 FUNCTIONS_SCHEMA_NAME,
-													 cagg->data.mat_hypertable_id);
-
-	if (jobs != NIL)
-	{
-		Assert(list_length(jobs) == 1);
-		if (!if_not_exists)
-			ereport(ERROR,
-					(errcode(ERRCODE_DUPLICATE_OBJECT),
-					 errmsg("continuous aggregate policy already exists for \"%s\"",
-							get_rel_name(cagg_oid)),
-					 errdetail("Only one continuous aggregate policy can be created per continuous "
-							   "aggregate and a policy with job id %d already exists for \"%s\".",
-							   ((BgwJob *) linitial(jobs))->fd.id,
-							   get_rel_name(cagg_oid))));
-		BgwJob *existing = linitial(jobs);
-
-		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														POL_REFRESH_CONF_KEY_START_OFFSET,
-														cagg->partition_type,
-														policyconf.offset_start.type,
-														policyconf.offset_start.value,
-														policyconf.offset_start.isnull) &&
-			policy_config_check_hypertable_lag_equality(existing->fd.config,
-														POL_REFRESH_CONF_KEY_END_OFFSET,
-														cagg->partition_type,
-														policyconf.offset_end.type,
-														policyconf.offset_end.value,
-														policyconf.offset_end.isnull))
-		{
-			/* If all arguments are the same, do nothing */
-			ereport(NOTICE,
-					(errmsg("continuous aggregate policy already exists for \"%s\", "
-							"skipping",
-							get_rel_name(cagg_oid))));
-			PG_RETURN_INT32(-1);
-		}
-		else
-		{
-			ereport(WARNING,
-					(errmsg("continuous aggregate policy already exists for \"%s\"",
-							get_rel_name(cagg_oid)),
-					 errdetail("A policy already exists with different arguments."),
-					 errhint("Remove the existing policy before adding a new one.")));
-			PG_RETURN_INT32(-1);
-		}
-	}
-
-	/* Next, insert a new job into jobs table */
+	/* Insert a new job into jobs table */
 	namestrcpy(&application_name, "Refresh Continuous Aggregate Policy");
 	namestrcpy(&proc_name, POLICY_REFRESH_CAGG_PROC_NAME);
 	namestrcpy(&proc_schema, FUNCTIONS_SCHEMA_NAME);
@@ -627,6 +728,47 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	Jsonb *config = JsonbValueToJsonb(result);
+
+	PolicyRefreshOffsetOverlapResult res = policy_refresh_cagg_check_for_overlaps(cagg, config, 0);
+	switch (res)
+	{
+		case POLICY_REFRESH_OFFSET_OVERLAP_NONE:
+			break;
+		case POLICY_REFRESH_OFFSET_OVERLAP_EQUAL:
+			if (if_not_exists)
+			{
+				ereport(NOTICE,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+
+						 errmsg("continuous aggregate refresh policy already exists for "
+								"\"%s\", skipping",
+								get_rel_name(cagg->relid)),
+						 errdetail("A refresh policy with the same start and end offset already "
+								   "exists "
+								   "for "
+								   "continuous aggregate \"%s\".",
+								   get_rel_name(cagg->relid))));
+				PG_RETURN_INT32(-1);
+			}
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+
+					 errmsg("continuous aggregate refresh policy already exists for "
+							"\"%s\"",
+							get_rel_name(cagg->relid)),
+					 errdetail("A refresh policy with the same start and end offset already exists "
+							   "for "
+							   "continuous aggregate \"%s\".",
+							   get_rel_name(cagg->relid))));
+			break;
+		case POLICY_REFRESH_OFFSET_OVERLAP:
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("refresh interval overlaps with an existing continuous aggregate "
+							"policy on \"%s\"",
+							get_rel_name(cagg->relid))));
+			break;
+	}
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&refresh_interval,
@@ -756,10 +898,15 @@ policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists)
 			PG_RETURN_BOOL(false);
 		}
 	}
-	Assert(list_length(jobs) == 1);
-	BgwJob *job = linitial(jobs);
 
-	ts_bgw_job_delete_by_id(job->fd.id);
+	// Delete all bgw jobs associated with this CAgg
+	ListCell *lc;
+	foreach (lc, jobs)
+	{
+		BgwJob *job = (BgwJob *) lfirst(lc);
+		ts_bgw_job_delete_by_id(job->fd.id);
+	}
+
 	PG_RETURN_BOOL(true);
 }
 

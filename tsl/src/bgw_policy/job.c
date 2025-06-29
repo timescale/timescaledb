@@ -382,6 +382,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	JsonbToCStringIndent(str, &config->root, VARSIZE(config));
 
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
+	bool extend_last_bucket = !policy_refresh_cagg_check_if_last_policy(&policy_data);
 
 	bool enable_osm_reads_old = ts_guc_enable_osm_reads;
 
@@ -427,7 +428,8 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										refresh_window->end_isnull,
 										(context.callctx != CAGG_REFRESH_POLICY_BATCHED),
 										false, /* force */
-										policy_data.process_hypertable_invalidations);
+										policy_data.process_hypertable_invalidations,
+										extend_last_bucket);
 		if (processing_batch >= policy_data.max_batches_per_execution &&
 			processing_batch < context.number_of_batches &&
 			policy_data.max_batches_per_execution > 0)
