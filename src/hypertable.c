@@ -1003,13 +1003,12 @@ hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
  * Create a chunk for the point, given that it does not exist yet.
  */
 Chunk *
-ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point, bool *found)
+ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point)
 {
 	Assert(ts_subspace_store_get(h->chunk_cache, point) == NULL);
 
 	Chunk *chunk = ts_chunk_create_for_point(h,
 											 point,
-											 found,
 											 NameStr(h->fd.associated_schema_name),
 											 NameStr(h->fd.associated_table_prefix));
 
@@ -2105,6 +2104,19 @@ ts_is_partitioning_column(const Hypertable *ht, AttrNumber column_attno)
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		if (column_attno == ht->space->dimensions[i].column_attno)
+			return true;
+	}
+	return false;
+}
+
+bool
+ts_is_partitioning_column_name(const Hypertable *ht, NameData column_name)
+{
+	uint16 i;
+
+	for (i = 0; i < ht->space->num_dimensions; i++)
+	{
+		if (namestrcmp(&ht->space->dimensions[i].fd.column_name, NameStr(column_name)) == 0)
 			return true;
 	}
 	return false;

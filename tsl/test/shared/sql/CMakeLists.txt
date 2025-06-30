@@ -3,6 +3,7 @@ set(TEST_FILES_SHARED
     chunkwise_agg_gather_sort.sql
     classify_relation.sql
     compat.sql
+    compress_bloom_sparse_compat.sql
     compress_unique_index.sql
     compression_dml.sql
     compression_nulls_not_distinct.sql
@@ -19,9 +20,8 @@ set(TEST_FILES_SHARED
     space_constraint.sql
     subtract_integer_from_now.sql)
 
-set(TEST_TEMPLATES_SHARED
-    gapfill.sql.in ordered_append.sql.in ordered_append_join.sql.in
-    transparent_decompress_chunk.sql.in)
+set(TEST_TEMPLATES_SHARED gapfill.sql.in ordered_append_join.sql.in
+                          transparent_decompress_chunk.sql.in)
 
 set(SOLO_TESTS merge_dml.sql)
 

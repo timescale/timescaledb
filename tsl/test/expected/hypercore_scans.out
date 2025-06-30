@@ -42,6 +42,7 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
  limit 1 \gset
 alter table :chunk set access method hypercore;
+vacuum analyze readings;
 --
 -- Check that TID scan works for both compressed and non-compressed
 -- rows.
@@ -602,6 +603,7 @@ select compress_chunk(ch, hypercore_use_access_method=>true) from show_chunks('r
  _timescaledb_internal._hyper_1_6_chunk
 (6 rows)
 
+vacuum analyze readings;
 -- Just test that this query doesn't fail with an error about Bump
 -- allocator not supporting pfree. Redirect output to a temporary
 -- table.
@@ -1048,18 +1050,20 @@ set timescaledb.enable_transparent_decompression='hypercore';
 explain (costs off)
 select * from readings
 where time <= '2022-06-02' and device in (1, 4);
-                                                                  QUERY PLAN                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
          Vectorized Filter: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
-         ->  Seq Scan on compress_hyper_2_7_chunk
-               Filter: ((_ts_meta_min_1 <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone) AND (device = ANY ('{1,4}'::integer[])))
+         ->  Bitmap Heap Scan on compress_hyper_2_7_chunk
+               Recheck Cond: ((device = ANY ('{1,4}'::integer[])) AND (_ts_meta_min_1 <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone))
+               ->  Bitmap Index Scan on compress_hyper_2_7_chunk_device__ts_meta_min_1__ts_meta_max_idx
+                     Index Cond: ((device = ANY ('{1,4}'::integer[])) AND (_ts_meta_min_1 <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone))
    ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk
          Vectorized Filter: ("time" <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone)
          ->  Seq Scan on compress_hyper_2_8_chunk
                Filter: ((_ts_meta_min_1 <= 'Thu Jun 02 00:00:00 2022 PDT'::timestamp with time zone) AND (device = ANY ('{1,4}'::integer[])))
-(9 rows)
+(11 rows)
 
 select sum(humidity) from readings
 where time <= '2022-06-02' and device in (1, 4);

@@ -1440,11 +1440,11 @@ SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
 \set ON_ERROR_STOP 0
 -- Updating or deleting everything will break the set limit.
 UPDATE test_limit SET id = 0;
-DELETE FROM test_limit WHERE id > 0;
+DELETE FROM test_limit WHERE id = 1;
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
 UPDATE test_limit SET id = 0;
-DELETE FROM test_limit WHERE id > 0;
+DELETE FROM test_limit WHERE id = 1;
 \set ON_ERROR_STOP 1
 
 DROP TABLE test_limit;
@@ -1565,6 +1565,21 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time IN ('2020-01-01','2020-01-0
 -- no pushdown for volatile functions
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = current_query(); ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',current_query()); ROLLBACK;
+
+-- test DELETE optimization without predicates
+-- should delete 3 complete batches without decompression
+BEGIN; :EXPLAIN DELETE FROM test_pushdown; ROLLBACK;
+
+-- test DELETE optimization on non-segmentby columns
+-- this shows optimization can be applied if in-memory filtering is enabled
+\set QUIET off
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+SET timescaledb.enable_dml_decompression_tuple_filtering TO OFF;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+BEGIN; DELETE FROM test_pushdown WHERE time > '2019-01-01'; ROLLBACK;
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+\set QUIET on
 
 -- github issue #6858
 -- check update triggers work correctly both on uncompressed and compressed chunks

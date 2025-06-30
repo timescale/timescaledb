@@ -23,6 +23,7 @@
 #define POL_REFRESH_CONF_KEY_BUCKETS_PER_BATCH "buckets_per_batch"
 #define POL_REFRESH_CONF_KEY_MAX_BATCHES_PER_EXECUTION "max_batches_per_execution"
 #define POL_REFRESH_CONF_KEY_REFRESH_NEWEST_FIRST "refresh_newest_first"
+#define POL_REFRESH_CONF_KEY_PROCESS_HYPERTABLE_INVALIDATIONS "process_hypertable_invalidations"
 
 #define POLICY_COMPRESSION_PROC_NAME "policy_compression"
 #define POLICY_COMPRESSION_CHECK_NAME "policy_compression_check"

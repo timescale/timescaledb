@@ -57,6 +57,7 @@
 #include "errors.h"
 #include "export.h"
 #include "extension.h"
+#include "foreign_key.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -592,7 +593,8 @@ chunk_add_constraints(const Chunk *chunk)
 	num_added += ts_chunk_constraints_add_inheritable_constraints(chunk->constraints,
 																  chunk->fd.id,
 																  chunk->relkind,
-																  chunk->hypertable_relid);
+																  chunk->hypertable_relid,
+																  chunk->table_id);
 
 	return num_added;
 }
@@ -711,11 +713,18 @@ copy_hypertable_acl_to_relid(const Hypertable *ht, const Oid owner_id, const Oid
  * instead needs the proper permissions on the database to create the schema.
  */
 Oid
-ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tablespacename)
+ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tablespacename,
+					  Oid amoid)
 {
 	Relation rel;
 	ObjectAddress address;
 	int sec_ctx;
+	char *amname = NULL;
+
+	if (OidIsValid(amoid))
+		amname = get_am_name(amoid);
+	else if (chunk->relkind == RELKIND_RELATION)
+		amname = get_am_name(ts_get_rel_am(chunk->hypertable_relid));
 
 	/*
 	 * CreateStmt node to create the chunk table
@@ -731,9 +740,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		.tablespacename = tablespacename ? (char *) tablespacename : NULL,
 		.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
-		.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
-							get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
-							NULL,
+		.accessMethod = amname,
 	};
 	Oid uid, saved_uid;
 
@@ -950,12 +957,12 @@ chunk_create_table_constraints(const Hypertable *ht, const Chunk *chunk)
 }
 
 static Oid
-chunk_create_table(Chunk *chunk, const Hypertable *ht)
+chunk_create_table(Chunk *chunk, const Hypertable *ht, Oid amoid)
 {
 	/* Create the actual table relation for the chunk */
 	const char *tablespace = ts_hypertable_select_tablespace_name(ht, chunk);
 
-	chunk->table_id = ts_chunk_create_table(chunk, ht, tablespace);
+	chunk->table_id = ts_chunk_create_table(chunk, ht, tablespace, amoid);
 
 	Assert(OidIsValid(chunk->table_id));
 
@@ -968,7 +975,8 @@ chunk_create_table(Chunk *chunk, const Hypertable *ht)
  */
 static Chunk *
 chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const char *schema_name,
-								   const char *table_name, const char *prefix, int32 chunk_id)
+								   const char *table_name, const char *prefix, Oid amoid,
+								   int32 chunk_id)
 {
 	Chunk *chunk;
 
@@ -977,7 +985,7 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 	chunk = chunk_create_object(ht, cube, schema_name, table_name, prefix, chunk_id);
 	Assert(chunk != NULL);
 
-	chunk_create_table(chunk, ht);
+	chunk_create_table(chunk, ht, amoid);
 
 	return chunk;
 }
@@ -985,7 +993,7 @@ chunk_create_only_table_after_lock(const Hypertable *ht, Hypercube *cube, const 
 static Chunk *
 chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
-									   const char *prefix)
+									   const char *prefix, Oid amoid)
 {
 	chunk_insert_check_hook_type osm_chunk_insert_hook = ts_get_osm_chunk_insert_hook();
 
@@ -1033,6 +1041,7 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 													  schema_name,
 													  table_name,
 													  prefix,
+													  amoid,
 													  get_next_chunk_id());
 
 	/* Insert any new chunk column stats entries into the catalog */
@@ -1083,7 +1092,8 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 static Chunk *
 chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube *cube,
 												 Oid chunk_table_relid, const char *schema_name,
-												 const char *table_name, const char *prefix)
+												 const char *table_name, const char *prefix,
+												 Oid amoid)
 {
 	Oid current_chunk_schemaid = get_rel_namespace(chunk_table_relid);
 	Oid new_chunk_schemaid = InvalidOid;
@@ -1196,6 +1206,7 @@ chunk_create_from_hypercube_and_table_after_lock(const Hypertable *ht, Hypercube
 	 * and triggers if some of them already exist on the chunk table prior to
 	 * creating the chunk from it. */
 	chunk_add_constraints(chunk);
+	ts_chunk_constraint_check_violated(chunk, ht->space);
 	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_add_inheritance(chunk, ht);
 	chunk_create_table_constraints(ht, chunk);
@@ -1233,12 +1244,18 @@ chunk_create_from_point_after_lock(const Hypertable *ht, const Point *p, const c
 	/* Resolve collisions with other chunks by cutting the new hypercube */
 	chunk_collision_resolve(ht, cube, p);
 
-	return chunk_create_from_hypercube_after_lock(ht, cube, schema_name, table_name, prefix);
+	return chunk_create_from_hypercube_after_lock(ht,
+												  cube,
+												  schema_name,
+												  table_name,
+												  prefix,
+												  InvalidOid);
 }
 
 Chunk *
 ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
-									 const char *table_name, Oid chunk_table_relid, bool *created)
+									 const char *table_name, Oid chunk_table_relid, Oid amoid,
+									 bool *created)
 {
 	ChunkStub *stub;
 	Chunk *chunk = NULL;
@@ -1272,10 +1289,15 @@ ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const 
 																		 chunk_table_relid,
 																		 schema_name,
 																		 table_name,
-																		 NULL);
+																		 NULL,
+																		 amoid);
 			else
-				chunk =
-					chunk_create_from_hypercube_after_lock(ht, hc, schema_name, table_name, NULL);
+				chunk = chunk_create_from_hypercube_after_lock(ht,
+															   hc,
+															   schema_name,
+															   table_name,
+															   NULL,
+															   amoid);
 
 			if (NULL != created)
 				*created = true;
@@ -1335,7 +1357,7 @@ ts_chunk_find_for_point(const Hypertable *ht, const Point *p)
  * Create a chunk through insertion of a tuple at a given point.
  */
 Chunk *
-ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, const char *schema,
+ts_chunk_create_for_point(const Hypertable *ht, const Point *p, const char *schema,
 						  const char *prefix)
 {
 	/*
@@ -1366,8 +1388,6 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 			 * release the lock early.
 			 */
 			UnlockRelationOid(ht->main_table_relid, ShareUpdateExclusiveLock);
-			if (found)
-				*found = true;
 			return chunk;
 		}
 
@@ -1378,16 +1398,11 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 		chunk = chunk_resurrect(ht, chunk_id);
 		if (chunk != NULL)
 		{
-			if (found)
-				*found = true;
 			return chunk;
 		}
 	}
 
 	/* Create the chunk normally. */
-	if (found)
-		*found = false;
-
 	Chunk *chunk = chunk_create_from_point_after_lock(ht, p, schema, NULL, prefix);
 
 	ASSERT_IS_VALID_CHUNK(chunk);
@@ -1873,7 +1888,7 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 		/* Create data table and related objects */
 		chunk->hypertable_relid = ht->main_table_relid;
 		chunk->relkind = RELKIND_RELATION;
-		chunk->table_id = chunk_create_table(chunk, ht);
+		chunk->table_id = chunk_create_table(chunk, ht, InvalidOid);
 		chunk_create_table_constraints(ht, chunk);
 
 		/* Finally, update the chunk tuple to no longer be a tombstone */
@@ -2843,11 +2858,11 @@ typedef enum ChunkDeleteResult
  * of tuples to process.
  */
 static ChunkDeleteResult
-chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row)
+chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserve_chunk_catalog_row,
+				   bool detach)
 {
 	FormData_chunk form;
 	CatalogSecurityContext sec_ctx;
-	ChunkConstraints *ccs = ts_chunk_constraints_alloc(2, ti->mctx);
 	ChunkDeleteResult res;
 	int i;
 
@@ -2859,7 +2874,15 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 	/* if only marking as deleted, keep the constraints and dimension info */
 	if (!preserve_chunk_catalog_row)
 	{
-		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs);
+		ChunkConstraints *ccs;
+
+		/*
+		 * Do not drop any constraint if detaching
+		 * We will still need to delete dimension slices for the chunk
+		 */
+		ccs = ts_chunk_constraints_alloc(2, ti->mctx);
+		ts_chunk_constraint_delete_dimensional_constraints(form.id, ccs, true, true);
+		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs, true, !detach);
 
 		/* Check for dimension slices that are orphaned by the chunk deletion */
 		for (i = 0; i < ccs->num_constraints; i++)
@@ -2920,7 +2943,15 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 		}
 	}
 
-	ts_chunk_index_delete_by_chunk_id(form.id, true);
+	/*
+	 * Even tough we keep foreign key constraints on the chunk, we still
+	 * need to drop the referencing foreign keys since such keys are possibly
+	 * intended to reference the hypertable, not the chunk.
+	 */
+	if (detach)
+		ts_chunk_drop_referencing_fk_by_chunk_id(form.id);
+	/* Do not drop any index if detaching */
+	ts_chunk_index_delete_by_chunk_id(form.id, !detach);
 	ts_compression_chunk_size_delete(form.id);
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
@@ -3013,7 +3044,7 @@ init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_nam
 
 static int
 chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior,
-			 bool preserve_chunk_catalog_row)
+			 bool preserve_chunk_catalog_row, bool detach)
 {
 	int count = 0;
 
@@ -3024,7 +3055,8 @@ chunk_delete(ScanIterator *iterator, Oid relid, DropBehavior behavior,
 		res = chunk_tuple_delete(ts_scan_iterator_tuple_info(iterator),
 								 relid,
 								 behavior,
-								 preserve_chunk_catalog_row);
+								 preserve_chunk_catalog_row,
+								 detach);
 
 		switch (res)
 		{
@@ -3049,7 +3081,7 @@ ts_chunk_delete_by_name_internal(const char *schema, const char *table, Oid reli
 	int count;
 
 	init_scan_by_qualified_table_name(&iterator, schema, table);
-	count = chunk_delete(&iterator, relid, behavior, preserve_chunk_catalog_row);
+	count = chunk_delete(&iterator, relid, behavior, preserve_chunk_catalog_row, false);
 
 	/* (schema,table) names and (hypertable_id) are unique so should only have
 	 * dropped one chunk or none (if not found) */
@@ -3097,7 +3129,7 @@ ts_chunk_delete_by_hypertable_id(int32 hypertable_id)
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 
-	return chunk_delete(&iterator, InvalidOid, DROP_RESTRICT, false);
+	return chunk_delete(&iterator, InvalidOid, DROP_RESTRICT, false, false);
 }
 
 bool
@@ -5232,4 +5264,27 @@ ts_merge_two_chunks(PG_FUNCTION_ARGS)
 	ArrayType *chunk_array =
 		construct_array(chunks, 2, REGCLASSOID, sizeof(Oid), true, TYPALIGN_INT);
 	return DirectFunctionCall1(ts_cm_functions->merge_chunks, PointerGetDatum(chunk_array));
+}
+
+void
+ts_chunk_detach_by_relid(Oid relid)
+{
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
+	char *schema;
+	char *table;
+	int PG_USED_FOR_ASSERTS_ONLY count;
+
+	Assert(OidIsValid(relid));
+
+	schema = get_namespace_name(get_rel_namespace(relid));
+	table = get_rel_name(relid);
+
+	init_scan_by_qualified_table_name(&iterator, schema, table);
+	count = chunk_delete(&iterator, relid, DROP_RESTRICT, false, true);
+
+	/*
+	 * (schema,table) names and (hypertable_id) are unique so should only have
+	 * dropped one chunk
+	 */
+	Assert(count == 1);
 }

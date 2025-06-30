@@ -1244,6 +1244,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 			/* If there was an error, rollback what was done before the error */
 			AbortCurrentTransaction();
 		StartTransactionCommand();
+		PushActiveSnapshot(GetTransactionSnapshot());
 
 		/* Free the old job if it exists, it's no longer needed, and since it's
 		 * in the TopMemoryContext it won't be freed otherwise.
@@ -1293,6 +1294,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 */
 		elog(LOG, "job %d threw an error", params.job_id);
 
+		PopActiveSnapshot();
 		CommitTransactionCommand();
 		ReThrowError(edata);
 	}

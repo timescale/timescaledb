@@ -125,6 +125,9 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ NULL, 0, false }
 };
 
+bool ts_guc_enable_direct_compress_copy = false;
+bool ts_guc_enable_direct_compress_copy_sort_batches = true;
+bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -480,6 +483,40 @@ _guc_init(void)
 							 NULL,
 							 &ts_guc_enable_deprecation_warnings,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy"),
+							 "Enable direct compression during COPY",
+							 "Enable experimental support for direct compression during COPY",
+							 &ts_guc_enable_direct_compress_copy,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_sort_batches"),
+							 "Enable batch sorting during direct compress COPY",
+							 NULL,
+							 &ts_guc_enable_direct_compress_copy_sort_batches,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_client_sorted"),
+							 "Enable direct compress COPY with presorted data",
+							 "Correct handling of data sorting by the user is required for this "
+							 "option.",
+							 &ts_guc_enable_direct_compress_copy_client_sorted,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,

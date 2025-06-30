@@ -12,3 +12,5 @@
 extern Datum chunk_status(PG_FUNCTION_ARGS);
 extern Datum chunk_show(PG_FUNCTION_ARGS);
 extern Datum chunk_create(PG_FUNCTION_ARGS);
+extern Datum chunk_detach(PG_FUNCTION_ARGS);
+extern Datum chunk_attach(PG_FUNCTION_ARGS);

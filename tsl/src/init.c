@@ -192,6 +192,11 @@ CrossModuleFunctions tsl_cm_functions = {
 	.hypercore_decompress_update_segment = hypercore_decompress_update_segment,
 	.is_compressed_tid = tsl_is_compressed_tid,
 	.compression_enable = tsl_compression_enable,
+	.compressor_init = tsl_compressor_init,
+	.compressor_add_slot = tsl_compressor_add_slot,
+	.compressor_flush = tsl_compressor_flush,
+	.compressor_free = tsl_compressor_free,
+	.compression_chunk_create = tsl_compression_chunk_create,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
 	.show_chunk = chunk_show,
@@ -205,6 +210,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.preprocess_query_tsl = tsl_preprocess_query,
 	.merge_chunks = chunk_merge_chunks,
 	.split_chunk = chunk_split_chunk,
+	.detach_chunk = chunk_detach,
+	.attach_chunk = chunk_attach,
 };
 
 static void

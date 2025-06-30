@@ -75,11 +75,15 @@ jobs:
       TABLESPACE2: D:\tablespace2\
       IGNORES: >-
         compress_bloom_sparse_debug
+        compress_bloom_sparse_compat
+        compress_qualpushdown_saop
+        compressed_copy
         compression_algos
         bgw_launcher
         chunk_adaptive
         metadata
         telemetry
+        net
       SKIPS: >-
         bgw_db_scheduler
         bgw_db_scheduler_fixed

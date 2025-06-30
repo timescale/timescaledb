@@ -39,6 +39,8 @@
 #include "debug_point.h"
 #include "guc.h"
 #include "hypercore/hypercore_handler.h"
+#include "nodes/chunk_dispatch/chunk_insert_state.h"
+#include "nodes/modify_hypertable.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
@@ -304,8 +306,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	Ensure(in_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
 	Ensure(out_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
 
-	TupleDesc in_desc = RelationGetDescr(in_rel);
-
 	/* Before calling row compressor relation should be segmented and sorted as configured
 	 * by compress_segmentby and compress_orderby.
 	 * Cost of sorting can be mitigated if we find an existing BTREE index defined for
@@ -508,7 +508,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			 RelationGetRelationName(in_rel));
 
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(settings, in_rel);
-		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_desc, in_rel, &writer);
+		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_rel, &writer);
 		tuplesort_end(sorted_rel);
 	}
 
@@ -878,6 +878,85 @@ check_for_limited_size_compressors(PerColumn *pcolumns, int16 natts)
 	return false;
 }
 
+void
+tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer, TupleTableSlot *slot)
+{
+	if (compressor->sort_state)
+	{
+		tuplesort_puttupleslot(compressor->sort_state, slot);
+		compressor->tuples_to_sort++;
+	}
+	else
+	{
+		row_compressor_process_ordered_slot(compressor, slot, bulk_writer);
+	}
+}
+
+void
+tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer)
+{
+	if (compressor->sort_state)
+	{
+		if (compressor->tuples_to_sort)
+		{
+			tuplesort_performsort(compressor->sort_state);
+
+			TupleTableSlot *slot = MakeTupleTableSlot(compressor->in_desc, &TTSOpsMinimalTuple);
+
+			while (tuplesort_gettupleslot(compressor->sort_state,
+										  true /*=forward*/,
+										  false /*=copy*/,
+										  slot,
+										  NULL /*=abbrev*/))
+				row_compressor_process_ordered_slot(compressor, slot, bulk_writer);
+
+			if (compressor->rows_compressed_into_current_value > 0)
+				row_compressor_flush(compressor, bulk_writer, true);
+
+			ExecDropSingleTupleTableSlot(slot);
+			tuplesort_reset(compressor->sort_state);
+			compressor->tuples_to_sort = 0;
+		}
+	}
+	else
+	{
+		if (compressor->rows_compressed_into_current_value > 0)
+			row_compressor_flush(compressor, bulk_writer, false);
+	}
+}
+
+void
+tsl_compressor_free(RowCompressor *compressor, BulkWriter *bulk_writer)
+{
+	if (compressor->sort_state)
+		tuplesort_end(compressor->sort_state);
+	tsl_compressor_flush(compressor, bulk_writer);
+	row_compressor_close(compressor);
+	bulk_writer_close(bulk_writer);
+	table_close(bulk_writer->out_rel, NoLock);
+}
+
+/*
+ * Initialize a RowCompressor for compressing tuples
+ *
+ * When `sort` is true, the compressor will buffer all the tuples in a
+ * Tuplesortstate and sort them before flushing to the output relation.
+ */
+RowCompressor *
+tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort)
+{
+	RowCompressor *compressor = palloc0(sizeof(RowCompressor));
+	CompressionSettings *settings = ts_compression_settings_get(in_rel->rd_id);
+	Relation out_rel = table_open(settings->fd.compress_relid, RowExclusiveLock);
+	*bulk_writer = bulk_writer_alloc(out_rel, 0);
+	row_compressor_init(compressor, settings, RelationGetDescr(in_rel), RelationGetDescr(out_rel));
+
+	if (sort)
+		compressor->sort_state = compression_create_tuplesort_state(settings, in_rel);
+
+	return compressor;
+}
+
 /********************
  ** row_compressor **
  ********************/
@@ -899,6 +978,7 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
 											 "compress chunk per-row",
 											 ALLOCSET_DEFAULT_SIZES),
+		.in_desc = CreateTupleDescCopyConstr(noncompressed_tupdesc),
 		.out_desc = CreateTupleDescCopyConstr(compressed_tupdesc),
 		.n_input_columns = noncompressed_tupdesc->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
@@ -908,6 +988,7 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 		.rowcnt_pre_compression = 0,
 		.num_compressed_rows = 0,
 		.first_iteration = true,
+		.sort_state = NULL,
 	};
 
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * compressed_tupdesc->natts);
@@ -927,26 +1008,19 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 
 void
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
-								  TupleDesc sorted_desc, Relation in_rel, BulkWriter *writer)
+								  Relation in_rel, BulkWriter *writer)
 {
-	TupleTableSlot *slot = MakeTupleTableSlot(sorted_desc, &TTSOpsMinimalTuple);
-	bool got_tuple;
+	TupleTableSlot *slot = MakeTupleTableSlot(row_compressor->in_desc, &TTSOpsMinimalTuple);
 	int64 nrows_processed = 0;
 	int64 report_reltuples;
 
 	report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);
 
-	for (got_tuple = tuplesort_gettupleslot(sorted_rel,
-											true /*=forward*/,
-											false /*=copy*/,
-											slot,
-											NULL /*=abbrev*/);
-		 got_tuple;
-		 got_tuple = tuplesort_gettupleslot(sorted_rel,
-											true /*=forward*/,
-											false /*=copy*/,
-											slot,
-											NULL /*=abbrev*/))
+	while (tuplesort_gettupleslot(sorted_rel,
+								  true /*=forward*/,
+								  false /*=copy*/,
+								  slot,
+								  NULL /*=abbrev*/))
 	{
 		row_compressor_process_ordered_slot(row_compressor, slot, writer);
 		if ((++nrows_processed % report_reltuples) == 0)
@@ -1000,6 +1074,27 @@ row_compressor_is_full(RowCompressor *row_compressor, TupleTableSlot *row)
 	}
 
 	return false;
+}
+
+void
+row_compressor_append_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot)
+{
+	MemoryContext old_ctx;
+	slot_getallattrs(slot);
+	old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
+	if (row_compressor->first_iteration)
+	{
+		row_compressor_update_group(row_compressor, slot);
+		row_compressor->first_iteration = false;
+	}
+	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
+	bool compressed_row_is_full = row_compressor_is_full(row_compressor, slot);
+
+	Ensure(!changed_groups, "row is in different group");
+	Ensure(!compressed_row_is_full, "batch is full");
+	row_compressor_append_row(row_compressor, slot);
+	MemoryContextSwitchTo(old_ctx);
+	ExecClearTuple(slot);
 }
 
 static void
@@ -1177,13 +1272,12 @@ row_compressor_build_tuple(RowCompressor *row_compressor)
 		Int32GetDatum(row_compressor->rows_compressed_into_current_value);
 	row_compressor->compressed_is_null[row_compressor->count_metadata_column_offset] = false;
 
-	HeapTuple tuple = heap_form_tuple(row_compressor->out_desc,
-									  row_compressor->compressed_values,
-									  row_compressor->compressed_is_null);
-
 	MemoryContextSwitchTo(old_cxt);
 
-	return tuple;
+	/* Build the tuple on the callers memory context */
+	return heap_form_tuple(row_compressor->out_desc,
+						   row_compressor->compressed_values,
+						   row_compressor->compressed_is_null);
 }
 
 void
@@ -1248,7 +1342,7 @@ row_compressor_flush(RowCompressor *row_compressor, BulkWriter *writer, bool cha
 
 	heap_freetuple(compressed_tuple);
 
-	if (NULL != row_compressor->on_flush)
+	if (row_compressor->on_flush)
 		row_compressor->on_flush(row_compressor,
 								 row_compressor->rows_compressed_into_current_value);
 
@@ -1420,6 +1514,20 @@ bulk_writer_build(Relation out_rel, int insert_options)
 		.estate = CreateExecutorState(),
 		.insert_options = insert_options,
 	};
+
+	return writer;
+}
+
+BulkWriter *
+bulk_writer_alloc(Relation out_rel, int insert_options)
+{
+	BulkWriter *writer = palloc(sizeof(BulkWriter));
+	writer->out_rel = out_rel;
+	writer->indexstate = CatalogOpenIndexes(out_rel);
+	writer->mycid = GetCurrentCommandId(true);
+	writer->bistate = GetBulkInsertState();
+	writer->estate = CreateExecutorState();
+	writer->insert_options = insert_options;
 
 	return writer;
 }

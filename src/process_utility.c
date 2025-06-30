@@ -1308,7 +1308,11 @@ process_truncate(ProcessUtilityArgs *args)
 						 * Block direct TRUNCATE on frozen chunk.
 						 */
 						if (ts_chunk_is_frozen(chunk))
-							elog(ERROR, "cannot TRUNCATE frozen chunk \"%s\"", get_rel_name(relid));
+							ereport(ERROR,
+									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+									 errmsg("cannot TRUNCATE frozen chunk \"%s\"",
+											get_rel_name(relid)),
+									 errhint("Unfreeze the chunk to TRUNCATE it.")));
 
 						Assert(ht != NULL);
 
@@ -4997,7 +5001,8 @@ process_viewstmt(ProcessUtilityArgs *args)
 	ts_with_clause_filter(stmt->options, &cagg_options, &pg_options);
 	if (cagg_options)
 		ereport(ERROR,
-				(errmsg("cannot create continuous aggregate with CREATE VIEW"),
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot create continuous aggregate with CREATE VIEW"),
 				 errhint("Use CREATE MATERIALIZED VIEW to create a continuous aggregate.")));
 	return DDL_CONTINUE;
 }

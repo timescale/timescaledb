@@ -35,6 +35,8 @@ typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 typedef struct CopyChunkState CopyChunkState;
 typedef struct ModifyHypertableState ModifyHypertableState;
+typedef struct RowCompressor RowCompressor;
+typedef struct BulkWriter BulkWriter;
 
 typedef struct CrossModuleFunctions
 {
@@ -142,6 +144,12 @@ typedef struct CrossModuleFunctions
 											   ItemPointer new_tid);
 
 	void (*compression_enable)(Hypertable *ht, WithClauseResult *with_clause_options);
+	RowCompressor *(*compressor_init)(Relation in_rel, BulkWriter **bulk_writer, bool sort);
+	void (*compressor_add_slot)(RowCompressor *compressor, BulkWriter *bulk_writer,
+								TupleTableSlot *slot);
+	void (*compressor_flush)(RowCompressor *compressor, BulkWriter *bulk_writer);
+	void (*compressor_free)(RowCompressor *compressor, BulkWriter *bulk_writer);
+	Chunk *(*compression_chunk_create)(Hypertable *ht, Chunk *src_chunk);
 
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
@@ -177,6 +185,9 @@ typedef struct CrossModuleFunctions
 	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);
 	PGFunction merge_chunks;
 	PGFunction split_chunk;
+
+	PGFunction detach_chunk;
+	PGFunction attach_chunk;
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

@@ -20,6 +20,7 @@
 #include "compat/compat.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
+#include "chunk_tuple_routing.h"
 #include "dimension.h"
 #include "errors.h"
 #include "guc.h"
@@ -41,6 +42,7 @@ ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
 	cd->prev_cis = NULL;
 	cd->prev_cis_oid = InvalidOid;
+	cd->counters = palloc0(sizeof(SharedCounters));
 
 	return cd;
 }
@@ -67,18 +69,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 {
 	ChunkInsertState *cis;
 	bool cis_changed = true;
-	bool found = true;
 	Chunk *chunk = NULL;
-
-	/* Direct inserts into internal compressed hypertable is not supported.
-	 * For compression chunks are created explicitly by compress_chunk and
-	 * inserted into directly so we should never end up in this code path
-	 * for a compressed hypertable.
-	 */
-	if (dispatch->hypertable->fd.compression_state == HypertableInternalCompressionTable)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("direct insert into internal compressed hypertable is not supported")));
 
 	cis = ts_subspace_store_get(dispatch->cache, point);
 
@@ -137,11 +128,31 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 		if (!chunk)
 		{
-			chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point, &found);
+			chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point);
 		}
 
 		if (!chunk)
 			elog(ERROR, "no chunk found or created");
+
+		if (dispatch->create_compressed_chunk && !chunk->fd.compressed_chunk_id)
+		{
+			/*
+			 * When we try to create a compressed chunk, we need to grab a lock on the
+			 * chunk to synchronize with other concurrent insert operations trying to
+			 * create the same compressed chunk.
+			 */
+			LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
+			chunk = ts_chunk_get_by_id(chunk->fd.id, CACHE_FLAG_NONE);
+			/* recheck whether compressed chunk exists after acquiring the lock */
+			if (!chunk->fd.compressed_chunk_id)
+			{
+				Hypertable *compressed_ht =
+					ts_hypertable_get_by_id(dispatch->hypertable->fd.compressed_hypertable_id);
+				Chunk *compressed_chunk =
+					ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
+				ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
+			}
+		}
 
 		cis = ts_chunk_insert_state_create(chunk->table_id, dispatch);
 		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
@@ -161,46 +172,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	dispatch->prev_cis = cis;
 	dispatch->prev_cis_oid = cis->rel->rd_id;
 	return cis;
-}
-
-extern void
-ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkInsertState *cis,
-												TupleTableSlot *slot)
-{
-	if (!cis->chunk_compressed || (cis->cached_decompression_state &&
-								   !cis->cached_decompression_state->has_primary_or_unique_index))
-		return;
-
-	/*
-	 * If this is an INSERT into a compressed chunk with UNIQUE or
-	 * PRIMARY KEY constraints we need to make sure any batches that could
-	 * potentially lead to a conflict are in the decompressed chunk so
-	 * postgres can do proper constraint checking.
-	 */
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
-
-	ts_cm_functions->init_decompress_state_for_insert(cis, slot);
-	ts_cm_functions->decompress_batches_for_insert(cis, slot);
-
-	/* mark rows visible */
-	if (onconflict_action == ONCONFLICT_UPDATE)
-		dispatch->estate->es_output_cid = GetCurrentCommandId(true);
-
-	if (ts_guc_max_tuples_decompressed_per_dml > 0)
-	{
-		if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					 errmsg("tuple decompression limit exceeded by operation"),
-					 errdetail("current limit: %d, tuples decompressed: %lld",
-							   ts_guc_max_tuples_decompressed_per_dml,
-							   (long long int) cis->cds->tuples_decompressed),
-					 errhint("Consider increasing "
-							 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
-							 "to 0 (unlimited).")));
-		}
-	}
 }
 
 static CustomScanMethods chunk_dispatch_plan_methods = {
@@ -420,7 +391,12 @@ chunk_dispatch_exec(CustomScanState *node)
 												   state);
 
 	if (!cis->use_tam)
-		ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
+	{
+		bool update_counter =
+			ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE;
+
+		ts_chunk_tuple_routing_decompress_for_insert(cis, slot, dispatch->estate, update_counter);
+	}
 
 	MemoryContextSwitchTo(old);
 
@@ -517,9 +493,6 @@ ts_is_chunk_dispatch_state(PlanState *state)
 void
 ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *mtstate)
 {
-	ModifyTable *mt_plan = castNode(ModifyTable, mtstate->ps.plan);
-
 	/* Inserts on hypertables should always have one subplan */
 	state->mtstate = mtstate;
-	state->arbiter_indexes = mt_plan->arbiterIndexes;
 }

@@ -158,7 +158,11 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 
 	cache_entry->hypertable_id = hypertable_id;
 	cache_entry->hypertable_relid = ht->main_table_relid;
-	cache_entry->hypertable_open_dimension = *hyperspace_get_open_dimension(ht->space, 0);
+
+	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Ensure(open_dim != NULL, "hypertable %d has no open partitioning dimension", hypertable_id);
+
+	cache_entry->hypertable_open_dimension = *open_dim;
 	if (cache_entry->hypertable_open_dimension.partitioning != NULL)
 	{
 		PartitioningInfo *open_dim_part_info =

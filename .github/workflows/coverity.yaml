@@ -2,10 +2,13 @@ name: Coverity
 "on":
   schedule:
     # run at 22:00 on every saturday
-    - cron: '0 22 * * SAT'
+    - cron: '0 22 * * TUE,SAT'
   push:
     branches:
       - coverity_scan
+      - trigger/coverity
+  pull_request:
+    paths: .github/workflows/coverity.yaml
   workflow_dispatch:
 jobs:
 

@@ -18,7 +18,7 @@ list(
   compression_conflicts_iso.spec
   cagg_insert.spec
   cagg_multi_iso.spec
-  cagg_concurrent_refresh.spec
+  compressed_copy.spec
   deadlock_drop_chunks_compress.spec
   deadlock_drop_index_vacuum.spec
   parallel_compression.spec
@@ -34,6 +34,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_FILES
     cagg_concurrent_move.spec
     cagg_concurrent_invalidation.spec
+    cagg_concurrent_refresh.spec
     compression_chunk_race.spec
     compression_freeze.spec
     compression_merge_race.spec
@@ -46,7 +47,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     # These tests are using markers for the isolation tests (to avoid race
     # conditions causing differing output), which were added after 13.3 and in
     # all later major versions.
-    deadlock_recompress_chunk.spec)
+    deadlock_recompress_chunk.spec
+    detach_chunk_isolation.spec
+    attach_chunk_isolation.spec)
 
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 

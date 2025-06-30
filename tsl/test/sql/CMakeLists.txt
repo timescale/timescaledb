@@ -20,12 +20,16 @@ set(TEST_FILES
     chunk_column_stats.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
+    compress_bitmap_scan.sql
     compress_bloom_sparse.sql
     compress_default.sql
     compress_dml_copy.sql
+    compress_float8_corrupt.sql
+    compress_qualpushdown_saop.sql
+    compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
-    compress_float8_corrupt.sql
+    compression.sql
     compression_allocation.sql
     compression_conflicts.sql
     compression_constraints.sql
@@ -42,9 +46,7 @@ set(TEST_FILES
     compression_settings.sql
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
-    compression.sql
     compression_trigger.sql
-    compress_sort_transform.sql
     create_table_with.sql
     custom_hashagg.sql
     decompress_chunk_cost.sql
@@ -67,8 +69,8 @@ set(TEST_FILES
     hypercore_trigger.sql
     hypercore_types.sql
     hypercore_update.sql
-    hypercore_vacuum_full.sql
     hypercore_vacuum.sql
+    hypercore_vacuum_full.sql
     merge_append_partially_compressed.sql
     merge_chunks.sql
     merge_compress.sql
@@ -91,6 +93,7 @@ set(TEST_TEMPLATES
     cagg_union_view.sql.in
     cagg_permissions.sql.in
     compression_permissions.sql.in
+    ordered_append.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
     transparent_decompression_ordered_index.sql.in)
@@ -99,10 +102,15 @@ if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
 endif()
 
+if(NOT APPLE)
+  list(APPEND TEST_FILES compressed_copy.sql)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
+    attach_chunk.sql
     bgw_custom.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
@@ -113,7 +121,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_scheduler_restart.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
-    cagg_refresh_policy_incremental.sql
+    cagg_policy_incremental.sql
     compress_bgw_reorder_drop_chunks.sql
     chunk_api.sql
     chunk_merge.sql
@@ -144,6 +152,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_policy_run.sql
     decompress_memory.sql
     decompress_vector_qual.sql
+    detach_chunk.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql
     exp_cagg_origin.sql
@@ -220,10 +229,11 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
-    cagg_refresh_policy_incremental
+    cagg_policy_incremental
     hypercore
     move
     reorder
+    split_chunk
     telemetry_stats)
 
 # Check if PostgreSQL was compiled with JIT support

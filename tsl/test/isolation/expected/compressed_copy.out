@@ -1,0 +1,24 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s1_begin s2_begin s1_copy s2_copy s2_commit s1_commit
+step s1_begin: 
+  BEGIN;
+
+step s2_begin: 
+  BEGIN;
+
+s1: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
+s1: NOTICE:  default segment by for hypertable "metrics" is set to ""
+s1: NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
+step s1_copy: 
+COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-01-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
+
+step s2_copy: 
+COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-01-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
+
+step s2_commit: 
+  COMMIT;
+
+step s1_commit: 
+  COMMIT;
+

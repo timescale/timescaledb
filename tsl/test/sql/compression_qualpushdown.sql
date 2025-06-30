@@ -46,6 +46,8 @@ SELECT *
 FROM hyper
 WHERE time = 3::bigint;
 
+SELECT * FROM hyper where time = val + 1;
+
 -- Test some volatile and stable functions
 SET timescaledb.enable_chunk_append TO OFF;
 SET timescaledb.enable_constraint_aware_append TO OFF;
@@ -229,3 +231,41 @@ LATERAL(
 ) l;
 
 DROP TABLE svf_pushdown;
+
+-- Test bool segmentby column to cover bool-returning operator deeper in the
+-- expression tree.
+create table booltab(ts int, segmentby bool, flag bool, value int);
+select create_hypertable('booltab', 'ts');
+alter table booltab set (timescaledb.compress, timescaledb.compress_segmentby = 'segmentby',
+    timescaledb.compress_orderby = 'ts, flag');
+insert into booltab values
+    (  1,  true,  true,   1),
+    ( 99, false, false,  99),
+    (100, false, false, 100),
+    (101, false, false, 101)
+;
+select count(compress_chunk(x)) from show_chunks('booltab') x;
+vacuum analyze booltab;
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where segmentby = (value = 1);
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where segmentby = (ts = 1);
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where segmentby != (ts = 1);
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where (value = 1) = (ts = 1);
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where flag = (ts = 1);
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where flag = (ts = 99);
+
+explain (analyze, costs off, timing off, summary off)
+select * from booltab where flag = (ts = 99);
+
+drop table booltab;

@@ -2023,18 +2023,6 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 		}
 	}
 
-	/*
-	 * We set enable_bitmapscan to false here to ensure any paths with bitmapscan do not
-	 * displace other paths. Note that setting the postgres GUC will not actually disable
-	 * the bitmapscan path creation but will instead create them with very high cost.
-	 * If bitmapscan were the dominant path after postgres planning we could end up
-	 * in a situation where we have no valid plan for this relation because we remove
-	 * bitmapscan paths from the pathlist.
-	 */
-
-	bool old_bitmapscan = enable_bitmapscan;
-	enable_bitmapscan = false;
-
 	if (sort_info->use_compressed_sort)
 	{
 		/*
@@ -2078,8 +2066,6 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 		check_index_predicates(root, compressed_rel);
 		create_index_paths(root, compressed_rel);
 	}
-
-	enable_bitmapscan = old_bitmapscan;
 }
 
 /*
