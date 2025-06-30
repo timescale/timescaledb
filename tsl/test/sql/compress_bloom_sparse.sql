@@ -424,3 +424,153 @@ drop table badtable;
 drop table byref;
 drop table arraybloom;
 
+-- Test configurable sparse indexes settings
+CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
+
+create table test_settings(x int, value text, u uuid, ts timestamp);
+select create_hypertable('test_settings', 'x');
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"),minmax("ts")');
+
+select * from settings;
+
+--multi column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), bloom("ts")');
+select * from settings;
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u), bloom(ts)');
+select * from settings;
+
+--test errors
+\set ON_ERROR_STOP 0
+-- invalid syntax
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), bloom(count(u))');
+
+-- same column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), minmax("u")');
+
+-- duplicate column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), bloom("u")');
+
+-- invalid column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), minmax("foo")');
+
+-- same column as orderby
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("x"), minmax("ts")');
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"), minmax("x")');
+
+-- guc disabled
+set timescaledb.enable_sparse_index_bloom to false;
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u")');
+
+reset timescaledb.enable_sparse_index_bloom;
+\set ON_ERROR_STOP 1
+
+drop table test_settings;
+
+-- Test configurable sparse indexes functionality
+create table test_sparse_index(x int, value text, u uuid, ts timestamp);
+select create_hypertable('test_sparse_index', 'x');
+
+insert into test_sparse_index
+select x, md5(x::text),
+    case when x = 7134 then '90ec9e8e-4501-4232-9d03-6d7cf6132815'
+        else '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid end,
+    '2021-01-01'::timestamp + (interval '1 hour') * x
+from generate_series(1, 10000) x;
+
+alter table test_sparse_index set (timescaledb.compress,
+    timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u"),minmax("ts")');
+select * from settings;
+select count(compress_chunk(x)) from show_chunks('test_sparse_index') x;
+vacuum full analyze test_sparse_index;
+
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test_sparse_index') limit 1)
+\gset
+
+\d+ :chunk
+
+-- UUID uses bloom
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
+
+-- Timestamp uses minmax
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
+
+drop table test_sparse_index;
+
+-- Test configurable sparse index in CREATE TABLE .. WITH
+create table test_sparse_index(x int, value text, u uuid, ts timestamp) with (
+    tsdb.hypertable,
+    tsdb.partition_column='x',
+    tsdb.order_by='x',
+    tsdb.index='bloom("u"),minmax("ts")');
+select * from settings;
+
+insert into test_sparse_index
+select x, md5(x::text),
+    case when x = 7134 then '90ec9e8e-4501-4232-9d03-6d7cf6132815'
+        else '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid end,
+    '2021-01-01'::timestamp + (interval '1 hour') * x
+from generate_series(1, 10000) x;
+
+select count(compress_chunk(x)) from show_chunks('test_sparse_index') x;
+vacuum full analyze test_sparse_index;
+
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test_sparse_index') limit 1)
+\gset
+
+\d+ :chunk
+
+-- these tests show that despite column having multiple sparse indexes, the appropriate one is selected by the planner
+-- UUID uses bloom
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
+
+-- Timestamp uses minmax
+explain (analyze, verbose, costs off, timing off, summary off)
+select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
+
+-- Test rename column
+alter table test_sparse_index rename ts to ts_new;
+select * from settings;
+
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test_sparse_index') limit 1)
+\gset
+
+\d+ :chunk
+
+drop table test_sparse_index;
