@@ -16,6 +16,7 @@
 #include <miscadmin.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <utils/hsearch.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
@@ -234,7 +235,9 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	int32 hypertable_id;
 
 	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
-		elog(ERROR, "must supply hypertable id");
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("must supply hypertable id"));
 
 	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
 	hypertable_id = atol(hypertable_id_str);

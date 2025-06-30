@@ -1,8 +1,14 @@
+ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.continuous_aggregates;
+
+DROP VIEW timescaledb_information.continuous_aggregates;
+
 DROP PROCEDURE _timescaledb_functions.process_hypertable_invalidations(REGCLASS);
 DROP PROCEDURE @extschema@.add_process_hypertable_invalidations_policy(REGCLASS, INTERVAL, BOOL, TIMESTAMPTZ, TEXT);
 DROP PROCEDURE @extschema@.remove_process_hypertable_invalidations_policy(REGCLASS, BOOL);
 DROP PROCEDURE _timescaledb_functions.policy_process_hypertable_invalidations(INTEGER, JSONB);
 DROP FUNCTION _timescaledb_functions.policy_process_hypertable_invalidations_check(JSONB);
+DROP FUNCTION _timescaledb_functions.cagg_parse_invalidation_record(BYTEA);
+DROP FUNCTION _timescaledb_functions.has_invalidation_trigger(regclass);
 
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(
