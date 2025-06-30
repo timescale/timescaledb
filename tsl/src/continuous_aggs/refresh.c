@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 
+#include "bgw/job.h"
 #include "bgw_policy/policies_v2.h"
 #include <access/xact.h>
 #include <executor/spi.h>
@@ -691,7 +692,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 									PG_ARGISNULL(1),
 									PG_ARGISNULL(2),
 									force,
-									process_hypertable_invalidations);
+									process_hypertable_invalidations,
+									false /*extend_last_bucket*/);
 
 	PG_RETURN_VOID();
 }
@@ -791,7 +793,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg,
 								const CaggRefreshContext context, const bool start_isnull,
 								const bool end_isnull, bool force,
-								bool process_hypertable_invalidations)
+								bool process_hypertable_invalidations, bool extend_last_bucket)
 {
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
@@ -857,6 +859,20 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 			Assert(bucket_width > 0);
 			refresh_window =
 				compute_inscribed_bucketed_refresh_window(cagg, refresh_window_arg, bucket_width);
+
+			/* If there is no other policy defined after this, the inscribed bucket calculated above
+			 * is correct. However, in the case of concurrent policies, if this isn't the last
+			 * policy defined then we should extend the end of the window to include the partial
+			 * bucket. This is done to ensure concurrent policies that are 'adjacent' don't skip a
+			 * bucket We don't need to do this when the CAgg is created WITH DATA, or manually
+			 * refreshed
+			 */
+			if (extend_last_bucket)
+			{
+				refresh_window.end = ts_time_saturating_add(refresh_window.end,
+															bucket_width - 1,
+															refresh_window.type);
+			}
 		}
 	}
 
