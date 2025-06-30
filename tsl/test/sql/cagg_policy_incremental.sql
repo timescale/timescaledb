@@ -305,7 +305,8 @@ SELECT
         'conditions_by_day_manual_refresh',
         start_offset => INTERVAL '15 days',
         end_offset => NULL,
-        schedule_interval => INTERVAL '1 h'
+        schedule_interval => INTERVAL '1 h',
+        buckets_per_batch => 0 -- 0 means no batching, so it will refresh all buckets in one go
     ) AS job_id_manual \gset
 
 TRUNCATE bgw_log, conditions_by_day, conditions_by_day_manual_refresh, conditions;
