@@ -172,31 +172,42 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * to a given batch row. We don't need the offsets for the previous batch
 	 * that are currently stored there, so we don't need to use repalloc.
 	 */
-	if ((size_t) dict_rows > hashing->num_key_index_for_dict)
+	if (dict_rows > hashing->num_key_index_for_dict)
 	{
 		if (hashing->key_index_for_dict != NULL)
 		{
 			pfree(hashing->key_index_for_dict);
 		}
-		hashing->num_key_index_for_dict = dict_rows;
+
+		const int new_size = Min(GLOBAL_MAX_ROWS_PER_COMPRESSION,
+								 Max(dict_rows, hashing->num_key_index_for_dict * 2 + 1));
+		hashing->num_key_index_for_dict = new_size;
+
 		hashing->key_index_for_dict =
 			palloc(sizeof(hashing->key_index_for_dict[0]) * hashing->num_key_index_for_dict);
 	}
 
 	/*
 	 * We shouldn't add the dictionary entries that are not used by any matching
-	 * rows. Translate the batch filter bitmap to dictionary rows.
+	 * rows. Translate the batch filter bitmap to a filter bitmap for dictionary
+	 * rows, using an array of bools as an intermediate to avoid complicated bit
+	 * operations.
 	 */
 	if (row_filter != NULL)
 	{
-		uint64 *restrict dict_filter = policy->tmp_filter;
-		const size_t dict_words = (dict_rows + 63) / 64;
-		memset(dict_filter, 0, sizeof(*dict_filter) * dict_words);
+		/*
+		 * We'll use the key index storage as a temporary to avoid reallocations.
+		 */
+		StaticAssertDecl(sizeof(bool) <= sizeof(*hashing->key_index_for_dict),
+						 "unexpected bool size");
+		bool *restrict dict_row_passes = (bool *) hashing->key_index_for_dict;
+		Assert(sizeof(*dict_row_passes) <= sizeof(*hashing->key_index_for_dict));
+		memset(dict_row_passes, 0, sizeof(*dict_row_passes) * dict_rows);
 
-		bool *restrict tmp = (bool *) hashing->key_index_for_dict;
-		Assert(sizeof(*tmp) <= sizeof(*hashing->key_index_for_dict));
-		memset(tmp, 0, sizeof(*tmp) * dict_rows);
-
+		/*
+		 * Determine for every dictionary row if it passes the filter, and store
+		 * it as a bool array.
+		 */
 		int outer;
 		for (outer = 0; outer < batch_rows / 64; outer++)
 		{
@@ -206,7 +217,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	{                                                                                              \
 		const int16 index =                                                                        \
 			((int16 *) params.single_grouping_column.buffers[3])[outer * 64 + inner];              \
-		tmp[index] = tmp[index] || (word & (1ull << inner));                                       \
+		dict_row_passes[index] = dict_row_passes[index] || (word & (1ull << inner));               \
 	}
 
 			INNER_LOOP(64)
@@ -218,15 +229,22 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 		}
 #undef INNER_LOOP
 
+		/*
+		 * Convert the bool array into the bitmap.
+		 */
+		uint64 *restrict dict_filter_bitmap = policy->tmp_filter;
+		const size_t dict_filter_bitmap_words = (dict_rows + 63) / 64;
+		memset(dict_filter_bitmap, 0, sizeof(*dict_filter_bitmap) * dict_filter_bitmap_words);
+
 		for (outer = 0; outer < dict_rows / 64; outer++)
 		{
 #define INNER_LOOP(INNER_MAX)                                                                      \
 	uint64 word = 0;                                                                               \
 	for (int inner = 0; inner < (INNER_MAX); inner++)                                              \
 	{                                                                                              \
-		word |= (tmp[outer * 64 + inner] ? 1ull : 0ull) << inner;                                  \
+		word |= (dict_row_passes[outer * 64 + inner] ? 1ull : 0ull) << inner;                      \
 	}                                                                                              \
-	dict_filter[outer] = word;
+	dict_filter_bitmap[outer] = word;
 
 			INNER_LOOP(64)
 		}
@@ -236,7 +254,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 		}
 #undef INNER_LOOP
 
-		params.batch_filter = dict_filter;
+		params.batch_filter = dict_filter_bitmap;
 	}
 	else
 	{
@@ -286,7 +304,7 @@ single_text_key_hashing_prepare_for_batch(GroupingPolicyHash *policy, TupleTable
 	 * text values.
 	 */
 	Assert(params.single_grouping_column.decompression_type = DT_ArrowTextDict);
-	Assert((size_t) dict_rows <= hashing->num_key_index_for_dict);
+	Assert(dict_rows <= hashing->num_key_index_for_dict);
 	memset(hashing->key_index_for_dict, 0, sizeof(*hashing->key_index_for_dict) * dict_rows);
 
 	params.single_grouping_column.decompression_type = DT_ArrowText;

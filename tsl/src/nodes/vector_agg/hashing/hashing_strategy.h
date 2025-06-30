@@ -82,7 +82,7 @@ typedef struct HashingStrategy
 	 * it to the actual rows.
 	 */
 	uint32 *restrict key_index_for_dict;
-	uint64 num_key_index_for_dict;
+	int64 num_key_index_for_dict;
 	bool use_key_index_for_dict;
 } HashingStrategy;
 
