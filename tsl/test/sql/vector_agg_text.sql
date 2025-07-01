@@ -124,4 +124,36 @@ order by explain, condition.n, variable, function, grouping.n
 -- Test grouping by long strings
 select count(*) from long group by a order by 1 limit 10;
 
+
 reset timescaledb.debug_require_vector_agg;
+
+
+-- Dictionary encoding with null values, used to test NULLS FIRST/LAST in the
+-- group aggregate mode.
+create table dictnulls(t int, x text);
+select create_hypertable('dictnulls', 't');
+insert into dictnulls select x * 10,
+        (case when x % 11 != 0
+            then to_char(x % 11, '00')
+            else null end)::text
+from generate_series(1, 10000) x
+;
+alter table dictnulls set (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x');
+select count(compress_chunk(x)) from show_chunks('dictnulls') x;
+
+-- Test NULLS FIRST/LAST in GroupAgg mode.
+set enable_hashagg to off;
+
+explain (costs off) select x, count(*) from dictnulls group by x order by x nulls last;
+select x, count(*) from dictnulls group by x order by x nulls last;
+
+alter table dictnulls set (timescaledb.compress, timescaledb.compress_segmentby = '',
+    timescaledb.compress_orderby = 'x nulls first');
+
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('dictnulls') x;
+explain (costs off) select x, count(*) from dictnulls group by x order by x nulls first;
+select x, count(*) from dictnulls group by x order by x nulls first;
+
+
+reset enable_hashagg;
