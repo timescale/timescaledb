@@ -428,7 +428,11 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	char *matpartcolname = matcolinfo->matpartcolname;
 	CreateStmt *create;
 	Datum toast_options;
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#if PG18_LT
+	char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#else
+	const char *const validnsps[] = HEAP_RELOPT_NAMESPACES;
+#endif
 	int32 mat_htid;
 	Oid mat_relid;
 	Cache *hcache;

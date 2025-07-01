@@ -104,7 +104,11 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 	ObjectAddress tbladdress;
 	CatalogSecurityContext sec_ctx;
 	Datum toast_options;
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#if PG18_LT
+	char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#else
+	const char *const validnsps[] = HEAP_RELOPT_NAMESPACES;
+#endif
 	CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
 
 	Oid owner = ts_rel_get_owner(chunk->hypertable_relid);

@@ -676,7 +676,11 @@ static void
 create_toast_table(CreateStmt *stmt, Oid chunk_oid)
 {
 	/* similar to tcop/utility.c */
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#if PG18_LT
+	char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#else
+	const char *const validnsps[] = HEAP_RELOPT_NAMESPACES;
+#endif
 	Datum toast_options =
 		transformRelOptions((Datum) 0, stmt->options, "toast", validnsps, true, false);
 
