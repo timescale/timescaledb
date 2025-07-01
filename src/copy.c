@@ -892,9 +892,17 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 #if PG16_LT
 	ExecInitRangeTable(estate, pstate->p_rtable);
-#else
+#elif PG18_LT
 	Assert(pstate->p_rteperminfos != NULL);
 	ExecInitRangeTable(estate, pstate->p_rtable, pstate->p_rteperminfos);
+#else
+	/*
+	 * PG18+ adds unpruned relids to ExecInitRangeTable
+	 * We initialize it with 1 similar to upstream behavior,
+	 * but since this is copy no pruning is expected to happen.
+	 */
+	Assert(pstate->p_rteperminfos != NULL);
+	ExecInitRangeTable(estate, pstate->p_rtable, pstate->p_rteperminfos, bms_make_singleton(1));
 #endif
 	ExecInitResultRelation(estate, resultRelInfo, 1);
 
