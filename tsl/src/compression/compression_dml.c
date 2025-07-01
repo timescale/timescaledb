@@ -464,7 +464,8 @@ decompress_batch_beginscan(Relation in_rel, Relation index_rel, Snapshot snapsho
 
 	if (index_rel)
 	{
-		scan->index_scan = index_beginscan(in_rel, index_rel, snapshot, num_scankeys, 0);
+		scan->index_scan =
+			index_beginscan_compat(in_rel, index_rel, snapshot, NULL, num_scankeys, 0);
 		index_rescan(scan->index_scan, scankeys, num_scankeys, NULL, 0);
 		scan->scan = NULL;
 	}
