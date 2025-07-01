@@ -669,3 +669,25 @@ pg_cmp_u32(uint32 a, uint32 b)
 #define i64abs(i) llabs(i)
 #endif
 #endif
+
+/*
+ * PG18 adds IndexScanInstrumentation parameter to index_beginscan
+ * https://github.com/postgres/postgres/commit/0fbceae8
+ */
+#if PG18_LT
+#define index_beginscan_compat(heapRelation,                                                       \
+							   indexRelation,                                                      \
+							   snapshot,                                                           \
+							   instrument,                                                         \
+							   nkeys,                                                              \
+							   norderbys)                                                          \
+	index_beginscan(heapRelation, indexRelation, snapshot, nkeys, norderbys)
+#else
+#define index_beginscan_compat(heapRelation,                                                       \
+							   indexRelation,                                                      \
+							   snapshot,                                                           \
+							   instrument,                                                         \
+							   nkeys,                                                              \
+							   norderbys)                                                          \
+	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys)
+#endif
