@@ -920,6 +920,9 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 				 * data. To circumvent this issue, we change the internal scan state to use the
 				 * transaction snapshot and execute a rescan so the scan state is set correctly and
 				 * includes the new data.
+				 *
+				 * From PG17 this has changed since the scan state is not initialized with
+				 * the node.
 				 */
 				if (should_rescan)
 				{
@@ -927,7 +930,7 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 					if (ss && ss->ss_currentScanDesc)
 					{
 						ss->ss_currentScanDesc->rs_snapshot = GetTransactionSnapshot();
-						ExecReScan(ps);
+						table_rescan(ss->ss_currentScanDesc, NULL);
 					}
 				}
 			}
