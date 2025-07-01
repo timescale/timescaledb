@@ -27,10 +27,11 @@
 #include "compression/create.h"
 #include "compression/recompress.h"
 #include "compression/sparse_index_bloom1.h"
-#include "config.h"
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
+#include "continuous_aggs/invalidation_funcs.h"
+#include "continuous_aggs/invalidation_multi.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/repair.h"
@@ -42,7 +43,6 @@
 #include "hypercore/attr_capture.h"
 #include "hypercore/hypercore_handler.h"
 #include "hypercore/hypercore_proxy.h"
-#include "hypertable.h"
 #include "license_guc.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/planner.h"
@@ -150,6 +150,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_process_hypertable_invalidations =
 		continuous_agg_process_hypertable_invalidations,
+	.continuous_agg_process_multi_hypertable_invalidations =
+		continuous_agg_process_multi_hypertable_invalidations,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,
@@ -157,6 +159,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
+	.continuous_agg_read_invalidation_record = ts_invalidation_read_record,
 	.cagg_try_repair = tsl_cagg_try_repair,
 
 	/* Compression */
