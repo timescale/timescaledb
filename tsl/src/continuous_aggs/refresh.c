@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 
+#include "bgw/job.h"
 #include "bgw_policy/policies_v2.h"
 #include <access/xact.h>
 #include <executor/spi.h>
@@ -692,7 +693,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 									PG_ARGISNULL(2),
 									true,
 									force,
-									process_hypertable_invalidations);
+									process_hypertable_invalidations,
+									false /*extend_last_bucket*/);
 
 	PG_RETURN_VOID();
 }
@@ -792,7 +794,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const InternalTimeRange *refresh_window_arg,
 								const CaggRefreshContext context, const bool start_isnull,
 								const bool end_isnull, bool bucketing_refresh_window, bool force,
-								bool process_hypertable_invalidations)
+								bool process_hypertable_invalidations, bool extend_last_bucket)
 {
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
@@ -868,6 +870,30 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 				 errdetail("The refresh window must cover at least one bucket of data."),
 				 errhint("Align the refresh window with the bucket"
 						 " time zone or use at least two buckets.")));
+
+	/* If there is no other policy defined after this, the inscribed bucket calculated above
+	 * is correct. However, in the case of concurrent policies, if this isn't the last
+	 * policy defined then we should extend the end of the window to include the partial
+	 * bucket. This is done to ensure concurrent policies that are 'adjacent' don't skip a
+	 * bucket We don't need to do this when the CAgg is created WITH DATA, or manually
+	 * refreshed
+	 */
+	if (extend_last_bucket && !(start_isnull && end_isnull))
+	{
+		if (cagg->bucket_function->bucket_fixed_interval == false)
+		{
+			refresh_window.end =
+				ts_compute_beginning_of_the_next_bucket_variable(refresh_window.end,
+																 cagg->bucket_function);
+		}
+		else
+		{
+			int64 bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
+			refresh_window.end =
+				ts_time_saturating_add(refresh_window.end, bucket_width - 1, refresh_window.type);
+		}
+	}
+
 	/*
 	 * Perform the refresh across two transactions.
 	 *
