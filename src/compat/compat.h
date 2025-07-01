@@ -691,3 +691,11 @@ pg_cmp_u32(uint32 a, uint32 b)
 							   norderbys)                                                          \
 	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys)
 #endif
+
+#if PG16_LT
+#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
+	make_range(typcache, lower, upper, empty)
+#else
+#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
+	make_range(typcache, lower, upper, empty, escontext)
+#endif
