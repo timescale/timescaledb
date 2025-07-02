@@ -8,7 +8,6 @@
  *  compress and decompress chunks
  */
 #include <postgres.h>
-#include "guc.h"
 #include <access/tableam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
@@ -45,6 +44,8 @@
 #include "debug_point.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "extension_constants.h"
+#include "guc.h"
 #include "hypercore/hypercore_handler.h"
 #include "hypercore/utils.h"
 #include "hypercube.h"
@@ -860,8 +861,8 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 		const RangeVar *rv = makeRangeVar(relschema, relname, -1);
 		/* Do quick migration to hypercore of already compressed data by
 		 * simply changing the access method to hypercore in pg_am. */
-		hypercore_set_am(rv);
-		hypercore_set_reloptions(chunk);
+		hypercore_set_am(rv, TS_HYPERCORE_TAM_NAME);
+		hypercore_set_compressed_autovacuum_reloption(chunk, false);
 		return chunk->table_id;
 	}
 
@@ -1032,7 +1033,9 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 				 errmsg("missing columnstore-enabled hypertable")));
 
 	if (ts_is_hypercore_am(uncompressed_chunk->amoid))
+	{
 		set_access_method(uncompressed_chunk_id, "heap");
+	}
 	else if (!ts_chunk_is_compressed(uncompressed_chunk))
 	{
 		ereport((if_compressed ? NOTICE : ERROR),
