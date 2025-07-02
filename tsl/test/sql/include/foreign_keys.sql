@@ -519,7 +519,13 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should cascade
 UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
 SELECT * FROM ht;
+-- Exclude below explain outputs from main DIFF because the custom plans
+-- for FK UPD/DEL cascades with constified params
+-- are legitimately different from generic plans with run-time params,
+-- with the resulting "ht" partial chunk composition being different.
+\o /dev/stdout
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+\o
 ROLLBACK;
 
 -- ON DELETE CASCADE
@@ -540,7 +546,9 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should cascade
 DELETE FROM fk_cascade;
 SELECT * FROM ht;
+\o /dev/stdout
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+\o
 ROLLBACK;
 RESET timescaledb.enable_compressed_direct_batch_delete;
 
@@ -552,7 +560,9 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should cascade
 DELETE FROM fk_cascade;
 SELECT * FROM ht;
+\o /dev/stdout
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+\o
 ROLLBACK;
 
 -- SET NULL
@@ -576,7 +586,9 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should set column to null
 UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
 SELECT * FROM ht;
+\o /dev/stdout
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+\o
 ROLLBACK;
 
 -- ON DELETE SET NULL
@@ -596,7 +608,9 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should set column to null
 DELETE FROM fk_set_null;
 SELECT * FROM ht;
+\o /dev/stdout
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+\o
 ROLLBACK;
 
 -- SET DEFAULT
@@ -620,7 +634,9 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 SELECT * FROM ht;
 UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
 SELECT * FROM ht;
+\o /dev/stdout
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+\o
 ROLLBACK;
 
 -- ON DELETE SET DEFAULT
@@ -639,7 +655,9 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 SELECT * FROM ht;
 DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
 SELECT * FROM ht;
+\o /dev/stdout
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+\o
 ROLLBACK;
 
 -- #7226
