@@ -34,6 +34,10 @@
 #include "nodes/chunk_append/transform.h"
 #include "utils.h"
 
+#if PG18_GE
+#include <commands/explain_format.h>
+#endif
+
 /*
  * Exclude child relations (chunks) at execution time based on constraints.
  *
