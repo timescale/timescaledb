@@ -26,19 +26,19 @@
 #include "utils.h"
 
 /*
- * Set reloptions for chunks using hypercore TAM.
+ * Set autovacuum reloption for chunks using hypercore TAM.
  *
- * This sets all reloptions needed for chunks using the hypercore table access
- * method. Right now this means turning of autovacuum for the compressed chunk
- * associated with the hypercore chunk by setting the "autovacuum_enabled"
- * option to "0" (false).
+ * This function turns autovacuum on or off for the (internal) compressed
+ * chunk associated with the hypercore chunk by setting the
+ * "autovacuum_enabled" option to "0" (false) or 1 (true). For Hypercore TAM,
+ * vacuum is triggered via the TAM on the "main" chunk, which is then relayed
+ * to the internal compressed chunk.
  *
- * It is (currently) not necessary to clear this reloption anywhere since we
- * (currently) delete the compressed chunk when changing the table access
- * method back to "heap".
+ * Note that it is not necessary to clear this reloption when decompressing
+ * since that deletes the compressed chunk.
  */
 void
-hypercore_set_reloptions(Chunk *chunk)
+hypercore_set_compressed_autovacuum_reloption(Chunk *chunk, bool enabled)
 {
 	/*
 	 * Update the tuple for the compressed chunk and disable autovacuum on
@@ -49,49 +49,71 @@ hypercore_set_reloptions(Chunk *chunk)
 	Relation compressed_rel = table_open(cchunk->table_id, AccessShareLock);
 
 	/* We use makeInteger since makeBoolean does not exist prior to PG15 */
-	List *options = list_make1(makeDefElem("autovacuum_enabled", (Node *) makeInteger(0), -1));
+	List *options =
+		list_make1(makeDefElem("autovacuum_enabled", (Node *) makeInteger(enabled ? 1 : 0), -1));
 	ts_relation_set_reloption(compressed_rel, options, AccessShareLock);
 
 	table_close(compressed_rel, AccessShareLock);
 }
 
 /*
- * Make a relation use hypercore without rewriting any data, simply by
- * updating the AM in pg_class. This only works if the relation is already
- * using (non-hypercore) compression.
+ * Switch a relation's TAM between heap and hypercore (and vice versa) without
+ * rewriting any data in the heap table. This is done by updating the AM in
+ * pg_class. When switching to hypercore, this only works if the relation is
+ * already using (non-hypercore) compression.
+ *
+ * Note that indexes need to be rebuilt, which can take some time depending on
+ * the number of indexes.
  */
 void
-hypercore_set_am(const RangeVar *rv)
+hypercore_set_am(const RangeVar *rv, const char *amname)
 {
 	HeapTuple tp;
 	Oid relid = RangeVarGetRelid(rv, NoLock, false);
 	Relation class_rel = table_open(RelationRelationId, RowExclusiveLock);
+	bool to_hypercore = strcmp(amname, TS_HYPERCORE_TAM_NAME) == 0;
+
+	Ensure(strcmp(amname, "heap") == 0 || to_hypercore,
+		   "can only migrate between heap and %s",
+		   TS_HYPERCORE_TAM_NAME);
 
 	tp = SearchSysCacheLockedCopy1(RELOID, ObjectIdGetDatum(relid));
 
 	if (HeapTupleIsValid(tp))
 	{
 		Form_pg_class reltup = (Form_pg_class) GETSTRUCT(tp);
-		Oid hypercore_amoid = get_table_am_oid(TS_HYPERCORE_TAM_NAME, false);
+		Oid amoid = get_table_am_oid(amname, false);
 #ifdef SYSCACHE_TUPLE_LOCK_NEEDED
 		ItemPointerData otid = tp->t_self;
 #endif
-		elog(DEBUG1, "migrating table \"%s\" to hypercore", get_rel_name(relid));
+		elog(DEBUG1, "migrating table \"%s\" to %s", get_rel_name(relid), amname);
 
-		reltup->relam = hypercore_amoid;
+		reltup->relam = amoid;
 		/* Set the new table access method */
 		CatalogTupleUpdate(class_rel, &tp->t_self, tp);
 		/* Also update pg_am dependency for the relation */
-		ObjectAddress depender = {
-			.classId = RelationRelationId,
-			.objectId = relid,
-		};
-		ObjectAddress referenced = {
-			.classId = AccessMethodRelationId,
-			.objectId = hypercore_amoid,
-		};
 
-		recordDependencyOn(&depender, &referenced, DEPENDENCY_NORMAL);
+		if (to_hypercore)
+		{
+			ObjectAddress depender = {
+				.classId = RelationRelationId,
+				.objectId = relid,
+			};
+			ObjectAddress referenced = {
+				.classId = AccessMethodRelationId,
+				.objectId = amoid,
+			};
+
+			recordDependencyOn(&depender, &referenced, DEPENDENCY_NORMAL);
+		}
+		else
+		{
+			deleteDependencyRecordsForClass(RelationRelationId,
+											relid,
+											AccessMethodRelationId,
+											DEPENDENCY_NORMAL);
+		}
+
 		UnlockSysCacheTuple(class_rel, &otid);
 
 		/*

@@ -7,6 +7,7 @@ show timescaledb.hypercore_indexam_whitelist;
 -- We need this to be able to create an index for a chunk as a default
 -- user.
 grant all on schema _timescaledb_internal to :ROLE_DEFAULT_PERM_USER;
+
 set role :ROLE_DEFAULT_PERM_USER;
 
 SET timescaledb.hypercore_arrow_cache_max_entries = 4;
@@ -31,9 +32,9 @@ SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, '{"a"
 FROM generate_series('2022-06-01'::timestamptz, '2022-07-01'::timestamptz, '5m') t;
 
 ALTER TABLE readings SET (
-	  timescaledb.compress,
-	  timescaledb.compress_orderby = 'time',
-	  timescaledb.compress_segmentby = 'device'
+      timescaledb.compress,
+      timescaledb.compress_orderby = 'time',
+      timescaledb.compress_segmentby = 'device'
 );
 
 -- Set some test chunks as global variables
@@ -197,16 +198,24 @@ ON (c1.compressed_chunk_id = c2.id);
 ALTER TABLE :chunk SET ACCESS METHOD heap;
 SET timescaledb.enable_transparent_decompression TO 'hypercore';
 
--- The compressed chunk should no longer exist
+-- The compressed chunk should still exist because we migrated back to
+-- heap without decompressing
 SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
 FROM _timescaledb_catalog.chunk c1
 INNER JOIN _timescaledb_catalog.chunk c2
 ON (c1.compressed_chunk_id = c2.id);
 
+-- TAM should now be heap
+SELECT amname FROM
+pg_am am JOIN pg_class cl ON (am.oid = cl.relam)
+WHERE cl.oid = :'chunk'::regclass;
+
+SELECT decompress_chunk(:'chunk');
+
 SELECT device, count(*) INTO num_rows_after FROM :chunk GROUP BY device;
 SELECT device, num_rows_after.count AS after,
-	   num_rows_before.count AS before,
-	   (num_rows_after.count - num_rows_before.count) AS diff
+       num_rows_before.count AS before,
+       (num_rows_after.count - num_rows_before.count) AS diff
 FROM num_rows_after JOIN num_rows_before USING (device)
 WHERE num_rows_after.count != num_rows_before.count;
 
@@ -468,3 +477,30 @@ vacuum crossmodule_test;
 \set ON_ERROR_STOP 1
 alter system reset timescaledb.license;
 select pg_reload_conf();
+
+
+-- Test conversion from different access method to heap. Don't want
+-- hypercore TAM stuff to interfere.
+CREATE ACCESS METHOD heap2 TYPE TABLE HANDLER heap_tableam_handler;
+set role :ROLE_DEFAULT_PERM_USER;
+
+create table customam (time timestamptz, temp float);
+select create_hypertable('customam', 'time');
+insert into customam values ('2024-11-02 01:00', 1.0), ('2024-11-02 02:00', 2.0), ('2024-11-02 03:00', 3.0), ('2024-11-02 05:00', 4.0);
+
+select ch as chunk from show_chunks('customam') ch \gset
+alter table :chunk set access method heap2;
+
+select relname, amname
+from pg_class cl join pg_am am on (am.oid = cl.relam)
+where cl.oid = :'chunk'::regclass;
+
+select * from customam order by time;
+
+alter table :chunk set access method heap;
+
+select relname, amname
+from pg_class cl join pg_am am on (am.oid = cl.relam)
+where cl.oid = :'chunk'::regclass;
+
+select * from customam order by time;
