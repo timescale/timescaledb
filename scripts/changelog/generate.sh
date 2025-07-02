@@ -8,9 +8,6 @@ set -eu
 echo_changelog() {
     echo "${1}"
     # skip the template and release notes files
-    #grep -i "${2}" .unreleased/* | \
-    #    cut -d: -f3- | sort | uniq | sed -e 's/^[[:space:]]*//' -e 's/^/* /' -e 's!#\([0-9]\+\)![#\1](https://github.com/timescale/timescaledb/pull/\1)!'
-
     grep -i "${2}" .unreleased/* | \
         cut -d: -f3- | sort | uniq | sed -e 's/^[[:space:]]*//' -e 's/^/* /' -e 's!#\([0-9][0-9]*\)![#\1](https://github.com/timescale/timescaledb/pull/\1)!g'
     echo
