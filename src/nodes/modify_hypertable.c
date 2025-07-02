@@ -8,10 +8,15 @@
 #include <nodes/execnodes.h>
 #include <nodes/makefuncs.h>
 
+#include "compat/compat.h"
 #include "chunk_tuple_routing.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/modify_hypertable.h"
+
+#if PG18_GE
+#include <commands/explain_format.h>
+#endif
 
 static ChunkDispatchState *
 get_chunk_dispatch_state(PlanState *substate)

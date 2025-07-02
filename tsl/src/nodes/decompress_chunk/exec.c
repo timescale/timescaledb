@@ -14,11 +14,10 @@
 #include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
+#include <tcop/tcopprot.h>
 #include <utils/datum.h>
 #include <utils/memutils.h>
 #include <utils/typcache.h>
-
-#include <tcop/tcopprot.h>
 
 #include "compat/compat.h"
 #include "compression/arrow_c_data_interface.h"
@@ -31,6 +30,11 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+
+#if PG18_GE
+#include <commands/explain_format.h>
+#include <commands/explain_state.h>
+#endif
 
 static void decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags);
 static void decompress_chunk_end(CustomScanState *node);
