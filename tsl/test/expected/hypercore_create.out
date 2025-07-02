@@ -255,6 +255,16 @@ ERROR:  hypertable "test3" is missing compression settings
 \set ON_ERROR_STOP 1
 -- Add compression settings
 alter table test3 set (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='');
+-- Show that there is no dependency on TAM initially
+select count(*) from pg_depend
+where classid = 'pg_class'::regclass
+and objid = :'chunk'::regclass
+and refclassid = 'pg_am'::regclass;
+ count 
+-------
+     0
+(1 row)
+
 \x on
 select * from test_chunk_info where chunk = :'chunk'::regclass;
 -[ RECORD 1 ]---------+----------------------------------------
@@ -274,6 +284,16 @@ compressed_chunk      | _timescaledb_internal.compress_hyper_5_14_chunk
 compressed_reloptions | {toast_tuple_target=128,autovacuum_enabled=0}
 
 \x off
+-- TAM dependency should exist now
+select count(*) from pg_depend
+where classid = 'pg_class'::regclass
+and objid = :'chunk'::regclass
+and refclassid = 'pg_am'::regclass;
+ count 
+-------
+     1
+(1 row)
+
 -- Check that chunk is using hypercore
 select * from amrels where rel=:'chunk'::regclass;
                    rel                   |  amname   | relparent 
@@ -294,14 +314,24 @@ compressed_reloptions | {toast_tuple_target=128,autovacuum_enabled=0}
 
 alter table :chunk set access method heap;
 select * from test_chunk_info where chunk = :'chunk'::regclass;
--[ RECORD 1 ]---------+----------------------------------------
+-[ RECORD 1 ]---------+------------------------------------------------
 hypertable            | test3
 chunk                 | _timescaledb_internal._hyper_4_13_chunk
 chunk_reloptions      | 
-compressed_chunk      | 
-compressed_reloptions | 
+compressed_chunk      | _timescaledb_internal.compress_hyper_5_14_chunk
+compressed_reloptions | {toast_tuple_target=128,autovacuum_enabled=1}
 
 \x off
+-- TAM dependency should be removed
+select count(*) from pg_depend
+where classid = 'pg_class'::regclass
+and objid = :'chunk'::regclass
+and refclassid = 'pg_am'::regclass;
+ count 
+-------
+     0
+(1 row)
+
 select compress_chunk(:'chunk', hypercore_use_access_method => true);
              compress_chunk              
 -----------------------------------------
@@ -335,7 +365,7 @@ select * from amrels where relparent='test3'::regclass;
                    rel                   |  amname   | relparent 
 -----------------------------------------+-----------+-----------
  _timescaledb_internal._hyper_4_13_chunk | hypercore | test3
- _timescaledb_internal._hyper_4_17_chunk | heap      | test3
+ _timescaledb_internal._hyper_4_16_chunk | heap      | test3
 (2 rows)
 
 -- Set hypercore on hypertable
@@ -348,8 +378,8 @@ select * from amrels where relparent='test3'::regclass;
                    rel                   |  amname   | relparent 
 -----------------------------------------+-----------+-----------
  _timescaledb_internal._hyper_4_13_chunk | hypercore | test3
- _timescaledb_internal._hyper_4_17_chunk | heap      | test3
- _timescaledb_internal._hyper_4_18_chunk | hypercore | test3
+ _timescaledb_internal._hyper_4_16_chunk | heap      | test3
+ _timescaledb_internal._hyper_4_17_chunk | hypercore | test3
 (3 rows)
 
 -- Test that we can DDL on a hypertable that is not a Hypercore but
@@ -378,7 +408,7 @@ NOTICE:  default order by for hypertable "test4" is set to ""time" DESC"
 select * from test_chunk_info where chunk = :'chunk'::regclass;
 -[ RECORD 1 ]---------+----------------------------------------
 hypertable            | test4
-chunk                 | _timescaledb_internal._hyper_6_20_chunk
+chunk                 | _timescaledb_internal._hyper_6_19_chunk
 chunk_reloptions      | 
 compressed_chunk      | 
 compressed_reloptions | 
@@ -387,18 +417,18 @@ alter table :chunk set access method hypercore;
 select * from test_chunk_info where chunk = :'chunk'::regclass;
 -[ RECORD 1 ]---------+------------------------------------------------
 hypertable            | test4
-chunk                 | _timescaledb_internal._hyper_6_20_chunk
+chunk                 | _timescaledb_internal._hyper_6_19_chunk
 chunk_reloptions      | 
-compressed_chunk      | _timescaledb_internal.compress_hyper_7_22_chunk
+compressed_chunk      | _timescaledb_internal.compress_hyper_7_21_chunk
 compressed_reloptions | {toast_tuple_target=128,autovacuum_enabled=0}
 
 select * from amrels where relparent='test4'::regclass;
 -[ RECORD 1 ]--------------------------------------
-rel       | _timescaledb_internal._hyper_6_20_chunk
+rel       | _timescaledb_internal._hyper_6_19_chunk
 amname    | hypercore
 relparent | test4
 -[ RECORD 2 ]--------------------------------------
-rel       | _timescaledb_internal._hyper_6_21_chunk
+rel       | _timescaledb_internal._hyper_6_20_chunk
 amname    | heap
 relparent | test4
 
@@ -406,7 +436,7 @@ relparent | test4
 -- test that alter table on the hypertable works
 alter table test4 add column magic int;
 \d :chunk
-          Table "_timescaledb_internal._hyper_6_20_chunk"
+          Table "_timescaledb_internal._hyper_6_19_chunk"
  Column |           Type           | Collation | Nullable | Default 
 --------+--------------------------+-----------+----------+---------
  time   | timestamp with time zone |           | not null | 
@@ -414,7 +444,7 @@ alter table test4 add column magic int;
  temp   | double precision         |           |          | 
  magic  | integer                  |           |          | 
 Indexes:
-    "_hyper_6_20_chunk_test4_time_idx" btree ("time" DESC)
+    "_hyper_6_19_chunk_test4_time_idx" btree ("time" DESC)
 Check constraints:
     "constraint_10" CHECK ("time" >= 'Wed May 25 17:00:00 2022 PDT'::timestamp with time zone AND "time" < 'Wed Jun 01 17:00:00 2022 PDT'::timestamp with time zone)
 Inherits: test4
@@ -463,7 +493,7 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_9_chunk  | hypercore | test2     |                       0 |                        0 |                          0
  _timescaledb_internal._hyper_1_11_chunk | hypercore | test2     |                       0 |                        0 |                          0
  _timescaledb_internal._hyper_4_13_chunk | hypercore | test3     |                       1 |                        1 |                          1
- _timescaledb_internal._hyper_4_18_chunk | hypercore | test3     |                       0 |                        0 |                          0
+ _timescaledb_internal._hyper_4_17_chunk | hypercore | test3     |                       0 |                        0 |                          0
 (8 rows)
 
 -- Decompress hypercores to check that stats are removed
@@ -479,7 +509,7 @@ select decompress_chunk(rel)
  _timescaledb_internal._hyper_1_9_chunk
  _timescaledb_internal._hyper_1_11_chunk
  _timescaledb_internal._hyper_4_13_chunk
- _timescaledb_internal._hyper_4_18_chunk
+ _timescaledb_internal._hyper_4_17_chunk
 (8 rows)
 
 -- All stats should be removed
@@ -520,8 +550,8 @@ from show_chunks('test3') ch;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_4_13_chunk
+ _timescaledb_internal._hyper_4_16_chunk
  _timescaledb_internal._hyper_4_17_chunk
- _timescaledb_internal._hyper_4_18_chunk
 (3 rows)
 
 -- Save the stats for later comparison. Exclude the amname column
@@ -544,8 +574,8 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_9_chunk  | hypercore | test2     |                    2016 |                       10 |                         10
  _timescaledb_internal._hyper_1_11_chunk | hypercore | test2     |                     373 |                       10 |                         10
  _timescaledb_internal._hyper_4_13_chunk | hypercore | test3     |                       1 |                        1 |                          1
+ _timescaledb_internal._hyper_4_16_chunk | hypercore | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_17_chunk | hypercore | test3     |                       1 |                        1 |                          1
- _timescaledb_internal._hyper_4_18_chunk | hypercore | test3     |                       1 |                        1 |                          1
 (9 rows)
 
 -- Convert back to heap and compress the old way to compare
@@ -568,8 +598,8 @@ from show_chunks('test3') ch;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_4_13_chunk
+ _timescaledb_internal._hyper_4_16_chunk
  _timescaledb_internal._hyper_4_17_chunk
- _timescaledb_internal._hyper_4_18_chunk
 (3 rows)
 
 select * from compressed_rel_size_stats order by rel;
@@ -582,8 +612,8 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_9_chunk  | heap   | test2     |                    2016 |                       10 |                         10
  _timescaledb_internal._hyper_1_11_chunk | heap   | test2     |                     373 |                       10 |                         10
  _timescaledb_internal._hyper_4_13_chunk | heap   | test3     |                       1 |                        1 |                          1
+ _timescaledb_internal._hyper_4_16_chunk | heap   | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_17_chunk | heap   | test3     |                       1 |                        1 |                          1
- _timescaledb_internal._hyper_4_18_chunk | heap   | test3     |                       1 |                        1 |                          1
 (9 rows)
 
 -- Check that stats are the same for hypercore and now with
@@ -673,7 +703,7 @@ LOG:  statement: select * from test_chunk_info where chunk = '_timescaledb_inter
 hypertable            | test2
 chunk                 | _timescaledb_internal._hyper_1_1_chunk
 chunk_reloptions      | 
-compressed_chunk      | _timescaledb_internal.compress_hyper_3_32_chunk
+compressed_chunk      | _timescaledb_internal.compress_hyper_3_31_chunk
 compressed_reloptions | {toast_tuple_target=128}
 
 alter table :alter_chunk set access method hypercore;
@@ -689,7 +719,7 @@ LOG:  statement: select * from test_chunk_info where chunk = '_timescaledb_inter
 hypertable            | test2
 chunk                 | _timescaledb_internal._hyper_1_1_chunk
 chunk_reloptions      | 
-compressed_chunk      | _timescaledb_internal.compress_hyper_3_32_chunk
+compressed_chunk      | _timescaledb_internal.compress_hyper_3_31_chunk
 compressed_reloptions | {toast_tuple_target=128,autovacuum_enabled=0}
 
 \x off
@@ -994,14 +1024,14 @@ insert into rides values
 select compress_chunk(ch, hypercore_use_access_method => true) from show_chunks('rides') ch;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_8_44_chunk
+ _timescaledb_internal._hyper_8_43_chunk
 (1 row)
 
 select rel, amname from compressed_rel_size_stats
 where relparent::regclass = 'rides'::regclass;
                    rel                   |  amname   
 -----------------------------------------+-----------
- _timescaledb_internal._hyper_8_44_chunk | hypercore
+ _timescaledb_internal._hyper_8_43_chunk | hypercore
 (1 row)
 
 -- Query to check everything is OK
@@ -1013,8 +1043,8 @@ select * from rides order by pickup_datetime;
                       QUERY PLAN                       
 -------------------------------------------------------
  Sort
-   Sort Key: _hyper_8_44_chunk.pickup_datetime
-   ->  Custom Scan (ColumnarScan) on _hyper_8_44_chunk
+   Sort Key: _hyper_8_43_chunk.pickup_datetime
+   ->  Custom Scan (ColumnarScan) on _hyper_8_43_chunk
 (3 rows)
 
 select * from rides order by pickup_datetime;
@@ -1072,14 +1102,14 @@ NOTICE:  default order by for hypertable "test5" is set to ""time" DESC"
 select compress_chunk(:'chunk');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_10_46_chunk
+ _timescaledb_internal._hyper_10_45_chunk
 (1 row)
 
 select * from amrels where relparent = 'test5'::regclass;
                    rel                    |  amname   | relparent 
 ------------------------------------------+-----------+-----------
- _timescaledb_internal._hyper_10_46_chunk | hypercore | test5
- _timescaledb_internal._hyper_10_47_chunk | heap      | test5
+ _timescaledb_internal._hyper_10_45_chunk | hypercore | test5
+ _timescaledb_internal._hyper_10_46_chunk | heap      | test5
 (2 rows)
 
 -- Check that operations that rewrite the relation are blocked with
@@ -1095,9 +1125,7 @@ set timescaledb.enable_transparent_decompression='hypercore';
 select decompress_chunk(:'chunk');
 ERROR:  operation not compatible with current setting of timescaledb.enable_transparent_decompression
 alter table :chunk set access method heap;
-ERROR:  operation not compatible with current setting of timescaledb.enable_transparent_decompression
 vacuum full :chunk;
-ERROR:  operation not compatible with current setting of timescaledb.enable_transparent_decompression
 select count(*) from :chunk;
  count 
 -------
@@ -1177,7 +1205,7 @@ select chunk, am.amname, cs.compress_relid, cl.relowner::regrole as chunk_owner,
   join pg_am am on (cl.relam = am.oid);
                   chunk                   |  amname   |                  compress_relid                  | chunk_owner | compress_chunk_owner 
 ------------------------------------------+-----------+--------------------------------------------------+-------------+----------------------
- _timescaledb_internal._hyper_12_49_chunk | hypercore | _timescaledb_internal.compress_hyper_13_50_chunk | test_role_1 | test_role_1
+ _timescaledb_internal._hyper_12_48_chunk | hypercore | _timescaledb_internal.compress_hyper_13_49_chunk | test_role_1 | test_role_1
 (1 row)
 
 -- Data is not compressed
@@ -1190,7 +1218,7 @@ select _timescaledb_debug.is_compressed_tid(ctid), * from conditions;
 select compress_chunk(ch) from show_chunks('conditions') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_12_49_chunk
+ _timescaledb_internal._hyper_12_48_chunk
 (1 row)
 
 -- Now the data is compressed

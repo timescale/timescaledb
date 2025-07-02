@@ -7,5 +7,5 @@
 
 #include <postgres.h>
 
-extern void hypercore_set_am(const RangeVar *rv);
-extern void hypercore_set_reloptions(Chunk *chunk);
+extern void hypercore_set_am(const RangeVar *rv, const char *amname);
+extern void hypercore_set_compressed_autovacuum_reloption(Chunk *chunk, bool enabled);

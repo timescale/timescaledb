@@ -61,6 +61,7 @@
 #include "ts_catalog/continuous_agg.h"
 #include "utils.h"
 #include "wal_utils.h"
+#include <utils/lsyscache.h>
 
 typedef struct CompressChunkCxt
 {
@@ -849,8 +850,8 @@ compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
 		const RangeVar *rv = makeRangeVar(relschema, relname, -1);
 		/* Do quick migration to hypercore of already compressed data by
 		 * simply changing the access method to hypercore in pg_am. */
-		hypercore_set_am(rv);
-		hypercore_set_reloptions(chunk);
+		hypercore_set_am(rv, "hypercore");
+		hypercore_set_compressed_autovacuum_reloption(chunk, false);
 		return chunk->table_id;
 	}
 
@@ -1021,7 +1022,9 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 				 errmsg("missing columnstore-enabled hypertable")));
 
 	if (ts_is_hypercore_am(uncompressed_chunk->amoid))
+	{
 		set_access_method(uncompressed_chunk_id, "heap");
+	}
 	else if (!ts_chunk_is_compressed(uncompressed_chunk))
 	{
 		ereport((if_compressed ? NOTICE : ERROR),
