@@ -148,11 +148,18 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 							/* Check if we can do quick migration */
 							if (!is_hypercore && ts_chunk_is_compressed(chunk))
 							{
-								hypercore_set_am(stmt->relation);
-								hypercore_set_reloptions(chunk);
+								hypercore_set_am(stmt->relation, TS_HYPERCORE_TAM_NAME);
+								hypercore_set_compressed_autovacuum_reloption(chunk, false);
 								/* Skip this command in the alter table
 								 * statement since we process it via quick
 								 * migration */
+								stmt->cmds = foreach_delete_current(stmt->cmds, lc);
+								continue;
+							}
+							else if (is_hypercore && (cmd->name && strcmp(cmd->name, "heap") == 0))
+							{
+								hypercore_set_compressed_autovacuum_reloption(chunk, true);
+								hypercore_set_am(stmt->relation, "heap");
 								stmt->cmds = foreach_delete_current(stmt->cmds, lc);
 								continue;
 							}
