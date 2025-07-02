@@ -61,7 +61,10 @@ WHERE c.relnamespace='_timescaledb_internal'::regnamespace;
 * [#8323](https://github.com/timescale/timescaledb/pull/8323) Fix DML issue with expression indexes and BHS
 
 **GUCs**
-* 
+* `enable_direct_compress_copy`: Enable experimental support for direct compression during `COPY`, default: off
+* `enable_direct_compress_copy_sort_batches`: Enable batch sorting during direct compress `COPY`, default: on
+* `enable_direct_compress_copy_client_sorted`: Correct handling of data sorting by the user is required for this option, default: off
+* `enable_optimizations`: Enable TimescaleDB query optimizations. default: on
 
 ## 2.20.3 (2025-06-11)
 
