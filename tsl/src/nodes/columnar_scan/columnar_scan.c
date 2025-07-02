@@ -30,6 +30,7 @@
 #include <utils/snapmgr.h>
 #include <utils/typcache.h>
 
+#include "compat/compat.h"
 #include "columnar_scan.h"
 #include "compression/compression.h"
 #include "guc.h"
@@ -37,6 +38,11 @@
 #include "hypercore/hypercore_handler.h"
 #include "hypercore/vector_quals.h"
 #include "import/ts_explain.h"
+
+#if PG18_GE
+#include "commands/explain_format.h"
+#include "commands/explain_state.h"
+#endif
 
 typedef struct SimpleProjInfo
 {

@@ -14,6 +14,11 @@
 #include <compat/compat.h>
 #include "arrow_cache_explain.h"
 
+#if PG18_GE
+#include <commands/explain_format.h>
+#include <commands/explain_state.h>
+#endif
+
 bool decompress_cache_print = false;
 struct DecompressCacheStats decompress_cache_stats;
 static ExplainOneQuery_hook_type prev_ExplainOneQuery_hook = NULL;
