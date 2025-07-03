@@ -12,7 +12,7 @@ This release contains performance improvements and bug fixes since the 2.20.3 re
 * Attach & Detach chunks
 * improved backfill / UPSERT
 * deletes of non-segmentby columns 42x faster with less IO & bloat
-* parallel CAgg refresh policies
+* concurrent CAgg refresh policies
 * direct compress (tech preview)
 
 **Sunsetting of the hypercore access method**
