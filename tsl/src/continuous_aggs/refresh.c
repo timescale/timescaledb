@@ -436,23 +436,13 @@ static void
 log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 				   const char *msg, CaggRefreshContext context)
 {
-	Datum start_ts;
-	Datum end_ts;
-	Oid outfuncid = InvalidOid;
-	bool isvarlena;
-
-	start_ts = ts_internal_to_time_value(refresh_window->start, refresh_window->type);
-	end_ts = ts_internal_to_time_value(refresh_window->end, refresh_window->type);
-	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
-	Assert(!isvarlena);
-
 	if (context.callctx == CAGG_REFRESH_POLICY_BATCHED)
 		elog(elevel,
 			 "%s \"%s\" in window [ %s, %s ] (batch %d of %d)",
 			 msg,
 			 NameStr(cagg->data.user_view_name),
-			 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
-			 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)),
+			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
+			 ts_internal_to_time_string(refresh_window->end, refresh_window->type),
 			 context.processing_batch,
 			 context.number_of_batches);
 	else
@@ -460,8 +450,8 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 			 "%s \"%s\" in window [ %s, %s ]",
 			 msg,
 			 NameStr(cagg->data.user_view_name),
-			 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
-			 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)));
+			 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
+			 ts_internal_to_time_string(refresh_window->end, refresh_window->type));
 }
 
 typedef void (*scan_refresh_ranges_funct_t)(const InternalTimeRange *bucketed_refresh_window,
@@ -980,27 +970,17 @@ static void
 debug_refresh_window(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 					 const char *msg)
 {
-	Datum start_ts;
-	Datum end_ts;
-	Oid outfuncid = InvalidOid;
-	bool isvarlena;
-
-	start_ts = ts_internal_to_time_value(refresh_window->start, refresh_window->type);
-	end_ts = ts_internal_to_time_value(refresh_window->end, refresh_window->type);
-	getTypeOutputInfo(refresh_window->type, &outfuncid, &isvarlena);
-	Assert(!isvarlena);
-
 	elog(DEBUG1,
 		 "%s \"%s\" in window [ %s, %s ] internal [ " INT64_FORMAT ", " INT64_FORMAT
 		 " ] minimum [ %s ]",
 		 msg,
 		 NameStr(cagg->data.user_view_name),
-		 DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
-		 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)),
+		 ts_internal_to_time_string(refresh_window->start, refresh_window->type),
+		 ts_internal_to_time_string(refresh_window->end, refresh_window->type),
 		 refresh_window->start,
 		 refresh_window->end,
-		 DatumGetCString(
-			 OidFunctionCall1(outfuncid, Int64GetDatum(ts_time_get_min(refresh_window->type)))));
+		 ts_datum_to_string(Int64GetDatum(ts_time_get_min(refresh_window->type)),
+							refresh_window->type));
 }
 
 List *
@@ -1097,18 +1077,12 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		Oid type = IS_TIMESTAMP_TYPE(refresh_window.type) ? INTERVALOID : refresh_window.type;
 		Datum refresh_size_interval = ts_internal_to_interval_value(refresh_window_size, type);
 		Datum batch_size_interval = ts_internal_to_interval_value(batch_size, type);
-		Oid typoutputfunc;
-		bool isvarlena;
-		FmgrInfo typoutputinfo;
-
-		getTypeOutputInfo(type, &typoutputfunc, &isvarlena);
-		fmgr_info(typoutputfunc, &typoutputinfo);
 
 		elog(LOG,
 			 "refresh window size (%s) is smaller than or equal to batch size (%s), falling back "
 			 "to single batch processing",
-			 OutputFunctionCall(&typoutputinfo, refresh_size_interval),
-			 OutputFunctionCall(&typoutputinfo, batch_size_interval));
+			 ts_datum_to_string(refresh_size_interval, type),
+			 ts_datum_to_string(batch_size_interval, type));
 		return NIL;
 	}
 

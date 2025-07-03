@@ -66,23 +66,13 @@
 static void
 log_retention_boundary(int elevel, PolicyRetentionData *policy_data, const char *message)
 {
-	char *relname;
-	Datum boundary;
-	Oid outfuncid = InvalidOid;
-	bool isvarlena;
-
-	getTypeOutputInfo(policy_data->boundary_type, &outfuncid, &isvarlena);
-
-	relname = get_rel_name(policy_data->object_relid);
-	boundary = policy_data->boundary;
-
-	if (OidIsValid(outfuncid))
+	if (OidIsValid(policy_data->boundary_type))
 		elog(elevel,
 			 "%s \"%s\": dropping data %s %s",
 			 message,
-			 relname,
+			 get_rel_name(policy_data->object_relid),
 			 policy_data->use_creation_time ? "created before" : "older than",
-			 DatumGetCString(OidFunctionCall1(outfuncid, boundary)));
+			 ts_datum_to_string(policy_data->boundary, policy_data->boundary_type));
 }
 
 static void
@@ -317,7 +307,7 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	Cache *hcache;
 	const Dimension *open_dim;
 	Datum boundary;
-	Datum boundary_type;
+	Oid boundary_type;
 	ContinuousAgg *cagg;
 	Interval *(*interval_getter)(const Jsonb *);
 	interval_getter = policy_retention_get_drop_after_interval;

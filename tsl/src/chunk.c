@@ -2326,27 +2326,19 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		 */
 		if (split_at < (slice->fd.range_start + 1) || split_at > (slice->fd.range_end - 2))
 		{
-			Oid outfuncid = InvalidOid;
-			bool isvarlena = false;
-
-			getTypeOutputInfo(splitdim_type, &outfuncid, &isvarlena);
-			Datum split_at_str = OidFunctionCall1(outfuncid, dim_datum);
-
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("cannot split chunk at %s", DatumGetCString(split_at_str))));
+					 errmsg("cannot split chunk at %s",
+							ts_datum_to_string(dim_datum, splitdim_type))));
 		}
 	}
 	else
 		split_at = slice->fd.range_start + (interval_range / 2);
 
-	Oid outfuncid = InvalidOid;
-	bool isvarlena = false;
-
-	getTypeOutputInfo(splitdim_type, &outfuncid, &isvarlena);
-	split_at_datum = ts_internal_to_time_value(split_at, splitdim_type);
-	Datum split_at_str = OidFunctionCall1(outfuncid, split_at_datum);
-	elog(DEBUG1, "splitting chunk %s at %s", get_rel_name(relid), DatumGetCString(split_at_str));
+	elog(DEBUG1,
+		 "splitting chunk %s at %s",
+		 get_rel_name(relid),
+		 ts_internal_to_time_string(split_at, splitdim_type));
 
 	const CompressionSettings *compress_settings = ts_compression_settings_get(relid);
 	int64 old_end = slice->fd.range_end;

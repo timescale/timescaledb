@@ -105,14 +105,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 				hyperspace_get_open_dimension(dispatch->hypertable->space, 0);
 			Assert(time_dim != NULL);
 
-			Oid outfuncid = InvalidOid;
-			bool isvarlena;
-			getTypeOutputInfo(time_dim->fd.column_type, &outfuncid, &isvarlena);
-			Assert(!isvarlena);
-			Datum start_ts = ts_internal_to_time_value(chunk->cube->slices[0]->fd.range_start,
-													   time_dim->fd.column_type);
-			Datum end_ts = ts_internal_to_time_value(chunk->cube->slices[0]->fd.range_end,
-													 time_dim->fd.column_type);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
@@ -120,8 +112,10 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 							"with range  [%s %s] failed",
 							NameStr(dispatch->hypertable->fd.schema_name),
 							NameStr(dispatch->hypertable->fd.table_name),
-							DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
-							DatumGetCString(OidFunctionCall1(outfuncid, end_ts))),
+							ts_internal_to_time_string(chunk->cube->slices[0]->fd.range_start,
+													   time_dim->fd.column_type),
+							ts_internal_to_time_string(chunk->cube->slices[0]->fd.range_end,
+													   time_dim->fd.column_type)),
 					 errhint(
 						 "Hypertable has tiered data with time range that overlaps the insert")));
 		}
