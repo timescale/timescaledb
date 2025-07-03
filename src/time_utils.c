@@ -615,11 +615,7 @@ ts_make_range_from_internal_time(PG_FUNCTION_ARGS)
 
 	/* Need to check the types of the lower and upper values. They should
 	 * match the returned range. */
-#if PG16_LT
-	PG_RETURN_RANGE_P(make_range(typcache, &lower, &upper, false));
-#else
-	PG_RETURN_RANGE_P(make_range(typcache, &lower, &upper, false, escontext));
-#endif
+	PG_RETURN_RANGE_P(make_range_compat(typcache, &lower, &upper, false, escontext));
 }
 
 Datum
