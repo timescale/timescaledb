@@ -18,7 +18,6 @@
 
 #include "exec.h"
 #include "import/list.h"
-#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"
@@ -177,25 +176,6 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	vector_agg->custom_private = ts_new_list(T_List, VASI_Count);
 	lfirst(list_nth_cell(vector_agg->custom_private, VASI_GroupingType)) =
 		makeInteger(grouping_type);
-
-	if (is_columnar_scan(childplan))
-	{
-		CustomScan *custom = castNode(CustomScan, childplan);
-
-		/*
-		 * ColumnarScan should not project when doing vectorized
-		 * aggregation. If it projects, it will turn the arrow slot into a set
-		 * of virtual slots and the vector data will not be passed up to
-		 * VectorAgg.
-		 *
-		 * To make ColumnarScan avoid projection, unset the custom scan node's
-		 * projection flag. Normally, it is to late to change this flag as
-		 * PostgreSQL already planned projection based on it. However,
-		 * ColumnarScan rechecks this flag before it begins execution and
-		 * ignores any projection if the flag is not set.
-		 */
-		custom->flags &= ~CUSTOMPATH_SUPPORT_PROJECTION;
-	}
 
 	return (Plan *) vector_agg;
 }
@@ -504,18 +484,6 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 	{
 		vectoragg_plan_decompress_chunk(childplan, vqi);
 		return true;
-	}
-
-	/* We're looking for a baserel scan */
-	if (customscan->scan.scanrelid > 0)
-	{
-		RangeTblEntry *rte = rt_fetch(customscan->scan.scanrelid, rtable);
-
-		if (rte && ts_is_hypercore_am(ts_get_rel_am(rte->relid)))
-		{
-			vectoragg_plan_tam(childplan, rtable, vqi);
-			return true;
-		}
 	}
 
 	return false;

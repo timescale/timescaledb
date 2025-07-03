@@ -106,8 +106,6 @@ typedef struct ChunkInsertState
 	bool skip_current_tuple;
 	SharedCounters *counters;
 
-	/* Chunk uses our own table access method */
-	bool use_tam;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

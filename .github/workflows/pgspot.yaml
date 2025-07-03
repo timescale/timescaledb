@@ -38,6 +38,8 @@ jobs:
         --proc-without-search-path 'extschema.cagg_migrate(cagg regclass,override boolean,drop_old boolean)'
         --proc-without-search-path
           '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,reindex_enabled boolean,use_creation_time boolean,useam boolean)'
+        --proc-without-search-path
+          '_timescaledb_functions.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean,reindex_enabled boolean,use_creation_time boolean)'
 
     steps:
 

@@ -221,18 +221,6 @@ should_create_bloom_sparse_index(Form_pg_attribute attr, TypeCacheEntry *type, O
 		return false;
 	}
 
-	/*
-	 * Bloom filter pushdown is not implemented for TAM at the moment, so keep
-	 * the old behavior with minmax sparse indexes. This check is actually not
-	 * enough, because the compressed chunk table is created when the
-	 * uncompressed chunk table is converted to TAM, and at this time it still
-	 * has the normal heap access method.
-	 */
-	if (ts_is_hypercore_am(ts_get_rel_am(src_reloid)))
-	{
-		return false;
-	}
-
 	return true;
 }
 
@@ -1035,20 +1023,16 @@ validate_hypertable_for_compression(Hypertable *ht)
 		Form_pg_trigger trigrec = (Form_pg_trigger) GETSTRUCT(tuple);
 
 		/*
-		 * We currently cannot support transition tables for DELETE triggers
-		 * on compressed tables that are not using hypercore table access
-		 * method since deleting a complete segment will not build a
+		 * We currently don't support transition tables for DELETE triggers
+		 * on compressed tables because deleting a complete segment will not build a
 		 * transition table for the delete.
 		 */
 		fastgetattr(tuple, Anum_pg_trigger_tgoldtable, pg_trigger->rd_att, &oldtable_isnull);
 		if (!oldtable_isnull && !TRIGGER_FOR_ROW(trigrec->tgtype) &&
-			TRIGGER_FOR_DELETE(trigrec->tgtype) && !ts_is_hypercore_am(ht->amoid))
+			TRIGGER_FOR_DELETE(trigrec->tgtype))
 			ereport(ERROR,
 					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					errmsg("DELETE triggers with transition tables not supported"),
-					errdetail(
-						"Compressed hypertables not using \"hypercore\" access method are not "
-						"supported if the trigger use transition tables."));
+					errmsg("DELETE triggers with transition tables not supported"));
 	}
 
 	systable_endscan(scan);

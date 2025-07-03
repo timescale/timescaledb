@@ -2236,38 +2236,6 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 							 mtstate->ps.state);
 	}
 
-	/*
-	 * If the target relation is using Hypercore TAM, the conflict resolution
-	 * index might point to a compressed segment containing the conflicting
-	 * row. It is possible to decompress the segment immediately so that the
-	 * update can proceed on the decompressed row.
-	 */
-	if (ts_is_hypercore_am(resultRelInfo->ri_RelationDesc->rd_rel->relam))
-	{
-		ItemPointerData new_tid;
-		int ntuples =
-			ts_cm_functions->hypercore_decompress_update_segment(resultRelInfo->ri_RelationDesc,
-																 conflictTid,
-																 existing,
-																 context->estate->es_snapshot,
-																 &new_tid);
-
-		if (ntuples > 0)
-		{
-			/*
-			 * The conflicting row was decompressed, so must update the
-			 * conflictTid to point to the decompressed row.
-			 */
-			ItemPointerCopy(&new_tid, conflictTid);
-			/*
-			 * Since data was decompressed, the command counter was
-			 * incremented to make it visible. Make sure the executor uses the
-			 * latest command ID to see the changes.
-			 */
-			context->estate->es_output_cid = GetCurrentCommandId(true);
-		}
-	}
-
 	/* Project the new tuple version */
 	ExecProject(resultRelInfo->ri_onConflict->oc_ProjInfo);
 

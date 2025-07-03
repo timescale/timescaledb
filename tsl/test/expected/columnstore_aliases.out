@@ -53,8 +53,7 @@ SELECT chunk FROM show_chunks('test1') tbl(chunk) LIMIT 1 \gset
 CALL convert_to_rowstore(:'chunk', if_columnstore => true);
 CALL convert_to_columnstore(:'chunk',
      if_not_columnstore => true,
-     recompress => false,
-     hypercore_use_access_method => false);
+     recompress => false);
 CALL add_columnstore_policy('test1', interval '1 day');
 CALL remove_columnstore_policy('test1');
 SELECT * FROM timescaledb_information.hypertable_columnstore_settings;

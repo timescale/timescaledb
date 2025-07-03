@@ -37,13 +37,8 @@
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "export.h"
-#include "hypercore/arrow_cache_explain.h"
-#include "hypercore/arrow_tts.h"
-#include "hypercore/attr_capture.h"
-#include "hypercore/hypercore_handler.h"
-#include "hypercore/hypercore_proxy.h"
+#include "hypertable.h"
 #include "license_guc.h"
-#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/gapfill/gapfill_functions.h"
 #include "nodes/skip_scan/skip_scan.h"
@@ -65,12 +60,6 @@ PG_MODULE_MAGIC;
 extern void PGDLLEXPORT _PG_init(void);
 #endif
 
-static void
-tsl_xact_event(XactEvent event, void *arg)
-{
-	hypercore_xact_event(event, arg);
-}
-
 /*
  * Cross module function initialization.
  *
@@ -86,7 +75,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
 	.set_rel_pathlist_query = tsl_set_rel_pathlist_query,
-	.process_explain_def = tsl_process_explain_def,
 
 	/* bgw policies */
 	.policy_compression_add = policy_compression_add,
@@ -187,18 +175,12 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
-	.hypercore_handler = hypercore_handler,
-	.hypercore_proxy_handler = hypercore_proxy_handler,
-	.hypercore_decompress_update_segment = hypercore_decompress_update_segment,
-	.is_compressed_tid = tsl_is_compressed_tid,
 	.compression_enable = tsl_compression_enable,
 	.compressor_init = tsl_compressor_init,
 	.compressor_add_slot = tsl_compressor_add_slot,
 	.compressor_flush = tsl_compressor_flush,
 	.compressor_free = tsl_compressor_free,
 	.compression_chunk_create = tsl_compression_chunk_create,
-	.ddl_command_start = tsl_ddl_command_start,
-	.ddl_command_end = tsl_ddl_command_end,
 	.show_chunk = chunk_show,
 	.create_compressed_chunk = tsl_create_compressed_chunk,
 	.create_chunk = chunk_create,
@@ -218,7 +200,6 @@ static void
 ts_module_cleanup_on_pg_exit(int code, Datum arg)
 {
 	_continuous_aggs_cache_inval_fini();
-	UnregisterXactCallback(tsl_xact_event, NULL);
 }
 
 TS_FUNCTION_INFO_V1(ts_module_init);
@@ -233,9 +214,6 @@ ts_module_init(PG_FUNCTION_ARGS)
 
 	_continuous_aggs_cache_inval_init();
 	_decompress_chunk_init();
-	_columnar_scan_init();
-	_arrow_cache_explain_init();
-	_attr_capture_init();
 	_skip_scan_init();
 	_vector_agg_init();
 
@@ -243,7 +221,6 @@ ts_module_init(PG_FUNCTION_ARGS)
 	if (register_proc_exit)
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);
 
-	RegisterXactCallback(tsl_xact_event, NULL);
 	PG_RETURN_BOOL(true);
 }
 

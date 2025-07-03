@@ -18,9 +18,7 @@
 #include "chunkwise_agg.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
-#include "hypercore/hypercore_handler.h"
 #include "hypertable.h"
-#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/gapfill/gapfill.h"
@@ -114,17 +112,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 static inline bool
 use_decompress_chunk_node(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *chunk)
 {
-	/*
-	 * The transparent_decompression GUC settings:
-	 *
-	 * 0 = Disabled.
-	 * 1 = Use only with "regular" compressed chunks.
-	 * 2 = Use with both "regular" compressed chunks and hypercore chunks.
-	 */
-	if (ts_guc_enable_transparent_decompression == 0)
-		return false;
-
-	if (ts_is_hypercore_am(chunk->amoid) && ts_guc_enable_transparent_decompression != 2)
+	if (!ts_guc_enable_transparent_decompression)
 		return false;
 
 	/* Check that the chunk is actually compressed */
@@ -158,18 +146,6 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	if (use_decompress_chunk_node(rel, rte, chunk))
 	{
 		ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
-	}
-	/*
-	 * If using our own access method on the chunk, we might want to add
-	 * alternative paths. This should not be compatible with transparent
-	 * decompression, so only add if we didn't add decompression paths above.
-	 */
-	else if (ts_is_hypercore_am(chunk->amoid))
-	{
-		if (ts_guc_enable_columnarscan)
-			columnar_scan_set_rel_pathlist(root, rel, ht);
-
-		hypercore_set_rel_pathlist(root, rel, ht);
 	}
 }
 

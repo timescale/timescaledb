@@ -47,74 +47,12 @@ static const struct config_enum_entry telemetry_level_options[] = {
 };
 #endif
 
-bool
-ts_is_whitelisted_indexam(const char *amname)
-{
-	ListCell *cell;
-	char *rawname = pstrdup(ts_guc_hypercore_indexam_whitelist);
-
-	List *namelist;
-	if (!SplitIdentifierString(rawname, ',', &namelist))
-	{
-		pfree(rawname);
-		list_free(namelist);
-		elog(ERROR, "List syntax is invalid");
-	}
-	foreach (cell, namelist)
-	{
-		const char *curname = (char *) lfirst(cell);
-		if (strcmp(curname, amname) == 0)
-		{
-			pfree(rawname);
-			list_free(namelist);
-			return true;
-		}
-	}
-	pfree(rawname);
-	list_free(namelist);
-	return false;
-}
-
 /* Copied from contrib/auto_explain/auto_explain.c */
 static const struct config_enum_entry loglevel_options[] = {
 	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
 	{ "debug2", DEBUG2, false }, { "debug1", DEBUG1, false }, { "debug", DEBUG2, true },
 	{ "info", INFO, false },	 { "notice", NOTICE, false }, { "warning", WARNING, false },
 	{ "log", LOG, false },		 { "error", ERROR, false },	  { "fatal", FATAL, false },
-	{ NULL, 0, false }
-};
-
-/*
- * Setting to enable or disable transparent decompression plans.
- *
- * The setting is an integer instead of boolean because it is possible to
- * enable transparent decompression plans also when using the Hypercore table
- * access method. But this is not enabled by default. The options are as
- * follows:
- *
- * (0) = off, disabled completely.
- *
- * (1) = on, enabled for compressed tables but not tables using Hypercore
- *       TAM. This is the default setting.
- *
- * (2) = hypercore, enabled for compressed tables and those using Hypercore
- *       TAM. This is useful mostly for debugging/testing and as a fallback.
- *       Only available in debug builds.
- */
-static const struct config_enum_entry transparent_decompression_options[] = {
-	{ "on", 1, false },
-	{ "true", 1, false },
-	{ "off", 0, false },
-	{ "false", 0, false },
-#ifdef TS_DEBUG
-	{ TS_HYPERCORE_TAM_NAME, 2, false },
-#endif
-	{ NULL, 0, false }
-};
-
-static const struct config_enum_entry hypercore_copy_to_options[] = {
-	{ "all_data", HYPERCORE_COPY_ALL_DATA, false },
-	{ "no_compressed_data", HYPERCORE_COPY_NO_COMPRESSED_DATA, false },
 	{ NULL, 0, false }
 };
 
@@ -152,7 +90,7 @@ TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
-TSDLLEXPORT int ts_guc_enable_transparent_decompression = 1;
+TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
@@ -162,7 +100,6 @@ TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom = true;
-TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
@@ -192,11 +129,6 @@ TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
-TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
-TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior =
-	HYPERCORE_COPY_NO_COMPRESSED_DATA;
-TSDLLEXPORT bool ts_guc_enable_hypercore_scankey_pushdown = true;
-TSDLLEXPORT int ts_guc_hypercore_arrow_cache_max_entries;
 
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
@@ -380,34 +312,6 @@ get_segmentby_func(char *input_name)
 #endif
 	Oid argtyp[] = { REGCLASSOID };
 	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
-}
-
-static bool
-check_indexam_whitelist(char **newval, void **extra, GucSource source)
-{
-	char *rawname;
-	List *namelist;
-
-	/* Need a modifiable copy of string */
-	rawname = pstrdup(*newval);
-
-	/* Parse string into list of identifiers */
-	if (!SplitIdentifierString(rawname, ',', &namelist))
-	{
-		/* syntax error in name list */
-		GUC_check_errdetail("List syntax is invalid.");
-		pfree(rawname);
-		list_free(namelist);
-		return false;
-	}
-
-	/* We might not be in a transaction when setting this so cannot consult
-	 * the systems catalog. We just require the list of index access methods
-	 * to be syntactically correct. */
-
-	pfree(rawname);
-	list_free(namelist);
-	return true;
 }
 
 static bool
@@ -687,12 +591,11 @@ _guc_init(void)
 							NULL,
 							NULL);
 
-	DefineCustomEnumVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
 							 "Enable transparent decompression",
 							 "Enable transparent decompression when querying hypertable",
 							 &ts_guc_enable_transparent_decompression,
-							 1,
-							 transparent_decompression_options,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -1273,64 +1176,6 @@ _guc_init(void)
 							   /* show_hook= */ NULL);
 #endif
 
-	DefineCustomStringVariable(MAKE_EXTOPTION("hypercore_indexam_whitelist"),
-							   gettext_noop(
-								   "Whitelist for index access methods supported by hypercore."),
-							   gettext_noop(
-								   "List of index access method names supported by hypercore."),
-							   /* valueAddr= */ &ts_guc_hypercore_indexam_whitelist,
-							   /* Value= */ "btree,hash",
-							   /* context= */ PGC_SIGHUP,
-							   /* flags= */ GUC_LIST_INPUT | GUC_SUPERUSER_ONLY,
-							   /* check_hook= */ check_indexam_whitelist,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
-
-	DefineCustomEnumVariable(MAKE_EXTOPTION("hypercore_copy_to_behavior"),
-							 "The behavior of COPY TO on a hypercore table",
-							 "Set to 'all_data' to return both compressed and uncompressed data "
-							 "via the Hypercore table when using COPY TO. Set to "
-							 "'no_compressed_data' to skip compressed data.",
-							 /* valueAddr= */ (int *) &ts_guc_hypercore_copy_to_behavior,
-							 /* bootValue= */ HYPERCORE_COPY_NO_COMPRESSED_DATA,
-							 /* options= */ hypercore_copy_to_options,
-							 /* context= */ PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("enable_hypercore_scankey_pushdown"),
-							 /* short_desc= */
-							 "Push down qualifiers as scankeys when using Hypercore TAM",
-							 /* long_desc= */
-							 "Enabling this setting might lead to faster scans when "
-							 "query qualifiers match Hypercore segmentby and orderby columns.",
-							 /* valueAddr= */ &ts_guc_enable_hypercore_scankey_pushdown,
-							 /* bootValue= */ true,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
-
-	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("hypercore_arrow_cache_max_entries"),
-							/* short_desc= */ "max number of entries in arrow data cache",
-							/* long_desc= */
-							"The max number of decompressed arrow segments that can be "
-							"cached before entries are evicted. This mainly affects the "
-							"performance of index scans on the Hypercore TAM "
-							"when segments are accessed in non-sequential order.",
-							/* valueAddr= */ &ts_guc_hypercore_arrow_cache_max_entries,
-							/* bootValue= */ 25000,
-							/* minValue= */ 1,
-							/* maxValue= */ INT_MAX,
-							/* context= */ PGC_USERSET,
-							/* flags= */ 0,
-							/* check_hook= */ NULL,
-							/* assign_hook= */ NULL,
-							/* show_hook= */ NULL);
-
 	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("debug_bgw_scheduler_exit_status"),
 							/* short_desc= */ "exit status to use when shutting down the scheduler",
 							/* long_desc= */ "this is for debugging purposes",
@@ -1448,18 +1293,6 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 #endif
-
-	DefineCustomBoolVariable(MAKE_EXTOPTION("default_hypercore_use_access_method"),
-							 gettext_noop("Enable to always use Hypercore TAM when compressing."),
-							 gettext_noop("Sets the global default for using Hypercore TAM when "
-										  "compressing chunks."),
-							 &ts_guc_default_hypercore_use_access_method,
-							 false,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
 
 	/* register feature flags */
 	ts_feature_flag_add(FEATURE_HYPERTABLE);
