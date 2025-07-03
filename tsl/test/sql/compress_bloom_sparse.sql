@@ -130,7 +130,7 @@ reset plan_cache_mode;
 reset timescaledb.enable_chunk_append;
 
 
--- Scalar array operations are not yet supported
+-- Scalar array operations are supported as well.
 explain (analyze, verbose, costs off, timing off, summary off)
 select count(*) from bloom where x < any(array[1000, 2000]::int[]);
 
@@ -202,6 +202,11 @@ select * from corner where c = 'test'
 -- Unsupported operator
 explain (costs off)
 select * from corner where c > s;
+
+-- Scalar array operation
+explain (analyze, verbose, costs off, timing off, summary off)
+select * from corner where c = any(array['short', 'nonexistent'])
+;
 
 
 -- Test a bad hash function.
