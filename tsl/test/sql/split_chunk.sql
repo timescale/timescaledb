@@ -425,8 +425,8 @@ select
 select * from chunk_summary_before_split;
 select * from chunk_summary_after_split;
 
--- Split a hypercore TAM chunk
-alter table _timescaledb_internal._hyper_1_3_chunk set access method hypercore;
+-- Split a columnstore chunk
+CALL convert_to_columnstore('_timescaledb_internal._hyper_1_3_chunk');
 
 -- Add some non-compressed data. One tuple in each partition after
 -- split.
@@ -435,8 +435,7 @@ insert into _timescaledb_internal._hyper_1_3_chunk values
 ('2024-01-10 02:04:12', 1, 17, 32.0);
 
 select *
-from _timescaledb_internal._hyper_1_3_chunk
-where _timescaledb_debug.is_compressed_tid(ctid) = false
+from ONLY _timescaledb_internal._hyper_1_3_chunk
 order by time;
 
 select table_name, dropped, status, compressed_chunk_id
@@ -464,13 +463,11 @@ where table_name in ('_hyper_1_3_chunk', '_hyper_1_16_chunk');
 
 -- Check that the non-compressed data rows ended up in separate partitions
 select *
-from _timescaledb_internal._hyper_1_3_chunk
-where _timescaledb_debug.is_compressed_tid(ctid) = false
+from ONLY _timescaledb_internal._hyper_1_3_chunk
 order by time;
 
 select *
-from _timescaledb_internal._hyper_1_16_chunk
-where _timescaledb_debug.is_compressed_tid(ctid) = false
+from ONLY _timescaledb_internal._hyper_1_16_chunk
 order by time;
 
 -- Show aggregate summary. Should be equal to summary before split

@@ -8,7 +8,6 @@
 #include <nodes/parsenodes.h>
 #include <parser/parsetree.h>
 
-#include "hypercore/hypercore_handler.h"
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "plan.h"
 

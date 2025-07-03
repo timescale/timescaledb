@@ -95,9 +95,6 @@ typedef struct CrossModuleFunctions
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
 
-	DDLResult (*ddl_command_start)(ProcessUtilityArgs *args);
-	void (*ddl_command_end)(EventTriggerData *trigdata);
-
 	/* Vectorized queries */
 	void (*tsl_postprocess_plan)(PlannedStmt *stmt);
 
@@ -140,9 +137,6 @@ typedef struct CrossModuleFunctions
 	void (*decompress_batches_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	void (*init_decompress_state_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
-	int (*hypercore_decompress_update_segment)(Relation relation, const ItemPointer ctid,
-											   TupleTableSlot *slot, Snapshot snapshot,
-											   ItemPointer new_tid);
 
 	void (*compression_enable)(Hypertable *ht, WithClauseResult *with_clause_options);
 	RowCompressor *(*compressor_init)(Relation in_rel, BulkWriter **bulk_writer, bool sort);
@@ -178,10 +172,6 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
-
-	PGFunction hypercore_handler;
-	PGFunction hypercore_proxy_handler;
-	PGFunction is_compressed_tid;
 
 	void (*preprocess_query_tsl)(Query *parse, int *cursor_opts);
 	PGFunction merge_chunks;

@@ -593,12 +593,6 @@ copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 	double tups_vacuumed = 0.0;
 	double tups_recently_dead = 0.0;
 
-	if (ts_is_hypercore_am(fromrel->rd_rel->relam))
-	{
-		tableam = fromrel->rd_tableam;
-		fromrel->rd_tableam = GetHeapamTableAmRoutine();
-	}
-
 	table_relation_copy_for_cluster(fromrel,
 									torel,
 									NULL,
@@ -965,7 +959,7 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 */
 		Oid amoid = rel->rd_rel->relam;
 
-		if (amoid != HEAP_TABLE_AM_OID && !ts_is_hypercore_am(amoid))
+		if (amoid != HEAP_TABLE_AM_OID)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("access method \"%s\" is not supported for merge",

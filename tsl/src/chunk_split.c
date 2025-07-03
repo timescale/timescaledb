@@ -24,8 +24,6 @@
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "debug_point.h"
-#include "hypercore/arrow_tts.h"
-#include "hypercore/hypercore_handler.h"
 #include "hypercube.h"
 #include "partitioning.h"
 #include "trigger.h"
@@ -495,12 +493,6 @@ copy_tuples_for_split(SplitContext *scontext)
 	scan = table_beginscan(srcrel, SnapshotAny, 0, NULL);
 
 	/*
-	 * If a Hypercore TAM relation, we only want to read uncompressed data
-	 * since the compressed relation is split separately.
-	 */
-	hypercore_scan_set_skip_compressed(scan, true);
-
-	/*
 	 * Switch to per-tuple memory context and reset it for each tuple
 	 * produced, so we don't leak memory.
 	 */
@@ -535,15 +527,7 @@ copy_tuples_for_split(SplitContext *scontext)
 
 		tuple = ExecFetchSlotHeapTuple(srcslot, false, NULL);
 
-		if (TTS_IS_ARROWTUPLE(srcslot))
-		{
-			ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) srcslot;
-			hslot = (BufferHeapTupleTableSlot *) aslot->child_slot;
-		}
-		else
-		{
-			hslot = (BufferHeapTupleTableSlot *) srcslot;
-		}
+		hslot = (BufferHeapTupleTableSlot *) srcslot;
 
 		buf = hslot->buffer;
 
@@ -762,7 +746,6 @@ update_compression_stats_for_split(const SplitRelationInfo *split_relations,
 								   int split_factor, Oid amoid)
 {
 	double total_tuples = 0;
-	bool is_hypercore_tam = ts_is_hypercore_am(amoid);
 
 	Assert(split_factor > 1);
 
@@ -809,7 +792,7 @@ update_compression_stats_for_split(const SplitRelationInfo *split_relations,
 		memcpy(&new_ccs, &ccs, sizeof(ccs));
 		compute_compression_size_stats_fraction(&new_ccs, fraction);
 
-		if (sri->heap_swap || is_hypercore_tam)
+		if (sri->heap_swap)
 		{
 			ts_compression_chunk_size_update(sri->chunk_id, &new_ccs);
 		}
@@ -872,14 +855,6 @@ update_chunk_stats_for_split(const SplitRelationInfo *split_relations,
 		Relation rel;
 		double ntuples = sri->stats.tuples_alive;
 
-		if (ts_is_hypercore_am(amoid) && compressed_split_relations)
-		{
-			/* Hypercore TAM has the total reltuples stats on the user-visible
-			 * relation */
-			const SplitRelationInfo *csri = &compressed_split_relations[i];
-			ntuples += csri->stats.tuples_in_segments;
-		}
-
 		rel = table_open(sri->relid, AccessShareLock);
 		update_relstats(relRelation, rel, ntuples);
 		table_close(rel, NoLock);
@@ -922,7 +897,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	Oid amoid = srcrel->rd_rel->relam;
 
-	if (amoid != HEAP_TABLE_AM_OID && !ts_is_hypercore_am(amoid))
+	if (amoid != HEAP_TABLE_AM_OID)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("access method \"%s\" is not supported for split", get_am_name(amoid))));
@@ -1119,25 +1094,10 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	if (compress_settings != NULL)
 	{
-		if (ts_is_hypercore_am(amoid))
-		{
-			Relation new_chunk_rel = table_open(new_chunk->table_id, AccessExclusiveLock);
-			HypercoreInfo *hinfo = RelationGetHypercoreInfo(new_chunk_rel);
-			/*
-			 * Hypercore TAM automatically creates the internal compressed
-			 * chunk when building the HypercoreInfo, so retrieve it to ensure
-			 * the compressed chunk was created.
-			 */
-			new_compressed_chunk = ts_chunk_get_by_relid(hinfo->compressed_relid, true);
-			table_close(new_chunk_rel, NoLock);
-		}
-		else
-		{
-			Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-			new_compressed_chunk = create_compress_chunk(ht_compressed, new_chunk, InvalidOid);
-			ts_trigger_create_all_on_chunk(new_compressed_chunk);
-			ts_chunk_set_compressed_chunk(new_chunk, new_compressed_chunk->fd.id);
-		}
+		Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+		new_compressed_chunk = create_compress_chunk(ht_compressed, new_chunk, InvalidOid);
+		ts_trigger_create_all_on_chunk(new_compressed_chunk);
+		ts_chunk_set_compressed_chunk(new_chunk, new_compressed_chunk->fd.id);
 	}
 
 	CommandCounterIncrement();

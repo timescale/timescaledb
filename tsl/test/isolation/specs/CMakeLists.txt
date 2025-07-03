@@ -23,9 +23,7 @@ list(
   deadlock_drop_index_vacuum.spec
   parallel_compression.spec
   osm_range_updates_iso.spec
-  concurrent_decompress_update.spec
-  hypercore_tuple_lock.spec
-  hypercore_concurrent_vacuum.spec)
+  concurrent_decompress_update.spec)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})
