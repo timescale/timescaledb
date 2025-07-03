@@ -917,12 +917,37 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	 */
 	Assert(saop != NULL);
 
+	/*
+	 * The planner can decide to build a hash table. It's still somewhat slower
+	 * than our vectorized lookups for array lengths <= 32.
+	 */
 	if (saop->hashfuncid)
 	{
-		/*
-		 * Don't vectorize if the planner decided to build a hash table.
-		 */
-		return NULL;
+		if (!IsA(arg2, Const))
+		{
+			/*
+			 * The planner as of PG 17 only uses hashing for plan-time constants,
+			 * but double-check.
+			 */
+			return NULL;
+		}
+
+		Const *c = castNode(Const, arg2);
+		if (c->constisnull)
+		{
+			/*
+			 * Shouldn't happen, but not controlled by us.
+			 */
+			return NULL;
+		}
+
+		Datum arrdatum = c->constvalue;
+		ArrayType *arr = (ArrayType *) DatumGetPointer(arrdatum);
+		const int nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
+		if (nitems > 32)
+		{
+			return NULL;
+		}
 	}
 
 	return (Node *) saop;
