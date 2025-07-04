@@ -1939,6 +1939,53 @@ SELECT count(*) FROM tab1 WHERE device_id = 1;
 (1 row)
 
 ROLLBACK;
+-- verify we can work with expression indexes and toastable types
+-- when the subquery returns a zero result set we used to end up
+-- trying to detoast a 0 value and segfaulting
+BEGIN;
+INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 1000, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+CREATE INDEX test ON tab1(repeat('t', device_id));
+CREATE TABLE join_table AS SELECT repeat('t', d) FROM generate_series(1,3,1) d;
+ANALYZE tab1;
+SET enable_seqscan = off;
+SET enable_indexscan = off;
+EXPLAIN (costs off) UPDATE tab1
+SET v0 = 0 FROM
+	(SELECT repeat, count(*)
+	FROM join_table
+	WHERE false group by 1) as devices
+WHERE repeat('t', device_id) = devices.repeat;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Update on tab1
+         Update on _hyper_21_39_chunk tab1_1
+         Update on _hyper_21_40_chunk tab1_2
+         Update on _hyper_21_41_chunk tab1_3
+         ->  Nested Loop
+               ->  Subquery Scan on devices
+                     ->  HashAggregate
+                           Group Key: repeat
+                           ->  Result
+                                 One-Time Filter: false
+               ->  Append
+                     ->  Bitmap Heap Scan on _hyper_21_39_chunk tab1_1
+                           Recheck Cond: (repeat('t'::text, device_id) = devices.repeat)
+                           ->  Bitmap Index Scan on _hyper_21_39_chunk_test
+                                 Index Cond: (repeat('t'::text, device_id) = devices.repeat)
+                     ->  Seq Scan on _hyper_21_40_chunk tab1_2
+                           Filter: (devices.repeat = repeat('t'::text, device_id))
+                     ->  Seq Scan on _hyper_21_41_chunk tab1_3
+                           Filter: (devices.repeat = repeat('t'::text, device_id))
+(20 rows)
+
+UPDATE tab1
+SET v0 = 0 FROM
+	(SELECT repeat, count(*)
+	FROM join_table
+	WHERE false group by 1) as devices
+WHERE repeat('t', device_id) = devices.repeat;
+ROLLBACK;
 -- create hypertable with space partitioning and compression
 CREATE TABLE tab2(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 CREATE INDEX ON tab2(time);

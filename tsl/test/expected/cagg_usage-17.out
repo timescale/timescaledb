@@ -417,13 +417,18 @@ time timestamptz NOT NULL,
 sensor_id integer NOT NULL,
 cpu double precision NULL,
 temperature double precision NULL);
-SELECT FROM create_hypertable('sensor_data','time');
---
-(1 row)
-
+SELECT hypertable_id FROM create_hypertable('sensor_data','time') \gset
 CREATE TRIGGER ts_cagg_invalidation_trigger AFTER INSERT OR DELETE OR UPDATE ON sensor_data FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger(999999);
 INSERT INTO sensor_data values('1980-01-01 00:00:00-00', 1, 1, 1);
 ERROR:  unable to determine relid for hypertable 999999
+DROP TRIGGER ts_cagg_invalidation_trigger ON sensor_data;
+CREATE TRIGGER ts_cagg_invalidation_trigger AFTER INSERT ON sensor_data FOR EACH STATEMENT EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger(:hypertable_id);
+INSERT INTO sensor_data values('1980-01-02 00:00:00-00', 1, 1, 1);
+ERROR:  continuous agg trigger function must be called in per row after trigger
+DROP TRIGGER ts_cagg_invalidation_trigger ON sensor_data;
+CREATE TRIGGER ts_cagg_invalidation_trigger BEFORE INSERT ON sensor_data FOR EACH STATEMENT EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger(:hypertable_id);
+INSERT INTO sensor_data values('1980-01-03 00:00:00-00', 1, 1, 1);
+ERROR:  continuous agg trigger function must be called in per row after trigger
 DROP TABLE sensor_data;
 -- END OF BASIC USAGE TESTS --
 CREATE TABLE metrics(time timestamptz, device TEXT, value float);
@@ -491,10 +496,10 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_12_17_chunk |            0 | f       |        
  _hyper_12_18_chunk |            0 | f       |        
  _hyper_12_19_chunk |            0 | f       |        
  _hyper_12_20_chunk |            0 | f       |        
+ _hyper_12_21_chunk |            0 | f       |        
 (4 rows)
 
 -- all caggs in the new format (finalized=true)
@@ -511,7 +516,7 @@ SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE 
 SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestamptz);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_12_17_chunk
+ _timescaledb_internal._hyper_12_18_chunk
 (1 row)
 
 -- should return 3 chunks
@@ -523,9 +528,9 @@ WHERE h.id = c.hypertable_id AND h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_12_18_chunk |            0 | f       |        
  _hyper_12_19_chunk |            0 | f       |        
  _hyper_12_20_chunk |            0 | f       |        
+ _hyper_12_21_chunk |            0 | f       |        
 (3 rows)
 
 -- let's update the catalog to fake an old format cagg (finalized=false)
@@ -547,7 +552,7 @@ SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE 
 SELECT drop_chunks('metrics', older_than => '2000-01-13 00:00:00-02'::timestamptz);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_12_18_chunk
+ _timescaledb_internal._hyper_12_19_chunk
 (1 row)
 
 -- should return 3 chunks and one of them should be marked as dropped
@@ -559,14 +564,14 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_12_18_chunk |            0 | t       |        
- _hyper_12_19_chunk |            0 | f       |        
+ _hyper_12_19_chunk |            0 | t       |        
  _hyper_12_20_chunk |            0 | f       |        
+ _hyper_12_21_chunk |            0 | f       |        
 (3 rows)
 
 -- remove the fake old format cagg
 DROP MATERIALIZED VIEW cagg1;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_21_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_22_chunk
 -- no more old format caggs (finalized=false)
 SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
  user_view_name | finalized 
@@ -580,7 +585,7 @@ SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE 
 SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestamptz);
                drop_chunks                
 ------------------------------------------
- _timescaledb_internal._hyper_12_19_chunk
+ _timescaledb_internal._hyper_12_20_chunk
 (1 row)
 
 -- should return 2 chunks and one of them should be marked as dropped
@@ -593,7 +598,7 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
      chunk_name     | chunk_status | dropped | comp_id 
 --------------------+--------------+---------+---------
- _hyper_12_18_chunk |            0 | t       |        
- _hyper_12_20_chunk |            0 | f       |        
+ _hyper_12_19_chunk |            0 | t       |        
+ _hyper_12_21_chunk |            0 | f       |        
 (2 rows)
 

@@ -109,7 +109,13 @@ ts_constraint_find_matching(HeapTuple ht_tup, Relation chunk_rel)
 		{
 			if (ts_indexing_compare(ht_con->conindid, chunk_con->conindid))
 			{
-				result = chunk_con;
+				/*
+				 * pfree'ing this form is up to the caller. It is not expected to
+				 * consume a lot of memory, as only one form is allocated per
+				 * constraint.
+				 */
+				result = (Form_pg_constraint) palloc(sizeof(FormData_pg_constraint));
+				memcpy(result, chunk_con, sizeof(FormData_pg_constraint));
 				break;
 			}
 		}

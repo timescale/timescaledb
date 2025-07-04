@@ -324,7 +324,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	HeapTuple compressed_tuple;
 	IndexScanDesc index_scan =
-		index_beginscan(compressed_chunk_rel, index_rel, snapshot, num_segmentby, 0);
+		index_beginscan_compat(compressed_chunk_rel, index_rel, snapshot, NULL, num_segmentby, 0);
 
 	bool found_tuple = fetch_uncompressed_chunk_into_tuplesort(input_tuplesortstate,
 															   uncompressed_chunk_rel,
