@@ -145,11 +145,24 @@ alter table :chunk set access method hypercore;
 
 -- Add compression settings
 alter table test3 set (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='');
+
+-- Show that there is no dependency on TAM initially
+select count(*) from pg_depend
+where classid = 'pg_class'::regclass
+and objid = :'chunk'::regclass
+and refclassid = 'pg_am'::regclass;
+
 \x on
 select * from test_chunk_info where chunk = :'chunk'::regclass;
 alter table :chunk set access method hypercore;
 select * from test_chunk_info where chunk = :'chunk'::regclass;
 \x off
+
+-- TAM dependency should exist now
+select count(*) from pg_depend
+where classid = 'pg_class'::regclass
+and objid = :'chunk'::regclass
+and refclassid = 'pg_am'::regclass;
 
 -- Check that chunk is using hypercore
 select * from amrels where rel=:'chunk'::regclass;
@@ -161,6 +174,13 @@ select * from test_chunk_info where chunk = :'chunk'::regclass;
 alter table :chunk set access method heap;
 select * from test_chunk_info where chunk = :'chunk'::regclass;
 \x off
+
+-- TAM dependency should be removed
+select count(*) from pg_depend
+where classid = 'pg_class'::regclass
+and objid = :'chunk'::regclass
+and refclassid = 'pg_am'::regclass;
+
 select compress_chunk(:'chunk', hypercore_use_access_method => true);
 
 -- Check that chunk is using hypercore
