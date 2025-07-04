@@ -465,12 +465,12 @@ QUERY PLAN
    ->  Gather Merge (actual rows=20 loops=1)
          Workers Planned: 2
          Workers Launched: 2
-         ->  Sort (actual rows=10 loops=2)
-               Sort Key: _hyper_X_X_chunk.device_id
-               Worker 0:  Sort Method: quicksort 
-               Worker 1:  Sort Method: quicksort 
-               ->  Custom Scan (VectorAgg) (actual rows=10 loops=2)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=10 loops=2)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+                     ->  Sort (actual rows=10 loops=2)
+                           Sort Key: compress_hyper_X_X_chunk.device_id
+                           Worker 0:  Sort Method: quicksort 
+                           Worker 1:  Sort Method: quicksort 
                            ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=2)
 (12 rows)
 
@@ -483,12 +483,12 @@ QUERY PLAN
          ->  Gather Merge (actual rows=20 loops=1)
                Workers Planned: 2
                Workers Launched: 2
-               ->  Sort (actual rows=10 loops=2)
-                     Sort Key: _hyper_X_X_chunk.device_id
-                     Worker 0:  Sort Method: quicksort 
-                     Worker 1:  Sort Method: quicksort 
-                     ->  Custom Scan (VectorAgg) (actual rows=10 loops=2)
-                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Custom Scan (VectorAgg) (actual rows=10 loops=2)
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+                           ->  Sort (actual rows=10 loops=2)
+                                 Sort Key: compress_hyper_X_X_chunk.device_id
+                                 Worker 0:  Sort Method: quicksort 
+                                 Worker 1:  Sort Method: quicksort 
                                  ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=2)
 (13 rows)
 

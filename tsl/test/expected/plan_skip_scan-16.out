@@ -4176,26 +4176,14 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
          Batches: 1 
          ->  Append (actual rows=10020 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
-                     ->  Sort (actual rows=11 loops=1)
-                           Sort Key: compress_hyper_4_18_chunk.dev NULLS FIRST
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=11 loops=1)
+                     ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
-                     ->  Sort (actual rows=11 loops=1)
-                           Sort Key: compress_hyper_4_19_chunk.dev NULLS FIRST
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_4_19_chunk (actual rows=11 loops=1)
+                     ->  Seq Scan on compress_hyper_4_19_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
-                     ->  Sort (actual rows=11 loops=1)
-                           Sort Key: compress_hyper_4_20_chunk.dev NULLS FIRST
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_4_20_chunk (actual rows=11 loops=1)
+                     ->  Seq Scan on compress_hyper_4_20_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
-                     ->  Sort (actual rows=11 loops=1)
-                           Sort Key: compress_hyper_4_21_chunk.dev NULLS FIRST
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_4_21_chunk (actual rows=11 loops=1)
-(27 rows)
+                     ->  Seq Scan on compress_hyper_4_21_chunk (actual rows=11 loops=1)
+(15 rows)
 
 -- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
@@ -4663,8 +4651,8 @@ stable expression in targetlist on skip_scan_htc
 (16 rows)
 
 :PREFIX SELECT DISTINCT dev, time, 'q1_10' FROM :TABLE ORDER BY dev;
-                                                                         QUERY PLAN                                                                          
--------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                              QUERY PLAN                                              
+------------------------------------------------------------------------------------------------------
  Sort (actual rows=10020 loops=1)
    Sort Key: _hyper_3_5_chunk.dev
    Sort Method: quicksort 
@@ -4674,26 +4662,14 @@ stable expression in targetlist on skip_scan_htc
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
-                           ->  Sort (actual rows=11 loops=1)
-                                 Sort Key: compress_hyper_4_26_chunk.dev, compress_hyper_4_26_chunk._ts_meta_min_1, compress_hyper_4_26_chunk._ts_meta_max_1
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_4_26_chunk (actual rows=11 loops=1)
+                           ->  Seq Scan on compress_hyper_4_26_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
-                           ->  Sort (actual rows=11 loops=1)
-                                 Sort Key: compress_hyper_4_27_chunk.dev, compress_hyper_4_27_chunk._ts_meta_min_1, compress_hyper_4_27_chunk._ts_meta_max_1
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_4_27_chunk (actual rows=11 loops=1)
+                           ->  Seq Scan on compress_hyper_4_27_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=2505 loops=1)
-                           ->  Sort (actual rows=11 loops=1)
-                                 Sort Key: compress_hyper_4_28_chunk.dev, compress_hyper_4_28_chunk._ts_meta_min_1, compress_hyper_4_28_chunk._ts_meta_max_1
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_4_28_chunk (actual rows=11 loops=1)
+                           ->  Seq Scan on compress_hyper_4_28_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk (actual rows=2505 loops=1)
-                           ->  Sort (actual rows=11 loops=1)
-                                 Sort Key: compress_hyper_4_29_chunk.dev, compress_hyper_4_29_chunk._ts_meta_min_1, compress_hyper_4_29_chunk._ts_meta_max_1
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_4_29_chunk (actual rows=11 loops=1)
-(28 rows)
+                           ->  Seq Scan on compress_hyper_4_29_chunk (actual rows=11 loops=1)
+(16 rows)
 
 -- use SkipScan as only one non-const distinct column
 :PREFIX SELECT DISTINCT dev, NULL, 'q1_11' FROM :TABLE ORDER BY dev;
