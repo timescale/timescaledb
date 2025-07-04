@@ -3,55 +3,75 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Some primitive tests that show cost of DecompressChunk node so that we can
 -- monitor the changes.
-create table t(ts int, s text, c text);
-select create_hypertable('t', 'ts');
+create table costtab(ts int, s text, c text, ti text, fi float);
+select create_hypertable('costtab', 'ts');
 NOTICE:  adding not-null constraint to column "ts"
- create_hypertable 
--------------------
- (1,public,t,t)
+  create_hypertable   
+----------------------
+ (1,public,costtab,t)
 (1 row)
 
-alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 's',
+alter table costtab set (timescaledb.compress, timescaledb.compress_segmentby = 's',
     timescaledb.compress_orderby = 'ts');
-insert into t select ts, ts % 10, ts::text from generate_series(1, 10000) ts;
-select count(compress_chunk(x)) from show_chunks('t') x;
+insert into costtab select ts, ts % 10, ts::text, ts::text, ts::float from generate_series(1, 10000) ts;
+create index on costtab(ti);
+create index on costtab(fi);
+select count(compress_chunk(x)) from show_chunks('costtab') x;
  count 
 -------
      1
 (1 row)
 
-vacuum freeze analyze t;
-explain select * from t;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=68)
-   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=78)
+vacuum freeze analyze costtab;
+explain select * from costtab;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=108)
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=142)
 (2 rows)
 
-explain select * from t where s = '1';
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=68)
-   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=1 width=78)
+explain select * from costtab where s = '1';
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=108)
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=1 width=142)
          Filter: (s = '1'::text)
 (3 rows)
 
-explain select * from t where c = '100';
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=68)
+explain select * from costtab where c = '100';
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=108)
    Vectorized Filter: (c = '100'::text)
-   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=78)
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=142)
 (3 rows)
 
-explain select ts from t;
+explain select * from costtab where ti = '200';
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.38..31.12 rows=3000 width=108)
+   Vectorized Filter: (ti = '200'::text)
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=3 width=142)
+         Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_ti, '200'::text)
+(4 rows)
+
+explain select * from costtab where fi = 200;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.15 rows=10000 width=108)
+   Vectorized Filter: (fi = '200'::double precision)
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.15 rows=10 width=142)
+         Filter: ((_ts_meta_v2_min_fi <= '200'::double precision) AND (_ts_meta_v2_max_fi >= '200'::double precision))
+(4 rows)
+
+explain select ts from costtab;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=4)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=44)
 (2 rows)
 
-explain select ts from t where s = '1';
+explain select ts from costtab where s = '1';
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=4)
@@ -59,7 +79,7 @@ explain select ts from t where s = '1';
          Filter: (s = '1'::text)
 (3 rows)
 
-explain select ts from t where c = '100';
+explain select ts from costtab where c = '100';
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=4)
@@ -67,14 +87,14 @@ explain select ts from t where c = '100';
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=76)
 (3 rows)
 
-explain select ts, s from t;
+explain select ts, s from costtab;
                                          QUERY PLAN                                         
 --------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=36)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=46)
 (2 rows)
 
-explain select ts, s from t where s = '1';
+explain select ts, s from costtab where s = '1';
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=36)
@@ -82,7 +102,7 @@ explain select ts, s from t where s = '1';
          Filter: (s = '1'::text)
 (3 rows)
 
-explain select ts, s from t where c = '100';
+explain select ts, s from costtab where c = '100';
                                          QUERY PLAN                                         
 --------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=36)
@@ -90,12 +110,12 @@ explain select ts, s from t where c = '100';
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=78)
 (3 rows)
 
-explain select * from t where ts = 5000;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.15..11.15 rows=1000 width=68)
+explain select * from costtab where ts = 5000;
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.15..11.15 rows=1000 width=108)
    Vectorized Filter: (ts = 5000)
-   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.15 rows=1 width=78)
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.15 rows=1 width=142)
          Filter: ((_ts_meta_min_1 <= 5000) AND (_ts_meta_max_1 >= 5000))
 (4 rows)
 
