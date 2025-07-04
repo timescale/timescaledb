@@ -768,6 +768,121 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 
 #define IS_UPDL_CMD(parse)                                                                         \
 	((parse)->commandType == CMD_UPDATE || (parse)->commandType == CMD_DELETE)
+typedef struct MinMaxReplacementContext
+{
+	AttrNumber *min_to_max;
+} MinMaxReplacementContext;
+
+static Node *
+minmax_replacement_mutator(Node *orig_node, MinMaxReplacementContext *context)
+{
+	if (orig_node == NULL)
+	{
+		/*
+		 * An expression node can have a NULL field and the mutator will be
+		 * still called for it, so we have to handle this.
+		 */
+		return NULL;
+	}
+
+	if (!IsA(orig_node, Var))
+	{
+		/*
+		 * Recurse.
+		 */
+		return expression_tree_mutator(orig_node, minmax_replacement_mutator, context);
+	}
+
+	Var *orig_var = castNode(Var, orig_node);
+	if (orig_var->varattno <= 0)
+	{
+		/*
+		 * We don't handle special variables. Not sure how it could happen though.
+		 */
+		return orig_node;
+	}
+
+	AttrNumber replaced_attno = context->min_to_max[orig_var->varattno];
+	if (replaced_attno == InvalidAttrNumber)
+	{
+		/*
+		 * No replacement for this column.
+		 */
+		return orig_node;
+	}
+
+	/*
+	 * Found the replacement, return the modified copy.
+	 */
+	Var *var_copy = copyObject(orig_var);
+	var_copy->varattno = replaced_attno;
+	return (Node *) var_copy;
+}
+
+static void
+set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+									  CompressionInfo *compression_info)
+{
+	/*
+	 * Build the correspondence of min metadata attno -> max metadata attno for
+	 * all minmax metadata.
+	 */
+	MinMaxReplacementContext replacement_context = {
+		.min_to_max = palloc0(sizeof(AttrNumber) * compression_info->compressed_rel->max_attr),
+	};
+	for (int uncompressed_attno = 1; uncompressed_attno <= compression_info->chunk_rel->max_attr;
+		 uncompressed_attno++)
+	{
+		if (get_rte_attribute_is_dropped(compression_info->chunk_rte, uncompressed_attno))
+		{
+			/* Skip the dropped column. */
+			continue;
+		}
+
+		AttrNumber min_attno =
+			compressed_column_metadata_attno(compression_info->settings,
+											 compression_info->chunk_rte->relid,
+											 uncompressed_attno,
+											 compression_info->compressed_rte->relid,
+											 "min");
+		AttrNumber max_attno =
+			compressed_column_metadata_attno(compression_info->settings,
+											 compression_info->chunk_rte->relid,
+											 uncompressed_attno,
+											 compression_info->compressed_rte->relid,
+											 "max");
+		if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+		{
+			continue;
+		}
+
+		replacement_context.min_to_max[min_attno] = max_attno;
+	}
+
+	List *orig_baserestrictinfo = rel->baserestrictinfo;
+	List *processed_baserestrictinfo = NULL;
+	ListCell *lc;
+	foreach (lc, orig_baserestrictinfo)
+	{
+		RestrictInfo *orig_restrictinfo = castNode(RestrictInfo, lfirst(lc));
+		Node *orig_clause = (Node *) orig_restrictinfo->clause;
+		Node *processed_clause =
+			expression_tree_mutator(orig_clause, minmax_replacement_mutator, &replacement_context);
+		RestrictInfo *processed_restrictinfo =
+			make_simple_restrictinfo(root, (Expr *) processed_clause);
+		processed_baserestrictinfo = lappend(processed_baserestrictinfo, processed_restrictinfo);
+	}
+	my_print(processed_baserestrictinfo);
+
+	/*
+	 * Unfortunately set_rel_width() is declared static, so we modify the
+	 * RelOptInfo and call the entire set_baserel_size_estimates() to avoid
+	 * copying too much Postgres code.
+	 */
+	rel->baserestrictinfo = processed_baserestrictinfo;
+	set_baserel_size_estimates(root, rel);
+	rel->baserestrictinfo = orig_baserestrictinfo;
+}
 void
 ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
 								   const Chunk *chunk)
@@ -839,7 +954,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root, compression_info->settings, chunk_rel, compressed_rel, consider_partial);
-	set_baserel_size_estimates(root, compressed_rel);
+	set_compressed_baserel_size_estimates(root, compressed_rel, compression_info);
 	double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
 
 	if (!compression_info->single_chunk)

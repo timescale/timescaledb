@@ -90,3 +90,12 @@ explain select ts, s from t where c = '100';
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=78)
 (3 rows)
 
+explain select * from t where ts = 5000;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.15..11.15 rows=1000 width=68)
+   Vectorized Filter: (ts = 5000)
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.15 rows=1 width=78)
+         Filter: ((_ts_meta_min_1 <= 5000) AND (_ts_meta_max_1 >= 5000))
+(4 rows)
+

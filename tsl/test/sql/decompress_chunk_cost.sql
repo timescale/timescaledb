@@ -31,3 +31,5 @@ explain select ts, s from t;
 explain select ts, s from t where s = '1';
 
 explain select ts, s from t where c = '100';
+
+explain select * from t where ts = 5000;
