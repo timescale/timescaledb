@@ -872,7 +872,6 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 			make_simple_restrictinfo(root, (Expr *) processed_clause);
 		processed_baserestrictinfo = lappend(processed_baserestrictinfo, processed_restrictinfo);
 	}
-	my_print(processed_baserestrictinfo);
 
 	/*
 	 * Unfortunately set_rel_width() is declared static, so we modify the
