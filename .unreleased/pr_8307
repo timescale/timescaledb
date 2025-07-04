@@ -1,1 +1,0 @@
-Fixes: #8307 Fix missing catalog entries for bool and null compression in fresh installations
