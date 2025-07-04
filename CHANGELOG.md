@@ -11,12 +11,12 @@ This release contains performance improvements and bug fixes since the 2.20.3 re
 **Highlighted features in TimescaleDB v2.21.0**
 * The attach & detach chunks feature allows manually adding or removing chunks from a hypertable with uncompressed chunks, similar to PostgreSQL’s partition management.
 * Continued improvement of backfilling into the columnstore, achieving up to 2.5x speedup for constrained tables, by introducing caching logic that boosts throughput for writes to compressed chunks, bringing `INSERT` performance close to that of uncompressed chunks.
-* Optimized `DELETE` operations on the columstore through batch-level deletions of non-segmentby keys in the filter condition, greatly improving performance of up to 42x faster in some cases, as well as reducing bloat, and lowering resource usage.
+* Optimized `DELETE` operations on the columstore through batch-level deletions of non-segmentby keys in the filter condition, greatly improving performance to up to 42x faster in some cases, as well as reducing bloat, and lowering resource usage.
 * The locking mechanism for Continuous Aggregate refresh policies was removed, enabling concurrent refreshes for non-overlapping ranges and eliminating the need for complex customer workarounds.
 * [tech preview] Direct Compress is an innovative TimescaleDB feature that improves high-volume data ingestion by compressing data in memory and writing it directly to disk, reducing I/O overhead, eliminating dependency on background compression jobs, and significantly boosting insert performance.
 
 **Sunsetting of the hypercore access method**
-We made the decision to deprecate hypercore access method (TAM) with the `2.21.0` release. It was an experiment, which did not show the signals we hoped for and will be sunset in TimescaleDB `2.22.0`, scheduled for September 2025. Upgrading to `2.22.0` and higher will be blocked if TAM is still in use. Since TAM’s inception in [2.18.0](https://github.com/timescale/timescaledb/releases/tag/2.18.0), we learned that btrees were not the right architecture. The recent advancements in the columnstore, such as more performant backfilling, SkipScan, adding check constraints, and faster point queries - put the [columnstore](https://www.timescale.com/blog/hypercore-a-hybrid-row-storage-engine-for-real-time-analytics), close to or on par with TAM without the storage from the additional index. We apologize for the inconvenience this action potentially causes and are here to assist you during the migration process.
+We made the decision to deprecate hypercore access method (TAM) with the `2.21.0` release. It was an experiment, which did not show the signals we hoped for and will be sunsetted in TimescaleDB `2.22.0`, scheduled for September 2025. Upgrading to `2.22.0` and higher will be blocked if TAM is still in use. Since TAM’s inception in [2.18.0](https://github.com/timescale/timescaledb/releases/tag/2.18.0), we learned that btrees were not the right architecture. The recent advancements in the columnstore—such as more performant backfilling, SkipScan, adding check constraints, and faster point queries—put the [columnstore](https://www.timescale.com/blog/hypercore-a-hybrid-row-storage-engine-for-real-time-analytics) close to or on par with TAM without the storage from the additional index. We apologize for the inconvenience this action potentially causes and are here to assist you during the migration process.
 
 Migration path
 
@@ -27,7 +27,7 @@ SELECT c.oid::regclass AS table from pg_class c JOIN pg_am am ON (c.relam=am.oid
 -- Set table access method back to `heap`
 ALTER TABLE <hypertable> SET ACCESS METHOD heap;
 
--- Recompress all chunks of the Hypertable again
+-- Recompress all chunks of the hypertable again
 SELECT decompress_chunk(c.oid::regclass), compress_chunk(c.oid::regclass) 
 FROM pg_class c inner join pg_am am ON c.relam=am.oid
 AND am.amname='hypercore' 
@@ -47,7 +47,7 @@ WHERE c.relnamespace='_timescaledb_internal'::regnamespace;
 * [#8191](https://github.com/timescale/timescaledb/pull/8191) Add option to not process hypertable invalidations
 * [#8196](https://github.com/timescale/timescaledb/pull/8196) Show deprecation warning for TAM
 * [#8208](https://github.com/timescale/timescaledb/pull/8208) Use `NULL` compression for bool batches with all null values like the other compression algorithms
-* [#8223](https://github.com/timescale/timescaledb/pull/8223) Support for Attach/Detach Chunk 
+* [#8223](https://github.com/timescale/timescaledb/pull/8223) Support for attach/detach chunk 
 * [#8265](https://github.com/timescale/timescaledb/pull/8265) Set incremental Continous Aggregate refresh policy on by default
 * [#8274](https://github.com/timescale/timescaledb/pull/8274) Allow creating concurrent continuous aggregate refresh policies
 * [#8314](https://github.com/timescale/timescaledb/pull/8314) Add support for timescaledb_lake in loader
