@@ -372,17 +372,19 @@ copy_decompress_chunk_path(DecompressChunkPath *src)
  * Maps the attno of the min metadata column in the compressed chunk to the
  * attno of the corresponding max metadata column. Zero if none or not applicable.
  */
-typedef struct MinMaxReplacementContext
+typedef struct SelectivityEstimationContext
 {
 	AttrNumber *min_to_max;
-} MinMaxReplacementContext;
+	AttrNumber *max_to_min;
+
+	List *vars;
+} SelectivityEstimationContext;
 
 /*
- * Replace the conditions on min metadata column with the conditions on max
- * metadata column.
+ * Collect the Vars referencing the "min" metadata columns into the context->vars.
  */
-static Node *
-minmax_replacement_mutator(Node *orig_node, MinMaxReplacementContext *context)
+static bool
+min_metadata_vars_collector(Node *orig_node, SelectivityEstimationContext *context)
 {
 	if (orig_node == NULL)
 	{
@@ -390,7 +392,7 @@ minmax_replacement_mutator(Node *orig_node, MinMaxReplacementContext *context)
 		 * An expression node can have a NULL field and the mutator will be
 		 * still called for it, so we have to handle this.
 		 */
-		return NULL;
+		return false;
 	}
 
 	if (!IsA(orig_node, Var))
@@ -398,7 +400,7 @@ minmax_replacement_mutator(Node *orig_node, MinMaxReplacementContext *context)
 		/*
 		 * Recurse.
 		 */
-		return expression_tree_mutator(orig_node, minmax_replacement_mutator, context);
+		return expression_tree_walker(orig_node, min_metadata_vars_collector, context);
 	}
 
 	Var *orig_var = castNode(Var, orig_node);
@@ -407,7 +409,7 @@ minmax_replacement_mutator(Node *orig_node, MinMaxReplacementContext *context)
 		/*
 		 * We don't handle special variables. Not sure how it could happen though.
 		 */
-		return orig_node;
+		return false;
 	}
 
 	AttrNumber replaced_attno = context->min_to_max[orig_var->varattno];
@@ -416,15 +418,11 @@ minmax_replacement_mutator(Node *orig_node, MinMaxReplacementContext *context)
 		/*
 		 * No replacement for this column.
 		 */
-		return orig_node;
+		return false;
 	}
 
-	/*
-	 * Found the replacement, return the modified copy.
-	 */
-	Var *var_copy = copyObject(orig_var);
-	var_copy->varattno = replaced_attno;
-	return (Node *) var_copy;
+	context->vars = lappend(context->vars, orig_var);
+	return false;
 }
 
 static void
@@ -450,11 +448,19 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	 * should not introduce much error, but at the same time allow Postgres to
 	 * see the correlation.
 	 *
+	 * We do this here for the entire baserestrictinfo and not per-rinfo as we
+	 * add them during filter pushdown, because the Postgres clauselist
+	 * selectivity estimator must see the entire clause list to detect the range
+	 * conditions.
+	 *
 	 * First, build the correspondence of min metadata attno -> max metadata
 	 * attno for all minmax metadata.
 	 */
-	MinMaxReplacementContext replacement_context = {
-		.min_to_max = palloc0(sizeof(AttrNumber) * compression_info->compressed_rel->max_attr),
+	AttrNumber *storage =
+		palloc0(2 * sizeof(AttrNumber) * compression_info->compressed_rel->max_attr);
+	SelectivityEstimationContext context = {
+		.min_to_max = &storage[0],
+		.max_to_min = &storage[compression_info->compressed_rel->max_attr],
 	};
 
 	for (int uncompressed_attno = 1; uncompressed_attno <= compression_info->chunk_rel->max_attr;
@@ -503,35 +509,49 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 			continue;
 		}
 
-		replacement_context.min_to_max[min_attno] = max_attno;
+		context.min_to_max[min_attno] = max_attno;
+		context.max_to_min[max_attno] = min_attno;
 	}
 
 	/*
 	 * Then, replace all conditions on min metadata column with conditions on
 	 * max metadata column.
 	 */
-	List *orig_baserestrictinfo = rel->baserestrictinfo;
-	List *processed_baserestrictinfo = NULL;
 	ListCell *lc;
-	foreach (lc, orig_baserestrictinfo)
+	foreach (lc, rel->baserestrictinfo)
 	{
 		RestrictInfo *orig_restrictinfo = castNode(RestrictInfo, lfirst(lc));
 		Node *orig_clause = (Node *) orig_restrictinfo->clause;
-		Node *processed_clause =
-			expression_tree_mutator(orig_clause, minmax_replacement_mutator, &replacement_context);
-		RestrictInfo *processed_restrictinfo =
-			make_simple_restrictinfo(root, (Expr *) processed_clause);
-		processed_baserestrictinfo = lappend(processed_baserestrictinfo, processed_restrictinfo);
+		expression_tree_walker(orig_clause, min_metadata_vars_collector, &context);
 	}
 
 	/*
-	 * Unfortunately set_rel_width() is declared static, so we modify the
-	 * RelOptInfo and call the entire set_baserel_size_estimates() to avoid
-	 * copying too much Postgres code.
+	 * Temporarily replace "min" with "max" in-place to save on memory allocations.
 	 */
-	rel->baserestrictinfo = processed_baserestrictinfo;
+	foreach (lc, context.vars)
+	{
+		Var *var = castNode(Var, lfirst(lc));
+
+		Assert(var->varattno != InvalidAttrNumber);
+		Assert(context.min_to_max[var->varattno] != InvalidAttrNumber);
+		Assert(context.max_to_min[context.min_to_max[var->varattno]] == var->varattno);
+
+		var->varattno = context.min_to_max[var->varattno];
+	}
+
+	/*
+	 * Compute selectivity with the updated filters.
+	 */
 	set_baserel_size_estimates(root, rel);
-	rel->baserestrictinfo = orig_baserestrictinfo;
+
+	/*
+	 * Replace the Vars back.
+	 */
+	foreach (lc, context.vars)
+	{
+		Var *var = castNode(Var, lfirst(lc));
+		var->varattno = context.max_to_min[var->varattno];
+	}
 }
 
 static CompressionInfo *

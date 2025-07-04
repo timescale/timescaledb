@@ -39,3 +39,7 @@ explain select ts, s from costtab where s = '1';
 explain select ts, s from costtab where c = '100';
 
 explain select * from costtab where ts = 5000;
+
+explain select * from costtab where fi = 200 and ts = 5000;
+
+explain select * from costtab where s = '1' or (fi = 200 and ts = 5000);

@@ -119,3 +119,21 @@ explain select * from costtab where ts = 5000;
          Filter: ((_ts_meta_min_1 <= 5000) AND (_ts_meta_max_1 >= 5000))
 (4 rows)
 
+explain select * from costtab where fi = 200 and ts = 5000;
+                                                                                   QUERY PLAN                                                                                    
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.20..11.20 rows=1000 width=108)
+   Vectorized Filter: ((fi = '200'::double precision) AND (ts = 5000))
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.20 rows=1 width=142)
+         Filter: ((_ts_meta_v2_min_fi <= '200'::double precision) AND (_ts_meta_v2_max_fi >= '200'::double precision) AND (_ts_meta_min_1 <= 5000) AND (_ts_meta_max_1 >= 5000))
+(4 rows)
+
+explain select * from costtab where s = '1' or (fi = 200 and ts = 5000);
+                                                                                              QUERY PLAN                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.23..11.22 rows=1000 width=108)
+   Filter: ((s = '1'::text) OR ((fi = '200'::double precision) AND (ts = 5000)))
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.23 rows=1 width=142)
+         Filter: ((s = '1'::text) OR ((_ts_meta_v2_min_fi <= '200'::double precision) AND (_ts_meta_v2_max_fi >= '200'::double precision) AND (_ts_meta_min_1 <= 5000) AND (_ts_meta_max_1 >= 5000)))
+(4 rows)
+
