@@ -12,7 +12,7 @@ This release contains performance improvements and bug fixes since the 2.20.3 re
 * The attach & detach chunks feature allows manually adding or removing chunks from a hypertable with uncompressed chunks, similar to PostgreSQL’s partition management.
 * Continued improvement of backfilling into the columnstore, achieving up to 2.5x speedup for constrained tables, by introducing caching logic that boosts throughput for writes to compressed chunks, bringing `INSERT` performance close to that of uncompressed chunks.
 * Optimized `DELETE` operations on the columstore through batch-level deletions of non-segmentby keys in the filter condition, greatly improving performance to up to 42x faster in some cases, as well as reducing bloat, and lowering resource usage.
-* The locking mechanism for Continuous Aggregate refresh policies was removed, enabling concurrent refreshes for non-overlapping ranges and eliminating the need for complex customer workarounds.
+* The heavy lock taken in Continuous Aggregate refresh was relaxed, enabling concurrent refreshes for non-overlapping ranges and eliminating the need for complex customer workarounds.
 * [tech preview] Direct Compress is an innovative TimescaleDB feature that improves high-volume data ingestion by compressing data in memory and writing it directly to disk, reducing I/O overhead, eliminating dependency on background compression jobs, and significantly boosting insert performance.
 
 **Sunsetting of the hypercore access method**
@@ -21,17 +21,20 @@ We made the decision to deprecate hypercore access method (TAM) with the 2.21.0 
 Migration path
 
 ```
--- Find all hypertables that use the hypercore access method
-SELECT c.oid::regclass AS table from pg_class c JOIN pg_am am ON (c.relam=am.oid AND am.amname='hypercore');
-
--- Set table access method back to `heap`
-ALTER TABLE <hypertable> SET ACCESS METHOD heap;
-
--- Recompress all chunks of the hypertable again
-SELECT decompress_chunk(c.oid::regclass), compress_chunk(c.oid::regclass) 
-FROM pg_class c inner join pg_am am ON c.relam=am.oid
-AND am.amname='hypercore' 
-WHERE c.relnamespace='_timescaledb_internal'::regnamespace;
+do $$
+declare   
+   relid regclass;
+begin
+   for relid in
+       select cl.oid from pg_class cl
+       join pg_am am on (am.oid = cl.relam)
+       where am.amname = 'hypercore'
+   loop
+       raise notice 'converting % to heap', relid::regclass;
+       execute format('alter table %s set access method heap', relid);
+   end loop;
+end
+$$;
 ```
 
 **Features**
