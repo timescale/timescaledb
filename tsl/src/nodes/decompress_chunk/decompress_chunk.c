@@ -370,7 +370,7 @@ copy_decompress_chunk_path(DecompressChunkPath *src)
 
 /*
  * Maps the attno of the min metadata column in the compressed chunk to the
- * attno of the corresponding max metadata column.
+ * attno of the corresponding max metadata column. Zero if none or not applicable.
  */
 typedef struct MinMaxReplacementContext
 {
