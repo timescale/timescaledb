@@ -50,215 +50,21 @@ copy_context(const QualPushdownContext *source)
 
 static Node *qual_pushdown_mutator(Node *node, QualPushdownContext *context);
 
-typedef struct SelectivityEstimationContext
-{
-	/*
-	 * Maps the attno of the min metadata column in the compressed chunk to the
-	 * attno of the corresponding max metadata column. Zero if none or not
-	 * applicable.
-	 */
-	AttrNumber *min_to_max;
-	AttrNumber *max_to_min;
-
-	/*
-	 * This is per-RestrictInfo, but needs to live here so that it can be passed
-	 * through the expression tree walker interface.
-	 */
-	List *vars;
-} SelectivityEstimationContext;
-
-static void
-init_selectivity_estimation_context(SelectivityEstimationContext *context,
-								  CompressionInfo *compression_info)
-{
-	/*
-	 * Build the correspondence of min metadata attno -> max metadata
-	 * attno, and the reverse, for all minmax metadata.
-	 */
-	context->min_to_max = palloc0(2 * sizeof(AttrNumber) * compression_info->compressed_rel->max_attr);
-	context->max_to_min = &context->min_to_max[compression_info->compressed_rel->max_attr];
-
-	for (int uncompressed_attno = 1; uncompressed_attno <= compression_info->chunk_rel->max_attr;
-		 uncompressed_attno++)
-	{
-		if (get_rte_attribute_is_dropped(compression_info->chunk_rte, uncompressed_attno))
-		{
-			/* Skip the dropped column. */
-			continue;
-		}
-
-		const char *attname = get_attname(compression_info->chunk_rte->relid,
-										  uncompressed_attno,
-										  /* missing_ok = */ false);
-		const int16 orderby_pos =
-			ts_array_position(compression_info->settings->fd.orderby, attname);
-
-		if (orderby_pos == 0)
-		{
-			/*
-			 * This reasoning is only applicable to orderby columns, where each
-			 * batch is a thin slice of the entire range of the column. It also does
-			 * not have many intersections, because the compressed batches mostly
-			 * follow the total order of orderby columns, that is relaxed for the
-			 * last orderby  columns or unordered chunks.This does not necessarily
-			 * hold for non-orderby columns that can also have a sparse index.
-			 */
-			continue;
-		}
-
-		AttrNumber min_attno =
-			compressed_column_metadata_attno(compression_info->settings,
-											 compression_info->chunk_rte->relid,
-											 uncompressed_attno,
-											 compression_info->compressed_rte->relid,
-											 "min");
-		AttrNumber max_attno =
-			compressed_column_metadata_attno(compression_info->settings,
-											 compression_info->chunk_rte->relid,
-											 uncompressed_attno,
-											 compression_info->compressed_rte->relid,
-											 "max");
-
-		if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
-		{
-			continue;
-		}
-
-		context->min_to_max[min_attno] = max_attno;
-		context->max_to_min[max_attno] = min_attno;
-	}
-}
-
-/*
- * Collect the Vars referencing the "min" metadata columns into the context->vars.
- */
-static bool
-min_metadata_vars_collector(Node *orig_node, SelectivityEstimationContext *context)
-{
-	if (orig_node == NULL)
-	{
-		/*
-		 * An expression node can have a NULL field and the mutator will be
-		 * still called for it, so we have to handle this.
-		 */
-		return false;
-	}
-
-	if (!IsA(orig_node, Var))
-	{
-		/*
-		 * Recurse.
-		 */
-		return expression_tree_walker(orig_node, min_metadata_vars_collector, context);
-	}
-
-	Var *orig_var = castNode(Var, orig_node);
-	if (orig_var->varattno <= 0)
-	{
-		/*
-		 * We don't handle special variables. Not sure how it could happen though.
-		 */
-		return true;
-	}
-
-	AttrNumber replaced_attno = context->min_to_max[orig_var->varattno];
-	if (replaced_attno == InvalidAttrNumber)
-	{
-		/*
-		 * No replacement for this column.
-		 */
-		return true;
-	}
-
-	context->vars = lappend(context->vars, orig_var);
-
-	return true;
-}
-
-static void
-estimate_pushed_down_selectivity(RestrictInfo *ri, SelectivityEstimationContext *context,
-								 PlannerInfo *root)
-{
-	/*
-	 * We need some custom selectivity estimation code for the compressed chunk
-	 * table, because some pushed down filters require special handling.
-	 *
-	 * An equality condition can be pushed down to the minmax sparse index
-	 * condition, and becomes x_min <= const and const <= x_max. Postgres
-	 * treats the part of this condition as independent, which leads to
-	 * significant overestimates when x has high cardinality, and therefore
-	 * not using the Index Scan. This stems from the fact that Postgres doesn't
-	 * know that x_max is always just very slightly more than x_min for the
-	 * given compressed batch.
-
-	 * To work around this, temporarily replace all conditions on x_min with
-	 * conditions on x_max before feeding them to the Postgres clauselist
-	 * selectivity functions. Since the range of x_min to x_max for a given
-	 * batch is small relative to the range of x in the entire chunk, this
-	 * should not introduce much error, but at the same time allow Postgres to
-	 * see the correlation.
-	 *
-	 * First, collect the "min" metadata Vars.
-	 */
-	context->vars = NIL;
-	if (!expression_tree_walker((Node *) ri->clause, min_metadata_vars_collector, context))
-	{
-		return;
-	}
-
-	/*
-	 * Temporarily replace "min" with "max" in-place to save on memory allocations.
-	 */
-	ListCell *lc;
-	foreach (lc, context->vars)
-	{
-		Var *var = castNode(Var, lfirst(lc));
-
-		Assert(var->varattno != InvalidAttrNumber);
-		Assert(context->min_to_max[var->varattno] != InvalidAttrNumber);
-		Assert(context->max_to_min[context->min_to_max[var->varattno]] == var->varattno);
-
-		var->varattno = context->min_to_max[var->varattno];
-	}
-
-	/*
-	 * Cache the selectivity of the processed clause in the RestrictInfo.
-	 */
-	Selectivity result = clause_selectivity(root,
-										(Node *) ri->clause,
-										/* varRelid = */ 0,
-										JOIN_INNER,
-										/* sjinfo = */ NULL);
-
-	/*
-	 * Replace the Vars back.
-	 */
-	foreach (lc, context->vars)
-	{
-		Var *var = castNode(Var, lfirst(lc));
-		var->varattno = context->max_to_min[var->varattno];
-	}
-
-	return result;
-}
-
 void
-pushdown_quals(PlannerInfo *root, CompressionInfo *compression_info, bool chunk_partial)
+pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chunk_rel,
+			   RelOptInfo *compressed_rel, bool chunk_partial)
 {
 	ListCell *lc;
 	List *decompress_clauses = NIL;
 	QualPushdownContext base_context = {
-		.chunk_rel = compression_info->chunk_rel,
-		.compressed_rel = compression_info->compressed_rel,
-		.chunk_rte = compression_info->chunk_rte,
-		.compressed_rte = compression_info->compressed_rte,
-		.settings = compression_info->settings,
+		.chunk_rel = chunk_rel,
+		.compressed_rel = compressed_rel,
+		.chunk_rte = planner_rt_fetch(chunk_rel->relid, root),
+		.compressed_rte = planner_rt_fetch(compressed_rel->relid, root),
+		.settings = settings,
 	};
 
-	SelectivityEstimationContext selectivity_context;
-	init_selectivity_estimation_context(&selectivity_context, compression_info);
-
-	foreach (lc, compression_info->chunk_rel->baserestrictinfo)
+	foreach (lc, chunk_rel->baserestrictinfo)
 	{
 		RestrictInfo *ri = lfirst(lc);
 
@@ -283,19 +89,15 @@ pushdown_quals(PlannerInfo *root, CompressionInfo *compression_info, bool chunk_
 				BoolExpr *bool_expr = castNode(BoolExpr, pushed_down);
 				foreach (lc_and, bool_expr->args)
 				{
-					RestrictInfo *rinfo = make_simple_restrictinfo(root, lfirst(lc_and));
-					estimate_pushed_down_selectivity(rinfo, &selectivity_context, root);
-					compression_info->compressed_rel->baserestrictinfo =
-						lappend(compression_info->compressed_rel->baserestrictinfo, rinfo);
+					compressed_rel->baserestrictinfo =
+						lappend(compressed_rel->baserestrictinfo,
+								make_simple_restrictinfo(root, lfirst(lc_and)));
 				}
 			}
 			else
-			{
-				RestrictInfo *rinfo = make_simple_restrictinfo(root, (Expr *) pushed_down);
-				estimate_pushed_down_selectivity(rinfo, &selectivity_context, root);
-				compression_info->compressed_rel->baserestrictinfo =
-					lappend(compression_info->compressed_rel->baserestrictinfo, rinfo);
-			}
+				compressed_rel->baserestrictinfo =
+					lappend(compressed_rel->baserestrictinfo,
+							make_simple_restrictinfo(root, (Expr *) pushed_down));
 		}
 
 		/*
@@ -307,7 +109,7 @@ pushdown_quals(PlannerInfo *root, CompressionInfo *compression_info, bool chunk_
 			decompress_clauses = lappend(decompress_clauses, ri);
 		}
 	}
-	compression_info->chunk_rel->baserestrictinfo = decompress_clauses;
+	chunk_rel->baserestrictinfo = decompress_clauses;
 }
 
 static OpExpr *
