@@ -466,6 +466,25 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 			continue;
 		}
 
+		const char *attname = get_attname(compression_info->chunk_rte->relid,
+										  uncompressed_attno,
+										  /* missing_ok = */ false);
+		const int16 orderby_pos =
+			ts_array_position(compression_info->settings->fd.orderby, attname);
+
+		if (orderby_pos == 0)
+		{
+			/*
+			 * This reasoning is only applicable to orderby columns, where each
+			 * batch is a thin slice of the entire range of the column. It also does
+			 * not have many intersections, because the compressed batches mostly
+			 * follow the total order of orderby columns, that is relaxed for the
+			 * last orderby  columns or unordered chunks.This does not necessarily
+			 * hold for non-orderby columns that can also have a sparse index.
+			 */
+			continue;
+		}
+
 		AttrNumber min_attno =
 			compressed_column_metadata_attno(compression_info->settings,
 											 compression_info->chunk_rte->relid,
@@ -478,6 +497,7 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 											 uncompressed_attno,
 											 compression_info->compressed_rte->relid,
 											 "max");
+
 		if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
 		{
 			continue;
