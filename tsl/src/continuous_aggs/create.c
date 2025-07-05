@@ -337,7 +337,7 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 /*
  * Add a logical decoding slot for reading invalidations.
  *
- * If a logical slot do not exist, it will be created. If it already exists,
+ * If a logical slot does not exist, it will be created. If it already exists,
  * nothing will happen.
  *
  * This code is mostly copied from create_logical_replication_slot and friends
@@ -347,10 +347,10 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
  * aggregates that use the WAL to collect invalidations.
  *
  * Obviously, the slot is needed to read invalidations for the hypertables and
- * it need to have the version expected by the timescale extension. If the
+ * it needs to have the version expected by the timescale extension. If the
  * versions do not match, the returned rows will not match what is expected.
  *
- * Less obvious, the slot need to be removed once there are no more continuous
+ * Less obvious, the slot needs to be removed once there are no more continuous
  * aggregates that need the slot. If not, the WAL will not be used and will
  * start to fill up storage.
  *
