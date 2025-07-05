@@ -54,6 +54,13 @@ typedef enum ContinuousAggViewType
 	ContinuousAggAnyView
 } ContinuousAggViewType;
 
+typedef enum ContinuousAggCollectUsing
+{
+	ContinuousAggCollectUsingDefault = 0,
+	ContinuousAggCollectUsingTrigger,
+	ContinuousAggCollectUsingWal,
+} ContinuousAggCollectUsing;
+
 /*
  * Information about the bucketing function.
  */
@@ -199,3 +206,4 @@ extern TSDLLEXPORT int64
 ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
 extern TSDLLEXPORT int64
 ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
+extern TSDLLEXPORT const char *ts_invalidation_get_invalidation_replication_slot_name(void);

@@ -16,9 +16,11 @@
  * cagg_create.
  */
 #include <postgres.h>
+
 #include <access/reloptions.h>
 #include <access/sysattr.h>
 #include <access/xact.h>
+#include <access/xlogutils.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_namespace.h>
@@ -30,6 +32,9 @@
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
 #include <commands/view.h>
+#include <executor/spi.h>
+#include <fmgr.h>
+#include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
@@ -45,36 +50,39 @@
 #include <parser/parse_relation.h>
 #include <parser/parse_type.h>
 #include <parser/parsetree.h>
+#include <replication/logical.h>
+#include <replication/slot.h>
+#include <storage/lwlocknames.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
+#include <utils/elog.h>
+#include <utils/pg_lsn.h>
 #include <utils/rel.h>
+#include <utils/resowner.h>
 #include <utils/ruleutils.h>
+#include <utils/snapshot.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
 #include "common.h"
+#include "config.h"
 #include "create.h"
 #include "finalize.h"
 #include "invalidation_threshold.h"
 
 #include "debug_assert.h"
 #include "dimension.h"
-#include "errors.h"
 #include "extension_constants.h"
-#include "func_cache.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "invalidation.h"
-#include "options.h"
 #include "refresh.h"
 #include "time_utils.h"
-#include "timezones.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
-#include "utils.h"
 #include "with_clause/create_materialized_view_with_clause.h"
 
 static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
@@ -97,6 +105,36 @@ static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Qu
 
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
+
+static bool
+has_invalidation_trigger(Oid relid)
+{
+	return OidIsValid(get_trigger_oid(relid, CAGGINVAL_TRIGGER_NAME, true));
+}
+
+static bool
+has_continuous_aggs_attached(int32 raw_hypertable_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX);
+
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_agg_raw_hypertable_id_idx_raw_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(raw_hypertable_id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		ts_scan_iterator_close(&iterator);
+		return true;
+	}
+	ts_scan_iterator_close(&iterator);
+	return false;
+}
 
 static void
 makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
@@ -296,6 +334,76 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("could not create materialization hypertable")));
+}
+
+/*
+ * Add a logical decoding slot for reading invalidations.
+ *
+ * If a logical slot does not exist, it will be created. If it already exists,
+ * nothing will happen.
+ *
+ * This code is mostly copied from create_logical_replication_slot and friends
+ * in slotfunc.c.
+ *
+ * It is important that the slot exists if and only if there are continuous
+ * aggregates that use the WAL to collect invalidations.
+ *
+ * Obviously, the slot is needed to read invalidations for the hypertables and
+ * it needs to have the version expected by the timescale extension. If the
+ * versions do not match, the returned rows will not match what is expected.
+ *
+ * Less obvious, the slot needs to be removed once there are no more continuous
+ * aggregates that need the slot. If not, the WAL will not be used and will
+ * start to fill up storage.
+ *
+ * There is a bug in PostgreSQL causing it to error out if you have too many
+ * "old" transactions that need to be cleaned up, so running this when you
+ * have a lot of concurrent transactions might cause it to error out before
+ * the slot is created.
+ */
+static void
+cagg_add_logical_decoding_slot(void)
+{
+	CatalogSecurityContext sec_ctx;
+	LogicalDecodingContext *ctx = NULL;
+	const char *slot_name = ts_invalidation_get_invalidation_replication_slot_name();
+	const char *plugin_name = CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME;
+
+	if (SearchNamedReplicationSlot(slot_name, true) != NULL)
+		return;
+
+	Assert(!MyReplicationSlot);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+
+	TS_DEBUG_LOG("creating replication slot %s", slot_name);
+#if PG17_LT
+	ReplicationSlotCreate(slot_name, true, RS_EPHEMERAL, false);
+#else
+	ReplicationSlotCreate(slot_name, true, RS_EPHEMERAL, false, false, false);
+#endif
+	TS_DEBUG_LOG("init plugin %s", plugin_name);
+	ctx = CreateInitDecodingContext(plugin_name,
+									NIL,
+									false,
+									InvalidXLogRecPtr,
+									XL_ROUTINE(.page_read = read_local_xlog_page,
+											   .segment_open = wal_segment_open,
+											   .segment_close = wal_segment_close),
+									NULL,
+									NULL,
+									NULL);
+
+	TS_DEBUG_LOG("find startpoint");
+	DecodingContextFindStartpoint(ctx);
+
+	TS_DEBUG_LOG("free decoding context");
+	FreeDecodingContext(ctx);
+
+	ts_catalog_restore_user(&sec_ctx);
+
+	ReplicationSlotPersist();
+	ReplicationSlotRelease();
 }
 
 /*
@@ -600,6 +708,30 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 	}
 }
 
+static const char *collect_using_info[] = {
+	[ContinuousAggCollectUsingDefault] = "default",
+	[ContinuousAggCollectUsingTrigger] = "trigger",
+	[ContinuousAggCollectUsingWal] = "wal",
+};
+
+static ContinuousAggCollectUsing
+get_collect_using(WithClauseResult *with_clause_options)
+{
+	if (with_clause_options[CreateMaterializedViewFlagCollectUsing].is_default)
+		return ContinuousAggCollectUsingDefault;
+
+	const char *collect_using = text_to_cstring(
+		DatumGetTextP(with_clause_options[CreateMaterializedViewFlagCollectUsing].parsed));
+
+	for (size_t i = 0; i < sizeof(collect_using_info) / sizeof(*collect_using_info); ++i)
+		if (strcmp(collect_using_info[i], collect_using) == 0)
+			return i;
+	ereport(ERROR,
+			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			errmsg("unrecognized value \"%s\" for collect_using", collect_using));
+	return -1; /* To keep linter happy */
+}
+
 /*
  * Modifies the passed in ViewStmt to do the following
  * a) Create a hypertable for the continuous agg materialization.
@@ -675,6 +807,9 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	bool materialized_only =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
 	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
+	ContinuousAggCollectUsing collect_using = get_collect_using(with_clause_options);
+	bool trigger_exists = has_invalidation_trigger(bucket_info->htoid);
+	bool caggs_exists = has_continuous_aggs_attached(bucket_info->htid);
 
 	int64 matpartcol_interval = 0;
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
@@ -706,6 +841,51 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	 * The options are valid only for internal use (ts_continuous).
 	 */
 	stmt->options = NULL;
+
+	/*
+	 * If we want to create a continuous aggregate using WAL-based
+	 * invalidation collection, it should not have an invalidation trigger
+	 * already.
+	 */
+	if (collect_using == ContinuousAggCollectUsingWal && trigger_exists)
+	{
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("cannot use WAL-based invalidation collection with hypertable that is "
+					   "using trigger-based invalidation collection"));
+	}
+
+	/*
+	 * If we want to create a continuous aggregate with a trigger, the
+	 * hypertable should either have a trigger already, or if there is no
+	 * trigger, no hypertables should be attached to it.
+	 */
+	if (collect_using == ContinuousAggCollectUsingTrigger && !trigger_exists && caggs_exists)
+		ereport(ERROR,
+				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				errmsg("cannot use trigger-based invalidation collection with hypertable that is "
+					   "using wal-based invalidation collection"));
+
+	/*
+	 * If we didn't specify which collection method to use, we pick whatever
+	 * is used, or the default if there are no continuous aggregates attached.
+	 */
+	if (collect_using == ContinuousAggCollectUsingDefault)
+	{
+		if (!caggs_exists)
+			collect_using = ContinuousAggCollectUsingTrigger; /* default case */
+		else if (trigger_exists)
+			collect_using = ContinuousAggCollectUsingTrigger;
+		else
+			collect_using = ContinuousAggCollectUsingWal;
+	}
+
+	/*
+	 * Step 0: Create logical replication slot if used. This needs to be first
+	 * since we cannot do this in a transaction that has performed any writes.
+	 */
+	if (collect_using == ContinuousAggCollectUsingWal)
+		cagg_add_logical_decoding_slot();
 
 	/*
 	 * Old format caggs are not supported anymore, there is no need to add
@@ -837,8 +1017,9 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										 bucket_info->bf->bucket_time_timezone,
 										 bucket_info->bf->bucket_fixed_interval);
 
-	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */
-	cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
+	/* Step 5: Create trigger on raw hypertable, if needed. */
+	if (collect_using == ContinuousAggCollectUsingTrigger)
+		cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
 }
 
 DDLResult

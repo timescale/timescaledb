@@ -163,10 +163,10 @@ WHERE hypertable_id = :ht_id;
 -- Make sure the catalog is cleaned up when the cagg is dropped
 DROP MATERIALIZED VIEW conditions_summary;
 
-SELECT * FROM _timescaledb_catalog.continuous_agg
+SELECT count(*) FROM _timescaledb_catalog.continuous_agg
 WHERE mat_hypertable_id = :cagg_id;
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT count(*) FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
 
 -- Re-create cagg, this time WITH DATA
