@@ -623,11 +623,93 @@ SHOW timescaledb.max_tuples_decompressed_per_dml_transaction;
  1
 (1 row)
 
+-- More tests for forceful refreshment
+TRUNCATE conditions;
+INSERT INTO conditions
+VALUES
+  -- daily bucket 2025-07-04 10:00:00+00
+  ('2025-07-04 10:00:00+00', 1, 1),
+  ('2025-07-04 10:05:00+00', 1, 1),
+  -- daily bucket 2025-07-04 11:00:00+00
+  ('2025-07-04 11:00:00+00', 1, 1),
+  ('2025-07-04 11:05:00+00', 1, 1),
+  -- daily bucket 2025-07-04 12:00:00+00
+  ('2025-07-04 12:00:00+00', 1, 1),
+  ('2025-07-04 12:05:00+00', 1, 1);
+CREATE MATERIALIZED VIEW conditions_by_hour
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket(INTERVAL '1 hour', time) AS bucket, -- Fixed bucket size
+  device,
+  MAX(temp),
+  MIN(temp),
+  COUNT(*)
+FROM conditions
+GROUP BY 1, 2
+WITH NO DATA;
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 10:00:00+00'::timestamptz, '2025-07-04 12:00:00+00'::timestamptz);
+-- It should return 2 buckets
+SELECT * FROM conditions_by_hour ORDER BY bucket;
+            bucket            | device | max | min | count 
+------------------------------+--------+-----+-----+-------
+ Fri Jul 04 03:00:00 2025 PDT |      1 |   1 |   1 |     2
+ Fri Jul 04 04:00:00 2025 PDT |      1 |   1 |   1 |     2
+(2 rows)
+
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 10:00:00+00'::timestamptz, '2025-07-04 12:00:00+00'::timestamptz, force=>true);
+-- It should return the same 2 buckets of previous query
+SELECT * FROM conditions_by_hour ORDER BY bucket;
+            bucket            | device | max | min | count 
+------------------------------+--------+-----+-----+-------
+ Fri Jul 04 03:00:00 2025 PDT |      1 |   1 |   1 |     2
+ Fri Jul 04 04:00:00 2025 PDT |      1 |   1 |   1 |     2
+(2 rows)
+
+-- Monthly buckets
+INSERT INTO conditions
+VALUES
+  -- monthly bucket 2025-05-01 00:00:00+00
+  ('2025-05-04 10:00:00+00', 1, 1),
+  ('2025-05-04 10:05:00+00', 1, 1),
+  -- monthly bucket 2025-06-01 00:00:00+00
+  ('2025-06-04 11:00:00+00', 1, 1),
+  ('2025-06-04 11:05:00+00', 1, 1);
+CREATE MATERIALIZED VIEW conditions_by_month
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket(INTERVAL '1 month', time) AS bucket, -- Variable bucket size
+  device,
+  MAX(temp),
+  MIN(temp),
+  COUNT(*)
+FROM conditions
+GROUP BY 1, 2
+WITH NO DATA;
+CALL refresh_continuous_aggregate('conditions_by_month', '2025-05-01 00:00:00+00'::timestamptz, '2025-07-01 12:00:00+00'::timestamptz);
+-- It should return 2 buckets
+SELECT * FROM conditions_by_month ORDER BY bucket;
+            bucket            | device | max | min | count 
+------------------------------+--------+-----+-----+-------
+ Wed Apr 30 17:00:00 2025 PDT |      1 |   1 |   1 |     2
+ Sat May 31 17:00:00 2025 PDT |      1 |   1 |   1 |     2
+(2 rows)
+
+CALL refresh_continuous_aggregate('conditions_by_month', '2025-05-01 00:00:00+00'::timestamptz, '2025-07-01 12:00:00+00'::timestamptz, force=>true);
+-- It should return the same 2 buckets of previous query
+SELECT * FROM conditions_by_month ORDER BY bucket;
+            bucket            | device | max | min | count 
+------------------------------+--------+-----+-----+-------
+ Wed Apr 30 17:00:00 2025 PDT |      1 |   1 |   1 |     2
+ Sat May 31 17:00:00 2025 PDT |      1 |   1 |   1 |     2
+(2 rows)
+
 -- Additional tests for MERGE refresh
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 10 other objects
+NOTICE:  drop cascades to 14 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_12_24_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_29_chunk
+NOTICE:  drop cascades to 2 other objects
 CREATE TABLE conditions (
     time TIMESTAMPTZ NOT NULL,
     location TEXT NOT NULL,
@@ -668,7 +750,7 @@ WITH NO DATA;
 SET client_min_messages TO LOG;
 CALL refresh_continuous_aggregate('conditions_daily', NULL, '2018-11-01 23:59:59-08');
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, '2018-11-01 23:59:59-08');
-LOG:  inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_20"
+LOG:  inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
 SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
 LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
             bucket            | location | avg | max | min 
@@ -683,7 +765,7 @@ LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 N
 -- Second refresh using MERGE should also fall back to INSERT since there's no data in the materialization hypertable
 CALL refresh_continuous_aggregate('conditions_daily', '2018-11-01', NULL);
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', '2018-11-01', NULL);
-LOG:  inserted 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_20"
+LOG:  inserted 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
 SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
 LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
             bucket            | location | avg | max | min 
@@ -720,8 +802,8 @@ LOG:  statement: UPDATE conditions SET humidity = humidity + 100 WHERE time = '2
 -- Shoudn't affect the materialization hypertable (merged=0 and deleted=0)
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
-LOG:  merged 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_20"
-LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_20"
+LOG:  merged 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_22"
 SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
 LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
             bucket            | location | avg | max | min 
@@ -749,7 +831,7 @@ VALUES
 -- There's no data in the affected range so the refresh should fall back to INSERT
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
-LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_20"
+LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
 SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
 LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
             bucket            | location | avg | max | min 
@@ -772,8 +854,8 @@ LOG:  statement: UPDATE conditions SET temperature = temperature + 100 WHERE tim
 -- Should merge 1 bucket (merged=1 and deleted=0)
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
-LOG:  merged 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_20"
-LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_20"
+LOG:  merged 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_22"
 SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
 LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
             bucket            | location | avg | max | min 
@@ -796,8 +878,8 @@ LOG:  statement: DELETE FROM conditions WHERE time >= '2018-11-02' AND time < '2
 -- Should not merge any bucket but delete one bucket (merged=0 and deleted=1)
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
-LOG:  merged 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_20"
-LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_20"
+LOG:  merged 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
+LOG:  deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_22"
 SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
 LOG:  statement: SELECT * FROM conditions_daily ORDER BY 1, 2, 3 NULLS LAST, 4 NULLS LAST, 5 NULLS LAST;
             bucket            | location | avg | max | min 
@@ -878,7 +960,7 @@ SET client_min_messages TO LOG;
 LOG:  statement: SET client_min_messages TO LOG;
 CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
-LOG:  inserted 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
+LOG:  inserted 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_24"
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT * FROM conditions_nullable_daily ORDER BY 1, 2 NULLS LAST, 3 NULLS LAST;
@@ -897,8 +979,8 @@ VALUES
 SET client_min_messages TO LOG;
 CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
 LOG:  statement: CALL refresh_continuous_aggregate('conditions_nullable_daily', NULL, '2018-11-01 23:59:59-08');
-LOG:  merged 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_22"
-LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_22"
+LOG:  merged 2 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_24"
+LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_24"
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;
 SELECT * FROM conditions_nullable_daily ORDER BY 1, 2 NULLS LAST, 3 NULLS LAST;
@@ -911,5 +993,5 @@ SELECT * FROM conditions_nullable_daily ORDER BY 1, 2 NULLS LAST, 3 NULLS LAST;
 (4 rows)
 
 DROP MATERIALIZED VIEW conditions_nullable_daily;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_35_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_41_chunk
 DROP TABLE conditions CASCADE;
