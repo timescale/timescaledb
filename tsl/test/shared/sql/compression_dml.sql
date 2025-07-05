@@ -24,6 +24,35 @@ DEALLOCATE p2;
 
 DROP TABLE i3719;
 
+-- Test issue #8241: invalidate generic plans for prepared statements
+-- when partial chunk is created from compressed chunk via UPDATE/DELETE
+CREATE TABLE t8241(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('t8241', 'time');
+
+INSERT INTO t8241(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO t8241(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+
+ALTER TABLE t8241 SET(timescaledb.compress, timescaledb.compress_segmentby='device');
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('t8241') ch;
+
+PREPARE prep AS SELECT * FROM t8241;
+-- Should only see compressed chunk in the plan, this generic plan is now cached
+EXECUTE prep;
+EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
+
+BEGIN;
+-- This will add decompressed row to the compressed chunk
+UPDATE t8241 SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+-- generic plan created for compressed chunk should be invalidated even though we didn't commit
+-- we should get correct result and the plan should have both compressed and decompressed parts
+EXECUTE prep;
+EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
+ROLLBACK;
+
+DEALLOCATE prep;
+DROP TABLE t8241 cascade;
+
 -- github issue 4778
 CREATE TABLE metric_5m (
     time TIMESTAMPTZ NOT NULL,
@@ -349,4 +378,3 @@ SELECT * FROM compress_dml t ORDER BY t;
 ROLLBACK;
 
 DROP TABLE compress_dml;
-

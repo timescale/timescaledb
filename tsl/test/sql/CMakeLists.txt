@@ -53,7 +53,7 @@ set(TEST_FILES
     custom_hashagg.sql
     decompress_chunk_cost.sql
     decompress_index.sql
-    foreign_keys.sql
+    foreign_keys_test.sql
     hypercore_columnar.sql
     hypercore_constraints.sql
     hypercore_copy.sql

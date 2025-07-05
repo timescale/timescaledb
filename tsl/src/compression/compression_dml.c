@@ -14,6 +14,7 @@
 #include <parser/parse_coerce.h>
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
+#include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
@@ -423,7 +424,11 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	 * to staging area, thus mark this chunk as partially compressed
 	 */
 	if (stats.batches_decompressed > 0)
+	{
 		ts_chunk_set_partial(chunk);
+		/* changed chunk status, so invalidate any plans involving this chunk */
+		CacheInvalidateRelcacheByRelid(chunk->table_id);
+	}
 
 	table_close(chunk_rel, NoLock);
 	table_close(comp_chunk_rel, NoLock);
