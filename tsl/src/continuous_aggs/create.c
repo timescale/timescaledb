@@ -21,13 +21,11 @@
 #include <access/sysattr.h>
 #include <access/xact.h>
 #include <access/xlogutils.h>
-#include <c.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_namespace.h>
 #include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
-#include <catalog/pg_type_d.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
@@ -114,12 +112,11 @@ has_invalidation_trigger(Oid relid)
 	return OidIsValid(get_trigger_oid(relid, CAGGINVAL_TRIGGER_NAME, true));
 }
 
-static int32
-number_of_continuous_aggs_attached(int32 raw_hypertable_id)
+static bool
+has_continuous_aggs_attached(int32 raw_hypertable_id)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	int32 count = 0;
 
 	iterator.ctx.index =
 		catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX);
@@ -130,8 +127,13 @@ number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 								   F_INT4EQ,
 								   Int32GetDatum(raw_hypertable_id));
 
-	ts_scanner_foreach(&iterator) { count++; }
-	return count;
+	ts_scanner_foreach(&iterator)
+	{
+		ts_scan_iterator_close(&iterator);
+		return true;
+	}
+	ts_scan_iterator_close(&iterator);
+	return false;
 }
 
 static void
@@ -364,7 +366,7 @@ cagg_add_logical_decoding_slot(void)
 {
 	CatalogSecurityContext sec_ctx;
 	LogicalDecodingContext *ctx = NULL;
-	const char *slot_name = ts_invalidation_get_slot_name();
+	const char *slot_name = ts_invalidation_get_invalidation_replication_slot_name();
 	const char *plugin_name = CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME;
 
 	if (SearchNamedReplicationSlot(slot_name, true) != NULL)
@@ -806,6 +808,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
 	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
 	ContinuousAggCollectUsing collect_using = get_collect_using(with_clause_options);
+	bool trigger_exists = has_invalidation_trigger(bucket_info->htoid);
+	bool caggs_exists = has_continuous_aggs_attached(bucket_info->htid);
 
 	int64 matpartcol_interval = 0;
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
@@ -843,8 +847,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	 * invalidation collection, it should not have an invalidation trigger
 	 * already.
 	 */
-	if (collect_using == ContinuousAggCollectUsingWal &&
-		has_invalidation_trigger(bucket_info->htoid))
+	if (collect_using == ContinuousAggCollectUsingWal && trigger_exists)
 	{
 		ereport(ERROR,
 				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -857,9 +860,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	 * hypertable should either have a trigger already, or if there is no
 	 * trigger, no hypertables should be attached to it.
 	 */
-	if (collect_using == ContinuousAggCollectUsingTrigger &&
-		!has_invalidation_trigger(bucket_info->htoid) &&
-		number_of_continuous_aggs_attached(bucket_info->htid) > 0)
+	if (collect_using == ContinuousAggCollectUsingTrigger && !trigger_exists && caggs_exists)
 		ereport(ERROR,
 				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				errmsg("cannot use trigger-based invalidation collection with hypertable that is "
@@ -867,13 +868,13 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	/*
 	 * If we didn't specify which collection method to use, we pick whatever
-	 * is used, or the default.
+	 * is used, or the default if there are no continuous aggregates attached.
 	 */
 	if (collect_using == ContinuousAggCollectUsingDefault)
 	{
-		if (number_of_continuous_aggs_attached(bucket_info->htid) == 0)
+		if (!caggs_exists)
 			collect_using = ContinuousAggCollectUsingTrigger; /* default case */
-		else if (has_invalidation_trigger(bucket_info->htoid))
+		else if (trigger_exists)
 			collect_using = ContinuousAggCollectUsingTrigger;
 		else
 			collect_using = ContinuousAggCollectUsingWal;

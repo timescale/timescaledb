@@ -206,4 +206,4 @@ extern TSDLLEXPORT int64
 ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
 extern TSDLLEXPORT int64
 ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
-extern TSDLLEXPORT const char *ts_invalidation_get_slot_name(void);
+extern TSDLLEXPORT const char *ts_invalidation_get_invalidation_replication_slot_name(void);

@@ -608,7 +608,7 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 }
 
 TSDLLEXPORT void
-ts_hypertable_drop_slot(const char *slot_name)
+ts_hypertable_drop_invalidation_replication_slot(const char *slot_name)
 {
 	CatalogSecurityContext sec_ctx;
 	NameData slot;

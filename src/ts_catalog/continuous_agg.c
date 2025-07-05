@@ -15,7 +15,6 @@
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
-#include <catalog/pg_type_d.h>
 #include <commands/trigger.h>
 #include <executor/spi.h>
 #include <fmgr.h>
@@ -213,7 +212,7 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 }
 
 const char *
-ts_invalidation_get_slot_name(void)
+ts_invalidation_get_invalidation_replication_slot_name(void)
 {
 	StringInfoData info;
 
@@ -549,12 +548,13 @@ hypertable_invalidation_slot_used(void)
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
 	ts_scanner_foreach(&iterator)
 	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		bool isnull;
+		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
+								   Anum_continuous_agg_raw_hypertable_id,
+								   &isnull);
 
-		FormData_continuous_agg data;
-		continuous_agg_formdata_fill(&data, ti);
-
-		Oid relid = ts_hypertable_id_to_relid(data.raw_hypertable_id, true);
+		Assert(!isnull);
+		Oid relid = ts_hypertable_id_to_relid(DatumGetInt32(datum), true);
 		if (!has_invalidation_trigger(relid))
 		{
 			ts_scan_iterator_close(&iterator);
@@ -994,9 +994,9 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	 * This is important since there is no actor that reads the slot, which
 	 * means that the WAL cannot be pruned.
 	 */
-	const char *const slot_name = ts_invalidation_get_slot_name();
+	const char *const slot_name = ts_invalidation_get_invalidation_replication_slot_name();
 	if (!hypertable_invalidation_slot_used() && SearchNamedReplicationSlot(slot_name, true) != NULL)
-		ts_hypertable_drop_slot(slot_name);
+		ts_hypertable_drop_invalidation_replication_slot(slot_name);
 
 	if (OidIsValid(mat_hypertable.objectId))
 	{
