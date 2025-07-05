@@ -1167,6 +1167,7 @@ typedef enum Anum_compression_settings
 	Anum_compression_settings_orderby,
 	Anum_compression_settings_orderby_desc,
 	Anum_compression_settings_orderby_nullsfirst,
+	Anum_compression_settings_index,
 	_Anum_compression_settings_max,
 } Anum_compression_settings;
 
@@ -1180,6 +1181,7 @@ typedef struct FormData_compression_settings
 	ArrayType *orderby;
 	ArrayType *orderby_desc;
 	ArrayType *orderby_nullsfirst;
+	Jsonb *sparse_index;
 } FormData_compression_settings;
 
 typedef FormData_compression_settings *Form_compression_settings;

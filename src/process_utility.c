@@ -4970,7 +4970,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	if (!parse_results[AlterTableFlagColumnstore].is_default ||
 		!parse_results[AlterTableFlagOrderBy].is_default ||
 		!parse_results[AlterTableFlagSegmentBy].is_default ||
-		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default)
+		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default ||
+		!parse_results[AlterTableFlagIndex].is_default)
 		ts_cm_functions->process_compress_table(ht, parse_results);
 
 	return DDL_DONE;
