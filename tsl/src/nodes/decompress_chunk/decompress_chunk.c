@@ -545,6 +545,9 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 	cost_sort(&sort_path,
 			  root,
 			  dcpath->required_compressed_pathkeys,
+#if PG18_GE
+			  compressed_path->disabled_nodes,
+#endif
 			  compressed_path->total_cost,
 			  compressed_path->rows,
 			  compressed_path->pathtarget->width,
@@ -1022,6 +1025,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 				cost_sort(&sort_path,
 						  root,
 						  sort_info.required_compressed_pathkeys,
+#if PG18_GE
+						  compressed_path->disabled_nodes,
+#endif
 						  compressed_path->total_cost,
 						  compressed_path->rows,
 						  compressed_path->pathtarget->width,
