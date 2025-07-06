@@ -89,7 +89,7 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
 
 	Oid opfamily, opcintype, equality_op;
-	int16 strategy;
+	CompareType strategy;
 	List *opfamilies;
 	EquivalenceClass *newec = makeNode(EquivalenceClass);
 	EquivalenceMember *em = makeNode(EquivalenceMember);
@@ -276,7 +276,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 
 			/* Find the operator in pg_amop --- failure shouldn't happen. */
 			Oid opfamily, opcintype;
-			int16 strategy;
+			CompareType strategy;
 			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
 				elog(ERROR, "operator %u is not a valid ordering operator", sortop);
 
@@ -314,7 +314,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 					ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
 
 				bool nulls_first;
-				int16 strategy;
+				CompareType strategy;
 
 				if (sort_info->reverse)
 				{
@@ -2197,11 +2197,11 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 									  orderby_index);
 
 		/*
-		 * pk_strategy is either BTLessStrategyNumber (for ASC) or
-		 * BTGreaterStrategyNumber (for DESC)
+		 * In PG18+: pk_cmptype is either COMPARE_LT (for ASC) or COMPARE_GT (for DESC)
+		 * For previous PG versions we have compatibility macros to make these new names available.
 		 */
 		bool this_pathkey_reverse = false;
-		if (pk->pk_strategy == BTLessStrategyNumber)
+		if (pk->pk_cmptype == COMPARE_LT)
 		{
 			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
 			{
@@ -2216,7 +2216,7 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 				return false;
 			}
 		}
-		else if (pk->pk_strategy == BTGreaterStrategyNumber)
+		else if (pk->pk_cmptype == COMPARE_GT)
 		{
 			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
 			{

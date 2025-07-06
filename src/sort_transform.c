@@ -454,7 +454,7 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	new_pk = make_canonical_pathkey(root,
 									transformed,
 									last_pk->pk_opfamily,
-									last_pk->pk_strategy,
+									last_pk->pk_cmptype,
 									last_pk->pk_nulls_first);
 
 	/*
