@@ -129,7 +129,7 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 	newec->ec_collation = 0;
 	newec->ec_members = list_make1(em);
 	newec->ec_sources = NIL;
-	newec->ec_derives = NIL;
+	newec->ec_derives_list = NIL;
 	newec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
 	newec->ec_has_const = false;
 	newec->ec_has_volatile = false;
@@ -167,7 +167,7 @@ append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Var *
 	ec->ec_collation = pk->pk_eclass->ec_collation;
 	ec->ec_members = list_make1(em);
 	ec->ec_sources = list_copy(pk->pk_eclass->ec_sources);
-	ec->ec_derives = list_copy(pk->pk_eclass->ec_derives);
+	ec->ec_derives_list = list_copy(pk->pk_eclass->ec_derives_list);
 	ec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
 	ec->ec_has_const = pk->pk_eclass->ec_has_const;
 	ec->ec_has_volatile = pk->pk_eclass->ec_has_volatile;

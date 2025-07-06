@@ -715,8 +715,17 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 /*
  * PG18 renames ri_ConstraintExprs to ri_CheckConstraintExprs
  * Add macros so we can use the new naming for older versions.
- * https://github.com/postgres/postgres/commit/88f55bc9
+ * https://github.com/postgres/postgres/commit/9a9ead11
  */
 #if PG18_LT
 #define ri_CheckConstraintExprs ri_ConstraintExprs
+#endif
+
+/*
+ * PG18 renames ec_derives to ec_derives_list
+ * Add macros so we can use the new naming for older versions.
+ * https://github.com/postgres/postgres/commit/88f55bc9
+ */
+#if PG18_LT
+#define ec_derives_list ec_derives
 #endif
