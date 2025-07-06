@@ -318,7 +318,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 				newec->ec_collation = orig->ec_collation;
 				newec->ec_members = NIL;
 				newec->ec_sources = list_copy(orig->ec_sources);
-				newec->ec_derives = list_copy(orig->ec_derives);
+				newec->ec_derives_list = list_copy(orig->ec_derives_list);
 				newec->ec_relids = bms_copy(orig->ec_relids);
 				newec->ec_has_const = orig->ec_has_const;
 
