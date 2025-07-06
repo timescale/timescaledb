@@ -457,7 +457,7 @@ is_compressed_col(const TupleDesc tupdesc, AttrNumber attno)
 	if (attno == InvalidAttrNumber)
 		return false;
 
-	coltypid = tupdesc->attrs[AttrNumberGetAttrOffset(attno)].atttypid;
+	coltypid = TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno))->atttypid;
 
 	if (typinfo == NULL)
 		typinfo = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA);
