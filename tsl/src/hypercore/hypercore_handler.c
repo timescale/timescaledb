@@ -286,7 +286,7 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 
 	for (int i = 0; i < hcinfo->num_columns; i++)
 	{
-		const Form_pg_attribute attr = &tupdesc->attrs[i];
+		const Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
 		ColumnCompressionSettings *colsettings = &hcinfo->columns[i];
 
 		if (attr->attisdropped)

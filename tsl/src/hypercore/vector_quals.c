@@ -60,7 +60,7 @@ vector_qual_state_get_arrow_array(VectorQualState *vqstate, Expr *expr, bool *is
 
 	if (array == NULL)
 	{
-		Form_pg_attribute attr = &slot->tts_tupleDescriptor->attrs[attoff];
+		Form_pg_attribute attr = TupleDescAttr(slot->tts_tupleDescriptor, attoff);
 		/*
 		 * If getting here, this is a non-compressed value or a compressed
 		 * column with a default value. We can treat non-compressed values the
