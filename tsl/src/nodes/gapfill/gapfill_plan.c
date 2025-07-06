@@ -142,7 +142,7 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 		EquivalenceMember *em = linitial(pk->pk_eclass->ec_members);
 
 		/* time_bucket_gapfill is last element */
-		if (BTLessStrategyNumber == pk->pk_strategy && IsA(em->em_expr, FuncExpr) &&
+		if (pk->pk_cmptype == COMPARE_LT && IsA(em->em_expr, FuncExpr) &&
 			((FuncExpr *) em->em_expr)->funcid == func->funcid)
 		{
 			int i;
@@ -376,7 +376,7 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 			if (!pk_func && IsA(em->em_expr, FuncExpr) &&
 				((FuncExpr *) em->em_expr)->funcid == func->funcid)
 			{
-				if (BTLessStrategyNumber == pk->pk_strategy)
+				if (pk->pk_cmptype == COMPARE_LT)
 					pk_func = pk;
 				else
 					pk_func = make_canonical_pathkey(root,

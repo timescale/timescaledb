@@ -729,3 +729,14 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 #if PG18_LT
 #define ec_derives_list ec_derives
 #endif
+
+/* PG18 introduces new CompareType for ordering operations
+ * Add macros so we can use the new naming for older versions.
+ * https://github.com/postgres/postgres/commit/8123e91f
+ */
+#if PG18_LT
+#define CompareType int16
+#define COMPARE_LT BTLessStrategyNumber
+#define COMPARE_GT BTGreaterStrategyNumber
+#define pk_cmptype pk_strategy
+#endif

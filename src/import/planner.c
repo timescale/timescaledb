@@ -609,11 +609,11 @@ ts_prepare_sort_from_pathkeys(Plan *lefttree, List *pathkeys, Relids relids,
 		sortop = get_opfamily_member(pathkey->pk_opfamily,
 									 pk_datatype,
 									 pk_datatype,
-									 pathkey->pk_strategy);
+									 pathkey->pk_cmptype);
 		if (!OidIsValid(sortop)) /* should not happen */
 			elog(ERROR,
 				 "missing operator %d(%u,%u) in opfamily %u",
-				 pathkey->pk_strategy,
+				 pathkey->pk_cmptype,
 				 pk_datatype,
 				 pk_datatype,
 				 pathkey->pk_opfamily);
