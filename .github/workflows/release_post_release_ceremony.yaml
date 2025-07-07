@@ -1,4 +1,12 @@
 name: Release - Post Release Ceremony
+
+#
+# Post Release Workflow
+#
+# 1. generate the artefacts to forward port to main and open PR for it
+# 2. bump the next patch number + 1 on the release branch and open PR for it
+# 
+
 "on":
   release:
     types: [published]
