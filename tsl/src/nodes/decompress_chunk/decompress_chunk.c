@@ -1241,7 +1241,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			Path *decompress_chunk_path = decompression_path;
 			if (IsA(decompression_path, SortPath))
 			{
-				decompress_chunk_path = castNode(SortPath, decompression_path)->subpath;
+				// decompress_chunk_path = castNode(SortPath, decompression_path)->subpath;
+				continue;
 			}
 
 			/*
