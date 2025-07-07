@@ -980,19 +980,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		/* Proceed with validation errors. */
 		if (!is_greater_or_equal_than_parent || !is_multiple_of_parent)
 		{
-			Datum width, width_parent;
-			Oid outfuncid = InvalidOid;
-			bool isvarlena;
-			char *width_out, *width_out_parent;
 			char *message = NULL;
-
-			getTypeOutputInfo(bucket_info.bf->bucket_width_type, &outfuncid, &isvarlena);
-			width = get_bucket_width_datum(bucket_info);
-			width_out = DatumGetCString(OidFunctionCall1(outfuncid, width));
-
-			getTypeOutputInfo(bucket_info_parent.bf->bucket_width_type, &outfuncid, &isvarlena);
-			width_parent = get_bucket_width_datum(bucket_info_parent);
-			width_out_parent = DatumGetCString(OidFunctionCall1(outfuncid, width_parent));
 
 			/* New bucket should be multiple of the parent. */
 			if (!is_multiple_of_parent)
@@ -1009,25 +997,18 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							   "bucket width of \"%s.%s\" [%s].",
 							   cagg_schema,
 							   cagg_name,
-							   width_out,
+							   ts_datum_to_string(get_bucket_width_datum(bucket_info),
+												  bucket_info.bf->bucket_width_type),
 							   message,
 							   NameStr(cagg_parent->data.user_view_schema),
 							   NameStr(cagg_parent->data.user_view_name),
-							   width_out_parent)));
+							   ts_datum_to_string(get_bucket_width_datum(bucket_info_parent),
+												  bucket_info_parent.bf->bucket_width_type))));
 		}
 
 		/* Test compatible time origin values */
 		if (bucket_info.bf->bucket_time_origin != bucket_info_parent.bf->bucket_time_origin)
 		{
-			char *origin = DatumGetCString(
-				DirectFunctionCall1(timestamptz_out,
-									TimestampTzGetDatum(bucket_info.bf->bucket_time_origin)));
-
-			char *origin_parent = DatumGetCString(
-				DirectFunctionCall1(timestamptz_out,
-									TimestampTzGetDatum(
-										bucket_info_parent.bf->bucket_time_origin)));
-
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg(
@@ -1036,10 +1017,14 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							   "same.",
 							   cagg_schema,
 							   cagg_name,
-							   origin,
+							   ts_datum_to_string(TimestampTzGetDatum(
+													  bucket_info.bf->bucket_time_origin),
+												  TIMESTAMPTZOID),
 							   NameStr(cagg_parent->data.user_view_schema),
 							   NameStr(cagg_parent->data.user_view_name),
-							   origin_parent)));
+							   ts_datum_to_string(TimestampTzGetDatum(
+													  bucket_info_parent.bf->bucket_time_origin),
+												  TIMESTAMPTZOID))));
 		}
 
 		/* Test compatible time offset values */

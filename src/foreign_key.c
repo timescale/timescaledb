@@ -168,6 +168,9 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 									   CONSTRAINT_FOREIGN,
 									   fk->condeferrable,
 									   fk->condeferred,
+#if PG18_GE
+									   true, /* isEnforced */
+#endif
 									   fk->convalidated,
 									   fk->oid,
 									   fk->conrelid,
@@ -193,6 +196,9 @@ clone_constraint_on_chunk(const Chunk *chunk, Relation parentRel, Form_pg_constr
 									   false,
 									   1,
 									   false,
+#if PG18_GE
+									   false, /* conPeriod */
+#endif
 									   false);
 
 	ObjectAddress address, referenced;

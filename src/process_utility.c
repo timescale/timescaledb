@@ -3662,7 +3662,12 @@ process_cluster_start(ProcessUtilityArgs *args)
 			 * Since we keep OIDs between transactions, there is a potential
 			 * issue if an OID gets reassigned between two subtransactions
 			 */
+#if PG18_LT
 			cluster_rel(cim->chunkoid, cim->indexoid, get_cluster_options(stmt));
+#else
+			Relation rel = table_open(cim->chunkoid, AccessExclusiveLock);
+			cluster_rel(rel, cim->indexoid, get_cluster_options(stmt));
+#endif
 			PopActiveSnapshot();
 			CommitTransactionCommand();
 		}

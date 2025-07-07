@@ -35,6 +35,7 @@
 #define is_supported_pg_version_15(version) ((version >= 150010) && (version < 160000))
 #define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
 #define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
+#define is_supported_pg_version_18(version) ((version >= 180000) && (version < 190000))
 
 /*
  * PG16 support is a WIP and not complete yet.
@@ -42,11 +43,12 @@
  */
 #define is_supported_pg_version(version)                                                           \
 	(is_supported_pg_version_15(version) || is_supported_pg_version_16(version) ||                 \
-	 is_supported_pg_version_17(version))
+	 is_supported_pg_version_17(version) || is_supported_pg_version_18(version))
 
 #define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 #define PG16 is_supported_pg_version_16(PG_VERSION_NUM)
 #define PG17 is_supported_pg_version_17(PG_VERSION_NUM)
+#define PG18 is_supported_pg_version_18(PG_VERSION_NUM)
 
 #define PG15_LT (PG_VERSION_NUM < 150000)
 #define PG15_GE (PG_VERSION_NUM >= 150000)
@@ -54,6 +56,8 @@
 #define PG16_GE (PG_VERSION_NUM >= 160000)
 #define PG17_LT (PG_VERSION_NUM < 170000)
 #define PG17_GE (PG_VERSION_NUM >= 170000)
+#define PG18_LT (PG_VERSION_NUM < 180000)
+#define PG18_GE (PG_VERSION_NUM >= 180000)
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
@@ -664,4 +668,46 @@ pg_cmp_u32(uint32 a, uint32 b)
 #else
 #define i64abs(i) llabs(i)
 #endif
+#endif
+
+/*
+ * PG18 adds IndexScanInstrumentation parameter to index_beginscan
+ * https://github.com/postgres/postgres/commit/0fbceae8
+ */
+#if PG18_LT
+#define index_beginscan_compat(heapRelation,                                                       \
+							   indexRelation,                                                      \
+							   snapshot,                                                           \
+							   instrument,                                                         \
+							   nkeys,                                                              \
+							   norderbys)                                                          \
+	index_beginscan(heapRelation, indexRelation, snapshot, nkeys, norderbys)
+#else
+#define index_beginscan_compat(heapRelation,                                                       \
+							   indexRelation,                                                      \
+							   snapshot,                                                           \
+							   instrument,                                                         \
+							   nkeys,                                                              \
+							   norderbys)                                                          \
+	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys)
+#endif
+
+#if PG16_LT
+#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
+	make_range(typcache, lower, upper, empty)
+#else
+#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
+	make_range(typcache, lower, upper, empty, escontext)
+#endif
+
+/* Copied from PG17. We can remove it once we deprecate older versions. */
+#if PG17_LT
+static inline void
+initReadOnlyStringInfo(StringInfo str, char *data, int len)
+{
+	str->data = data;
+	str->len = len;
+	str->maxlen = 0; /* read-only */
+	str->cursor = 0;
+}
 #endif

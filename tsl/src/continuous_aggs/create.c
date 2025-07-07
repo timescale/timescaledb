@@ -428,7 +428,11 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
 	char *matpartcolname = matcolinfo->matpartcolname;
 	CreateStmt *create;
 	Datum toast_options;
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#if PG18_LT
+	char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#else
+	const char *const validnsps[] = HEAP_RELOPT_NAMESPACES;
+#endif
 	int32 mat_htid;
 	Oid mat_relid;
 	Cache *hcache;
@@ -954,10 +958,12 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		continuous_agg_refresh_internal(cagg,
 										&refresh_window,
 										context,
-										true,
-										true,
-										false,
-										true /* process_hypertable_invalidations */);
+										true,  /* start_isnull */
+										true,  /* end_isnull */
+										true,  /* bucketing_refresh_window */
+										false, /* force */
+										true,  /* process_hypertable_invalidations */
+										false /*extend_last_bucket*/);
 	}
 
 	return DDL_DONE;

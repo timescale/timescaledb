@@ -672,7 +672,13 @@ get_job_lock_for_delete(int32 job_id)
 		if (VirtualTransactionIdIsValid(*vxid))
 		{
 			proc = VirtualTransactionGetProcCompat(vxid);
-			if (proc != NULL && proc->isBackgroundWorker)
+			if (proc != NULL
+#if PG18_LT
+				&& proc->isBackgroundWorker
+#else
+				&& !proc->isRegularBackend
+#endif
+			)
 			{
 				/* Simply assuming that this pid corresponds to the background worker
 				 * running the job is not sufficient. The scheduler could also be the

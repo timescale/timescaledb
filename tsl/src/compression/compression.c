@@ -475,7 +475,8 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			 "using index \"%s\" to scan rows for converting to columnstore",
 			 get_rel_name(matched_index_rel->rd_id));
 
-		index_scan = index_beginscan(in_rel, matched_index_rel, GetTransactionSnapshot(), 0, 0);
+		index_scan =
+			index_beginscan_compat(in_rel, matched_index_rel, GetTransactionSnapshot(), NULL, 0, 0);
 		slot = table_slot_create(in_rel, NULL);
 		index_rescan(index_scan, NULL, 0, NULL, 0);
 		report_reltuples = calculate_reltuples_to_report(in_rel->rd_rel->reltuples);

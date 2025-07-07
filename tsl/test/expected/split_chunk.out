@@ -1163,3 +1163,78 @@ select count(*) from :compress_relid2;
      0
 (1 row)
 
+---
+--- Test splitting chunks that are using a time partitioning function
+---
+-- There are multiple versions of to_timestamp() so need to find the
+-- Oid of the one we want.
+select p.oid as time_funcid
+from pg_proc p
+join pg_namespace n on (p.pronamespace = n.oid)
+where proname = 'to_timestamp'
+and provolatile = 'i'
+and n.nspname = 'pg_catalog' \gset
+create table time_part_func (time float8, temp float);
+select create_hypertable('time_part_func', 'time', time_partitioning_func => :'time_funcid', create_default_indexes => false, chunk_time_interval => interval '1 month');
+NOTICE:  adding not-null constraint to column "time"
+      create_hypertable      
+-----------------------------
+ (5,public,time_part_func,t)
+(1 row)
+
+alter table time_part_func set (tsdb.orderby = 'time');
+insert into time_part_func values (1734714800, 10.0), (1736220400, 11.0), (1736420400, 12.0);
+select ch as chunk_to_split from show_chunks('time_part_func') ch \gset
+call split_chunk(:'chunk_to_split');
+select ch as chunk1 from show_chunks('time_part_func') ch limit 1 \gset
+select ch as chunk2 from show_chunks('time_part_func') ch limit 1 offset 1 \gset
+select to_timestamp(time), * from :chunk1;
+         to_timestamp         |    time    | temp 
+------------------------------+------------+------
+ Fri Dec 20 09:13:20 2024 PST | 1734714800 |   10
+(1 row)
+
+select to_timestamp(time), * from :chunk2;
+         to_timestamp         |    time    | temp 
+------------------------------+------------+------
+ Mon Jan 06 19:26:40 2025 PST | 1736220400 |   11
+ Thu Jan 09 03:00:00 2025 PST | 1736420400 |   12
+(2 rows)
+
+-- Split a compressed chunk using time partitioning func
+call convert_to_columnstore(:'chunk2');
+select * from show_chunks('time_part_func');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_5_29_chunk
+ _timescaledb_internal._hyper_5_30_chunk
+(2 rows)
+
+select to_timestamp(1736320400::float8);
+         to_timestamp         
+------------------------------
+ Tue Jan 07 23:13:20 2025 PST
+(1 row)
+
+call split_chunk(:'chunk2', split_at => 1736320400::float8);
+select ch as chunk1 from show_chunks('time_part_func') ch limit 1 \gset
+select ch as chunk2 from show_chunks('time_part_func') ch limit 1 offset 1 \gset
+select ch as chunk3 from show_chunks('time_part_func') ch limit 1 offset 2 \gset
+select to_timestamp(time), * from :chunk1;
+         to_timestamp         |    time    | temp 
+------------------------------+------------+------
+ Fri Dec 20 09:13:20 2024 PST | 1734714800 |   10
+(1 row)
+
+select to_timestamp(time), * from :chunk2;
+         to_timestamp         |    time    | temp 
+------------------------------+------------+------
+ Mon Jan 06 19:26:40 2025 PST | 1736220400 |   11
+(1 row)
+
+select to_timestamp(time), * from :chunk3;
+         to_timestamp         |    time    | temp 
+------------------------------+------------+------
+ Thu Jan 09 03:00:00 2025 PST | 1736420400 |   12
+(1 row)
+

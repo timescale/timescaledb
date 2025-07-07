@@ -17,6 +17,7 @@
 
 #include "nodes/vector_agg/exec.h"
 
+#include "compat/compat.h"
 #include "compression/arrow_c_data_interface.h"
 #include "hypercore/arrow_tts.h"
 #include "hypercore/vector_quals.h"
@@ -26,6 +27,11 @@
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "nodes/vector_agg/plan.h"
+
+#if PG18_GE
+#include "commands/explain_format.h"
+#include "commands/explain_state.h"
+#endif
 
 static int
 get_input_offset_decompress_chunk(const DecompressChunkState *decompress_state, const Var *var)

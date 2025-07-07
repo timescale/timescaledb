@@ -13,6 +13,8 @@ set(TEST_FILES
     cagg_invalidation.sql
     cagg_policy.sql
     cagg_policy_move.sql
+    cagg_policy_concurrent.sql
+    cagg_plugin.sql
     cagg_refresh.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
@@ -229,6 +231,7 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
+    cagg_plugin
     cagg_policy_incremental
     hypercore
     move

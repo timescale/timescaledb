@@ -120,17 +120,11 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 extern TSDLLEXPORT char *
 ts_with_clause_result_deparse_value(const WithClauseResult *result)
 {
-	Oid oid = result->definition->type_id;
-	Ensure(OidIsValid(oid), "argument \"%d\" has invalid OID", oid);
+	Ensure(OidIsValid(result->definition->type_id),
+		   "argument \"%d\" has invalid OID",
+		   result->definition->type_id);
 
-	Oid in_fn;
-	bool typIsVarlena pg_attribute_unused();
-
-	getTypeOutputInfo(oid, &in_fn, &typIsVarlena);
-	Ensure(OidIsValid(in_fn), "no output function for type with OID %d", oid);
-
-	char *val = OidOutputFunctionCall(in_fn, result->parsed);
-	return val;
+	return ts_datum_to_string(result->parsed, result->definition->type_id);
 }
 
 static Datum

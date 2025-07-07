@@ -673,3 +673,48 @@ select count(*) from only _timescaledb_internal._hyper_1_25_chunk;
 select count(*) from :compress_relid;
 select count(*) from only _timescaledb_internal._hyper_1_27_chunk;
 select count(*) from :compress_relid2;
+
+
+---
+--- Test splitting chunks that are using a time partitioning function
+---
+
+-- There are multiple versions of to_timestamp() so need to find the
+-- Oid of the one we want.
+select p.oid as time_funcid
+from pg_proc p
+join pg_namespace n on (p.pronamespace = n.oid)
+where proname = 'to_timestamp'
+and provolatile = 'i'
+and n.nspname = 'pg_catalog' \gset
+
+create table time_part_func (time float8, temp float);
+select create_hypertable('time_part_func', 'time', time_partitioning_func => :'time_funcid', create_default_indexes => false, chunk_time_interval => interval '1 month');
+alter table time_part_func set (tsdb.orderby = 'time');
+insert into time_part_func values (1734714800, 10.0), (1736220400, 11.0), (1736420400, 12.0);
+
+select ch as chunk_to_split from show_chunks('time_part_func') ch \gset
+
+call split_chunk(:'chunk_to_split');
+
+select ch as chunk1 from show_chunks('time_part_func') ch limit 1 \gset
+select ch as chunk2 from show_chunks('time_part_func') ch limit 1 offset 1 \gset
+
+select to_timestamp(time), * from :chunk1;
+select to_timestamp(time), * from :chunk2;
+
+-- Split a compressed chunk using time partitioning func
+call convert_to_columnstore(:'chunk2');
+
+select * from show_chunks('time_part_func');
+
+select to_timestamp(1736320400::float8);
+call split_chunk(:'chunk2', split_at => 1736320400::float8);
+
+select ch as chunk1 from show_chunks('time_part_func') ch limit 1 \gset
+select ch as chunk2 from show_chunks('time_part_func') ch limit 1 offset 1 \gset
+select ch as chunk3 from show_chunks('time_part_func') ch limit 1 offset 2 \gset
+
+select to_timestamp(time), * from :chunk1;
+select to_timestamp(time), * from :chunk2;
+select to_timestamp(time), * from :chunk3;

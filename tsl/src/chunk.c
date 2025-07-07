@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/attnum.h>
 #include <access/heapam.h>
 #include <access/htup.h>
 #include <access/htup_details.h>
@@ -23,6 +24,8 @@
 #include <catalog/objectaddress.h>
 #include <catalog/pg_am.h>
 #include <catalog/pg_class.h>
+#include <catalog/pg_collation.h>
+#include <catalog/pg_collation_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_foreign_server.h>
 #include <catalog/pg_foreign_table.h>
@@ -41,6 +44,9 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
+#include <nodes/primnodes.h>
+#include <nodes/value.h>
+#include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <storage/block.h>
 #include <storage/buf.h>
@@ -65,13 +71,13 @@
 #include <math.h>
 
 #include "compat/compat.h"
-#include "annotations.h"
 #include "cache.h"
 #include "chunk.h"
 #include "compression/api.h"
 #include "compression/compression.h"
 #include "compression/create.h"
 #include "debug_point.h"
+#include "dimension.h"
 #include "extension.h"
 #include "extension_constants.h"
 #include "hypercore/arrow_tts.h"
@@ -79,6 +85,7 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "partitioning.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
@@ -1294,9 +1301,8 @@ typedef struct SplitContext SplitContext;
  */
 typedef struct SplitPoint
 {
-	AttrNumber attnum; /* Attnum of dimension/column we split along */
-	Oid type;		   /* Type of split dimension */
-	int64 point;	   /* Point at which we split */
+	const Dimension *dim;
+	int64 point; /* Point at which we split */
 	/*
 	 * Function to route a tuple to a result relation during the split. The
 	 * function's implementation is different depending on whether compressed
@@ -1485,6 +1491,34 @@ reform_and_rewrite_tuple(HeapTuple tuple, Relation srcrel, RelationWriteState *r
 	heap_freetuple(tupcopy);
 }
 
+static Datum
+slot_get_partition_value(TupleTableSlot *slot, AttrNumber attnum, const SplitPoint *sp)
+{
+	bool isnull = false;
+	Datum value = slot_getattr(slot, attnum, &isnull);
+
+	/*
+	 * Space-partition columns can have NULL values, but we only support
+	 * splits on time dimensions at the moment.
+	 */
+	Ensure(!isnull, "unexpected NULL value in partitioning column");
+
+	/*
+	 * Both time and space dimensions can have partitioning functions, so it
+	 * is necessary to always check for a function.
+	 */
+	if (NULL != sp->dim->partitioning)
+	{
+		Oid collation;
+
+		collation =
+			TupleDescAttr(slot->tts_tupleDescriptor, AttrNumberGetAttrOffset(attnum))->attcollation;
+		value = ts_partitioning_func_apply(sp->dim->partitioning, collation, value);
+	}
+
+	return value;
+}
+
 /*
  * Compute the partition/routing index for a tuple.
  *
@@ -1493,13 +1527,9 @@ reform_and_rewrite_tuple(HeapTuple tuple, Relation srcrel, RelationWriteState *r
 static int
 route_tuple(TupleTableSlot *slot, const SplitPoint *sp)
 {
-	bool isnull = false;
-	Datum value = slot_getattr(slot, sp->attnum, &isnull);
-	int64 point;
-
-	Ensure(!isnull, "unexpected NULL value in partitioning column");
-
-	point = ts_time_value_to_internal(value, sp->type);
+	Oid dimtype = ts_dimension_get_partition_type(sp->dim);
+	Datum value = slot_get_partition_value(slot, sp->dim->column_attno, sp);
+	int64 point = ts_time_value_to_internal(value, dimtype);
 
 	/*
 	 * Route to partition based on new boundaries. Only 2-way split is
@@ -1519,15 +1549,11 @@ static int
 route_compressed_tuple(TupleTableSlot *slot, const SplitPoint *sp)
 {
 	const CompressedSplitPoint *csp = (const CompressedSplitPoint *) sp;
-	bool isnull = false;
-	Datum min_value = slot_getattr(slot, csp->attnum_min, &isnull);
-	Assert(!isnull);
-
-	Datum max_value = slot_getattr(slot, csp->attnum_max, &isnull);
-	Assert(!isnull);
-
-	int64 min_point = ts_time_value_to_internal(min_value, sp->type);
-	int64 max_point = ts_time_value_to_internal(max_value, sp->type);
+	Oid dimtype = ts_dimension_get_partition_type(sp->dim);
+	Datum min_value = slot_get_partition_value(slot, csp->attnum_min, sp);
+	Datum max_value = slot_get_partition_value(slot, csp->attnum_max, sp);
+	int64 min_point = ts_time_value_to_internal(min_value, dimtype);
+	int64 max_point = ts_time_value_to_internal(max_value, dimtype);
 
 	if (max_point < sp->point)
 		return 0;
@@ -2199,8 +2225,8 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	NameData splitdim_name;
 	namestrcpy(&splitdim_name, NameStr(dim->fd.column_name));
 
-	AttrNumber splitdim_attnum = get_attnum(relid, NameStr(dim->fd.column_name));
-	Oid splitdim_type = get_atttype(relid, splitdim_attnum);
+	Oid splitdim_type = ts_dimension_get_partition_type(dim);
+	Oid splitcolumn_type = dim->fd.column_type;
 	Datum split_at_datum;
 	bool have_split_at = false;
 
@@ -2240,7 +2266,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		else
 			split_at_datum = arg;
 
-		if (argtype != splitdim_type)
+		if (argtype != splitcolumn_type)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 					 errmsg("invalid type '%s' for split_at argument", format_type_be(argtype)),
@@ -2282,7 +2308,15 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	if (have_split_at)
 	{
-		split_at = ts_time_value_to_internal(split_at_datum, splitdim_type);
+		Datum dim_datum;
+
+		if (NULL != dim->partitioning)
+			dim_datum =
+				ts_partitioning_func_apply(dim->partitioning, C_COLLATION_OID, split_at_datum);
+		else
+			dim_datum = split_at_datum;
+
+		split_at = ts_time_value_to_internal(dim_datum, splitdim_type);
 
 		/*
 		 * Check that the split_at value actually produces a valid split. Note
@@ -2292,27 +2326,19 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		 */
 		if (split_at < (slice->fd.range_start + 1) || split_at > (slice->fd.range_end - 2))
 		{
-			Oid outfuncid = InvalidOid;
-			bool isvarlena = false;
-
-			getTypeOutputInfo(splitdim_type, &outfuncid, &isvarlena);
-			Datum split_at_str = OidFunctionCall1(outfuncid, split_at_datum);
-
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("cannot split chunk at %s", DatumGetCString(split_at_str))));
+					 errmsg("cannot split chunk at %s",
+							ts_datum_to_string(dim_datum, splitdim_type))));
 		}
 	}
 	else
 		split_at = slice->fd.range_start + (interval_range / 2);
 
-	Oid outfuncid = InvalidOid;
-	bool isvarlena = false;
-
-	getTypeOutputInfo(splitdim_type, &outfuncid, &isvarlena);
-	split_at_datum = ts_internal_to_time_value(split_at, splitdim_type);
-	Datum split_at_str = OidFunctionCall1(outfuncid, split_at_datum);
-	elog(DEBUG1, "splitting chunk %s at %s", get_rel_name(relid), DatumGetCString(split_at_str));
+	elog(DEBUG1,
+		 "splitting chunk %s at %s",
+		 get_rel_name(relid),
+		 ts_internal_to_time_string(split_at, splitdim_type));
 
 	const CompressionSettings *compress_settings = ts_compression_settings_get(relid);
 	int64 old_end = slice->fd.range_end;
@@ -2368,18 +2394,16 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		}
 	}
 
-	ts_cache_release(&hcache);
-
 	CommandCounterIncrement();
 
 	DEBUG_WAITPOINT("split_chunk_before_tuple_routing");
 
 	SplitPoint sp = {
 		.point = split_at,
-		.attnum = splitdim_attnum,
-		.type = splitdim_type,
+		.dim = hyperspace_get_open_dimension(ht->space, 0),
 		.route_next_tuple = route_next_non_compressed_tuple,
 	};
+
 	/*
 	 * Array of the heap Oids of the resulting relations. Those relations that
 	 * will get a heap swap (i.e., the original chunk) has heap_swap set to
@@ -2412,8 +2436,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 		CompressedSplitPoint csp = {
 			.base = {
 				.point = split_at,
-				.attnum = splitdim_attnum,
-				.type = splitdim_type,
+				.dim = hyperspace_get_open_dimension(ht->space, 0),
 				.route_next_tuple = route_next_compressed_tuple,
 			},
 			.attnum_min = get_attnum(compress_settings->fd.compress_relid, min_attname),
@@ -2437,6 +2460,8 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 
 	/* Now split the non-compressed relation */
 	split_relation(srcrel, &sp, SPLIT_FACTOR, split_relations);
+
+	ts_cache_release(&hcache);
 
 	/* Update stats after split is done */
 	update_chunk_stats_for_split(split_relations, compressed_split_relations, SPLIT_FACTOR, amoid);
