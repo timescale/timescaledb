@@ -926,14 +926,6 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 		mergedentry.is_modified = false;
 		ItemPointerSet(&mergedentry.tid, InvalidBlockNumber, 0);
 
-		elog(DEBUG1,
-			 "forcing refresh for continuous aggregate \"%s\" [ %s, %s ]",
-			 NameStr(state->cagg->data.user_view_name),
-			 ts_internal_to_time_string(mergedentry.lowest_modified_value,
-										state->cagg->partition_type),
-			 ts_internal_to_time_string(mergedentry.greatest_modified_value,
-										state->cagg->partition_type));
-
 		/* Jump to process remainder to properly cut the invalidation */
 		goto process_remainder;
 	}
