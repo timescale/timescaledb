@@ -1235,13 +1235,12 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			 * We shouldn't use it for MergeAppend, because the MergeAppend
 			 * sorts its children anyway, and having a Sort under it just leads
 			 * to the plan creation having to call prepare_sort_from_pathkeys()
-			 * twice, which is a noticeable planning time regression. Use the
-			 * underlying decompression path instead.
+			 * twice, which is a noticeable planning time regression. Skip this
+			 * path because we have an unsorted path as a fallback.
 			 */
 			Path *decompress_chunk_path = decompression_path;
 			if (IsA(decompression_path, SortPath))
 			{
-				// decompress_chunk_path = castNode(SortPath, decompression_path)->subpath;
 				continue;
 			}
 
