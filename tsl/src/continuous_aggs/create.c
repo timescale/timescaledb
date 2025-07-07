@@ -852,7 +852,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	ViewStmt viewstmt = {
 		.type = T_ViewStmt,
 		.view = stmt->into->rel,
-		.query = stmt->into->viewQuery,
+		.query = (Node *) stmt->into->viewQuery,
 		.options = stmt->into->options,
 		.aliases = stmt->into->colNames,
 	};
