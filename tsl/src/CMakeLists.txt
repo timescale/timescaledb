@@ -2,6 +2,7 @@ set(SOURCES
     chunk_api.c
     chunk.c
     chunk_merge.c
+    chunk_split.c
     chunkwise_agg.c
     init.c
     partialize_finalize.c
