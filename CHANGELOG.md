@@ -55,6 +55,7 @@ $$;
 * [#8274](https://github.com/timescale/timescaledb/pull/8274) Allow creating concurrent continuous aggregate refresh policies
 * [#8314](https://github.com/timescale/timescaledb/pull/8314) Add support for timescaledb_lake in loader
 * [#8209](https://github.com/timescale/timescaledb/pull/8209) Add experimental support for Direct Compress of `COPY`
+* [#8341](https://github.com/timescale/timescaledb/pull/8341) Allow quick migration from hypercore TAM to (columnstore) heap
 
 **Bugfixes**
 * [#8153](https://github.com/timescale/timescaledb/pull/8153) Restoring a database having NULL compressed data
