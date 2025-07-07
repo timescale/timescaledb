@@ -1012,21 +1012,22 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		path_copy->reverse = sort_info->reverse;
 		path_copy->batch_sorted_merge = true;
 
-		/* The segment by optimization is only enabled if it can deliver the tuples in the
+		/*
+		 * The segment by optimization is only enabled if it can deliver the tuples in the
 		 * same order as the query requested it. So, we can just copy the pathkeys of the
 		 * query here.
 		 */
-		path_copy->custom_path.path.pathkeys = root->query_pathkeys;
+		path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 		cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
 
 		decompressed_paths = lappend(decompressed_paths, path_copy);
 	}
 
 	/*
-	 * If we can push down the sort below the DecompressChunk node, we set the pathkeys of
-	 * the decompress node to the query pathkeys, while remembering the compressed_pathkeys
-	 * corresponding to those query_pathkeys. We will determine whether to put a sort
-	 * between the decompression node and the scan during plan creation.
+	 * If we can push down the sort below the DecompressChunk node, we set the
+	 * pathkeys of the decompress node to the decompressed_sort_pathkeys. We
+	 * will determine whether to put an actual sort between the decompression
+	 * node and the scan during plan creation.
 	 */
 	if (sort_info->use_compressed_sort)
 	{
@@ -1041,7 +1042,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			path->reverse = sort_info->reverse;
 			path->needs_sequence_num = sort_info->needs_sequence_num;
 			path->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
-			path->custom_path.path.pathkeys = root->query_pathkeys;
+			path->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 		}
 		else
 		{
@@ -1055,7 +1056,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			path_copy->reverse = sort_info->reverse;
 			path_copy->needs_sequence_num = sort_info->needs_sequence_num;
 			path_copy->required_compressed_pathkeys = sort_info->required_compressed_pathkeys;
-			path_copy->custom_path.path.pathkeys = root->query_pathkeys;
+			path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 
 			/*
 			 * Add costing for a sort. The standard Postgres pattern is to add the cost during
@@ -1132,13 +1133,14 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		   "couldn't find a scan path for uncompressed chunk table");
 
 	Path *ordered_uncompressed_path = NULL;
-	if (root->query_pathkeys != NIL)
+	if (sort_info->decompressed_sort_pathkeys != NIL)
 	{
-		ordered_uncompressed_path = get_cheapest_path_for_pathkeys(uncompressed_table_pathlist,
-																   root->query_pathkeys,
-																   req_outer,
-																   TOTAL_COST,
-																   false);
+		ordered_uncompressed_path =
+			get_cheapest_path_for_pathkeys(uncompressed_table_pathlist,
+										   sort_info->decompressed_sort_pathkeys,
+										   req_outer,
+										   TOTAL_COST,
+										   false);
 	}
 
 	/*
@@ -1161,107 +1163,105 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			reparameterize_path(root, ordered_uncompressed_path, req_outer, 1.0);
 	}
 
+	/*
+	 * Create plain Append, potentially parallel. It only makes sense for the
+	 * unsorted input paths.
+	 */
+	{
+		const int workers = Max(chunk_path_no_sort->parallel_workers,
+								unordered_uncompressed_path->parallel_workers);
+
+		List *parallel_paths = NIL;
+		List *sequential_paths = NIL;
+
+		if (chunk_path_no_sort->parallel_workers > 0)
+		{
+			parallel_paths = lappend(parallel_paths, chunk_path_no_sort);
+		}
+		else
+		{
+			sequential_paths = lappend(sequential_paths, chunk_path_no_sort);
+		}
+
+		if (unordered_uncompressed_path->parallel_workers > 0)
+		{
+			parallel_paths = lappend(parallel_paths, unordered_uncompressed_path);
+		}
+		else
+		{
+			sequential_paths = lappend(sequential_paths, unordered_uncompressed_path);
+		}
+
+		Path *plain_append = (Path *) create_append_path(root,
+														 chunk_rel,
+														 sequential_paths,
+														 parallel_paths,
+														 /* pathkeys = */ NIL,
+														 req_outer,
+														 workers,
+														 workers > 0,
+														 chunk_path_no_sort->rows +
+															 unordered_uncompressed_path->rows);
+		combined_paths = lappend(combined_paths, plain_append);
+	}
+
+	if (sort_info->decompressed_sort_pathkeys == NIL)
+	{
+		/*
+		 * No sorting requested, so we're done after creating the plain Append
+		 * above.
+		 */
+		return combined_paths;
+	}
+
+	/*
+	 * We require sorting, try MergeAppend.
+	 */
+	Path *uncompressed_path_for_merge = ordered_uncompressed_path;
+	if (uncompressed_path_for_merge == NULL || IsA(uncompressed_path_for_merge, SortPath))
+	{
+		/*
+		 * Don't use explicit Sort as MergeAppend child, because the
+		 * MergeAppend adds the required sorting anyway. With the explicit
+		 * Sort it still works but performs the pathkey lookups twice, which
+		 * leads to planning performance regression.
+		 */
+		uncompressed_path_for_merge = unordered_uncompressed_path;
+	}
+	if (uncompressed_path_for_merge->parallel_workers > 0)
+	{
+		/*
+		 * MergeAppend can't be parallel.
+		 */
+		return combined_paths;
+	}
+
+	/*
+	 * We might have unsorted decompressed path, compressed sort pushdown path,
+	 * and batch sorted merge path. We have to make a cost-based decision
+	 * between them (i.e. batch sorted merge might be more expensive due to
+	 * memory requirements).
+	 */
 	ListCell *lc;
 	foreach (lc, decompressed_paths)
 	{
 		Path *decompression_path = lfirst(lc);
-		List *pathkeys = decompression_path->pathkeys;
-
-		/*
-		 * All of the paths we generated in this function are supposed to have
-		 * the same parameterization inherited from the compressed path.
-		 */
-		Assert(bms_equal(req_outer, PATH_REQ_OUTER(decompression_path)));
-
-		/*
-		 * Combine decompressed path with uncompressed part of the chunk,
-		 * using either MergeAppend or plain Append, depending on
-		 * whether it has sorting.
-		 *
-		 * Another consideration is parallel plans. Postgres currently doesn't
-		 * use MergeAppend under GatherMerge, i.e. as part of parallel plans.
-		 * This is mostly relevant to the append over chunks which is created by
-		 * Postgres. Here we are creating a MergeAppend for a partial chunk,
-		 * parallelizing it by itself is probably less important, so in this
-		 * case we just create a plain Append instead of MergeAppend even for
-		 * ordered chunk paths.
-		 */
-		Path *combined_path = NULL;
-		const int workers = Max(decompression_path->parallel_workers,
-								unordered_uncompressed_path->parallel_workers);
-		if (pathkeys == NIL || workers > 0)
+		if (decompression_path->parallel_workers > 0)
 		{
 			/*
-			 * Append distinguishes paths that are parallel and not, and uses
-			 * this for cost estimation, so we have to distinguish them as well
-			 * here.
+			 * MergeAppend can't be parallel.
 			 */
-			List *parallel_paths = NIL;
-			List *sequential_paths = NIL;
-
-			if (decompression_path->parallel_workers > 0)
-			{
-				parallel_paths = lappend(parallel_paths, decompression_path);
-			}
-			else
-			{
-				sequential_paths = lappend(sequential_paths, decompression_path);
-			}
-
-			if (unordered_uncompressed_path->parallel_workers > 0)
-			{
-				parallel_paths = lappend(parallel_paths, unordered_uncompressed_path);
-			}
-			else
-			{
-				sequential_paths = lappend(sequential_paths, unordered_uncompressed_path);
-			}
-
-			combined_path = (Path *) create_append_path(root,
-														chunk_rel,
-														sequential_paths,
-														parallel_paths,
-														/* pathkeys = */ NIL,
-														req_outer,
-														workers,
-														workers > 0,
-														decompression_path->rows +
-															unordered_uncompressed_path->rows);
-		}
-		else
-		{
-			/*
-			 * We might have a path with explicit Sort on top of decompression.
-			 * We shouldn't use it for MergeAppend, because the MergeAppend
-			 * sorts its children anyway, and having a Sort under it just leads
-			 * to the plan creation having to call prepare_sort_from_pathkeys()
-			 * twice, which is a noticeable planning time regression. Skip this
-			 * path because we have an unsorted path as a fallback.
-			 */
-			Path *decompress_chunk_path = decompression_path;
-			if (IsA(decompression_path, SortPath))
-			{
-				continue;
-			}
-
-			/*
-			 * Same logic as above for the uncompressed chunk part.
-			 */
-			Path *uncompressed_path = ordered_uncompressed_path;
-			if (uncompressed_path == NULL || IsA(uncompressed_path, SortPath))
-			{
-				uncompressed_path = unordered_uncompressed_path;
-			}
-
-			combined_path = (Path *) create_merge_append_path(root,
-															  chunk_rel,
-															  list_make2(decompress_chunk_path,
-																		 uncompressed_path),
-															  pathkeys,
-															  req_outer);
+			continue;
 		}
 
-		combined_paths = lappend(combined_paths, combined_path);
+		Path *merge_append =
+			(Path *) create_merge_append_path(root,
+											  chunk_rel,
+											  list_make2(decompression_path,
+														 uncompressed_path_for_merge),
+											  sort_info->decompressed_sort_pathkeys,
+											  req_outer);
+		combined_paths = lappend(combined_paths, merge_append);
 	}
 
 	return combined_paths;
