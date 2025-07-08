@@ -874,7 +874,7 @@ vacuum analyze test_partials;
 -- Chunks must be different size for plan stability
 select count(*) from test_partials group by tableoid order by count(*) desc;
 
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
 
