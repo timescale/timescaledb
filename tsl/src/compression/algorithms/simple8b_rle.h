@@ -138,6 +138,8 @@ typedef struct Simple8bRleDecompressResult
 static inline void simple8brle_compressor_init(Simple8bRleCompressor *compressor);
 static inline Simple8bRleSerialized *
 simple8brle_compressor_finish(Simple8bRleCompressor *compressor);
+static inline char *simple8brle_compressor_finish_into(Simple8bRleCompressor *compressor,
+													   char *dest, size_t expected_size);
 static inline void simple8brle_compressor_append(Simple8bRleCompressor *compressor, uint64 val);
 static inline bool simple8brle_compressor_is_empty(Simple8bRleCompressor *compressor);
 
@@ -501,6 +503,61 @@ simple8brle_compressor_finish(Simple8bRleCompressor *compressor)
 		   size_left);
 
 	return compressed;
+}
+
+static char *
+simple8brle_compressor_finish_into(Simple8bRleCompressor *compressor, char *dest,
+								   size_t expected_size)
+{
+	size_t size_left;
+	size_t selector_size;
+	size_t compressed_size;
+	char *end_ptr;
+	Simple8bRleSerialized *compressed;
+	uint64 bits;
+
+	simple8brle_compressor_flush(compressor);
+	if (compressor->num_elements == 0)
+		return dest;
+
+	Assert(compressor->last_block_set);
+	simple8brle_compressor_push_block(compressor, compressor->last_block);
+
+	compressed_size = simple8brle_compressor_compressed_size(compressor);
+	Ensure(expected_size == compressed_size,
+		   "expected_size: %zu, compressed_size: %zu",
+		   expected_size,
+		   compressed_size);
+
+	compressed = (Simple8bRleSerialized *) dest;
+	Assert(bit_array_num_buckets(&compressor->selectors) > 0);
+	Assert(compressor->compressed_data.num_elements > 0);
+	Assert(compressor->compressed_data.num_elements ==
+		   simple8brle_compressor_num_selectors(compressor));
+
+	*compressed = (Simple8bRleSerialized){
+		.num_elements = compressor->num_elements,
+		.num_blocks = compressor->compressed_data.num_elements,
+	};
+
+	size_left = compressed_size - sizeof(*compressed);
+	Assert(size_left >= bit_array_data_bytes_used(&compressor->selectors));
+	selector_size = bit_array_output(&compressor->selectors, compressed->slots, size_left, &bits);
+
+	size_left -= selector_size;
+	Assert(size_left ==
+		   (compressor->compressed_data.num_elements * sizeof(*compressor->compressed_data.data)));
+	Assert(compressor->selectors.buckets.num_elements ==
+		   simple8brle_num_selector_slots_for_num_blocks(compressor->compressed_data.num_elements));
+
+	memcpy(compressed->slots + compressor->selectors.buckets.num_elements,
+		   compressor->compressed_data.data,
+		   size_left);
+
+	end_ptr = (char *) (compressed->slots + compressor->selectors.buckets.num_elements) + size_left;
+	Assert(end_ptr == dest + expected_size);
+
+	return end_ptr;
 }
 
 static void

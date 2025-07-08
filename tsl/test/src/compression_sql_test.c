@@ -264,6 +264,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 		volatile int bytes = 0;
 		PG_TRY();
 		{
+			// TODO dbeck remove: elog(WARNING, "reading file: %s", path);
 			read_compressed_data_file_impl(algo,
 										   PG_GETARG_OID(1),
 										   path,
@@ -278,6 +279,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 			MemoryContextSwitchTo(call_memory_context);
 
 			ErrorData *error = CopyErrorData();
+			// TODO dbeck remove: elog(WARNING, "error: %s at: %s:%d", error->message, error->filename, error->lineno);
 			FlushErrorState();
 
 			values[out_sqlstate] =
