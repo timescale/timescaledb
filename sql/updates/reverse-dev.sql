@@ -5,6 +5,8 @@ DROP PROCEDURE _timescaledb_functions.policy_process_hypertable_invalidations(IN
 DROP FUNCTION _timescaledb_functions.policy_process_hypertable_invalidations_check(JSONB);
 DROP FUNCTION _timescaledb_functions.cagg_parse_invalidation_record(BYTEA);
 
+DROP FUNCTION _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.bloom1, anyarray);
+
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(
   INTEGER, INTEGER, ANYELEMENT, INTEGER, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN

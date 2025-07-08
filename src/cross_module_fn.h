@@ -170,6 +170,7 @@ typedef struct CrossModuleFunctions
 	PGFunction bool_compressor_append;
 	PGFunction bool_compressor_finish;
 	PGFunction bloom1_contains;
+	PGFunction bloom1_contains_any;
 
 	PGFunction create_chunk;
 	PGFunction show_chunk;
