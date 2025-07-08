@@ -511,8 +511,25 @@ UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
 SELECT * FROM ht;
 ROLLBACK;
 
+-- Run EXPLAIN setups for both generic and custom plans so that DIFF_CMD won't differ
+-- as custom plans for FK UPD/DEL cascades with constified params
+-- are legitimately different from generic plans with run-time params,
+-- with the resulting "ht" partial chunk composition being different.
+
 -- ON UPDATE CASCADE with compression
 BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
 INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
 INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
@@ -533,7 +550,9 @@ ROLLBACK;
 
 -- ON DELETE CASCADE with compression without direct batch delete
 SET timescaledb.enable_compressed_direct_batch_delete TO false;
+
 BEGIN;
+SET plan_cache_mode TO force_custom_plan;
 INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
 INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
@@ -542,10 +561,34 @@ DELETE FROM fk_cascade;
 SELECT * FROM ht;
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
+
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+
 RESET timescaledb.enable_compressed_direct_batch_delete;
 
 -- ON DELETE CASCADE with compression and direct batch delete
 BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
 INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
 INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
@@ -570,6 +613,18 @@ ROLLBACK;
 
 -- ON UPDATE SET NULL with compression
 BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
 INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
 INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
@@ -590,6 +645,18 @@ ROLLBACK;
 
 -- ON DELETE SET NULL with compression
 BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+DELETE FROM fk_set_null;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
 INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
 INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
@@ -614,6 +681,18 @@ ROLLBACK;
 
 -- ON UPDATE SET DEFAULT with compression
 BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
@@ -633,6 +712,18 @@ ROLLBACK;
 
 -- ON DELETE SET DEFAULT with compression
 BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;

@@ -23,6 +23,7 @@
 #include <optimizer/planner.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
+#include <parser/parse_param.h>
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <utils/elog.h>
@@ -495,8 +496,8 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 	 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
 	 */
 	if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
-		context->root->glob->boundParams && query->jointree->quals &&
-		IsA(query->jointree->quals, OpExpr))
+		query->jointree->quals && IsA(query->jointree->quals, OpExpr) &&
+		(context->root->glob->boundParams || query_contains_extern_params(query)))
 	{
 		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
 		if (!rte->inh && rte->rtekind == RTE_RELATION)
@@ -517,8 +518,8 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 	 *      WHERE $n = fkatt1 [AND ...]
 	 */
 	if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
-		context->root->glob->boundParams && query->jointree->quals &&
-		IsA(query->jointree->quals, OpExpr))
+		query->jointree->quals && IsA(query->jointree->quals, OpExpr) &&
+		(context->root->glob->boundParams || query_contains_extern_params(query)))
 	{
 		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
 		if (!rte->inh && rte->rtekind == RTE_RELATION)
@@ -540,7 +541,8 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 	 *       FOR KEY SHARE OF x
 	 */
 	if (query->commandType == CMD_SELECT && query->hasForUpdate &&
-		list_length(query->rtable) == 1 && context->root->glob->boundParams)
+		list_length(query->rtable) == 1 &&
+		(context->root->glob->boundParams || query_contains_extern_params(query)))
 	{
 		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
 		if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
