@@ -1,0 +1,2 @@
+Fixes: #8336 Fix generic plans for FK checks and prepared statements
+Thanks: @CodeTherapist for reporting the issue with FK checks not working after several insert statements
