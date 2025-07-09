@@ -87,17 +87,17 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 	int ncheck, i;
 	ConstrCheck *check;
 
-	Assert(rel->rd_att->constr != NULL && rri->ri_ConstraintExprs == NULL);
+	Assert(rel->rd_att->constr != NULL && rri->ri_CheckConstraintExprs == NULL);
 
 	ncheck = rel->rd_att->constr->num_check;
 	check = rel->rd_att->constr->check;
-	rri->ri_ConstraintExprs = (ExprState **) palloc(ncheck * sizeof(ExprState *));
+	rri->ri_CheckConstraintExprs = (ExprState **) palloc(ncheck * sizeof(ExprState *));
 
 	for (i = 0; i < ncheck; i++)
 	{
 		Expr *checkconstr = stringToNode(check[i].ccbin);
 
-		rri->ri_ConstraintExprs[i] = prepare_constr_expr(checkconstr);
+		rri->ri_CheckConstraintExprs[i] = prepare_constr_expr(checkconstr);
 	}
 }
 
