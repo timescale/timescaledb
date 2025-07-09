@@ -711,3 +711,12 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 	str->cursor = 0;
 }
 #endif
+
+/*
+ * PG18 renames ri_ConstraintExprs to ri_CheckConstraintExprs
+ * Add macros so we can use the new naming for older versions.
+ * https://github.com/postgres/postgres/commit/88f55bc9
+ */
+#if PG18_LT
+#define ri_CheckConstraintExprs ri_ConstraintExprs
+#endif

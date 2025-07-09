@@ -851,6 +851,9 @@ ExecInsert(ModifyTableContext *context,
 										   slot,
 										   estate,
 										   &conflictTid,
+#if PG18_GE
+										   NULL,
+#endif
 										   arbiterIndexes))
 			{
 				/* committed conflict tuple found */

@@ -358,6 +358,9 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 	constr->deferrable = false;
 	constr->skip_validation = true;
 	constr->initially_valid = true;
+#if PG18_GE
+	constr->is_enforced = true;
+#endif
 
 	Assert(list_length(compexprs) >= 1);
 
