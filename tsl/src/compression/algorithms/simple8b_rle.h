@@ -247,6 +247,33 @@ simple8brle_serialized_recv(StringInfo buffer)
 	return data;
 }
 
+static inline void *
+simple8brle_serialized_recv_into(StringInfo buffer, void *dest, Simple8bRleSerialized ** data_out)
+{
+	uint32 i;
+	uint32 num_elements = pq_getmsgint32(buffer);
+	CheckCompressedData(num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	uint32 num_blocks = pq_getmsgint32(buffer);
+	CheckCompressedData(num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	uint32 num_selector_slots = simple8brle_num_selector_slots_for_num_blocks(num_blocks);
+
+	Size compressed_size =
+		sizeof(Simple8bRleSerialized) + (num_blocks + num_selector_slots) * sizeof(uint64);
+	if (!AllocSizeIsValid(compressed_size))
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+
+	*data_out = (Simple8bRleSerialized *) dest;
+	(*data_out)->num_elements = num_elements;
+	(*data_out)->num_blocks = num_blocks;
+
+	for (i = 0; i < num_blocks + num_selector_slots; i++)
+		(*data_out)->slots[i] = pq_getmsgint64(buffer);
+
+	return (char *) *data_out + compressed_size;
+}
+
 static void
 simple8brle_serialized_send(StringInfo buffer, const Simple8bRleSerialized *data)
 {

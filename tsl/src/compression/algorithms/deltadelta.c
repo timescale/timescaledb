@@ -765,29 +765,33 @@ deltadelta_compressed_recv(StringInfo buffer)
 	int nulls_size = 0;
 	size_t compressed_size = 0;
 
+	/* This is has more bytes than we strictly needed, but it is better to be safe than sorry */
+	size_t allocated_size = 2*sizeof(Simple8bRleSerialized) + sizeof(DeltaDeltaCompressed) + 16 + (buffer->len - buffer->cursor);
+	compressed = palloc(allocated_size);
+
 	has_nulls = pq_getmsgbyte(buffer);
 	CheckCompressedData(has_nulls == 0 || has_nulls == 1);
 
 	last_value = pq_getmsgint64(buffer);
 	last_delta = pq_getmsgint64(buffer);
 
-	/* NOTE : we are doing too many allocations here, because simple8brle_serialized_recv
-	 * allocates a new Simple8bRleSerialized for each call.
-	 * We should be able to do this in a single allocation.
-	 */
+	/* Leave space for the header, but we don't yet know the size of the compressed data */
+	buf_ptr = (char *) compressed + sizeof(DeltaDeltaCompressed);
 
+	/* Calculate the size of the delta delta values based on the number of bytes read */
 	delta_size = buffer->cursor;
-	delta_deltas = simple8brle_serialized_recv(buffer);
+	buf_ptr = simple8brle_serialized_recv_into(buffer, buf_ptr, &delta_deltas);
 	delta_size = buffer->cursor - delta_size;
+
 	if (has_nulls)
 	{
+		/* Calculate the size of the nulls based on the number of bytes read */
 		nulls_size = buffer->cursor;
-		nulls = simple8brle_serialized_recv(buffer);
+		buf_ptr = simple8brle_serialized_recv_into(buffer, buf_ptr, &nulls);
 		nulls_size = buffer->cursor - nulls_size;
 		CheckCompressedData(delta_deltas->num_elements < nulls->num_elements);
 	}
 
-	/* NOTE: this is the second place we allocate memory, so altogether we do 3 allocations instead of 1 */
 	compressed_size = sizeof(DeltaDeltaCompressed) + delta_size + nulls_size;
 
 	if (!AllocSizeIsValid(compressed_size))
@@ -795,12 +799,8 @@ deltadelta_compressed_recv(StringInfo buffer)
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
 
-	compressed = palloc(compressed_size);
-
-	buf_ptr = delta_delta_set_header_and_advance(last_value, last_delta, has_nulls, compressed_size, compressed);
-	buf_ptr = bytes_serialize_simple8b_and_advance(buf_ptr, delta_size, delta_deltas);
-	if (has_nulls)
-		buf_ptr = bytes_serialize_simple8b_and_advance(buf_ptr, nulls_size, nulls);
+	/* Set header but don't change the buffer pointer */
+	delta_delta_set_header_and_advance(last_value, last_delta, has_nulls, compressed_size, compressed);
 
 	PG_RETURN_POINTER(compressed);
 }
