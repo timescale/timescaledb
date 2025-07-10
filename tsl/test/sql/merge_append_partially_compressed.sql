@@ -90,11 +90,11 @@ ANALYZE test1;
 -- tests that require resorting (pushdown below decompressChunk node cannot happen)
 
 -- requires resorting, no pushdown can happen
-:PREFIX
+explain (analyze, timing off, summary off)
 SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- requires resorting
-:PREFIX
+explain (analyze, timing off, summary off)
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
 
 -- all these require resorting, no pushdown can happen
