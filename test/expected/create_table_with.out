@@ -10,10 +10,13 @@ CREATE TABLE t1(time timestamptz, device text, value float) WITH (autovacuum_ena
 DROP TABLE t1;
 -- test error cases
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
 ERROR:  hypertable option requires time_column
+HINT:  Use "timescaledb.partition_column" to specify the column to use as partitioning column.
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
 ERROR:  hypertable option requires time_column
+HINT:  Use "timescaledb.partition_column" to specify the column to use as partitioning column.
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
 ERROR:  column "null" does not exist
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='');
@@ -22,23 +25,38 @@ CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertabl
 ERROR:  column "foo" does not exist
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.partition_column='time');
 ERROR:  timescaledb options requires hypertable option
+HINT:  Use "timescaledb.hypertable" to enable creating a hypertable.
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.partition_column='time');
 ERROR:  timescaledb options requires hypertable option
+HINT:  Use "timescaledb.hypertable" to enable creating a hypertable.
 CREATE TABLE t2(time timestamptz , device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='foo');
 ERROR:  invalid input syntax for type interval: "foo"
 CREATE TABLE t2(time int2 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='3 months');
 ERROR:  invalid input syntax for type smallint: "3 months"
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes='time');
 ERROR:  invalid value for tsdb.create_default_indexes 'time'
+HINT:  tsdb.create_default_indexes must be a valid bool
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=2);
 ERROR:  invalid value for tsdb.create_default_indexes '2'
+HINT:  tsdb.create_default_indexes must be a valid bool
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=-1);
 ERROR:  invalid value for tsdb.create_default_indexes '-1'
+HINT:  tsdb.create_default_indexes must be a valid bool
 CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
 ERROR:  functionality not supported under the current "apache" license. Learn more at https://tsdb.co/pdbir1r3
-CREATE TABLE t3(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore,tsdb.hypertable,tsdb.partition_column='time');
+HINT:  To access all features and the best time-series experience, try out Timescale Cloud.
+CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore,tsdb.hypertable,tsdb.partition_column='time');
 ERROR:  functionality not supported under the current "apache" license. Learn more at https://tsdb.co/pdbir1r3
+HINT:  To access all features and the best time-series experience, try out Timescale Cloud.
+-- Test error hint for invalid timescaledb options during CREATE TABLE
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.invalid_option = true);
+ERROR:  unrecognized parameter "tsdb.invalid_option"
+HINT:  Valid timescaledb parameters are: hypertable, columnstore, partition_column, chunk_interval, create_default_indexes, associated_schema, associated_table_prefix, orderby, segmentby
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.nonexistent_param = false);
+ERROR:  unrecognized parameter "timescaledb.nonexistent_param"
+HINT:  Valid timescaledb parameters are: hypertable, columnstore, partition_column, chunk_interval, create_default_indexes, associated_schema, associated_table_prefix, orderby, segmentby
 \set ON_ERROR_STOP 1
+\set VERBOSITY terse
 BEGIN;
 CREATE TABLE t3(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time');
 CREATE TABLE t4(time timestamp, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,timescaledb.partition_column='time');
