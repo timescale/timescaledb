@@ -1829,20 +1829,6 @@ ts_get_rel_am(Oid relid)
 	return amoid;
 }
 
-static Oid hypercore_amoid = InvalidOid;
-
-bool
-ts_is_hypercore_am(Oid amoid)
-{
-	if (!OidIsValid(hypercore_amoid))
-		hypercore_amoid = get_table_am_oid(TS_HYPERCORE_TAM_NAME, true);
-
-	if (!OidIsValid(amoid) || !OidIsValid(hypercore_amoid))
-		return false;
-
-	return amoid == hypercore_amoid;
-}
-
 /*
  * Set reloption for relation.
  *

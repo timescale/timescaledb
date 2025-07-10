@@ -11,21 +11,6 @@
 #include "config.h"
 #include "export.h"
 
-/*
- * Decide if the access method should be used for compression, or if it is
- * undefined. Used for parameter values to PostgreSQL functions and is a
- * nullable boolean.
- *
- * Using explicit values of TRUE = 1 and FALSE = 0 since this enum is cast to
- * boolean value in the code.
- */
-typedef enum UseAccessMethod
-{
-	USE_AM_FALSE = 0,
-	USE_AM_TRUE = 1,
-	USE_AM_NULL = 2,
-} UseAccessMethod;
-
 #ifdef USE_TELEMETRY
 extern bool ts_telemetry_on(void);
 extern bool ts_function_telemetry_on(void);
@@ -57,7 +42,7 @@ extern bool ts_guc_enable_direct_compress_copy_sort_batches;
 extern bool ts_guc_enable_direct_compress_copy_client_sorted;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
-extern TSDLLEXPORT int ts_guc_enable_transparent_decompression;
+extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_compression_wal_markers;
 extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
@@ -150,33 +135,10 @@ extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
 
 extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
 extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
-extern TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method;
 
 extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 
 extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
-extern TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
-
-/*
- * Defines the behavior of COPY TO when used on a Hypercore table.
- *
- * If set to COPY_ALL_DATA, all data is copied from a Hypercore table,
- * including compressed data (but in uncompressed form) from the internal
- * compressed relation. When doing a COPY TO on the internal compressed
- * relation, no data is returned.
- *
- * If set to COPY_NO_COMPRESSED_DATA, then only uncompressed data is copied
- * (if any). This behavior is compatible with compression without hypercore.
- */
-typedef enum HypercoreCopyToBehavior
-{
-	HYPERCORE_COPY_NO_COMPRESSED_DATA,
-	HYPERCORE_COPY_ALL_DATA,
-} HypercoreCopyToBehavior;
-
-extern TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior;
-extern TSDLLEXPORT bool ts_guc_enable_hypercore_scankey_pushdown;
-extern TSDLLEXPORT int ts_guc_hypercore_arrow_cache_max_entries;
 
 void _guc_init(void);
 

@@ -81,8 +81,8 @@ TupleDescGetAttrNumber(TupleDesc desc, const char *name)
 {
 	for (int i = 0; i < desc->natts; i++)
 	{
-		if (strcmp(name, NameStr(desc->attrs[i].attname)) == 0)
-			return desc->attrs[i].attnum;
+		if (strcmp(name, NameStr(TupleDescAttr(desc, i)->attname)) == 0)
+			return TupleDescAttr(desc, i)->attnum;
 	}
 
 	return InvalidAttrNumber;

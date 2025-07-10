@@ -59,9 +59,6 @@ jobs:
           compress_bloom_sparse_debug
           compress_qualpushdown_saop
           compression_allocation
-          hypercore_parallel
-          hypercore_vacuum
-          hypercore_vectoragg
           pg_dump
           telemetry
           transparent_decompress_chunk-*

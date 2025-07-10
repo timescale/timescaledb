@@ -83,7 +83,7 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
 
 	Oid opfamily, opcintype, equality_op;
-	int16 strategy;
+	CompareType strategy;
 	List *opfamilies;
 	EquivalenceClass *newec = makeNode(EquivalenceClass);
 	EquivalenceMember *em = makeNode(EquivalenceMember);
@@ -123,7 +123,7 @@ append_ec_for_seqnum(PlannerInfo *root, const CompressionInfo *info, const SortI
 	newec->ec_collation = 0;
 	newec->ec_members = list_make1(em);
 	newec->ec_sources = NIL;
-	newec->ec_derives = NIL;
+	newec->ec_derives_list = NIL;
 	newec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
 	newec->ec_has_const = false;
 	newec->ec_has_volatile = false;
@@ -161,7 +161,7 @@ append_ec_for_metadata_col(PlannerInfo *root, const CompressionInfo *info, Var *
 	ec->ec_collation = pk->pk_eclass->ec_collation;
 	ec->ec_members = list_make1(em);
 	ec->ec_sources = list_copy(pk->pk_eclass->ec_sources);
-	ec->ec_derives = list_copy(pk->pk_eclass->ec_derives);
+	ec->ec_derives_list = list_copy(pk->pk_eclass->ec_derives_list);
 	ec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
 	ec->ec_has_const = pk->pk_eclass->ec_has_const;
 	ec->ec_has_volatile = pk->pk_eclass->ec_has_volatile;
@@ -270,7 +270,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 
 			/* Find the operator in pg_amop --- failure shouldn't happen. */
 			Oid opfamily, opcintype;
-			int16 strategy;
+			CompareType strategy;
 			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
 				elog(ERROR, "operator %u is not a valid ordering operator", sortop);
 
@@ -308,7 +308,7 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 					ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
 
 				bool nulls_first;
-				int16 strategy;
+				CompareType strategy;
 
 				if (sort_info->reverse)
 				{
@@ -539,6 +539,9 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 	cost_sort(&sort_path,
 			  root,
 			  dcpath->required_compressed_pathkeys,
+#if PG18_GE
+			  compressed_path->disabled_nodes,
+#endif
 			  compressed_path->total_cost,
 			  compressed_path->rows,
 			  compressed_path->pathtarget->width,
@@ -1078,6 +1081,9 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			cost_sort(&sort_path,
 					  root,
 					  sort_info->required_compressed_pathkeys,
+#if PG18_GE
+					  compressed_path->disabled_nodes,
+#endif
 					  compressed_path->total_cost,
 					  compressed_path->rows,
 					  compressed_path->pathtarget->width,
@@ -2241,11 +2247,11 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 									  orderby_index);
 
 		/*
-		 * pk_strategy is either BTLessStrategyNumber (for ASC) or
-		 * BTGreaterStrategyNumber (for DESC)
+		 * In PG18+: pk_cmptype is either COMPARE_LT (for ASC) or COMPARE_GT (for DESC)
+		 * For previous PG versions we have compatibility macros to make these new names available.
 		 */
 		bool this_pathkey_reverse = false;
-		if (pk->pk_strategy == BTLessStrategyNumber)
+		if (pk->pk_cmptype == COMPARE_LT)
 		{
 			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
 			{
@@ -2260,7 +2266,7 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 				return false;
 			}
 		}
-		else if (pk->pk_strategy == BTGreaterStrategyNumber)
+		else if (pk->pk_cmptype == COMPARE_GT)
 		{
 			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
 			{

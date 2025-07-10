@@ -53,26 +53,7 @@ set(TEST_FILES
     custom_hashagg.sql
     decompress_chunk_cost.sql
     decompress_index.sql
-    foreign_keys.sql
-    hypercore_columnar.sql
-    hypercore_constraints.sql
-    hypercore_copy.sql
-    hypercore_cursor.sql
-    hypercore_ddl.sql
-    hypercore_delete.sql
-    hypercore_dump_restore.sql
-    hypercore_index_btree.sql
-    hypercore_index_hash.sql
-    hypercore_insert.sql
-    hypercore_join.sql
-    hypercore_merge.sql
-    hypercore_policy.sql
-    hypercore_stats.sql
-    hypercore_trigger.sql
-    hypercore_types.sql
-    hypercore_update.sql
-    hypercore_vacuum.sql
-    hypercore_vacuum_full.sql
+    foreign_keys_test.sql
     merge_append_partially_compressed.sql
     merge_chunks.sql
     merge_compress.sql
@@ -159,9 +140,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     exp_cagg_next_gen.sql
     exp_cagg_origin.sql
     exp_cagg_timezone.sql
-    hypercore.sql
-    hypercore_create.sql
-    hypercore_scans.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
@@ -198,14 +176,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(
-    APPEND
-    TEST_FILES
-    cagg_planning.sql
-    hypercore_parallel.sql
-    hypercore_vectoragg.sql
-    skip_scan_dagg.sql
-    plan_skip_scan_dagg.sql)
+  list(APPEND TEST_FILES cagg_planning.sql skip_scan_dagg.sql
+       plan_skip_scan_dagg.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
@@ -233,7 +205,6 @@ set(SOLO_TESTS
     cagg_invalidation
     cagg_plugin
     cagg_policy_incremental
-    hypercore
     move
     reorder
     split_chunk
