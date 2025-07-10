@@ -845,20 +845,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 				   compressed_rel,
 				   add_uncompressed_part);
 	set_baserel_size_estimates(root, compressed_rel);
-	double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
 
 	Index ht_relid = 0;
-	if (!compression_info->single_chunk)
-	{
-		/* adjust the parent's estimate by the diff of new and old estimate */
-		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
-		Assert(chunk_info->parent_reloid == ht->main_table_relid);
-		ht_relid = chunk_info->parent_relid;
-		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
-	}
-
-	chunk_rel->rows = new_row_estimate;
+	double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
 
 	/*
 	 * The tuple estimates derived from pg_class will be empty, so we have to
@@ -867,7 +856,21 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	 * mistakenly uses the "tuples" instead of "rows", so it leads to weird plan
 	 * divergence on older PG versions.
 	 */
-	chunk_rel->tuples = new_row_estimate;
+	double new_tuples_estimate = compressed_rel->tuples * TARGET_COMPRESSED_BATCH_SIZE;
+	
+	if (!compression_info->single_chunk)
+	{
+		/* adjust the parent's estimate by the diff of new and old estimate */
+		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
+		Assert(chunk_info->parent_reloid == ht->main_table_relid);
+		ht_relid = chunk_info->parent_relid;
+		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
+		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
+		hypertable_rel->tuples += (new_tuples_estimate - chunk_rel->tuples);
+	}
+
+	chunk_rel->rows = new_row_estimate;
+	chunk_rel->tuples = new_tuples_estimate;
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
 
@@ -1217,7 +1220,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 														 workers > 0,
 														 chunk_path_no_sort->rows +
 															 unordered_uncompressed_path->rows);
-		combined_paths = lappend(combined_paths, plain_append);
+		(void) plain_append;
+		// combined_paths = lappend(combined_paths, plain_append);
 	}
 
 	if (sort_info->decompressed_sort_pathkeys == NIL)
