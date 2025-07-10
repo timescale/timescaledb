@@ -406,6 +406,8 @@ multi_invalidation_move_invalidations(MultiInvalidationState *state)
 	args[1] = Int32GetDatum(1000); /* !!! Hard-coded for now. We should probably have a GUC. */
 	args[2] = PointerGetDatum(array);
 
+	TS_DEBUG_LOG("array: %s", convert_value_to_string(CurrentMemoryContext, args[2], TEXTARRAYOID));
+
 	while (true)
 	{
 		CatalogSecurityContext sec_ctx;
