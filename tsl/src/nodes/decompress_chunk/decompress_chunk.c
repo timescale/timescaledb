@@ -857,6 +857,15 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 	chunk_rel->rows = new_row_estimate;
 
+	/*
+	 * The tuple estimates derived from pg_class will be empty, so we have to
+	 * compute that based on the compressed relation as well.
+	 * This is not really needed, but in PG before 17 the Merge Append cost code
+	 * mistakenly uses the "tuples" instead of "rows", so it leads to weird plan
+	 * divergence on older PG versions.
+	 */
+	chunk_rel->tuples = new_row_estimate;
+
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
 
 	/* create non-parallel paths */

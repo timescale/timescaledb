@@ -1945,26 +1945,26 @@ select count(*) from test_partials group by tableoid order by count(*) desc;
      3
 (3 rows)
 
-EXPLAIN SELECT * FROM test_partials ORDER BY time;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_partials  (cost=1.23..207.80 rows=8001 width=16)
+EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
-   ->  Merge Append  (cost=1.23..139.82 rows=4001 width=16)
+   ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk  (cost=1.09..97.66 rows=4000 width=16)
-               ->  Sort  (cost=1.08..1.09 rows=4 width=88)
+         ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
+               ->  Sort
                      Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1
-                     ->  Seq Scan on compress_hyper_34_123_chunk  (cost=0.00..1.04 rows=4 width=88)
-         ->  Index Scan Backward using _hyper_33_120_chunk_test_partials_time_idx on _hyper_33_120_chunk  (cost=0.12..2.14 rows=1 width=16)
-   ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk  (cost=1.03..33.99 rows=2000 width=16)
-         ->  Sort  (cost=1.03..1.03 rows=2 width=88)
+                     ->  Seq Scan on compress_hyper_34_123_chunk
+         ->  Index Scan Backward using _hyper_33_120_chunk_test_partials_time_idx on _hyper_33_120_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
+         ->  Sort
                Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1
-               ->  Seq Scan on compress_hyper_34_124_chunk  (cost=0.00..1.02 rows=2 width=88)
-   ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk  (cost=1.03..33.99 rows=2000 width=16)
-         ->  Sort  (cost=1.03..1.03 rows=2 width=88)
+               ->  Seq Scan on compress_hyper_34_124_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
+         ->  Sort
                Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1
-               ->  Seq Scan on compress_hyper_34_125_chunk  (cost=0.00..1.02 rows=2 width=88)
+               ->  Seq Scan on compress_hyper_34_125_chunk
 (17 rows)
 
 -- verify correct results
