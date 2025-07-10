@@ -1227,8 +1227,8 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 														 workers > 0,
 														 chunk_path_no_sort->rows +
 															 unordered_uncompressed_path->rows);
-		(void) plain_append;
-		// combined_paths = lappend(combined_paths, plain_append);
+
+		combined_paths = lappend(combined_paths, plain_append);
 	}
 
 	if (sort_info->decompressed_sort_pathkeys == NIL)
