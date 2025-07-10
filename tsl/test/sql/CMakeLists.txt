@@ -16,7 +16,8 @@ set(TEST_FILES
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
     cagg_plugin.sql
-    cagg_refresh.sql
+    cagg_refresh_using_trigger.sql
+    cagg_refresh_using_wal.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql

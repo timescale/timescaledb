@@ -6,6 +6,7 @@
 SET timescaledb.enable_merge_on_cagg_refresh TO ON;
 SET timezone TO PST8PDT;
 
+\set invalidate_using trigger
 \ir include/cagg_refresh_common.sql
 
 -- Additional tests for MERGE refresh
