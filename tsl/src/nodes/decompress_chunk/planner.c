@@ -995,6 +995,9 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 	cost_sort(&sort_path,
 			  root,
 			  NIL,
+#if PG18_GE
+			  lefttree->disabled_nodes,
+#endif
 			  lefttree->total_cost,
 			  lefttree->plan_rows,
 			  lefttree->plan_width,
