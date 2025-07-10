@@ -10,13 +10,17 @@
  */
 
 #include <postgres.h>
+
 #include <access/htup_details.h>
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
 #include <commands/trigger.h>
+#include <executor/spi.h>
 #include <fmgr.h>
+#include <lib/stringinfo.h>
 #include <nodes/makefuncs.h>
+#include <replication/slot.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
@@ -45,6 +49,14 @@
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
+
+TS_FUNCTION_INFO_V1(ts_has_invalidation_trigger);
+
+Datum
+ts_has_invalidation_trigger(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_BOOL(has_invalidation_trigger(PG_GETARG_OID(0)));
+}
 
 static void
 init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
@@ -191,6 +203,12 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
+}
+
+void
+ts_get_invalidation_replication_slot_name(char *slotname, Size szslot)
+{
+	snprintf(slotname, szslot, "ts_%u_cagg", MyDatabaseId);
 }
 
 void
@@ -500,6 +518,37 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
 	}
 	return all_caggs_info;
+}
+
+/*
+ * Return true if there is any continuous aggregate that is using WAL-based
+ * invalidation collection.
+ *
+ * A hypertable is using the WAL-based invalidation collection if it has a
+ * attached continuous aggregate but does not have an invalidation trigger.
+ */
+static bool
+hypertable_invalidation_slot_used(void)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
+								   Anum_continuous_agg_raw_hypertable_id,
+								   &isnull);
+
+		Assert(!isnull);
+		Oid relid = ts_hypertable_id_to_relid(DatumGetInt32(datum), true);
+		if (!has_invalidation_trigger(relid))
+		{
+			ts_scan_iterator_close(&iterator);
+			return true;
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+	return false;
 }
 
 TSDLLEXPORT ContinuousAggHypertableStatus
@@ -829,6 +878,10 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	 *
 	 * AccessExclusiveLock is needed to drop triggers and also prevent
 	 * concurrent DML commands.
+	 *
+	 * It is needed also in the case that we are using WAL-based invalidation
+	 * collection since we want to serialize create and drop of continuous
+	 * aggregates.
 	 */
 	if (drop_user_view)
 		user_view = get_and_lock_rel_by_name(&cadata->user_view_schema,
@@ -856,17 +909,13 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 						RowExclusiveLock);
 
-		/* The trigger will be dropped if the hypertable still exists and no other
+		/* The trigger will be dropped if it exists (it does not for WAL-based
+		 * invalidation collection), the hypertable still exists and no other
 		 * caggs attached. */
-		if (OidIsValid(raw_hypertable.objectId))
+		Oid tgoid = get_trigger_oid(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME, true);
+		if (OidIsValid(raw_hypertable.objectId) && OidIsValid(tgoid))
 		{
-			ObjectAddressSet(raw_hypertable_trig,
-							 TriggerRelationId,
-							 get_trigger_oid(raw_hypertable.objectId,
-											 CAGGINVAL_TRIGGER_NAME,
-											 false));
-
-			/* Raw hypertable is locked above */
+			ObjectAddressSet(raw_hypertable_trig, TriggerRelationId, tgoid);
 			LockRelationOid(raw_hypertable_trig.objectId, AccessExclusiveLock);
 		}
 	}
@@ -923,6 +972,18 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	{
 		ts_hypertable_drop_trigger(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME);
 	}
+
+	/*
+	 * Drop invalidation slot if there are no hypertables using WAL-based
+	 * invalidation collection.
+	 *
+	 * This is important since there is no actor that reads the slot, which
+	 * means that the WAL cannot be pruned.
+	 */
+	char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
+	ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
+	if (!hypertable_invalidation_slot_used() && SearchNamedReplicationSlot(slot_name, true) != NULL)
+		ts_hypertable_drop_invalidation_replication_slot(slot_name);
 
 	if (OidIsValid(mat_hypertable.objectId))
 	{

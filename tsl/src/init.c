@@ -30,6 +30,7 @@
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
+#include "continuous_aggs/invalidation_multi.h"
 #include "continuous_aggs/invalidation_record.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
@@ -137,6 +138,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_process_hypertable_invalidations =
 		continuous_agg_process_hypertable_invalidations,
+	.continuous_agg_process_multi_hypertable_invalidations =
+		continuous_agg_process_multi_hypertable_invalidations,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,

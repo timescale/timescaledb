@@ -607,6 +607,17 @@ ts_hypertable_create_trigger(const Hypertable *ht, CreateTrigStmt *stmt, const c
 	return root_trigger_addr;
 }
 
+TSDLLEXPORT void
+ts_hypertable_drop_invalidation_replication_slot(const char *slot_name)
+{
+	CatalogSecurityContext sec_ctx;
+	NameData slot;
+	namestrcpy(&slot, slot_name);
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	DirectFunctionCall1(pg_drop_replication_slot, NameGetDatum(&slot));
+	ts_catalog_restore_user(&sec_ctx);
+}
+
 /* based on RemoveObjects */
 TSDLLEXPORT void
 ts_hypertable_drop_trigger(Oid relid, const char *trigger_name)

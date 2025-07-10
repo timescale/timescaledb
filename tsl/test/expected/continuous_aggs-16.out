@@ -2235,6 +2235,7 @@ view_definition                   |  SELECT time_bucket('@ 1 day'::interval, tim
                                   |    FROM conditions                                       +
                                   |   GROUP BY (time_bucket('@ 1 day'::interval, timec));
 finalized                         | t
+invalidate_using                  | trigger
 
 \x OFF
 CALL refresh_continuous_aggregate('conditions_summary_new', NULL, NULL);

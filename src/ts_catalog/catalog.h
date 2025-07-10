@@ -1012,7 +1012,6 @@ typedef enum Anum_continuous_aggs_bucket_function_pkey
  */
 #define CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE_NAME                                     \
 	"continuous_aggs_hypertable_invalidation_log"
-#define CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_SLOT_NAME "continuous_aggs_hypertable_invalidations"
 
 typedef enum Anum_continuous_aggs_hypertable_invalidation_log
 {
