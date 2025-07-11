@@ -434,13 +434,83 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 }
 
 /*
+ * Estimate the average count of elements in the compressed batch based on the
+ * Postgres statistics for _ts_meta_count column.
+ * Returns TARGET_COMPRESSED_BATCH_SIZE when no pg_statistic entry exists.
+ */
+static double
+estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compression_info)
+{
+	AttrNumber attnum = get_attnum(compression_info->compressed_rte->relid, "_ts_meta_count");
+	if (attnum == InvalidAttrNumber)
+		return TARGET_COMPRESSED_BATCH_SIZE;
+
+	Var *var = makeVar(compression_info->compressed_rel->relid, attnum, INT4OID, -1, InvalidOid, 0);
+
+	/* fetch statistics */
+	VariableStatData vardata;
+	examine_variable(root, (Node *) var, 0, &vardata);
+
+	if (!HeapTupleIsValid(vardata.statsTuple))
+	{
+		ReleaseVariableStats(vardata);
+		return TARGET_COMPRESSED_BATCH_SIZE;
+	}
+
+	double mcv_sum = 0.0;
+	double mcv_freq = 0.0;
+
+	/* exact MCV contribution */
+	AttStatsSlot mcvslot;
+	if (get_attstatsslot(&mcvslot, vardata.statsTuple,
+						 STATISTIC_KIND_MCV, InvalidOid,
+						 ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS))
+	{
+		for (int i = 0; i < mcvslot.nvalues; i++)
+		{
+			double val = (double) DatumGetInt32(mcvslot.values[i]);
+			double freq = (double) mcvslot.numbers[i];
+			mcv_sum += val * freq;
+			mcv_freq += freq;
+		}
+		free_attstatsslot(&mcvslot);
+	}
+
+	double hist_sum = 0.0;
+
+	/* histogram contribution */
+	AttStatsSlot histslot;
+	if (get_attstatsslot(&histslot, vardata.statsTuple,
+						 STATISTIC_KIND_HISTOGRAM, InvalidOid,
+						 ATTSTATSSLOT_VALUES))
+	{
+		int buckets = histslot.nvalues - 1;
+
+		if (buckets > 0 && mcv_freq < 1.0)
+		{
+			for (int i = 0; i < buckets; i++)
+			{
+				double lo = (double) DatumGetInt32(histslot.values[i]);
+				double hi = (double) DatumGetInt32(histslot.values[i + 1]);
+				hist_sum += (lo + hi) / 2.0;
+			}
+			hist_sum *= (1.0 - mcv_freq) / buckets;
+		}
+		free_attstatsslot(&histslot);
+	}
+
+	ReleaseVariableStats(vardata);
+	return mcv_sum + hist_sum;
+}
+
+/*
  * calculate cost for DecompressChunkPath
  *
  * since we have to read whole batch before producing tuple
  * we put cost of 1 tuple of compressed_scan as startup cost
  */
 static void
-cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
+cost_decompress_chunk(PlannerInfo *root, const CompressionInfo *compression_info, Path *path, Path *compressed_path)
 {
 	/* startup_cost is cost before fetching first tuple */
 	const double compressed_rows = Max(1, compressed_path->rows);
@@ -449,7 +519,8 @@ cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
 	/* total_cost is cost for fetching all tuples */
-	path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
+	//path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
+	path->rows = compressed_path->rows * estimate_compressed_batch_size(root, compression_info);
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 }
 
@@ -1035,7 +1106,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 						  work_mem,
 						  -1);
 
-				cost_decompress_chunk(root, &path_copy->custom_path.path, &sort_path);
+				cost_decompress_chunk(root, compression_info, &path_copy->custom_path.path, &sort_path);
 			}
 
 			chunk_path = &path_copy->custom_path.path;
@@ -1892,17 +1963,17 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 }
 
 static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *compression_info, Path *compressed_path)
 {
 	DecompressChunkPath *path;
 
 	path = (DecompressChunkPath *) newNode(sizeof(DecompressChunkPath), T_CustomPath);
 
-	path->info = info;
+	path->info = compression_info;
 
 	path->custom_path.path.pathtype = T_CustomScan;
-	path->custom_path.path.parent = info->chunk_rel;
-	path->custom_path.path.pathtarget = info->chunk_rel->reltarget;
+	path->custom_path.path.parent = compression_info->chunk_rel;
+	path->custom_path.path.pathtarget = compression_info->chunk_rel->reltarget;
 
 	if (compressed_path->param_info != NULL)
 	{
@@ -1914,7 +1985,7 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Pat
 		 */
 		path->custom_path.path.param_info =
 			get_baserel_parampathinfo(root,
-									  info->chunk_rel,
+									  compression_info->chunk_rel,
 									  compressed_path->param_info->ppi_req_outer);
 		Assert(path->custom_path.path.param_info != NULL);
 	}
@@ -1941,7 +2012,7 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Pat
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
 	path->required_compressed_pathkeys = NIL;
-	cost_decompress_chunk(root, &path->custom_path.path, compressed_path);
+	cost_decompress_chunk(root, compression_info, &path->custom_path.path, compressed_path);
 
 	return path;
 }
