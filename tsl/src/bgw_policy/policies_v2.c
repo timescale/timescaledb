@@ -242,7 +242,8 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 											if_exists,
 											false,
 											DT_NOBEGIN,
-											NULL);
+											NULL,
+											false);
 	}
 
 	if (all_policies.retention && all_policies.retention->create_policy)

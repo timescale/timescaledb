@@ -371,4 +371,24 @@ SELECT _timescaledb_functions.policy_reorder_check(NULL);
 SELECT _timescaledb_functions.policy_retention_check(NULL);
 \set ON_ERROR_STOP 1
 
+-- `add_compression_policy()` and `add_columnstore_policy()` share the same
+-- C-function, but their arguments have different names and hence they are
+-- supposed to have slightly different error messages
+create table test_errors (time timestamptz NOT NULL, a int, b int);
+select create_hypertable('test_errors', 'time');
+alter table test_errors set (timescaledb.compress);
+create materialized view test_errors_cagg
+with (timescaledb.continuous, timescaledb.materialized_only=false) as
+select time_bucket('1 week', time) as bucket from test_errors group by 1;
+alter materialized view test_errors_cagg SET (timescaledb.compress);
+SELECT add_continuous_aggregate_policy('test_errors_cagg', '1 year', '1 day', '1 hour');
 
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+select add_compression_policy('test_errors', compress_after => NULL);
+CALL add_columnstore_policy('test_errors', after => NULL);
+select add_compression_policy('test_errors', compress_after => '1 day');
+CALL add_columnstore_policy('test_errors', after => '1 day');
+select add_compression_policy('test_errors_cagg', compress_created_before => '1 day'::interval);
+CALL add_columnstore_policy('test_errors_cagg', created_before => '1 day'::interval);
+\set ON_ERROR_STOP 1
