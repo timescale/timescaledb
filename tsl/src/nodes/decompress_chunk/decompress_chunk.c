@@ -462,8 +462,10 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
 
 	/* exact MCV contribution */
 	AttStatsSlot mcvslot;
-	if (get_attstatsslot(&mcvslot, vardata.statsTuple,
-						 STATISTIC_KIND_MCV, InvalidOid,
+	if (get_attstatsslot(&mcvslot,
+						 vardata.statsTuple,
+						 STATISTIC_KIND_MCV,
+						 InvalidOid,
 						 ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS))
 	{
 		for (int i = 0; i < mcvslot.nvalues; i++)
@@ -480,8 +482,10 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
 
 	/* histogram contribution */
 	AttStatsSlot histslot;
-	if (get_attstatsslot(&histslot, vardata.statsTuple,
-						 STATISTIC_KIND_HISTOGRAM, InvalidOid,
+	if (get_attstatsslot(&histslot,
+						 vardata.statsTuple,
+						 STATISTIC_KIND_HISTOGRAM,
+						 InvalidOid,
 						 ATTSTATSSLOT_VALUES))
 	{
 		int buckets = histslot.nvalues - 1;
@@ -510,7 +514,8 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
  * we put cost of 1 tuple of compressed_scan as startup cost
  */
 static void
-cost_decompress_chunk(PlannerInfo *root, const CompressionInfo *compression_info, Path *path, Path *compressed_path)
+cost_decompress_chunk(PlannerInfo *root, const CompressionInfo *compression_info, Path *path,
+					  Path *compressed_path)
 {
 	/* startup_cost is cost before fetching first tuple */
 	const double compressed_rows = Max(1, compressed_path->rows);
@@ -519,7 +524,7 @@ cost_decompress_chunk(PlannerInfo *root, const CompressionInfo *compression_info
 		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
 	/* total_cost is cost for fetching all tuples */
-	//path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
+	// path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
 	path->rows = compressed_path->rows * estimate_compressed_batch_size(root, compression_info);
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 }
@@ -1106,7 +1111,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 						  work_mem,
 						  -1);
 
-				cost_decompress_chunk(root, compression_info, &path_copy->custom_path.path, &sort_path);
+				cost_decompress_chunk(root,
+									  compression_info,
+									  &path_copy->custom_path.path,
+									  &sort_path);
 			}
 
 			chunk_path = &path_copy->custom_path.path;
@@ -1963,7 +1971,8 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 }
 
 static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *compression_info, Path *compressed_path)
+decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *compression_info,
+							 Path *compressed_path)
 {
 	DecompressChunkPath *path;
 
