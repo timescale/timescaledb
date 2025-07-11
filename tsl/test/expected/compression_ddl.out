@@ -1441,19 +1441,20 @@ EXPLAIN (costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate
    Group Key: _hyper_31_110_chunk.device_id
-   ->  Merge Append
+   ->  Sort
          Sort Key: _hyper_31_110_chunk.device_id
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
-                     ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
-         ->  Partial GroupAggregate
-               Group Key: _hyper_31_110_chunk.device_id
-               ->  Index Only Scan using _hyper_31_110_chunk_compression_insert_device_id_time_idx on _hyper_31_110_chunk
-(10 rows)
+         ->  Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+                           ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
+               ->  Partial GroupAggregate
+                     Group Key: _hyper_31_110_chunk.device_id
+                     ->  Index Only Scan using _hyper_31_110_chunk_compression_insert_device_id_time_idx on _hyper_31_110_chunk
+(11 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert

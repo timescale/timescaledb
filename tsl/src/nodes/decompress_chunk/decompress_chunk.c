@@ -1267,10 +1267,12 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 	}
 
 	/*
-	 * We might have unsorted decompressed path, compressed sort pushdown path,
-	 * and batch sorted merge path. We have to make a cost-based decision
-	 * between them (i.e. batch sorted merge might be more expensive due to
-	 * memory requirements).
+	 * For Merge Append, we consider:
+	 * 1) explicit sorting over decompressed path,
+	 * 2) compressed sort pushdown path,
+	 * 3) batch sorted merge path.
+	 * We have to make a cost-based decision between them (i.e. batch sorted
+	 * merge might be more expensive due to memory requirements).
 	 */
 	ListCell *lc;
 	foreach (lc, decompressed_paths)
@@ -1282,6 +1284,28 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			 * MergeAppend can't be parallel.
 			 */
 			continue;
+		}
+
+		if (decompression_path == chunk_path_no_sort)
+		{
+			/*
+			 * We can't use the unsorted decompression path directly because it
+			 * doesn't have the sort projection cost workaround.
+			 */
+			continue;
+		}
+
+		if (IsA(decompression_path, SortPath))
+		{
+			/*
+			 * We have to remove the explicit Sort, otherwise it will lead to
+			 * planning time regression because of double call of
+			 * prepare_sort_from_pathkeys() in MergeAppend plan creation. Still,
+			 * we have to use the copy of DecompressChunk path that we created
+			 * for explicit sorting, because it has the sort projection cost
+			 * workaround.
+			 */
+			decompression_path = castNode(SortPath, decompression_path)->subpath;
 		}
 
 		Path *merge_append =
