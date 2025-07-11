@@ -83,7 +83,6 @@ jobs:
         chunk_adaptive
         metadata
         telemetry
-        net
       SKIPS: >-
         bgw_db_scheduler
         bgw_db_scheduler_fixed
