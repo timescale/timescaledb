@@ -8,7 +8,7 @@
 #include <nodes/parsenodes.h>
 #include <parser/parsetree.h>
 
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/vector_quals.h"
 #include "plan.h"
 
 void

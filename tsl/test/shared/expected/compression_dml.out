@@ -100,7 +100,7 @@ INSERT INTO mytab SELECT '2022-10-07 05:30:10+05:30'::timestamp with time zone, 
 EXPLAIN (costs off) SELECT * FROM :chunk_table;
 QUERY PLAN
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
          ->  Seq Scan on compress_hyper_X_X_chunk
    ->  Seq Scan on _hyper_X_X_chunk
 (4 rows)
@@ -137,9 +137,9 @@ SELECT count(compress_chunk(c)) FROM show_chunks('comp_seg_varchar') c;
 EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 QUERY PLAN
  Append (actual rows=90 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=27 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=27 loops=1)
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=63 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=63 loops=1)
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
 (5 rows)
 
@@ -149,10 +149,10 @@ ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 QUERY PLAN
  Append (actual rows=91 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=27 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=27 loops=1)
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
    ->  Seq Scan on _hyper_X_X_chunk (actual rows=1 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=63 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=63 loops=1)
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
 (6 rows)
 
@@ -162,10 +162,10 @@ ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 QUERY PLAN
  Append (actual rows=92 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=27 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=27 loops=1)
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
    ->  Seq Scan on _hyper_X_X_chunk (actual rows=2 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=63 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=63 loops=1)
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
 (6 rows)
 
@@ -943,7 +943,7 @@ EXECUTE prep;
 
 EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
 QUERY PLAN
- Custom Scan (DecompressChunk) on _hyper_X_X_chunk
+ Custom Scan (ColumnarScan) on _hyper_X_X_chunk
    ->  Seq Scan on compress_hyper_X_X_chunk
 (2 rows)
 
@@ -963,7 +963,7 @@ EXECUTE prep;
 EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
 QUERY PLAN
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
          ->  Seq Scan on compress_hyper_X_X_chunk
    ->  Seq Scan on _hyper_X_X_chunk
 (4 rows)
@@ -972,7 +972,7 @@ ROLLBACK;
 -- Should see the compressed chunk only
 EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
 QUERY PLAN
- Custom Scan (DecompressChunk) on _hyper_X_X_chunk
+ Custom Scan (ColumnarScan) on _hyper_X_X_chunk
    ->  Seq Scan on compress_hyper_X_X_chunk
 (2 rows)
 
@@ -993,7 +993,7 @@ EXECUTE prep;
 EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
 QUERY PLAN
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
          ->  Seq Scan on compress_hyper_X_X_chunk
    ->  Seq Scan on _hyper_X_X_chunk
 (4 rows)

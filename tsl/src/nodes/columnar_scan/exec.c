@@ -24,29 +24,29 @@
 #include "compression/compression.h"
 #include "guc.h"
 #include "import/ts_explain.h"
-#include "nodes/decompress_chunk/batch_array.h"
-#include "nodes/decompress_chunk/batch_queue.h"
-#include "nodes/decompress_chunk/compressed_batch.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/decompress_chunk/exec.h"
-#include "nodes/decompress_chunk/planner.h"
+#include "nodes/columnar_scan/batch_array.h"
+#include "nodes/columnar_scan/batch_queue.h"
+#include "nodes/columnar_scan/compressed_batch.h"
+#include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/columnar_scan/exec.h"
+#include "nodes/columnar_scan/planner.h"
 
 #if PG18_GE
 #include <commands/explain_format.h>
 #include <commands/explain_state.h>
 #endif
 
-static void decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags);
-static void decompress_chunk_end(CustomScanState *node);
-static void decompress_chunk_rescan(CustomScanState *node);
-static void decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *es);
+static void columnar_scan_begin(CustomScanState *node, EState *estate, int eflags);
+static void columnar_scan_end(CustomScanState *node);
+static void columnar_scan_rescan(CustomScanState *node);
+static void columnar_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es);
 
-static CustomExecMethods decompress_chunk_state_methods = {
-	.BeginCustomScan = decompress_chunk_begin,
+static CustomExecMethods columnar_scan_state_methods = {
+	.BeginCustomScan = columnar_scan_begin,
 	.ExecCustomScan = NULL, /* To be determined later. */
-	.EndCustomScan = decompress_chunk_end,
-	.ReScanCustomScan = decompress_chunk_rescan,
-	.ExplainCustomScan = decompress_chunk_explain,
+	.EndCustomScan = columnar_scan_end,
+	.ReScanCustomScan = columnar_scan_rescan,
+	.ExplainCustomScan = columnar_scan_explain,
 };
 
 /*
@@ -56,36 +56,36 @@ static CustomExecMethods decompress_chunk_state_methods = {
  */
 
 Node *
-decompress_chunk_state_create(CustomScan *cscan)
+columnar_scan_state_create(CustomScan *cscan)
 {
-	DecompressChunkState *chunk_state;
+	ColumnarScanState *chunk_state;
 
-	chunk_state = (DecompressChunkState *) newNode(sizeof(DecompressChunkState), T_CustomScanState);
+	chunk_state = (ColumnarScanState *) newNode(sizeof(ColumnarScanState), T_CustomScanState);
 
-	chunk_state->exec_methods = decompress_chunk_state_methods;
+	chunk_state->exec_methods = columnar_scan_state_methods;
 	chunk_state->csstate.methods = &chunk_state->exec_methods;
 
 	Assert(IsA(cscan->custom_private, List));
-	Assert(list_length(cscan->custom_private) == DCP_Count);
-	List *settings = list_nth(cscan->custom_private, DCP_Settings);
-	chunk_state->decompression_map = list_nth(cscan->custom_private, DCP_DecompressionMap);
-	chunk_state->is_segmentby_column = list_nth(cscan->custom_private, DCP_IsSegmentbyColumn);
+	Assert(list_length(cscan->custom_private) == CSP_Count);
+	List *settings = list_nth(cscan->custom_private, CSP_Settings);
+	chunk_state->decompression_map = list_nth(cscan->custom_private, CSP_DecompressionMap);
+	chunk_state->is_segmentby_column = list_nth(cscan->custom_private, CSP_IsSegmentbyColumn);
 	chunk_state->bulk_decompression_column =
-		list_nth(cscan->custom_private, DCP_BulkDecompressionColumn);
-	chunk_state->sortinfo = list_nth(cscan->custom_private, DCP_SortInfo);
+		list_nth(cscan->custom_private, CSP_BulkDecompressionColumn);
+	chunk_state->sortinfo = list_nth(cscan->custom_private, CSP_SortInfo);
 
 	chunk_state->custom_scan_tlist = cscan->custom_scan_tlist;
 
 	Assert(IsA(settings, IntList));
-	Assert(list_length(settings) == DCS_Count);
-	chunk_state->hypertable_id = list_nth_int(settings, DCS_HypertableId);
-	chunk_state->chunk_relid = list_nth_int(settings, DCS_ChunkRelid);
-	chunk_state->decompress_context.reverse = list_nth_int(settings, DCS_Reverse);
+	Assert(list_length(settings) == CSS_Count);
+	chunk_state->hypertable_id = list_nth_int(settings, CSS_HypertableId);
+	chunk_state->chunk_relid = list_nth_int(settings, CSS_ChunkRelid);
+	chunk_state->decompress_context.reverse = list_nth_int(settings, CSS_Reverse);
 	chunk_state->decompress_context.batch_sorted_merge =
-		list_nth_int(settings, DCS_BatchSortedMerge);
+		list_nth_int(settings, CSS_BatchSortedMerge);
 	chunk_state->decompress_context.enable_bulk_decompression =
-		list_nth_int(settings, DCS_EnableBulkDecompression);
-	chunk_state->has_row_marks = list_nth_int(settings, DCS_HasRowMarks);
+		list_nth_int(settings, CSS_EnableBulkDecompression);
+	chunk_state->has_row_marks = list_nth_int(settings, CSS_HasRowMarks);
 
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);
@@ -157,22 +157,22 @@ constify_tableoid(List *node, Index chunk_index, Oid chunk_relid)
 }
 
 pg_attribute_always_inline static TupleTableSlot *
-decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFunctions *funcs);
+columnar_scan_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunctions *funcs);
 
 static TupleTableSlot *
-decompress_chunk_exec_fifo(CustomScanState *node)
+columnar_scan_exec_fifo(CustomScanState *node)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	Assert(!chunk_state->decompress_context.batch_sorted_merge);
-	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsFifo);
+	return columnar_scan_exec_impl(chunk_state, &BatchQueueFunctionsFifo);
 }
 
 static TupleTableSlot *
-decompress_chunk_exec_heap(CustomScanState *node)
+columnar_scan_exec_heap(CustomScanState *node)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	Assert(chunk_state->decompress_context.batch_sorted_merge);
-	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
+	return columnar_scan_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
 }
 
 /*
@@ -182,9 +182,9 @@ decompress_chunk_exec_heap(CustomScanState *node)
  * but any private fields should be initialized here.
  */
 static void
-decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
+columnar_scan_begin(CustomScanState *node, EState *estate, int eflags)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	DecompressContext *dcontext = &chunk_state->decompress_context;
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
 	Plan *compressed_scan = linitial(cscan->custom_plans);
@@ -334,10 +334,10 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			/* metadata columns */
 			switch (column.custom_scan_attno)
 			{
-				case DECOMPRESS_CHUNK_COUNT_ID:
+				case COLUMNAR_SCAN_COUNT_ID:
 					column.type = COUNT_COLUMN;
 					break;
-				case DECOMPRESS_CHUNK_SEQUENCE_NUM_ID:
+				case COLUMNAR_SCAN_SEQUENCE_NUM_ID:
 					column.type = SEQUENCE_NUM_COLUMN;
 					break;
 				default:
@@ -374,13 +374,13 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 									chunk_state->sortinfo,
 									dcontext->custom_scan_slot->tts_tupleDescriptor,
 									&BatchQueueFunctionsHeap);
-		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_heap;
+		chunk_state->exec_methods.ExecCustomScan = columnar_scan_exec_heap;
 	}
 	else
 	{
 		chunk_state->batch_queue =
 			batch_queue_fifo_create(num_data_columns, &BatchQueueFunctionsFifo);
-		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_fifo;
+		chunk_state->exec_methods.ExecCustomScan = columnar_scan_exec_fifo;
 	}
 
 	if (ts_guc_debug_require_batch_sorted_merge && !dcontext->batch_sorted_merge)
@@ -410,13 +410,13 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 }
 
 /*
- * The exec function for the DecompressChunk node. It takes the explicit queue
+ * The exec function for the ColumnarScan node. It takes the explicit queue
  * functions pointer as an optimization, to allow these functions to be
  * inlined in the FIFO case. This is important because this is a part of a
  * relatively hot loop.
  */
 pg_attribute_always_inline static TupleTableSlot *
-decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFunctions *bqfuncs)
+columnar_scan_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunctions *bqfuncs)
 {
 	DecompressContext *dcontext = &chunk_state->decompress_context;
 	BatchQueue *bq = chunk_state->batch_queue;
@@ -461,9 +461,9 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 }
 
 static void
-decompress_chunk_rescan(CustomScanState *node)
+columnar_scan_rescan(CustomScanState *node)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	BatchQueue *bq = chunk_state->batch_queue;
 
 	bq->funcs->reset(bq);
@@ -476,9 +476,9 @@ decompress_chunk_rescan(CustomScanState *node)
 
 /* End the decompress operation and free the requested resources */
 static void
-decompress_chunk_end(CustomScanState *node)
+columnar_scan_end(CustomScanState *node)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	BatchQueue *bq = chunk_state->batch_queue;
 
 	bq->funcs->free(bq);
@@ -491,9 +491,9 @@ decompress_chunk_end(CustomScanState *node)
  * Output additional information for EXPLAIN of a custom-scan plan node.
  */
 static void
-decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *es)
+columnar_scan_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	DecompressContext *dcontext = &chunk_state->decompress_context;
 
 	ts_show_scan_qual(chunk_state->vectorized_quals_original,

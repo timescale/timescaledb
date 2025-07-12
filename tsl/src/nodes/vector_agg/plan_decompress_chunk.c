@@ -7,7 +7,7 @@
 #include <nodes/pathnodes.h>
 #include <nodes/plannodes.h>
 
-#include "nodes/decompress_chunk/planner.h"
+#include "nodes/columnar_scan/planner.h"
 #include "plan.h"
 
 /*
@@ -17,23 +17,23 @@ static bool
 is_vector_compressed_column(const CustomScan *custom, int compressed_column_index,
 							bool *out_is_segmentby)
 {
-	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
+	List *bulk_decompression_column = list_nth(custom->custom_private, CSP_BulkDecompressionColumn);
 	const bool bulk_decompression_enabled_for_column =
 		list_nth_int(bulk_decompression_column, compressed_column_index);
 
 	/*
-	 * Bulk decompression can be disabled for all columns in the DecompressChunk
+	 * Bulk decompression can be disabled for all columns in the ColumnarScan
 	 * node settings, we can't do vectorized aggregation for compressed columns
 	 * in that case. For segmentby columns it's still possible.
 	 */
 	List *settings = linitial(custom->custom_private);
 	const bool bulk_decompression_enabled_globally =
-		list_nth_int(settings, DCS_EnableBulkDecompression);
+		list_nth_int(settings, CSS_EnableBulkDecompression);
 
 	/*
 	 * Check if this column is a segmentby.
 	 */
-	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
+	List *is_segmentby_column = list_nth(custom->custom_private, CSP_IsSegmentbyColumn);
 	const bool is_segmentby = list_nth_int(is_segmentby_column, compressed_column_index);
 	if (out_is_segmentby)
 	{
@@ -85,7 +85,7 @@ vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi)
 	 * Now, we have to translate the decompressed varno into the compressed
 	 * column index, to check if the column supports bulk decompression.
 	 */
-	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
+	List *decompression_map = list_nth(custom->custom_private, CSP_DecompressionMap);
 
 	/*
 	 * There's no easy way to determine maximum attribute number for uncompressed
@@ -134,5 +134,5 @@ vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi)
 	}
 
 	List *settings = linitial(custom->custom_private);
-	vqi->reverse = list_nth_int(settings, DCS_Reverse);
+	vqi->reverse = list_nth_int(settings, CSS_Reverse);
 }

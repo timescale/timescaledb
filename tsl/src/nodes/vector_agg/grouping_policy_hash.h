@@ -11,7 +11,7 @@
 
 #include "grouping_policy.h"
 
-#include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/columnar_scan/compressed_batch.h"
 
 #include "hashing/hashing_strategy.h"
 

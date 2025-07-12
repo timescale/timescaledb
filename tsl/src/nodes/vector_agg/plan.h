@@ -7,7 +7,7 @@
 #include <nodes/plannodes.h>
 #include <utils/relcache.h>
 
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/vector_quals.h"
 
 /*
  * The indexes of settings that we have to pass through the custom_private list.

@@ -18,7 +18,8 @@
 
 #include "exec.h"
 #include "import/list.h"
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"
 
@@ -480,7 +481,7 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 
 	CustomScan *customscan = castNode(CustomScan, childplan);
 
-	if (strcmp(customscan->methods->CustomName, "DecompressChunk") == 0)
+  if (ts_is_columnar_scan_plan(&customscan->scan.plan))
 	{
 		vectoragg_plan_decompress_chunk(childplan, vqi);
 		return true;
