@@ -9,7 +9,7 @@
 #include <access/attnum.h>
 #include <access/tupdesc.h>
 
-#include <nodes/decompress_chunk/compressed_batch.h>
+#include <nodes/columnar_scan/compressed_batch.h>
 
 /*
  * Vector slot functions.

@@ -18,7 +18,7 @@
 #include "guc.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/columnar_scan/columnar_scan.h"
 #include "planner.h"
 
 /* Helper function to find the first node of the provided type in the pathlist of the relation */
@@ -302,7 +302,7 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 	 * modify the targetlist of the projection-capable paths in place, which
 	 * would cause a mismatch when these paths are used in another context.
 	 *
-	 * In case of DecompressChunk path, we can make a copy of it and push the
+	 * In case of ColumnarScan path, we can make a copy of it and push the
 	 * projection down to it.
 	 *
 	 * In general, the projection here arises because the pathtarget of the
@@ -310,9 +310,9 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 	 * used columns in attno order, and the pathtarget before grouping is
 	 * computed later and has the grouping columns in front.
 	 */
-	if (ts_is_decompress_chunk_path(subpath))
+	if (ts_is_columnar_scan_path(subpath))
 	{
-		subpath = (Path *) copy_decompress_chunk_path((DecompressChunkPath *) subpath);
+		subpath = (Path *) copy_columnar_scan_path((ColumnarScanPath *) subpath);
 		subpath->pathtarget = chunk_target_before_grouping;
 	}
 	else

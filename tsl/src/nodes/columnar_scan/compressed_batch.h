@@ -6,8 +6,8 @@
 #pragma once
 
 #include "compression/compression.h"
-#include "nodes/decompress_chunk/decompress_context.h"
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/decompress_context.h"
+#include "nodes/columnar_scan/vector_quals.h"
 #include <executor/tuptable.h>
 
 typedef struct ArrowArray ArrowArray;
@@ -185,7 +185,7 @@ compressed_batch_current_tuple(DecompressBatchState *batch_state)
 
 /*
  * VectorQualState for a compressed batch used to pass
- * DecompressChunk-specific data to vector qual functions that are shared
+ * ColumnarScan-specific data to vector qual functions that are shared
  * across scan nodes.
  */
 typedef struct CompressedBatchVectorQualState

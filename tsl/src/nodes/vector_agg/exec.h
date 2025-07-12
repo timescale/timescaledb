@@ -8,7 +8,7 @@
 
 #include <postgres.h>
 
-#include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/columnar_scan/compressed_batch.h"
 #include <nodes/execnodes.h>
 
 #include "function/functions.h"

@@ -34,15 +34,15 @@
 #include "debug_assert.h"
 #include "import/allpaths.h"
 #include "import/planner.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/decompress_chunk/planner.h"
-#include "nodes/decompress_chunk/qual_pushdown.h"
+#include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/columnar_scan/planner.h"
+#include "nodes/columnar_scan/qual_pushdown.h"
 #include "ts_catalog/array_utils.h"
 #include "utils.h"
 
-static CustomPathMethods decompress_chunk_path_methods = {
-	.CustomName = "DecompressChunk",
-	.PlanCustomPath = decompress_chunk_plan_create,
+static CustomPathMethods columnar_scan_path_methods = {
+	.CustomName = "ColumnarScan",
+	.PlanCustomPath = columnar_scan_plan_create,
 };
 
 typedef struct SortInfo
@@ -50,7 +50,7 @@ typedef struct SortInfo
 	List *required_compressed_pathkeys;
 	List *required_eq_classes;
 	bool needs_sequence_num;
-	bool use_compressed_sort; /* sort can be pushed below DecompressChunk */
+	bool use_compressed_sort; /* sort can be pushed below ColumnarScan */
 	bool use_batch_sorted_merge;
 	bool reverse;
 
@@ -58,16 +58,16 @@ typedef struct SortInfo
 	QualCost decompressed_sort_pathkeys_cost;
 } SortInfo;
 
-static RangeTblEntry *decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode,
+static RangeTblEntry *columnar_scan_make_rte(Oid compressed_relid, LOCKMODE lockmode,
 												Query *parse);
 static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 										 const CompressionInfo *compression_info,
 										 const SortInfo *sort_info);
 
-static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
+static ColumnarScanPath *
+columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path);
 
-static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
+static void columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info,
 											 const Chunk *chunk, RelOptInfo *chunk_rel,
 											 bool needs_sequence_num);
 
@@ -357,13 +357,13 @@ build_compressed_scan_pathkeys(const SortInfo *sort_info, PlannerInfo *root, Lis
 	return required_compressed_pathkeys;
 }
 
-DecompressChunkPath *
-copy_decompress_chunk_path(DecompressChunkPath *src)
+ColumnarScanPath *
+copy_columnar_scan_path(ColumnarScanPath *src)
 {
-	Assert(ts_is_decompress_chunk_path(&src->custom_path.path));
+	Assert(ts_is_columnar_scan_path(&src->custom_path.path));
 
-	DecompressChunkPath *dst = palloc(sizeof(DecompressChunkPath));
-	memcpy(dst, src, sizeof(DecompressChunkPath));
+	ColumnarScanPath *dst = palloc(sizeof(ColumnarScanPath));
+	memcpy(dst, src, sizeof(ColumnarScanPath));
 
 	return dst;
 }
@@ -434,13 +434,13 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 }
 
 /*
- * calculate cost for DecompressChunkPath
+ * calculate cost for ColumnarScanPath
  *
  * since we have to read whole batch before producing tuple
  * we put cost of 1 tuple of compressed_scan as startup cost
  */
 static void
-cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
+cost_columnar_scan(PlannerInfo *root, Path *path, Path *compressed_path)
 {
 	/* startup_cost is cost before fetching first tuple */
 	const double compressed_rows = Max(1, compressed_path->rows);
@@ -483,7 +483,7 @@ smoothstep(double x, double start, double end)
  * to merge the per segment by column sorted individual batches into a sorted result. So, we end
  * up which a data flow which looks as follows:
  *
- * DecompressChunk
+ * ColumnarScan
  *   * Decompress Batch 1
  *   * Decompress Batch 2
  *   * Decompress Batch 3
@@ -531,7 +531,7 @@ smoothstep(double x, double start, double end)
  */
 static void
 cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_info,
-						DecompressChunkPath *dcpath, Path *compressed_path)
+						ColumnarScanPath *dcpath, Path *compressed_path)
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
@@ -692,10 +692,10 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 		return NULL;
 	}
 
-	Assert(ts_is_decompress_chunk_path(path));
+	Assert(ts_is_columnar_scan_path(path));
 
 	/*
-	 * We should be given an unsorted DecompressChunk path.
+	 * We should be given an unsorted ColumnarScan path.
 	 */
 	Assert(path->pathkeys == NIL);
 
@@ -704,7 +704,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	 * chunk path because the original can be recycled in add_path, and our
 	 * sorted path must be independent.
 	 */
-	DecompressChunkPath *path_copy = copy_decompress_chunk_path((DecompressChunkPath *) path);
+	ColumnarScanPath *path_copy = copy_columnar_scan_path((ColumnarScanPath *) path);
 
 	/*
 	 * Sorting might require a projection to evaluate the sorting keys. It is
@@ -772,7 +772,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 #define IS_UPDL_CMD(parse)                                                                         \
 	((parse)->commandType == CMD_UPDATE || (parse)->commandType == CMD_DELETE)
 void
-ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
+ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
 								   const Chunk *chunk)
 {
 	RelOptInfo *compressed_rel;
@@ -822,7 +822,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	chunk_rel->partial_pathlist = NIL;
 
 	/* add RangeTblEntry and RelOptInfo for compressed chunk */
-	decompress_chunk_add_plannerinfo(root,
+	columnar_scan_add_plannerinfo(root,
 									 compression_info,
 									 chunk,
 									 chunk_rel,
@@ -965,7 +965,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 
 		Assert(compressed_path->parallel_workers == 0);
 		Path *chunk_path =
-			(Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+			(Path *) columnar_scan_path_create(root, compression_info, compressed_path);
 		Assert(chunk_path->parallel_workers == 0);
 
 		/*
@@ -975,10 +975,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 		 * down the sort to the compressed chunk. If we can push down the sort, the batches can be
 		 * directly consumed in this order and we don't need to use this optimization.
 		 */
-		DecompressChunkPath *batch_merge_path = NULL;
+		ColumnarScanPath *batch_merge_path = NULL;
 		if (sort_info.use_batch_sorted_merge)
 		{
-			batch_merge_path = copy_decompress_chunk_path((DecompressChunkPath *) chunk_path);
+			batch_merge_path = copy_columnar_scan_path((ColumnarScanPath *) chunk_path);
 
 			batch_merge_path->reverse = sort_info.reverse;
 			batch_merge_path->batch_sorted_merge = true;
@@ -998,14 +998,14 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 				add_path(chunk_rel, &batch_merge_path->custom_path.path);
 		}
 
-		/* If we can push down the sort below the DecompressChunk node, we set the pathkeys of
+		/* If we can push down the sort below the ColumnarScan node, we set the pathkeys of
 		 * the decompress node to the query pathkeys, while remembering the compressed_pathkeys
 		 * corresponding to those query_pathkeys. We will determine whether to put a sort
 		 * between the decompression node and the scan during plan creation */
 		if (sort_info.use_compressed_sort)
 		{
-			DecompressChunkPath *path_copy =
-				copy_decompress_chunk_path((DecompressChunkPath *) chunk_path);
+			ColumnarScanPath *path_copy =
+				copy_columnar_scan_path((ColumnarScanPath *) chunk_path);
 			path_copy->reverse = sort_info.reverse;
 			path_copy->needs_sequence_num = sort_info.needs_sequence_num;
 			path_copy->required_compressed_pathkeys = sort_info.required_compressed_pathkeys;
@@ -1035,7 +1035,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 						  work_mem,
 						  -1);
 
-				cost_decompress_chunk(root, &path_copy->custom_path.path, &sort_path);
+				cost_columnar_scan(root, &path_copy->custom_path.path, &sort_path);
 			}
 
 			chunk_path = &path_copy->custom_path.path;
@@ -1154,7 +1154,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			 */
 			Assert(compressed_path->parallel_workers > 0);
 			Assert(compressed_path->parallel_safe);
-			path = (Path *) decompress_chunk_path_create(root, compression_info, compressed_path);
+			path = (Path *) columnar_scan_path_create(root, compression_info, compressed_path);
 			Assert(path->parallel_workers > 0);
 			Assert(path->parallel_safe);
 
@@ -1376,7 +1376,7 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 	/*
 	 * It doesn't make sense to request a whole-row var from the compressed
 	 * chunk scan. If it is requested, just fetch the rest of columns. The
-	 * whole-row var will be created by the projection of DecompressChunk node.
+	 * whole-row var will be created by the projection of ColumnarScan node.
 	 */
 	if (have_whole_row_var)
 	{
@@ -1415,7 +1415,7 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 }
 
 static Bitmapset *
-decompress_chunk_adjust_child_relids(Bitmapset *src, int chunk_relid, int compressed_chunk_relid)
+columnar_scan_adjust_child_relids(Bitmapset *src, int chunk_relid, int compressed_chunk_relid)
 {
 	Bitmapset *result = NULL;
 	if (src != NULL)
@@ -1466,28 +1466,28 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 
 		/* adjust relid sets too */
 		newinfo->clause_relids =
-			decompress_chunk_adjust_child_relids(oldinfo->clause_relids,
+			columnar_scan_adjust_child_relids(oldinfo->clause_relids,
 												 context->chunk_rel->relid,
 												 context->compressed_rel->relid);
 		newinfo->required_relids =
-			decompress_chunk_adjust_child_relids(oldinfo->required_relids,
+			columnar_scan_adjust_child_relids(oldinfo->required_relids,
 												 context->chunk_rel->relid,
 												 context->compressed_rel->relid);
 		newinfo->outer_relids =
-			decompress_chunk_adjust_child_relids(oldinfo->outer_relids,
+			columnar_scan_adjust_child_relids(oldinfo->outer_relids,
 												 context->chunk_rel->relid,
 												 context->compressed_rel->relid);
 #if PG16_LT
 		newinfo->nullable_relids =
-			decompress_chunk_adjust_child_relids(oldinfo->nullable_relids,
+			columnar_scan_adjust_child_relids(oldinfo->nullable_relids,
 												 context->chunk_rel->relid,
 												 context->compressed_rel->relid);
 #endif
-		newinfo->left_relids = decompress_chunk_adjust_child_relids(oldinfo->left_relids,
+		newinfo->left_relids = columnar_scan_adjust_child_relids(oldinfo->left_relids,
 																	context->chunk_rel->relid,
 																	context->compressed_rel->relid);
 		newinfo->right_relids =
-			decompress_chunk_adjust_child_relids(oldinfo->right_relids,
+			columnar_scan_adjust_child_relids(oldinfo->right_relids,
 												 context->chunk_rel->relid,
 												 context->compressed_rel->relid);
 
@@ -1796,7 +1796,7 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
  * and add it to PlannerInfo
  */
 static void
-decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk,
+columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Chunk *chunk,
 								 RelOptInfo *chunk_rel, bool needs_sequence_num)
 {
 	Index compressed_index = root->simple_rel_array_size;
@@ -1812,7 +1812,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 																   CACHE_FLAG_NONE));
 
 	expand_planner_arrays(root, 1);
-	info->compressed_rte = decompress_chunk_make_rte(info->settings->fd.compress_relid,
+	info->compressed_rte = columnar_scan_make_rte(info->settings->fd.compress_relid,
 													 info->chunk_rte->rellockmode,
 													 root->parse);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
@@ -1891,12 +1891,12 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const
 	}
 }
 
-static DecompressChunkPath *
-decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
+static ColumnarScanPath *
+columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
 {
-	DecompressChunkPath *path;
+	ColumnarScanPath *path;
 
-	path = (DecompressChunkPath *) newNode(sizeof(DecompressChunkPath), T_CustomPath);
+	path = (ColumnarScanPath *) newNode(sizeof(ColumnarScanPath), T_CustomPath);
 
 	path->info = info;
 
@@ -1924,11 +1924,11 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Pat
 	}
 
 	path->custom_path.flags = 0;
-	path->custom_path.methods = &decompress_chunk_path_methods;
+	path->custom_path.methods = &columnar_scan_path_methods;
 	path->batch_sorted_merge = false;
 
 	/*
-	 * DecompressChunk doesn't manage any parallelism itself.
+	 * ColumnarScan doesn't manage any parallelism itself.
 	 */
 	path->custom_path.path.parallel_aware = false;
 
@@ -1941,7 +1941,7 @@ decompress_chunk_path_create(PlannerInfo *root, const CompressionInfo *info, Pat
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
 	path->required_compressed_pathkeys = NIL;
-	cost_decompress_chunk(root, &path->custom_path.path, compressed_path);
+	cost_columnar_scan(root, &path->custom_path.path, compressed_path);
 
 	return path;
 }
@@ -2037,7 +2037,7 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
  * create RangeTblEntry for compressed chunk
  */
 static RangeTblEntry *
-decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode, Query *parse)
+columnar_scan_make_rte(Oid compressed_relid, LOCKMODE lockmode, Query *parse)
 {
 	RangeTblEntry *rte = makeNode(RangeTblEntry);
 	Relation r = table_open(compressed_relid, lockmode);
@@ -2250,7 +2250,7 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 }
 
 /*
- * Check if we can push down the sort below the DecompressChunk node and fill
+ * Check if we can push down the sort below the ColumnarScan node and fill
  * SortInfo accordingly
  *
  * The following conditions need to be true for pushdown:
@@ -2413,10 +2413,10 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 	return sort_info;
 }
 
-/* Check if the provided path is a DecompressChunkPath */
+/* Check if the provided path is a ColumnarScanPath */
 bool
-ts_is_decompress_chunk_path(Path *path)
+ts_is_columnar_scan_path(Path *path)
 {
 	return IsA(path, CustomPath) &&
-		   castNode(CustomPath, path)->methods == &decompress_chunk_path_methods;
+		   castNode(CustomPath, path)->methods == &columnar_scan_path_methods;
 }

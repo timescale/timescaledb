@@ -1448,7 +1448,7 @@ ORDER BY device_id;
    ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
                      ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_110_chunk.device_id
@@ -1532,10 +1532,10 @@ ORDER BY device_id;
    ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
                      ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_112_chunk
                      ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_112_chunk.device_id
@@ -1619,13 +1619,13 @@ ORDER BY device_id;
    ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
                      ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_112_chunk
                      ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_114_chunk
                      ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_114_chunk.device_id
@@ -1709,16 +1709,16 @@ ORDER BY device_id;
    ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
                      ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_112_chunk
                      ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_114_chunk
                      ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_116_chunk
                      ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_116_chunk.device_id
@@ -1802,19 +1802,19 @@ ORDER BY device_id;
    ->  Merge Append
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_110_chunk
                      ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_111_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_112_chunk
                      ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_113_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_114_chunk
                      ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_115_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_116_chunk
                      ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_117_chunk
          ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_31_118_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_31_118_chunk
                      ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_min_1__ts_me_idx on compress_hyper_32_119_chunk
          ->  Partial GroupAggregate
                Group Key: _hyper_31_118_chunk.device_id
@@ -1919,15 +1919,15 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 --------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
          ->  Sort
                Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_123_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_121_chunk
          ->  Sort
                Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_124_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_122_chunk
          ->  Sort
                Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_125_chunk
@@ -1952,18 +1952,18 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
                ->  Sort
                      Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1
                      ->  Seq Scan on compress_hyper_34_123_chunk
          ->  Sort
                Sort Key: _hyper_33_120_chunk."time"
                ->  Seq Scan on _hyper_33_120_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_121_chunk
          ->  Sort
                Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_124_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_122_chunk
          ->  Sort
                Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_125_chunk
@@ -2011,7 +2011,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
                ->  Sort
                      Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1
                      ->  Seq Scan on compress_hyper_34_123_chunk
@@ -2020,14 +2020,14 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
                ->  Seq Scan on _hyper_33_120_chunk
    ->  Merge Append
          Sort Key: _hyper_33_121_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_33_121_chunk
                ->  Sort
                      Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1
                      ->  Seq Scan on compress_hyper_34_124_chunk
          ->  Sort
                Sort Key: _hyper_33_121_chunk."time"
                ->  Seq Scan on _hyper_33_121_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_122_chunk
          ->  Sort
                Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_125_chunk
@@ -2079,7 +2079,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_33_120_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
                ->  Sort
                      Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1
                      ->  Seq Scan on compress_hyper_34_123_chunk
@@ -2088,7 +2088,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
                ->  Seq Scan on _hyper_33_120_chunk
    ->  Merge Append
          Sort Key: _hyper_33_121_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_33_121_chunk
                ->  Sort
                      Sort Key: compress_hyper_34_124_chunk._ts_meta_min_1
                      ->  Seq Scan on compress_hyper_34_124_chunk
@@ -2097,7 +2097,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
                ->  Seq Scan on _hyper_33_121_chunk
    ->  Merge Append
          Sort Key: _hyper_33_122_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_33_122_chunk
                ->  Sort
                      Sort Key: compress_hyper_34_125_chunk._ts_meta_min_1
                      ->  Seq Scan on compress_hyper_34_125_chunk
@@ -2140,17 +2140,17 @@ EXPLAIN (COSTS OFF) SELECT * FROM test_partials ORDER BY time;
 ---------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
          ->  Sort
                Sort Key: compress_hyper_34_127_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_127_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_121_chunk
          ->  Sort
                Sort Key: compress_hyper_34_128_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_128_chunk
    ->  Merge Append
          Sort Key: _hyper_33_122_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_33_122_chunk
                ->  Sort
                      Sort Key: compress_hyper_34_129_chunk._ts_meta_min_1
                      ->  Seq Scan on compress_hyper_34_129_chunk
@@ -2186,28 +2186,28 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 --------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_33_120_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
          ->  Sort
                Sort Key: compress_hyper_34_127_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_127_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_33_121_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_121_chunk
          ->  Sort
                Sort Key: compress_hyper_34_128_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_128_chunk
    ->  Merge Append
          Sort Key: _hyper_33_122_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_33_122_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_33_122_chunk
                ->  Sort
                      Sort Key: compress_hyper_34_129_chunk._ts_meta_min_1
                      ->  Seq Scan on compress_hyper_34_129_chunk
          ->  Sort
                Sort Key: _hyper_33_122_chunk."time"
                ->  Seq Scan on _hyper_33_122_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_33_126_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_126_chunk
          ->  Sort
                Sort Key: compress_hyper_34_131_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_131_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_33_130_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_33_130_chunk
          ->  Sort
                Sort Key: compress_hyper_34_132_chunk._ts_meta_min_1
                ->  Seq Scan on compress_hyper_34_132_chunk
@@ -2306,14 +2306,14 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
    Order: space_part."time"
    ->  Merge Append
          Sort Key: _hyper_35_133_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_135_chunk._ts_meta_min_1, compress_hyper_36_135_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_135_chunk
          ->  Sort
                Sort Key: _hyper_35_133_chunk."time"
                ->  Seq Scan on _hyper_35_133_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
                Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
@@ -2335,14 +2335,14 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
    Order: space_part."time"
    ->  Merge Append
          Sort Key: _hyper_35_133_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_135_chunk._ts_meta_min_1, compress_hyper_36_135_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_135_chunk
          ->  Sort
                Sort Key: _hyper_35_133_chunk."time"
                ->  Seq Scan on _hyper_35_133_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
                Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
@@ -2370,21 +2370,21 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 ----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
          ->  Sort
                Sort Key: compress_hyper_36_135_chunk._ts_meta_min_1, compress_hyper_36_135_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_135_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
                Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_35_137_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_139_chunk._ts_meta_min_1, compress_hyper_36_139_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_139_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_35_138_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_140_chunk._ts_meta_min_1, compress_hyper_36_140_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_140_chunk
@@ -2400,21 +2400,21 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 ----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
          ->  Sort
                Sort Key: compress_hyper_36_135_chunk._ts_meta_min_1, compress_hyper_36_135_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_135_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
                Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_35_137_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_139_chunk._ts_meta_min_1, compress_hyper_36_139_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_139_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_35_138_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_140_chunk._ts_meta_min_1, compress_hyper_36_140_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_140_chunk
@@ -2432,24 +2432,24 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 ----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_35_133_chunk
          ->  Sort
                Sort Key: compress_hyper_36_135_chunk._ts_meta_min_1, compress_hyper_36_135_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_135_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_35_134_chunk
          ->  Sort
                Sort Key: compress_hyper_36_136_chunk._ts_meta_min_1, compress_hyper_36_136_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_136_chunk
    ->  Merge Append
          Sort Key: _hyper_35_137_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_35_137_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_139_chunk._ts_meta_min_1, compress_hyper_36_139_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_139_chunk
          ->  Sort
                Sort Key: _hyper_35_137_chunk."time"
                ->  Seq Scan on _hyper_35_137_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_35_138_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_140_chunk._ts_meta_min_1, compress_hyper_36_140_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_140_chunk

@@ -431,7 +431,7 @@ select * from mergeme where device = 1;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
  Append
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          Filter: (device = 1)
          ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_min_1__ts_meta_max_idx on compress_hyper_2_6_chunk
                Index Cond: (device = 1)
