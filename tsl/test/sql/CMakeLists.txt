@@ -20,6 +20,7 @@ set(TEST_FILES
     cagg_utils.sql
     cagg_watermark.sql
     chunk_column_stats.sql
+    columnar_scan_cost.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
@@ -52,7 +53,6 @@ set(TEST_FILES
     compression_trigger.sql
     create_table_with.sql
     custom_hashagg.sql
-    decompress_chunk_cost.sql
     decompress_index.sql
     foreign_keys_test.sql
     merge_append_partially_compressed.sql

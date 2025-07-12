@@ -480,7 +480,7 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 
 	CustomScan *customscan = castNode(CustomScan, childplan);
 
-	if (strcmp(customscan->methods->CustomName, "DecompressChunk") == 0)
+	if (strcmp(customscan->methods->CustomName, "ColumnarScan") == 0)
 	{
 		vectoragg_plan_decompress_chunk(childplan, vqi);
 		return true;
