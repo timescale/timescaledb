@@ -40,7 +40,7 @@
 #include "vector_predicates.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
-	.CustomName = "DecompressChunk",
+	.CustomName = "ColumnarScan",
 	.CreateCustomScanState = decompress_chunk_state_create,
 };
 
