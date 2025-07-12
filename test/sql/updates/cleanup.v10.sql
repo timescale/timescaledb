@@ -2,5 +2,5 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\ir setup.v8.sql
-\ir setup.chunk_skipping.sql
+\ir cleanup.v9.sql
+\ir cleanup.sparse_index.sql

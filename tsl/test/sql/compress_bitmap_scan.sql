@@ -20,10 +20,6 @@ create table bscan(ts int, s int, id int, payload int);
 
 select create_hypertable('bscan', 'ts', chunk_time_interval => 500001);
 
-alter table bscan set (timescaledb.compress,
-    timescaledb.compress_segmentby = 's',
-    timescaledb.compress_orderby = 'id, ts');
-
 insert into bscan
 select ts,
     ts % 239 s,
@@ -32,6 +28,10 @@ select ts,
 from generate_series(1, 1000000) ts;
 
 create index on bscan(payload);
+
+alter table bscan set (timescaledb.compress,
+    timescaledb.compress_segmentby = 's',
+    timescaledb.compress_orderby = 'id, ts');
 
 select count(compress_chunk(x)) from show_chunks('bscan') x;
 

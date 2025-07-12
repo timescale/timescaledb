@@ -11,8 +11,6 @@ $$ LANGUAGE SQL;
 
 create table test(ts int, s text, c text);
 select create_hypertable('test', 'ts');
-alter table test set (timescaledb.compress, timescaledb.compress_segmentby = 's',
-    timescaledb.compress_orderby = 'ts');
 
 insert into test
 select ts, ts % 10 s, mix(ts)::text c from generate_series(1, 10000) ts;
@@ -25,6 +23,8 @@ select ts, 20 + ts % 10 s, mix(ts % 10)::text c from generate_series(15001, 2000
 
 
 create index on test using brin(c text_bloom_ops);
+alter table test set (timescaledb.compress, timescaledb.compress_segmentby = 's',
+    timescaledb.compress_orderby = 'ts');
 select count(compress_chunk(x)) from show_chunks('test') x;
 
 
