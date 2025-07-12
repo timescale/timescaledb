@@ -17,22 +17,28 @@ ALTER TABLE ht_metrics_compressed SET (timescaledb.compress, timescaledb.compres
 
 INSERT INTO ht_metrics_compressed
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'6 hour') time,
+FROM generate_series('2020-01-02 00:00:00+00'::timestamptz,'2020-01-18 00:00:00+00'::timestamptz,'6 hour') time,
 generate_series(1,3) device;
 
 SELECT compress_chunk(c) FROM show_chunks('ht_metrics_compressed') c;
+
 -- make them partially compressed
 INSERT INTO ht_metrics_compressed
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'9 hour') time,
+FROM generate_series('2020-01-02 00:00:00+00'::timestamptz,'2020-01-18 00:00:00+00'::timestamptz,'9 hour') time,
 generate_series(1,3) device;
 
 VACUUM ANALYZE ht_metrics_compressed;
 
+SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group by 1 order by 2;
+
 -- chunkAppend eligible queries (from tsbench)
 -- sort is not pushed down
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time DESC, device LIMIT 1;
-:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('1d', time) DESC, device LIMIT 1;
+
+explain (analyze, timing off, summary off)
+SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('1d', time) DESC, device LIMIT 1;
+
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time desc limit 10;
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('2d',time) DESC LIMIT 1;
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time DESC LIMIT 1;
@@ -90,11 +96,11 @@ ANALYZE test1;
 -- tests that require resorting (pushdown below decompressChunk node cannot happen)
 
 -- requires resorting, no pushdown can happen
-:PREFIX
+explain (analyze, timing off, summary off)
 SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- requires resorting
-:PREFIX
+explain (analyze, timing off, summary off)
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
 
 -- all these require resorting, no pushdown can happen
