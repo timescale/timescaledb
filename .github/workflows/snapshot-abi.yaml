@@ -38,7 +38,7 @@ jobs:
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
-      PG_EXTENSIONS: postgres_fdw test_decoding pageinspect pgstattuple
+      PG_EXTENSIONS: postgres_fdw test_decoding
 
     strategy:
       fail-fast: false

@@ -70,7 +70,7 @@ jobs:
           vectorized_aggregation
           net
         SKIPS: chunk_adaptive histogram_test-*
-        EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
+        EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
