@@ -1921,6 +1921,11 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 				 errhint("Remove the rules before creating a hypertable.")));
 
 	/*
+	 * Must close the relation to decrease the reference count for the relation
+	 * as PG18+ will check the reference count when adding constraints for the table.
+	 */
+	table_close(rel, NoLock);
+	/*
 	 * Create the associated schema where chunks are stored, or, check
 	 * permissions if it already exists
 	 */
@@ -2022,12 +2027,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 
 	/*
 	 * Migrate data from the main table to chunks
-	 *
-	 * Note: we do not unlock here. We wait till the end of the txn instead.
-	 * Must close the relation before migrating data.
 	 */
-	table_close(rel, NoLock);
-
 	if (table_has_data)
 	{
 		ereport(NOTICE,
