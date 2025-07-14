@@ -990,12 +990,26 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 			batch_merge_path->custom_path.path.pathkeys = root->query_pathkeys;
 			cost_batch_sorted_merge(root, compression_info, batch_merge_path, compressed_path);
 
+			if (ts_guc_debug_require_batch_sorted_merge == DRO_Force)
+			{
+				batch_merge_path->custom_path.path.startup_cost = cpu_tuple_cost;
+				batch_merge_path->custom_path.path.total_cost = 2 * cpu_tuple_cost;
+			}
+
 			/* If the chunk is partially compressed, prepare the path only and add it later
 			 * to a merge append path when we are able to generate the ordered result for the
 			 * compressed and uncompressed part of the chunk.
 			 */
 			if (!consider_partial)
 				add_path(chunk_rel, &batch_merge_path->custom_path.path);
+		}
+		else if (ts_guc_debug_require_batch_sorted_merge == DRO_Require ||
+				 ts_guc_debug_require_batch_sorted_merge == DRO_Force)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("debug: batch sorted merge is required but not possible at planning "
+							"time")));
 		}
 
 		/* If we can push down the sort below the DecompressChunk node, we set the pathkeys of
