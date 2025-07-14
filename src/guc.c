@@ -1190,6 +1190,18 @@ _guc_init(void)
 							/* assign_hook= */ NULL,
 							/* show_hook= */ NULL);
 
+	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
+							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
+							 /* long_desc= */ "this is for debugging purposes",
+							 /* valueAddr= */ (int *) &ts_guc_debug_require_batch_sorted_merge,
+							 /* bootValue= */ DRO_Allow,
+							 /* options = */ debug_require_options,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),
 							 /* short_desc= */ "immediately shutdown the bgw scheduler",
@@ -1264,18 +1276,6 @@ _guc_init(void)
 							 "and "
 							 "using the test templates is a pain",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_qual,
-							 /* bootValue= */ DRO_Allow,
-							 /* options = */ debug_require_options,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
-
-	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
-							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
-							 /* long_desc= */ "this is for debugging purposes",
-							 /* valueAddr= */ (int *) &ts_guc_debug_require_batch_sorted_merge,
 							 /* bootValue= */ DRO_Allow,
 							 /* options = */ debug_require_options,
 							 /* context= */ PGC_USERSET,
