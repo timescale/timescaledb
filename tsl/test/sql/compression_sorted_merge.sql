@@ -26,6 +26,8 @@ INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 01:00:00-00', 1,
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2, 1, 3, 3, 0);
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
 
+INSERT INTO test1 (time, x1, x2, x3, x4, x5) select '2000-01-01 04:00:00-00'::timestamptz + interval '1 second' * x, 1, 2, 4, 5 + x, 0 from generate_series(0, 1000) x;
+
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
 ANALYZE test1;
 
@@ -77,111 +79,111 @@ ANALYZE test_with_defined_null;
 
 -- Should be optimized (implicit NULLS first)
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST;
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST LIMIT 10;
 
 -- Should not be optimized (NULL order wrong)
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS LAST;
+SELECT * FROM test1 ORDER BY time DESC NULLS LAST LIMIT 10;
 
 -- Should be optimized (implicit NULLS last)
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC;
+SELECT * FROM test1 ORDER BY time ASC LIMIT 10;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST LIMIT 10;
 
 -- Should not be optimized (NULL order wrong)
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST LIMIT 10;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST;
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST LIMIT 10;
 
 -- Should not be optimized (wrong order for x4)
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST;
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST LIMIT 10;
 
 -- Should be optimized (backward scan)
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST LIMIT 10;
 
 -- Should be optimized (backward scan)
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST LIMIT 10;
 
 -- Should be optimized (backward scan)
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST LIMIT 10;
 
 -- Should not be optimized (wrong order for x4 in backward scan)
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC LIMIT 10;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test2 ORDER BY time ASC;
+SELECT * FROM test2 ORDER BY time ASC LIMIT 10;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 DESC;
+SELECT * FROM test2 ORDER BY time ASC, x3 DESC LIMIT 10;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 DESC, x4 DESC;
+SELECT * FROM test2 ORDER BY time ASC, x3 DESC, x4 DESC LIMIT 10;
 
 -- Should not be optimized (wrong order for x3)
 :PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC;
+SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC LIMIT 10;
 
 -- Should not be optimized (wrong order for x3)
 :PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC;
+SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC LIMIT 10;
 
 -- Should be optimized (backward scan)
 :PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST LIMIT 10;
 
 -- Should be optimized (backward scan)
 :PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
 
 -- Should be optimized (backward scan)
 :PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS LAST;
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS LAST LIMIT 10;
 
 -- Should not be optimized (wrong order for x3 in backward scan)
 :PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS FIRST;
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS FIRST LIMIT 10;
 
 -- Should not be optimized (wrong order for x3 in backward scan)
 :PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS FIRST;
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS FIRST LIMIT 10;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST LIMIT 10;
 
 -- Should be optimized (backward scan)
 :PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST LIMIT 10;
 
 -- Should not be optimized
 :PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST LIMIT 10;
 
 -- Should not be optimized
 :PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST LIMIT 10;
 
 
 ------
@@ -190,36 +192,36 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
 -- Should be optimized (some batches qualify by pushed down filter on _ts_meta_max_3)
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 0 ORDER BY time DESC;
+SELECT * FROM test1 WHERE x4 > 0 ORDER BY time DESC LIMIT 10;
 
 -- Should be optimized (no batches qualify by pushed down filter on _ts_meta_max_3)
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC LIMIT 10;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4 LIMIT 10;
 
 -- Should be optimized (duplicate order by attributes)
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x3;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x3 LIMIT 10;
 
 -- Should be optimized (duplicate order by attributes)
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4, x3, x4;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4, x3, x4 LIMIT 10;
 
 -- Should not be optimized
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3 LIMIT 10;
 
 -- Should not be optimized
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4 LIMIT 10;
 
 -- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
 SET enable_sort TO OFF;
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 RESET enable_sort;
 
 ------
@@ -227,64 +229,64 @@ RESET enable_sort;
 ------
 
 -- Forward scan
-SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Backward scan
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST LIMIT 10;
 
 -- Forward scan
-SELECT * FROM test2 ORDER BY time ASC;
+SELECT * FROM test2 ORDER BY time ASC LIMIT 10;
 
 -- Backward scan
-SELECT * FROM test2 ORDER BY time DESC NULLS LAST;
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST LIMIT 10;
 
 -- With selection on compressed column (value larger as max value for all batches, so no batch has to be opened)
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC LIMIT 10;
 
 -- With selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
-SELECT * FROM test1 WHERE x4 > 2 ORDER BY time DESC;
+SELECT * FROM test1 WHERE x4 > 2 ORDER BY time DESC LIMIT 10;
 
 -- With selection on segment_by column
-SELECT * FROM test1 WHERE time < '1980-01-01 00:00:00-00' ORDER BY time DESC;
-SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
+SELECT * FROM test1 WHERE time < '1980-01-01 00:00:00-00' ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC LIMIT 10;
 
 -- With selection on segment_by and compressed column
-SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
-SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' AND x4 > 100 ORDER BY time DESC;
+SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' AND x4 > 100 ORDER BY time DESC LIMIT 10;
 
 -- Without projection
-SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- With projection on time
-SELECT time FROM test1 ORDER BY time DESC;
+SELECT time FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- With projection on x3
-SELECT x3 FROM test1 ORDER BY time DESC;
+SELECT x3 FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- With projection on x3 and time
-SELECT x3,time FROM test1 ORDER BY time DESC;
+SELECT x3,time FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- With projection on time and x3
-SELECT time,x3 FROM test1 ORDER BY time DESC;
+SELECT time,x3 FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
-SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
-SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- With projection and selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
-SELECT x4 FROM test1 WHERE x4 > 2 ORDER BY time DESC;
+SELECT x4 FROM test1 WHERE x4 > 2 ORDER BY time DESC LIMIT 10;
 
 -- Aggregation with count
 SELECT count(*) FROM test1;
 
 -- Test with default values
-ALTER TABLE test1 ADD COLUMN c1 int;
-ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 42;
-SELECT * FROM test1 ORDER BY time DESC;
+ALTER TABLE test1 ADD COLUMN c1 int LIMIT 10;
+ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 42 LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Recompress
 SELECT decompress_chunk(i) FROM show_chunks('test1') i;
@@ -293,39 +295,39 @@ ANALYZE test1;
 
 -- Test with a changed physical layout
 -- build_physical_tlist() can not be used for the scan on the compressed chunk anymore
-SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 ALTER TABLE test1 DROP COLUMN c2;
-SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Test with a re-created column
 ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 43;
-SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Test with the recreated column
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC;
-SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Test with projection and recreated column
 :PREFIX
-SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
-SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
+SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Test with projection and recreated column
 :PREFIX
-SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
-SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
+SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Test with projection, constants and recreated column
 :PREFIX
-SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
-SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
+SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC LIMIT 10;
 
 -- Test with null values
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST LIMIT 10;
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST LIMIT 10;
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST LIMIT 10;
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST LIMIT 10;
 
 ------
 -- Tests based on compressed chunk state

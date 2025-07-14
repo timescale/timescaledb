@@ -809,18 +809,15 @@ VACUUM ANALYZE test_ordering;
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_ordering
-   Order: test_ordering."time"
-   ->  Merge Append
-         Sort Key: _hyper_13_20_chunk."time"
+ Sort
+   Sort Key: _hyper_13_20_chunk."time"
+   ->  Append
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Sort
                      Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_14_21_chunk
-         ->  Sort
-               Sort Key: _hyper_13_20_chunk."time"
-               ->  Seq Scan on _hyper_13_20_chunk
-(11 rows)
+         ->  Seq Scan on _hyper_13_20_chunk
+(8 rows)
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
 VACUUM ANALYZE test_ordering;
@@ -828,19 +825,16 @@ VACUUM ANALYZE test_ordering;
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on test_ordering
-   Order: test_ordering."time"
-   ->  Merge Append
-         Sort Key: _hyper_13_20_chunk."time"
+ Sort
+   Sort Key: _hyper_13_20_chunk."time"
+   ->  Append
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Sort
                      Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_14_21_chunk
-         ->  Sort
-               Sort Key: _hyper_13_20_chunk."time"
-               ->  Seq Scan on _hyper_13_20_chunk
-   ->  Index Only Scan Backward using _hyper_13_22_chunk_test_ordering_time_idx on _hyper_13_22_chunk
-(12 rows)
+         ->  Seq Scan on _hyper_13_20_chunk
+         ->  Seq Scan on _hyper_13_22_chunk
+(9 rows)
 
 --insert into compressed + uncompressed chunk
 INSERT INTO test_ordering VALUES (21), (22),(113);

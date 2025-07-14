@@ -124,15 +124,17 @@ full join query_params q2
                  Sort Key: test_copy.a, ((test_copy.b + 1))
                  ->  Seq Scan on test_copy
                        Filter: ((a)::text = ANY ('{lat,lon}'::text[]))
-   ->  Hash Full Join
-         Hash Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-               ->  Seq Scan on compress_hyper_2_2_chunk
-         ->  Hash
+   ->  Merge Full Join
+         Merge Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk.a
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Materialize
                ->  CTE Scan on query_params q
    ->  Hash
          ->  CTE Scan on query_params q2
-(16 rows)
+(18 rows)
 
 reset enable_seqscan;
 reset jit;
