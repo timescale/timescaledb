@@ -50,10 +50,13 @@ typedef struct MultiInvalidationEntry
  */
 typedef struct MultiInvalidationRangeEntry
 {
+	/* Key fields */
 	int32 materialization_id; /* Materialization table for continuous aggregate */
-	size_t ranges_alloc;	  /* Number of range entries allocated in array*/
-	size_t ranges_count;	  /* Number of range entries in array */
-	RangeType **ranges;		  /* Array of pointers to collected invalidation ranges */
+
+	/* Value fields */
+	int ranges_alloc;	/* Number of range entries allocated in array */
+	int ranges_count;	/* Number of range entries in array */
+	RangeType **ranges; /* Array of pointers to collected invalidation ranges */
 	ContinuousAggBucketFunction *bucket_function;
 } MultiInvalidationRangeEntry;
 
