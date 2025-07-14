@@ -42,6 +42,7 @@ set(SOURCE_FILES
     histogram.sql
     bgw_scheduler.sql
     metadata.sql
+    uuidv7.sql
     views.sql
     views_experimental.sql
     gapfill.sql
