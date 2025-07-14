@@ -50,10 +50,13 @@ typedef struct MultiInvalidationEntry
  */
 typedef struct MultiInvalidationRangeEntry
 {
+	/* Key fields */
 	int32 materialization_id; /* Materialization table for continuous aggregate */
-	size_t ranges_alloc;	  /* Number of range entries allocated in array*/
-	size_t ranges_count;	  /* Number of range entries in array */
-	RangeType **ranges;		  /* Array of pointers to collected invalidation ranges */
+
+	/* Value fields */
+	int ranges_alloc;	/* Number of range entries allocated in array */
+	int ranges_count;	/* Number of range entries in array */
+	RangeType **ranges; /* Array of pointers to collected invalidation ranges */
 	ContinuousAggsBucketFunction *bucket_function;
 } MultiInvalidationRangeEntry;
 
@@ -99,5 +102,4 @@ extern MultiInvalidationEntry *
 multi_invalidation_state_hypertable_entry_get_for_update(MultiInvalidationState *state,
 														 int32 hypertable_id);
 extern void multi_invalidation_process_hypertable_log(List *hypertables);
-extern Datum
-continuous_agg_process_multi_hypertable_invalidations(PG_FUNCTION_ARGS);
+extern Datum continuous_agg_process_multi_hypertable_invalidations(PG_FUNCTION_ARGS);
