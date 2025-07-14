@@ -85,6 +85,7 @@ TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
 #endif
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
+TSDLLEXPORT int ts_guc_cagg_wal_batch_size = 10000;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
@@ -879,6 +880,20 @@ _guc_init(void)
 							10,
 							0,
 							INT_MAX,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("cagg_processing_wal_batch_size"),
+							"Batch size when processing WAL entries.",
+							"Number of entries processed from the WAL at a go. Larger values take "
+							"more memory but might be more efficient.",
+							&ts_guc_cagg_wal_batch_size,
+							10000,
+							1000,
+							10000000,
 							PGC_USERSET,
 							0,
 							NULL,
