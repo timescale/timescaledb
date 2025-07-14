@@ -144,8 +144,6 @@ TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
 
-bool ts_guc_debug_require_batch_sorted_merge = false;
-
 bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
 /*
@@ -169,19 +167,22 @@ char *ts_current_timestamp_mock = NULL;
 
 int ts_guc_debug_toast_tuple_target = 128;
 
-#ifdef TS_DEBUG
-
-bool ts_guc_debug_have_int128;
-
 static const struct config_enum_entry debug_require_options[] = { { "allow", DRO_Allow, false },
 																  { "forbid", DRO_Forbid, false },
 																  { "require", DRO_Require, false },
+																  { "force", DRO_Force, false },
 																  { NULL, 0, false } };
+
+#ifdef TS_DEBUG
+
+bool ts_guc_debug_have_int128;
 
 DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
 
 DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 #endif
+
+DebugRequireOption ts_guc_debug_require_batch_sorted_merge = false;
 
 bool ts_guc_debug_compression_path_info = false;
 bool ts_guc_enable_rowlevel_compression_locking = false;
@@ -1271,11 +1272,12 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
-	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
+	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
 							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
 							 /* long_desc= */ "this is for debugging purposes",
-							 /* valueAddr= */ &ts_guc_debug_require_batch_sorted_merge,
-							 /* bootValue= */ false,
+							 /* valueAddr= */ (int *) &ts_guc_debug_require_batch_sorted_merge,
+							 /* bootValue= */ DRO_Allow,
+							 /* options = */ debug_require_options,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,
 							 /* check_hook= */ NULL,

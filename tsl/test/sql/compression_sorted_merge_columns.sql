@@ -21,7 +21,7 @@ select compress_chunk(show_chunks('t')) \gset
 
 set enable_sort to off;
 set timescaledb.enable_decompression_sorted_merge to on;
-set timescaledb.debug_require_batch_sorted_merge to on;
+set timescaledb.debug_require_batch_sorted_merge to 'require';
 -- set enable_sort to on;
 -- set timescaledb.enable_decompression_sorted_merge to off;
 -- set timescaledb.debug_require_batch_sorted_merge to off;

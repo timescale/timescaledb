@@ -16,7 +16,7 @@ select compress_chunk(x, true) from show_chunks('batches') x;
 
 analyze batches;
 
-set timescaledb.debug_require_batch_sorted_merge to true;
+set timescaledb.debug_require_batch_sorted_merge to 'require';
 set enable_sort to off;
 
 select ts from batches where ts != '2022-02-02 00:00:02' order by ts;

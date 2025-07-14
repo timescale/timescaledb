@@ -383,11 +383,20 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_fifo;
 	}
 
-	if (ts_guc_debug_require_batch_sorted_merge && !dcontext->batch_sorted_merge)
+	if ((ts_guc_debug_require_batch_sorted_merge == DRO_Require ||
+		 ts_guc_debug_require_batch_sorted_merge == DRO_Force) &&
+		!dcontext->batch_sorted_merge)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("debug: batch sorted merge is required but not used")));
+	}
+
+	if (ts_guc_debug_require_batch_sorted_merge == DRO_Forbid && dcontext->batch_sorted_merge)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("debug: batch sorted merge is used when it is forbidden")));
 	}
 
 	/* Constify stable expressions in vectorized predicates. */
