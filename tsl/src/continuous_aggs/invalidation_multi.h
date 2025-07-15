@@ -54,9 +54,10 @@ typedef struct MultiInvalidationRangeEntry
 	int32 materialization_id; /* Materialization table for continuous aggregate */
 
 	/* Value fields */
-	int ranges_alloc;	/* Number of range entries allocated in array */
-	int ranges_count;	/* Number of range entries in array */
-	RangeType **ranges; /* Array of pointers to collected invalidation ranges */
+	int ranges_alloc;	   /* Number of range entries allocated in array */
+	int ranges_count;	   /* Number of range entries in array */
+	RangeType **ranges;	   /* Array of pointers to collected invalidation ranges */
+	MemoryContext context; /* Memory context for the ranges in this entry */
 	ContinuousAggsBucketFunction *bucket_function;
 } MultiInvalidationRangeEntry;
 
@@ -81,8 +82,10 @@ typedef struct MultiInvalidationRangeEntry
 typedef struct MultiInvalidationState
 {
 	MemoryContext hash_context; /* Memory context for stored data */
-	MemoryContext proc_context; /* Memory context for short-lived processing data */
+	MemoryContext work_context; /* Memory context for short-lived processing data */
 	TypeCacheEntry *typecache;	/* Typecache entry for multirange type */
+	Size high_work_mem;			/* High limit on the working memory (in bytes) */
+	Size low_work_mem;			/* Low limit on the working memory (in bytes) */
 	HTAB *hypertables;			/* Cache for information about hypertables being processed */
 	HTAB *ranges;				/* Cache with ranges for all continuous aggregates */
 	Relation logrel;			/* Materialization invalidation log table being written */
@@ -90,16 +93,16 @@ typedef struct MultiInvalidationState
 } MultiInvalidationState;
 
 extern void multi_invalidation_state_init(MultiInvalidationState *state, const char *slot_name,
-										  MemoryContext mcxt);
+										  Size low_work_mem, Size high_work_mem);
 extern void multi_invalidation_state_cleanup(MultiInvalidationState *state);
+extern void multi_invalidation_flush_ranges(MultiInvalidationState *state);
 extern void multi_invalidation_range_add(MultiInvalidationState *state,
 										 const Invalidation *invalidation);
-extern void multi_invalidation_range_write(MultiInvalidationState *state,
-										   MultiInvalidationRangeEntry *entry);
 extern void multi_invalidation_range_write_all(MultiInvalidationState *state);
 extern void multi_invalidation_move_invalidations(MultiInvalidationState *state);
 extern MultiInvalidationEntry *
 multi_invalidation_state_hypertable_entry_get_for_update(MultiInvalidationState *state,
 														 int32 hypertable_id);
 extern void multi_invalidation_process_hypertable_log(List *hypertables);
-extern Datum continuous_agg_process_multi_hypertable_invalidations(PG_FUNCTION_ARGS);
+extern Datum
+continuous_agg_process_multi_hypertable_invalidations(PG_FUNCTION_ARGS);
