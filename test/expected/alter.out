@@ -656,9 +656,8 @@ INSERT INTO original_name.my_table2 (date, quantity) VALUES ('2018-07-04T21:00:0
 ALTER SCHEMA original_name RENAME TO new_name;
 DROP SCHEMA new_name CASCADE;
 NOTICE:  drop cascades to 4 other objects
-\dt new_name.*;
-      List of relations
- Schema | Name | Type | Owner 
+SELECT * FROM test.relation WHERE schema = 'new_name';
+ schema | name | type | owner 
 --------+------+------+-------
 (0 rows)
 
