@@ -8,6 +8,15 @@
  * Module for processing invalidations for multiple hypertables in one single
  * pass. It will build up a multi-range for each continuous aggregate using
  * the internal time type.
+ *
+ * The multi-invalidation module will collect ranges for all continuous
+ * aggregates associated with a hypertable and automatically write them to the
+ * materialization log as needed to meet the memory bounds.
+ *
+ * When setting up the module, a log and high and low working memory limits
+ * are provided. As ranges are added, the used memory is tracked and when it
+ * exceeds the high working memory limit, invalidation ranges will be flushed
+ * to the materialization log until reaching the low working memory limit.
  */
 
 #include "invalidation_multi.h"
@@ -16,12 +25,16 @@
 
 #include <access/tupdesc.h>
 #include <catalog/pg_type_d.h>
+#include <common/int.h>
 #include <executor/spi.h>
 #include <lib/stringinfo.h>
+#include <miscadmin.h>
 #include <nodes/pg_list.h>
 #include <postgres_ext.h>
 #include <replication/logicalproto.h>
 #include <utils/array.h>
+#include <utils/elog.h>
+#include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/rangetypes.h>
 #include <utils/typcache.h>
@@ -32,15 +45,26 @@
 #include "guc.h"
 #include "ts_catalog/continuous_agg.h"
 
+/*
+ * Initialize the multi-invalidation state to collect invalidations for
+ * continuous aggregates.
+ *
+ * The multi-invalidation state tracks invalidation ranges for continuous
+ * aggregates and is used to combine multiple ranges from the hypertable log
+ * into a set of smaller ranges aligned to bucket widths for each continuous
+ * aggregate.
+ */
 void
 multi_invalidation_state_init(MultiInvalidationState *state, const char *slot_name,
-							  MemoryContext mcxt)
+							  Size low_work_mem, Size high_work_mem)
 {
-	state->hash_context =
-		AllocSetContextCreate(mcxt, "InvalidationsHashContext", ALLOCSET_DEFAULT_SIZES);
+	state->hash_context = AllocSetContextCreate(CurrentMemoryContext,
+												"InvalidationHashContext",
+												ALLOCSET_START_SMALL_SIZES);
 
-	state->proc_context =
-		AllocSetContextCreate(mcxt, "InvalidationsProcessingContext", ALLOCSET_DEFAULT_SIZES);
+	state->work_context = AllocSetContextCreate(CurrentMemoryContext,
+												"InvalidationProcessingContext",
+												ALLOCSET_START_SMALL_SIZES);
 
 	HASHCTL hypertables_ctl = { .keysize = sizeof(int32),
 								.entrysize = sizeof(MultiInvalidationEntry),
@@ -64,6 +88,8 @@ multi_invalidation_state_init(MultiInvalidationState *state, const char *slot_na
 	state->logrel = table_open(relid, RowExclusiveLock);
 	state->typecache = lookup_type_cache(INT8MULTIRANGEOID, TYPECACHE_MULTIRANGE_INFO);
 	namestrcpy(&state->slot_name, slot_name);
+	state->low_work_mem = low_work_mem;
+	state->high_work_mem = high_work_mem;
 }
 
 void
@@ -73,18 +99,43 @@ multi_invalidation_state_cleanup(MultiInvalidationState *state)
 	hash_destroy(state->hypertables);
 	table_close(state->logrel, NoLock);
 	MemoryContextDelete(state->hash_context);
-	MemoryContextDelete(state->proc_context);
+	MemoryContextDelete(state->work_context);
 }
 
 static void
-multi_invalidation_range_entry_init(MultiInvalidationRangeEntry *entry, int32 materialization_id,
-									ContinuousAggBucketFunction *bucket_function)
+multi_invalidation_range_entry_init(MultiInvalidationState *state,
+									MultiInvalidationRangeEntry *entry, int32 materialization_id,
+									ContinuousAggBucketFunction *bucket_function,
+									MemoryContext context)
 {
+	entry->context = context;
 	entry->materialization_id = materialization_id;
 	entry->bucket_function = bucket_function;
 	entry->ranges_count = 0;
 	entry->ranges_alloc = 16; /* Starting count, but will increase */
-	entry->ranges = palloc0(entry->ranges_alloc * sizeof(RangeType *));
+	entry->ranges =
+		MemoryContextAllocZero(entry->context, entry->ranges_alloc * sizeof(RangeType *));
+}
+
+/*
+ * Clear the range entry.
+ *
+ * This is typically done before it is removed from the hash table. If you
+ * want to use it again, you need to call multi_invalidation_range_init.
+ *
+ * Both the ranges and the range entry are stored in the hash memory context
+ * for the processing state, so we need to free them explicitly.
+ */
+static void
+multi_invalidation_range_entry_destroy(MultiInvalidationState *state,
+									   MultiInvalidationRangeEntry *entry)
+{
+	Assert(entry->ranges != NULL && entry->context != NULL);
+	TS_DEBUG_LOG("destroying context %s with %u KiB",
+				 entry->context->name,
+				 (unsigned int) (MemoryContextMemAllocated(entry->context, false) / 1024));
+	MemoryContextDelete(entry->context);
+	entry->ranges = NULL;
 }
 
 /*
@@ -93,7 +144,7 @@ multi_invalidation_range_entry_init(MultiInvalidationRangeEntry *entry, int32 ma
  * Returns all associated continuous aggregates that are using WAL to collect
  * invalidations.
  */
-static List *
+static void
 multi_invalidation_hypertable_entry_init(MultiInvalidationState *state,
 										 MultiInvalidationEntry *entry, int32 hypertable_id)
 {
@@ -121,7 +172,6 @@ multi_invalidation_hypertable_entry_init(MultiInvalidationState *state,
 		entry->caggs = lappend_int(entry->caggs, cagg->data.mat_hypertable_id);
 	}
 	MemoryContextSwitchTo(old_context);
-	return caggs;
 }
 
 /*
@@ -142,29 +192,7 @@ multi_invalidation_state_hypertable_entry_get_for_update(MultiInvalidationState 
 
 	/* If hypertable entry was not found, initialize it. */
 	if (!hypertables_entry_found)
-	{
-		List *caggs =
-			multi_invalidation_hypertable_entry_init(state, hypertables_entry, hypertable_id);
-
-		/* We know that the continuous aggregates for the hypertable were not
-		 * in the cache since the hypertable was not in the cache, so let's
-		 * write the associated continuous aggregates (that are all using the
-		 * WAL) to the ranges cache at this point. */
-		ListCell *lc;
-		foreach (lc, caggs)
-		{
-			ContinuousAgg *cagg = lfirst(lc);
-			int32 materialization_id = cagg->data.mat_hypertable_id;
-			bool ranges_entry_found;
-			MultiInvalidationRangeEntry *ranges_entry =
-				hash_search(state->ranges, &materialization_id, HASH_ENTER, &ranges_entry_found);
-
-			Assert(!ranges_entry_found);
-			multi_invalidation_range_entry_init(ranges_entry,
-												materialization_id,
-												cagg->bucket_function);
-		}
-	}
+		multi_invalidation_hypertable_entry_init(state, hypertables_entry, hypertable_id);
 
 	Assert(hypertables_entry != NULL);
 	return hypertables_entry;
@@ -173,12 +201,24 @@ multi_invalidation_state_hypertable_entry_get_for_update(MultiInvalidationState 
 void
 multi_invalidation_range_add(MultiInvalidationState *state, const Invalidation *invalidation)
 {
-	MultiInvalidationEntry *hypertables_entry =
-		multi_invalidation_state_hypertable_entry_get_for_update(state, invalidation->hyper_id);
+	Size allocated_hash_mem = MemoryContextMemAllocated(state->hash_context, true);
+
+	/*
+	 * If we are exceeding the high working memory mark, start to flush ranges
+	 * until we are below the low working memory mark. We first check the
+	 * amount of memory allocated, because this is quick, but then we need to
+	 * check if it was a false alarm and we actually had space left.
+	 */
+	TS_DEBUG_LOG("used memory: %u KiB / %u KiB",
+				 (unsigned int) (allocated_hash_mem / 1024),
+				 (unsigned int) (state->high_work_mem / 1024));
+	if (allocated_hash_mem > state->high_work_mem)
+		multi_invalidation_flush_ranges(state);
 
 	MemoryContext old_context = MemoryContextSwitchTo(state->hash_context);
 
-	TS_DEBUG_LOG("CurrentMemoryContext: %s", CurrentMemoryContext->name);
+	MultiInvalidationEntry *hypertables_entry =
+		multi_invalidation_state_hypertable_entry_get_for_update(state, invalidation->hyper_id);
 
 	/* Iterate over all associated caggs of the hypertable, expand the range
 	 * to the bucket boundaries for the continuous aggregate, and add it to
@@ -195,11 +235,31 @@ multi_invalidation_range_add(MultiInvalidationState *state, const Invalidation *
 
 		bool ranges_entry_found;
 		MultiInvalidationRangeEntry *ranges_entry =
-			hash_search(state->ranges, &materialized_id, HASH_FIND, &ranges_entry_found);
+			hash_search(state->ranges, &materialized_id, HASH_ENTER, &ranges_entry_found);
 
-		/* The continuous aggregate should be in the table since we added it when we added the
-		 * hypertable. If it is not there, something is wrong. */
-		Assert(ranges_entry_found);
+		if (!ranges_entry_found)
+		{
+			/*
+			 * The init below does a lot of scans so to be able to throw away that memory we use the
+			 * range entry context for this scan. When destroying the memory context while flushing
+			 * ranges we will get rid of this as well.
+			 */
+			MemoryContext context = AllocSetContextCreate(state->hash_context,
+														  "InvalidationRangeEntryContext",
+														  ALLOCSET_START_SMALL_SIZES);
+			MemoryContext old_context = MemoryContextSwitchTo(context);
+
+			ContinuousAgg *cagg =
+				ts_continuous_agg_find_by_mat_hypertable_id(materialized_id, false);
+			multi_invalidation_range_entry_init(state,
+												ranges_entry,
+												materialized_id,
+												cagg->bucket_function,
+												context);
+			MemoryContextSwitchTo(old_context);
+		}
+
+		MemoryContext old_context = MemoryContextSwitchTo(ranges_entry->context);
 
 		/* Check invariant for processing to make sure that we do not write
 		 * outside allocated memory. */
@@ -254,49 +314,55 @@ multi_invalidation_range_add(MultiInvalidationState *state, const Invalidation *
 				repalloc(ranges_entry->ranges, ranges_entry->ranges_alloc * sizeof(RangeType *));
 		}
 
+		MemoryContextSwitchTo(old_context);
+
 		Assert(ranges_entry->ranges_count < ranges_entry->ranges_alloc);
 	}
-
 	MemoryContextSwitchTo(old_context);
 }
 
 /*
  * Write the aggregated ranges to the log.
  *
+ * This will first check if it is necessary to evict any range entries because
+ * we risk exceeding the memory limit. If that is the case, it will start to
+ * evict entries until it has "sufficient margins" to continue running.
+ *
  * This will first create a multi-range from all the collected ranges to
  * eliminate duplicates and merge adjacent ranges, and then write all the
  * ranges to the materialization log.
  */
-void
-multi_invalidation_range_write(MultiInvalidationState *state, MultiInvalidationRangeEntry *entry)
+static void
+multi_invalidation_range_entry_write(MultiInvalidationState *state,
+									 MultiInvalidationRangeEntry *entry)
 {
 	int32 range_count;
 	RangeType **ranges;
 	TupleDesc tupdesc = RelationGetDescr(state->logrel);
-	TypeCacheEntry *typcache = lookup_type_cache(INT8MULTIRANGEOID, TYPECACHE_MULTIRANGE_INFO);
 
-	MemoryContext old_context = MemoryContextSwitchTo(state->proc_context);
+	MemoryContext old_context = MemoryContextSwitchTo(state->work_context);
 
-	TS_DEBUG_LOG("CurrentMemoryContext: %s", CurrentMemoryContext->name);
-
-	/* Create a multirange from the collected ranges. This will also
-	 * combine and merge any overlapping entries. */
-	MultirangeType *multirange =
-		make_multirange(INT8MULTIRANGEOID, typcache->rngtype, entry->ranges_count, entry->ranges);
+	/* Create a multirange from the collected ranges. This will also combine
+	 * and merge any overlapping entries. It is allocated in the work context
+	 * that we switched to above. */
+	MultirangeType *multirange = make_multirange(INT8MULTIRANGEOID,
+												 state->typecache->rngtype,
+												 entry->ranges_count,
+												 entry->ranges);
 
 	/* Deserialize the multirange to a sequence of ranges and write them
 	 * to the materialization log table. */
-	multirange_deserialize(typcache->rngtype, multirange, &range_count, &ranges);
+	multirange_deserialize(state->typecache->rngtype, multirange, &range_count, &ranges);
 	for (int i = 0; i < range_count; i++)
 	{
 		bool empty;
 		RangeBound lower, upper;
 
 		/* Deserialize the range to get the lower and upper bound. */
-		range_deserialize(typcache->rngtype, ranges[i], &lower, &upper, &empty);
+		range_deserialize(state->typecache->rngtype, ranges[i], &lower, &upper, &empty);
 
-		/* There should be no empty ranges returned, but if there is, we just ignore them in
-		 * release builds. */
+		/* There should be no empty ranges returned, but if there is, we just
+		 * ignore them in release builds. */
 		Assert(!empty);
 		if (!empty)
 		{
@@ -312,8 +378,18 @@ multi_invalidation_range_write(MultiInvalidationState *state, MultiInvalidationR
 			ts_catalog_restore_user(&sec_ctx);
 		}
 	}
+
+	/*
+	 * We cannot reset the work memory context inside the loop since the
+	 * multi-range is allocated in this memory. Doing so might thrash that
+	 * data.
+	 *
+	 * A possible optimization is to create a temporary working context for
+	 * the memory allocated in the loop, but this seems excessive unless we
+	 * know a lot of memory is used here.
+	 */
 	MemoryContextSwitchTo(old_context);
-	MemoryContextReset(state->proc_context);
+	MemoryContextReset(state->work_context);
 }
 
 void
@@ -324,7 +400,81 @@ multi_invalidation_range_write_all(MultiInvalidationState *state)
 
 	hash_seq_init(&hash_seq, state->ranges);
 	while ((entry = hash_seq_search(&hash_seq)) != NULL)
-		multi_invalidation_range_write(state, entry);
+		multi_invalidation_range_entry_write(state, entry);
+}
+
+#if PG17_LT
+static inline int
+pg_cmp_size(size_t a, size_t b)
+{
+	return (a > b) - (a < b);
+}
+#endif
+
+static int
+range_entry_size_cmp(const void *lhs, const void *rhs)
+{
+	const MultiInvalidationRangeEntry *lhs_entry = *(MultiInvalidationRangeEntry **) lhs;
+	const MultiInvalidationRangeEntry *rhs_entry = *(MultiInvalidationRangeEntry **) rhs;
+	const Size lhs_size = MemoryContextMemAllocated(lhs_entry->context, false);
+	const Size rhs_size = MemoryContextMemAllocated(rhs_entry->context, false);
+	return pg_cmp_size(lhs_size, rhs_size);
+}
+
+/*
+ * Flush ranges until we read low working memory.
+ */
+void
+multi_invalidation_flush_ranges(MultiInvalidationState *state)
+{
+	HASH_SEQ_STATUS hash_seq;
+	MultiInvalidationRangeEntry *entry;
+	int count;
+
+	/*
+	 * We do *not* allocate this array on the work context since we are using
+	 * the work context when processing the range entries. We explicitly free
+	 * the memory after processing.
+	 */
+	Assert(CurrentMemoryContext != state->work_context);
+	const long num_entries = hash_get_num_entries(state->ranges);
+	MultiInvalidationRangeEntry **entries =
+		palloc_array(MultiInvalidationRangeEntry *, num_entries);
+	hash_seq_init(&hash_seq, state->ranges);
+	for (count = 0; (entry = hash_seq_search(&hash_seq)) != NULL; ++count)
+		entries[count] = entry;
+
+	Assert(count == num_entries);
+
+	/* Sort entries on the number of ranges in each entry */
+	qsort(entries, num_entries, sizeof(MultiInvalidationRangeEntry *), range_entry_size_cmp);
+
+	/*
+	 * Flush range entries (and remove them from the hash table) until we are
+	 * below the low working memory limit. We start from the largest entries
+	 * (that is, the end of the array).
+	 */
+	int idx = num_entries;
+	while (idx-- > 0 && state->low_work_mem < MemoryContextMemAllocated(state->hash_context, true))
+	{
+		multi_invalidation_range_entry_write(state, entries[idx]);
+		multi_invalidation_range_entry_destroy(state, entries[idx]);
+		hash_search(state->ranges, &entries[idx]->materialization_id, HASH_REMOVE, NULL);
+	}
+
+	/*
+	 * If we ran out of entries to flush and still exceed working memory, we
+	 * abort with an error. There is nothing we can do.
+	 *
+	 * This is not particularly likely, unless maintenance work memory is set
+	 * really low.
+	 */
+	if (state->low_work_mem < MemoryContextMemAllocated(state->hash_context, true))
+		ereport(ERROR,
+				errcode(ERRCODE_OUT_OF_MEMORY),
+				errmsg("not enough memory available to process invalidations"));
+
+	pfree(entries);
 }
 
 /*
@@ -476,8 +626,19 @@ multi_invalidation_process_hypertable_log(List *hypertables)
 	ListCell *lc;
 	char slotname[TS_INVALIDATION_SLOT_NAME_MAX];
 
+	/*
+	 * This typically runs under PortalContext that lives for the duration of
+	 * the query / call.
+	 */
+	TS_DEBUG_LOG("CurrentMemoryContext \"%s\" with %u KiB",
+				 CurrentMemoryContext->name,
+				 (unsigned int) (MemoryContextMemAllocated(CurrentMemoryContext, true) / 1024));
+
 	ts_get_invalidation_replication_slot_name(slotname, sizeof(slotname));
-	multi_invalidation_state_init(&state, slotname, CurrentMemoryContext);
+	multi_invalidation_state_init(&state,
+								  slotname,
+								  1024 * ts_guc_cagg_low_work_mem,
+								  1024 * ts_guc_cagg_high_work_mem);
 
 	foreach (lc, hypertables)
 		(void) multi_invalidation_state_hypertable_entry_get_for_update(&state, lfirst_int(lc));

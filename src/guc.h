@@ -29,6 +29,8 @@ extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
 extern TSDLLEXPORT int ts_guc_cagg_wal_batch_size;
+extern TSDLLEXPORT int ts_guc_cagg_low_work_mem;
+extern TSDLLEXPORT int ts_guc_cagg_high_work_mem;
 extern bool ts_guc_enable_now_constify;
 extern bool ts_guc_enable_foreign_key_propagation;
 extern TSDLLEXPORT bool ts_guc_enable_osm_reads;
