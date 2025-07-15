@@ -26,8 +26,6 @@ INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 01:00:00-00', 1,
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:00:00-00', 2, 1, 3, 3, 0);
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1, 2, 4, 4, 0);
 
-INSERT INTO test1 (time, x1, x2, x3, x4, x5) select '2000-01-01 04:00:00-00'::timestamptz + interval '1 second' * x, 1, 2, 4, 5 + x, 0 from generate_series(0, 1000) x;
-
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
 ANALYZE test1;
 
@@ -77,216 +75,226 @@ ANALYZE test_with_defined_null;
 -- Tests based on ordering
 ------
 
+set timescaledb.debug_require_batch_sorted_merge to 'force';
+
 -- Should be optimized (implicit NULLS first)
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST LIMIT 10;
-
--- Should not be optimized (NULL order wrong)
-:PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS LAST LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST;
 
 -- Should be optimized (implicit NULLS last)
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC LIMIT 10;
+SELECT * FROM test1 ORDER BY time ASC;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST LIMIT 10;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC, x3 DESC;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC, x3 DESC, x4 DESC;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS LAST;
+
+-- Should be optimized
+:PREFIX
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
+
+-- Should be optimized (backward scan)
+:PREFIX
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+
+-- Should not be optimized (wrong order for x3 in backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS FIRST;
+
+-- Should not be optimized (wrong order for x3 in backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS FIRST;
 
 -- Should not be optimized (NULL order wrong)
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC NULLS LAST;
 
--- Should be optimized
+-- Should not be optimized (NULL order wrong)
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
-
--- Should be optimized
-:PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST LIMIT 10;
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
 
 -- Should not be optimized (wrong order for x4)
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST LIMIT 10;
-
--- Should be optimized (backward scan)
-:PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST LIMIT 10;
-
--- Should be optimized (backward scan)
-:PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST LIMIT 10;
-
--- Should be optimized (backward scan)
-:PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST;
 
 -- Should not be optimized (wrong order for x4 in backward scan)
 :PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC LIMIT 10;
-
--- Should be optimized
-:PREFIX
-SELECT * FROM test2 ORDER BY time ASC LIMIT 10;
-
--- Should be optimized
-:PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 DESC LIMIT 10;
-
--- Should be optimized
-:PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 DESC, x4 DESC LIMIT 10;
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
 
 -- Should not be optimized (wrong order for x3)
 :PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC LIMIT 10;
+SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC;
 
 -- Should not be optimized (wrong order for x3)
 :PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC LIMIT 10;
-
--- Should be optimized (backward scan)
+SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC;
+-- Should not be optimized
 :PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS FIRST LIMIT 10;
-
--- Should be optimized (backward scan)
-:PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
-
--- Should be optimized (backward scan)
-:PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS LAST LIMIT 10;
-
--- Should not be optimized (wrong order for x3 in backward scan)
-:PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS FIRST LIMIT 10;
-
--- Should not be optimized (wrong order for x3 in backward scan)
-:PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS FIRST LIMIT 10;
-
--- Should be optimized
-:PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST LIMIT 10;
-
--- Should be optimized (backward scan)
-:PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST LIMIT 10;
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
 
 -- Should not be optimized
 :PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST LIMIT 10;
-
--- Should not be optimized
-:PREFIX
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST LIMIT 10;
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
 
 ------
 -- Tests based on attributes
 ------
 
+set timescaledb.debug_require_batch_sorted_merge to 'require';
+
 -- Should be optimized (some batches qualify by pushed down filter on _ts_meta_max_3)
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 0 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 WHERE x4 > 0 ORDER BY time DESC;
 
 -- Should be optimized (no batches qualify by pushed down filter on _ts_meta_max_3)
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
 
 -- Should be optimized
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4 LIMIT 10;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4;
 
 -- Should be optimized (duplicate order by attributes)
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x3 LIMIT 10;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x3;
 
 -- Should be optimized (duplicate order by attributes)
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4, x3, x4 LIMIT 10;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4, x3, x4;
+
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 
 -- Should not be optimized
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3 LIMIT 10;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3;
 
 -- Should not be optimized
 :PREFIX
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4 LIMIT 10;
-
--- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
-SET enable_sort TO OFF;
-:PREFIX
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
-RESET enable_sort;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4;
 
 ------
 -- Tests based on results
 ------
 
--- Forward scan
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
-
--- Backward scan
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST LIMIT 10;
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 
 -- Forward scan
-SELECT * FROM test2 ORDER BY time ASC LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC;
+
+-- Forward scan
+SELECT * FROM test2 ORDER BY time ASC;
+
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 
 -- Backward scan
-SELECT * FROM test2 ORDER BY time DESC NULLS LAST LIMIT 10;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+-- Backward scan
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
+
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 
 -- With selection on compressed column (value larger as max value for all batches, so no batch has to be opened)
-SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
 
 -- With selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
-SELECT * FROM test1 WHERE x4 > 2 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 WHERE x4 > 2 ORDER BY time DESC;
 
 -- With selection on segment_by column
-SELECT * FROM test1 WHERE time < '1980-01-01 00:00:00-00' ORDER BY time DESC LIMIT 10;
-SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 WHERE time < '1980-01-01 00:00:00-00' ORDER BY time DESC;
+SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
 
 -- With selection on segment_by and compressed column
-SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC LIMIT 10;
-SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' AND x4 > 100 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
+SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' AND x4 > 100 ORDER BY time DESC;
 
 -- Without projection
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC;
 
 -- With projection on time
-SELECT time FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT time FROM test1 ORDER BY time DESC;
 
 -- With projection on x3
-SELECT x3 FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT x3 FROM test1 ORDER BY time DESC;
 
 -- With projection on x3 and time
-SELECT x3,time FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT x3,time FROM test1 ORDER BY time DESC;
 
 -- With projection on time and x3
-SELECT time,x3 FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT time,x3 FROM test1 ORDER BY time DESC;
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC LIMIT 10;
-SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC LIMIT 10;
+EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
+SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC LIMIT 10;
-SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC LIMIT 10;
+EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
+SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
 
 -- With projection and selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
-SELECT x4 FROM test1 WHERE x4 > 2 ORDER BY time DESC LIMIT 10;
+SELECT x4 FROM test1 WHERE x4 > 2 ORDER BY time DESC;
+
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 
 -- Aggregation with count
 SELECT count(*) FROM test1;
 
 -- Test with default values
-ALTER TABLE test1 ADD COLUMN c1 int LIMIT 10;
-ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 42 LIMIT 10;
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+ALTER TABLE test1 ADD COLUMN c1 int;
+ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 42;
+set timescaledb.debug_require_batch_sorted_merge to 'force';
+SELECT * FROM test1 ORDER BY time DESC;
 
 -- Recompress
 SELECT decompress_chunk(i) FROM show_chunks('test1') i;
@@ -295,45 +303,48 @@ ANALYZE test1;
 
 -- Test with a changed physical layout
 -- build_physical_tlist() can not be used for the scan on the compressed chunk anymore
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC;
 ALTER TABLE test1 DROP COLUMN c2;
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC;
 
 -- Test with a re-created column
 ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 43;
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC;
 
 -- Test with the recreated column
 :PREFIX
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
-SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT * FROM test1 ORDER BY time DESC;
+SELECT * FROM test1 ORDER BY time DESC;
 
 -- Test with projection and recreated column
 :PREFIX
-SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC LIMIT 10;
-SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
+SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
 
 -- Test with projection and recreated column
 :PREFIX
-SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC LIMIT 10;
-SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
+SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
 
 -- Test with projection, constants and recreated column
 :PREFIX
-SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC LIMIT 10;
-SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC LIMIT 10;
+SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
+SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
 
 -- Test with null values
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST LIMIT 10;
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST LIMIT 10;
-SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST LIMIT 10;
-SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST LIMIT 10;
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
+SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
 ------
 -- Tests based on compressed chunk state
 ------
 
 -- Should be optimized
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
 
@@ -353,6 +364,8 @@ ROLLBACK;
 ------
 -- Tests on a larger relation
 ------
+
+set timescaledb.debug_require_batch_sorted_merge to 'allow';
 
 CREATE TABLE sensor_data (
 time timestamptz NOT NULL,
@@ -497,10 +510,14 @@ ANALYZE test_costs;
 SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS s;
 
 -- Test query plan (should not be optimized due to 1000 different segments)
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+
 :PREFIX
 SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
 
 -- Test query plan with predicate (query should be optimized due to ~100 segments)
+set timescaledb.debug_require_batch_sorted_merge to 'require';
+
 :PREFIX
 SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_by < 999 ORDER BY time DESC;
 
@@ -640,3 +657,13 @@ VALUES  (109288, '2023-05-25 23:12:13.000000', 130, 14499, 13, 0.132165698840012
 SELECT compress_chunk(show_chunks('test', older_than => INTERVAL '1 week'), true);
 
 SELECT t.dttm FROM test t WHERE t.dttm > '2023-05-25T14:23:12' ORDER BY t.dttm;
+
+-- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
+SET enable_sort TO OFF;
+set timescaledb.debug_require_batch_sorted_merge = 'require';
+:PREFIX
+SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
+RESET enable_sort;
+
+reset timescaledb.debug_require_batch_sorted_merge;
+
