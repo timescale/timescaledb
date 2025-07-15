@@ -75,9 +75,8 @@ ORDER BY c.id;
 ----------+---------------+--------------+-------------+-------------+-----------
 (0 rows)
 
-\dt "_timescaledb_internal"._hyper*
-      List of relations
- Schema | Name | Type | Owner 
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+ schema | name | type | owner 
 --------+------+------+-------
 (0 rows)
 
@@ -135,9 +134,8 @@ ORDER BY c.id;
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
 (12 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_1_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_2_chunk  | table | default_perm_user
@@ -490,9 +488,8 @@ SELECT * FROM show_chunks('drop_chunk_test2');
  _timescaledb_internal._hyper_2_12_chunk
 (5 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_2_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
@@ -541,28 +538,24 @@ ORDER BY c.id;
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
 (9 rows)
 
-\dt "_timescaledb_internal".*
-                             List of relations
-        Schema         |          Name          | Type  |       Owner       
------------------------+------------------------+-------+-------------------
- _timescaledb_internal | _hyper_1_3_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_1_4_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_1_5_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_1_6_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_2_10_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_2_11_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_2_12_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_2_8_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_2_9_chunk       | table | default_perm_user
- _timescaledb_internal | _hyper_3_14_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_3_15_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_3_16_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_3_17_chunk      | table | default_perm_user
- _timescaledb_internal | _hyper_3_18_chunk      | table | default_perm_user
- _timescaledb_internal | bgw_job_stat           | table | super_user
- _timescaledb_internal | bgw_job_stat_history   | table | super_user
- _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
-(17 rows)
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
+-----------------------+-------------------+-------+-------------------
+ _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_5_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_1_6_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_10_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_2_8_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_2_9_chunk  | table | default_perm_user
+ _timescaledb_internal | _hyper_3_14_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_3_15_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_3_16_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_3_17_chunk | table | default_perm_user
+ _timescaledb_internal | _hyper_3_18_chunk | table | default_perm_user
+(14 rows)
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');
@@ -615,9 +608,8 @@ ORDER BY c.id;
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
 (9 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
@@ -660,9 +652,8 @@ ORDER BY c.id;
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
 (8 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
@@ -706,9 +697,8 @@ SELECT show_chunks('drop_chunk_test1');
  _timescaledb_internal._hyper_1_4_chunk
 (2 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_1_3_chunk  | table | default_perm_user
  _timescaledb_internal | _hyper_1_4_chunk  | table | default_perm_user
@@ -1030,9 +1020,8 @@ BEGIN;
 (1 row)
 
 ROLLBACK;
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
@@ -1061,9 +1050,8 @@ SELECT drop_chunks('drop_chunk_test3', created_after => interval '1 minute');
 -------------
 (0 rows)
 
-\dt "_timescaledb_internal"._hyper*
-                           List of relations
-        Schema         |       Name        | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name        | type  |       owner       
 -----------------------+-------------------+-------+-------------------
  _timescaledb_internal | _hyper_2_11_chunk | table | default_perm_user
  _timescaledb_internal | _hyper_2_12_chunk | table | default_perm_user
