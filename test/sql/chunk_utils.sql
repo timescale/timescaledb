@@ -45,7 +45,7 @@ INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id =
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
 
-\dt "_timescaledb_internal"._hyper*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
 
 SELECT  _timescaledb_functions.get_partition_for_key('dev1'::text);
 SELECT  _timescaledb_functions.get_partition_for_key('dev7'::varchar(5));
@@ -79,7 +79,7 @@ INNER JOIN  _timescaledb_catalog.dimension_slice ds ON (ds.dimension_id = time_d
 INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id = ds.id AND cc.chunk_id = c.id)
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
-\dt "_timescaledb_internal"._hyper*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');
@@ -160,7 +160,7 @@ ORDER BY c.id;
 SELECT show_chunks('drop_chunk_test1');
 SELECT * FROM show_chunks('drop_chunk_test2');
 
-\dt "_timescaledb_internal"._hyper*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'drop_chunk_test1\', older_than => 3)::NAME'
 \set QUERY2 'SELECT drop_chunks(\'drop_chunk_test1\', older_than => 3)::NAME'
@@ -177,7 +177,7 @@ INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id =
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
 
-\dt "_timescaledb_internal".*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
 
 -- next two calls of show_chunks should give same set of chunks as above when combined
 SELECT show_chunks('drop_chunk_test1');
@@ -200,7 +200,7 @@ INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id =
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2' OR h.table_name = 'drop_chunk_test3')
 ORDER BY c.id;
 
-\dt "_timescaledb_internal"._hyper*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
 \set ON_ERROR_STOP 0
 -- should error because no hypertable
 SELECT drop_chunks('drop_chunk_test4', older_than => 5);
@@ -219,7 +219,7 @@ INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id =
 WHERE h.schema_name = 'public' AND (h.table_name = 'drop_chunk_test1' OR h.table_name = 'drop_chunk_test2')
 ORDER BY c.id;
 
-\dt "_timescaledb_internal"._hyper*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
 
 -- newer_than tests
 -- show_chunks and drop_chunks output should be the same
@@ -240,7 +240,7 @@ ORDER BY c.id;
 
 SELECT show_chunks('drop_chunk_test1');
 
-\dt "_timescaledb_internal"._hyper*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '_hyper%';
 
 -- show_chunks and drop_chunks output should be the same
 \set QUERY1 'SELECT show_chunks(\'drop_chunk_test1\', older_than=>4, newer_than=>3)::NAME'
@@ -386,7 +386,7 @@ BEGIN;
     SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
 ROLLBACK;
 
-\dt "_timescaledb_internal"._hyper*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
 
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(interval '1 minute');
@@ -399,7 +399,7 @@ SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
 -- time to identify the affected chunks.
 SELECT drop_chunks('drop_chunk_test3', created_after => interval '1 minute');
 
-\dt "_timescaledb_internal"._hyper*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
 
 CREATE TABLE PUBLIC.drop_chunk_test_date(time date, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_date', 'time', chunk_time_interval => interval '1 day', create_default_indexes=>false);
