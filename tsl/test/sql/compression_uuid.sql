@@ -72,3 +72,25 @@ WHERE
 GROUP BY 1
 ORDER BY 1;
 
+-- Sub ms timestamp test:
+--   generate all microseconds timestamps between the two dates below and
+--   generate a UUID v7 based on the timestamp and
+--   extract the timestamp from the UUID and
+--   compare the timestamp to the original one
+--   1 microsecond difference is allowed due to scaling of decimals to binaries
+--
+CREATE TABLE subms AS SELECT _timescaledb_functions.uuid_v7_from_timestamptz(x) u, x ts
+FROM
+  generate_series('2025-01-01:00:00:00'::timestamptz, '2025-01-01:00:00:03'::timestamptz, '1 microsecond'::interval) x;
+
+SELECT u, ts, ts2
+FROM
+  (
+    SELECT
+      u, ts, _timescaledb_functions.timestamptz_from_uuid_v7(u) ts2
+    FROM
+      subms
+  ) x
+WHERE
+  (x.ts - x.ts2) > '00:00:00.000001' OR (x.ts - x.ts2) < '-00:00:00.000001';
+
