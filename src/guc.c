@@ -63,6 +63,9 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 	{ NULL, 0, false }
 };
 
+#define GUC_CAGG_LOW_WORK_MEM_NAME "cagg_processing_low_work_mem"
+#define GUC_CAGG_HIGH_WORK_MEM_NAME "cagg_processing_high_work_mem"
+
 bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
@@ -86,6 +89,8 @@ TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 TSDLLEXPORT int ts_guc_cagg_wal_batch_size = 10000;
+TSDLLEXPORT int ts_guc_cagg_low_work_mem = 0.6 * 65536;
+TSDLLEXPORT int ts_guc_cagg_high_work_mem = 0.8 * 65536;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
@@ -315,6 +320,38 @@ get_segmentby_func(char *input_name)
 #endif
 	Oid argtyp[] = { REGCLASSOID };
 	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
+}
+
+static bool
+check_cagg_low_work_mem(int *newval, void **extra, GucSource source)
+{
+	if (*newval >= ts_guc_cagg_high_work_mem)
+	{
+		GUC_check_errdetail("\"%s\" must be less than value of \"%s\".",
+							GUC_CAGG_LOW_WORK_MEM_NAME,
+							GUC_CAGG_HIGH_WORK_MEM_NAME);
+		GUC_check_errhint("Set \"%s\" to a value less than %d.",
+						  GUC_CAGG_LOW_WORK_MEM_NAME,
+						  ts_guc_cagg_high_work_mem);
+		return false;
+	}
+	return true;
+}
+
+static bool
+check_cagg_high_work_mem(int *newval, void **extra, GucSource source)
+{
+	if (*newval <= ts_guc_cagg_low_work_mem)
+	{
+		GUC_check_errdetail("\"%s\" must be greater than value of \"%s\".",
+							GUC_CAGG_HIGH_WORK_MEM_NAME,
+							GUC_CAGG_LOW_WORK_MEM_NAME);
+		GUC_check_errhint("Set \"%s\" to a value greater than %d.",
+						  GUC_CAGG_HIGH_WORK_MEM_NAME,
+						  ts_guc_cagg_low_work_mem);
+		return false;
+	}
+	return true;
 }
 
 static bool
@@ -897,6 +934,36 @@ _guc_init(void)
 							PGC_USERSET,
 							0,
 							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION(GUC_CAGG_LOW_WORK_MEM_NAME),
+							"Low working memory limit for continuous aggregate invalidation "
+							"processing.",
+							"The low working memory limit for the continuous aggregate "
+							"invalidation processing.",
+							&ts_guc_cagg_low_work_mem,
+							0.6 * maintenance_work_mem,
+							64,
+							MAX_KILOBYTES,
+							PGC_USERSET,
+							GUC_UNIT_KB,
+							check_cagg_low_work_mem,
+							NULL,
+							NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION(GUC_CAGG_HIGH_WORK_MEM_NAME),
+							"High working memory limit for continuous aggregate invalidation "
+							"processing.",
+							"The high working memory limit for the continuous aggregate "
+							"invalidation processing.",
+							&ts_guc_cagg_high_work_mem,
+							0.8 * maintenance_work_mem,
+							64,
+							MAX_KILOBYTES,
+							PGC_USERSET,
+							GUC_UNIT_KB,
+							check_cagg_high_work_mem,
 							NULL,
 							NULL);
 

@@ -127,3 +127,51 @@ SELECT m.*
   FROM mat_invals m FULL JOIN saved_invals s ON row(m.*) = row(s.*)
  WHERE m.table_name IS NULL OR s.table_name IS NULL
 ORDER BY 1,2,3;
+
+DROP TABLE saved_invals;
+
+-- Insert a lot of invalidations (more than 256) to trigger the code
+-- that grows the ranges array and make sure that works as well. We
+-- need to generate separate transactions for each insert, so we do
+-- this using a loop rather than a single insert.
+
+SELECT * FROM hypertable_invalidation_thresholds ORDER BY 1,2;
+
+DO $$
+DECLARE
+  rec RECORD;
+BEGIN
+  FOR rec IN
+     SELECT t, d FROM generate_series(1,100) t, generate_series(1,100) d
+  LOOP
+     INSERT INTO conditions VALUES (rec.t, rec.d, 100.0 * random());
+     COMMIT;
+  END LOOP;
+END
+$$;
+
+SELECT * INTO saved_invals FROM mat_invals;
+
+-- Peek at the WAL to check what we've got recorded.
+SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'ts%cagg' \gset
+SELECT count(data)
+  FROM pg_logical_slot_peek_binary_changes(:'slot_name', NULL, 1000, variadic ARRAY['conditions', 'time']);
+
+-- We set the work memory quite low to trigger range shedding when
+-- running out of memory.
+SET timescaledb.cagg_processing_low_work_mem TO 64;
+SET timescaledb.cagg_processing_high_work_mem TO 96;
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['conditions']);
+
+-- Here we should get invalidations aligned to the bucket widths based
+-- on the invalidation above.
+--
+-- We collect all the ranges into a multirange to avoid flakes because
+-- of additional entries as a result of shedding below. The complete
+-- invalidated ranges should be the same regardless.
+SELECT m.aggregate_name,
+       unnest(range_agg(multirange(int8range(m.lowest_modified_value, m.greatest_modified_value))))
+  FROM mat_invals m FULL JOIN saved_invals s ON row(m.*) = row(s.*)
+ WHERE m.table_name IS NULL OR s.table_name IS NULL
+GROUP BY 1 ORDER BY 1,2;
+
