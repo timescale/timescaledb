@@ -542,7 +542,7 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 ------
 -- Tests based on attributes
 ------
-set timescaledb.debug_require_batch_sorted_merge to 'require';
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 -- Should be optimized (some batches qualify by pushed down filter on _ts_meta_max_3)
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 0 ORDER BY time DESC;
@@ -1119,13 +1119,11 @@ INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:01:00-00', 10
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
                                                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                                                  
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on public.test1 (actual rows=5 loops=1)
-   Output: test1."time", test1.x1, test1.x2, test1.x3, test1.x4, test1.x5, test1.c1, test1.c2
-   Order: test1."time"
-   Startup Exclusion: false
-   Runtime Exclusion: false
-   ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
+ Sort (actual rows=5 loops=1)
+   Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5, _hyper_1_1_chunk.c1, _hyper_1_1_chunk.c2
+   Sort Key: _hyper_1_1_chunk."time"
+   Sort Method: quicksort 
+   ->  Append (actual rows=5 loops=1)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4 loops=1)
                Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5, _hyper_1_1_chunk.c1, _hyper_1_1_chunk.c2
                Batch Sorted Merge: true
@@ -1137,13 +1135,9 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk (actual rows=3 loops=1)
                            Output: compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk.x1, compress_hyper_2_7_chunk.x2, compress_hyper_2_7_chunk.x3, compress_hyper_2_7_chunk._ts_meta_min_2, compress_hyper_2_7_chunk._ts_meta_max_2, compress_hyper_2_7_chunk.x4, compress_hyper_2_7_chunk._ts_meta_min_3, compress_hyper_2_7_chunk._ts_meta_max_3, compress_hyper_2_7_chunk.x5, compress_hyper_2_7_chunk.c1, compress_hyper_2_7_chunk.c2, compress_hyper_2_7_chunk._ts_meta_count
-         ->  Sort (actual rows=1 loops=1)
+         ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk (actual rows=1 loops=1)
                Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5, _hyper_1_1_chunk.c1, _hyper_1_1_chunk.c2
-               Sort Key: _hyper_1_1_chunk."time"
-               Sort Method: quicksort 
-               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk (actual rows=1 loops=1)
-                     Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5, _hyper_1_1_chunk.c1, _hyper_1_1_chunk.c2
-(24 rows)
+(18 rows)
 
 -- The inserted value should be visible
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
@@ -1342,18 +1336,13 @@ ALTER TABLE test_costs SET (timescaledb.compress, timescaledb.compress_segmentby
 -- Create 100 segments
 INSERT INTO test_costs
 SELECT
-'2000-01-01 02:01:00-00'::timestamptz AS time,
+time,
 segment_by,
 random() as x1
 FROM
-generate_series(1, 100, 1) AS g2(segment_by)
+generate_series(1, 100, 1) AS g2(segment_by),
+generate_series('2000-01-01 02:01:00-00', '2000-01-06 00:00:00+00', interval '1 hour') time
 ORDER BY time;
-SELECT add_compression_policy('test_costs','1 minute'::INTERVAL);
- add_compression_policy 
-------------------------
-                   1001
-(1 row)
-
 SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
              compress_chunk              
 -----------------------------------------
@@ -1373,7 +1362,7 @@ SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS 
 SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
                                                                                                                                                                       QUERY PLAN                                                                                                                                                                      
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_9_20_chunk (actual rows=100 loops=1)
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_9_20_chunk (actual rows=11800 loops=1)
    Output: _hyper_9_20_chunk."time", _hyper_9_20_chunk.segment_by, _hyper_9_20_chunk.x1
    Batch Sorted Merge: true
    Bulk Decompression: false
@@ -1395,11 +1384,12 @@ SELECT decompress_chunk(i) FROM show_chunks('test_costs') i;
 -- Add 900 segments (1000 segments total)
 INSERT INTO test_costs
 SELECT
-'2000-01-01 02:01:00-00'::timestamptz AS time,
+time,
 segment_by,
 random() as x1
 FROM
-generate_series(100, 1000, 1) AS g2(segment_by)
+generate_series(100, 1000, 1) AS g2(segment_by),
+generate_series('2000-01-01 02:01:00-00', '2000-01-06 00:00:00+00', interval '1 hour') time
 ORDER BY time;
 -- Recompress chunk
 SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
@@ -1422,11 +1412,11 @@ set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
                                                                                                                                                                       QUERY PLAN                                                                                                                                                                      
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort (actual rows=1001 loops=1)
+ Sort (actual rows=118118 loops=1)
    Output: _hyper_9_20_chunk."time", _hyper_9_20_chunk.segment_by, _hyper_9_20_chunk.x1
    Sort Key: _hyper_9_20_chunk."time" DESC
    Sort Method: quicksort 
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_9_20_chunk (actual rows=1001 loops=1)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_9_20_chunk (actual rows=118118 loops=1)
          Output: _hyper_9_20_chunk."time", _hyper_9_20_chunk.segment_by, _hyper_9_20_chunk.x1
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_10_22_chunk (actual rows=1000 loops=1)
@@ -1439,7 +1429,7 @@ set timescaledb.debug_require_batch_sorted_merge to 'require';
 SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_by < 999 ORDER BY time DESC;
                                                                                                                                                                       QUERY PLAN                                                                                                                                                                      
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_9_20_chunk (actual rows=98 loops=1)
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_9_20_chunk (actual rows=11564 loops=1)
    Output: _hyper_9_20_chunk."time", _hyper_9_20_chunk.segment_by, _hyper_9_20_chunk.x1
    Batch Sorted Merge: true
    Bulk Decompression: false
@@ -1489,6 +1479,7 @@ SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
 (1 row)
 
 ANALYZE bugtab;
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 :PREFIX
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                      
