@@ -167,6 +167,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.bool_compressor_append = tsl_bool_compressor_append,
 	.bool_compressor_finish = tsl_bool_compressor_finish,
 	.bloom1_contains = bloom1_contains,
+	.bloom1_get_hash_function = bloom1_get_hash_function,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,

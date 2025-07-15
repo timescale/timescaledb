@@ -644,8 +644,8 @@ SELECT decompress_chunk(show_chunks('tab1'));
 INSERT into tab2 SELECT * from tab1;
 CREATE INDEX idx_asc_null_first ON tab1(id, time ASC NULLS FIRST);
 CREATE INDEX idx2_asc_null_first ON tab2(id, time ASC NULLS FIRST);
-ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
-ALTER TABLE tab2 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
+ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST', timescaledb.index='');
+ALTER TABLE tab2 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST', timescaledb.index='');
 RESET timescaledb.enable_compression_indexscan;
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore

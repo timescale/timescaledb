@@ -477,6 +477,7 @@ CREATE TABLE _timescaledb_catalog.compression_settings (
   orderby text[],
   orderby_desc bool[],
   orderby_nullsfirst bool[],
+  index jsonb,
   CONSTRAINT compression_settings_pkey PRIMARY KEY (relid),
   CONSTRAINT compression_settings_check_segmentby CHECK (array_ndims(segmentby) = 1),
   CONSTRAINT compression_settings_check_orderby_null CHECK ((orderby IS NULL AND orderby_desc IS NULL AND orderby_nullsfirst IS NULL) OR (orderby IS NOT NULL AND orderby_desc IS NOT NULL AND orderby_nullsfirst IS NOT NULL)),
