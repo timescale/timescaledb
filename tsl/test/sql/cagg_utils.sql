@@ -243,3 +243,57 @@ SELECT user_view_name, bf.bucket_func
 FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id) AS bf
 WHERE user_view_name = 'temperature_tz_4h_3'
 ORDER BY user_view_name;
+
+---------------------------------
+--Event trigger on cagg DDL
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- Create a base table
+create table foo(time timestamptz, val int );
+select create_hypertable('foo', 'time');
+insert into foo values ('2025-01-01', 1);
+insert into foo values ('2025-01-02', 2);
+
+-- Create a trigger function that raises a notice
+CREATE OR REPLACE FUNCTION log_any_command()
+RETURNS event_trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    cmd RECORD;
+BEGIN
+    RAISE NOTICE 'command % for event %', tg_tag, tg_event;
+    FOR cmd IN SELECT * FROM pg_event_trigger_ddl_commands()
+    LOOP
+        RAISE NOTICE 'tag: %, object: %', cmd.command_tag, cmd.object_identity::regclass;
+    END LOOP;
+END;
+$$;
+
+--create trigger on ddl start
+CREATE EVENT TRIGGER log_ddl_start ON ddl_command_start
+EXECUTE FUNCTION log_any_command();
+
+--create trigger on ddl end
+CREATE EVENT TRIGGER log_ddl_end ON ddl_command_end
+EXECUTE FUNCTION log_any_command();
+
+--create trigger on ddl drop
+CREATE EVENT TRIGGER log_ddl_drop ON sql_drop
+EXECUTE FUNCTION log_any_command();
+
+--create a continuous aggregate, the trigger should now be fired too
+create materialized view foo_cagg with (timescaledb.continuous) as select time_bucket('1 day', time) as day, sum(val) as total from foo group by day;
+
+--drop the continuous aggregate, the trigger on drop ddl should be fired, because 
+--the TimescaleDB's interceptor on the drop statement returns DDL_CONTINUE, eventually fallback to 
+--the default drop materialized view behavior
+DROP MATERIALIZED VIEW foo_cagg;
+
+--clean up
+DROP EVENT TRIGGER log_ddl_start;
+DROP EVENT TRIGGER log_ddl_end;
+DROP EVENT TRIGGER log_ddl_drop;
+DROP FUNCTION log_any_command();
+DROP TABLE foo;
