@@ -1,0 +1,1 @@
+Implements: #8391 Support ddl_command_start and ddl_command_end event triggers for continuous aggregates

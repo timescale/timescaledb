@@ -100,6 +100,7 @@ void _process_utility_fini(void);
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
+
 static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
 static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
@@ -4265,6 +4266,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 	const Oid view_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 	ContinuousAgg *cagg;
 	ListCell *lc;
+	bool needCleanup = false;
 
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
@@ -4273,51 +4275,96 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 
 	if (cagg == NULL)
 		return DDL_CONTINUE;
-
-	continuous_agg_with_clause_perm_check(cagg, view_relid);
-
-	foreach (lc, stmt->cmds)
+	/* start event trigger context */
+	needCleanup = EventTriggerBeginCompleteQuery();
+	/* PG_TRY block is to ensure we call EventTriggerEndCompleteQuery */
+	PG_TRY();
 	{
-		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+		/* fire ddl_command_start event trigger */
+		EventTriggerDDLCommandStart((Node *) stmt);
 
-		switch (cmd->subtype)
+		/* start saving the current command in the trigger context */
+		EventTriggerAlterTableStart((Node *) stmt);
+		/* set ObjectID for the current command */
+		EventTriggerAlterTableRelid(view_relid);
+
+		continuous_agg_with_clause_perm_check(cagg, view_relid);
+
+		foreach (lc, stmt->cmds)
 		{
-			case AT_SetRelOptions:
-				if (!IsA(cmd->def, List))
+			AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+
+			/*
+			 * Disable command collection for event trigger context.
+			 * Some of the calls alter_table_.. would otherwise try to collect commands for event
+			 * trigger context. We don't want to do that here because we will not fallback to
+			 * Postgres processing, but rather handle it ourselves.
+			 */
+			EventTriggerInhibitCommandCollection();
+
+			switch (cmd->subtype)
+			{
+				case AT_SetRelOptions:
+					if (!IsA(cmd->def, List))
+						ereport(ERROR,
+								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+								 errmsg("expected set options to contain a list")));
+					process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
+					break;
+
+				case AT_ChangeOwner:
+					alter_table_by_relation(stmt->relation, cmd);
+					alter_table_by_name(&cagg->data.partial_view_schema,
+										&cagg->data.partial_view_name,
+										cmd);
+					alter_table_by_name(&cagg->data.direct_view_schema,
+										&cagg->data.direct_view_name,
+										cmd);
+					alter_hypertable_by_id(cagg->data.mat_hypertable_id,
+										   stmt,
+										   cmd,
+										   process_altertable_change_owner);
+					break;
+
+				case AT_SetTableSpace:
+					alter_hypertable_by_id(cagg->data.mat_hypertable_id,
+										   stmt,
+										   cmd,
+										   process_altertable_set_tablespace_end);
+					break;
+
+				default:
 					ereport(ERROR,
-							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-							 errmsg("expected set options to contain a list")));
-				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
-				break;
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot alter only SET options of a continuous "
+									"aggregate")));
+			}
 
-			case AT_ChangeOwner:
-				alter_table_by_relation(stmt->relation, cmd);
-				alter_table_by_name(&cagg->data.partial_view_schema,
-									&cagg->data.partial_view_name,
-									cmd);
-				alter_table_by_name(&cagg->data.direct_view_schema,
-									&cagg->data.direct_view_name,
-									cmd);
-				alter_hypertable_by_id(cagg->data.mat_hypertable_id,
-									   stmt,
-									   cmd,
-									   process_altertable_change_owner);
-				break;
-
-			case AT_SetTableSpace:
-				alter_hypertable_by_id(cagg->data.mat_hypertable_id,
-									   stmt,
-									   cmd,
-									   process_altertable_set_tablespace_end);
-				break;
-
-			default:
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("cannot alter only SET options of a continuous "
-								"aggregate")));
+			EventTriggerUndoInhibitCommandCollection();
+			/*
+			 * collect the subcommand, we leave the object empty for now until we knows better
+			 * what would be needed. For example, we might consider firing table_rewrite event
+			 * trigger on the underlying hypertable for SET tablespace or change owner
+			 */
+			EventTriggerCollectAlterTableSubcmd((Node *) cmd, InvalidObjectAddress);
 		}
+		/* finish collecting current command */
+		EventTriggerAlterTableEnd();
+		/* fire ddl_end trigger */
+		EventTriggerDDLCommandEnd((Node *) stmt);
+		/* clean up event trigger context */
+		if (needCleanup)
+			EventTriggerEndCompleteQuery();
 	}
+	/* Use PG_CATCH() until we tweak compiler to accept PG_FINALLY.*/
+	PG_CATCH();
+	{
+		if (needCleanup)
+			EventTriggerEndCompleteQuery();
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
+
 	/* All commands processed by us, nothing for postgres to do.*/
 	return DDL_DONE;
 }
