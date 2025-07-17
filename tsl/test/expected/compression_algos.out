@@ -1749,6 +1749,221 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, ((NULLIF(i, (CASE W
 (1 row)
 
 DROP TABLE base_bools;
+----------------------
+-- UUID Compression --
+----------------------
+CREATE TABLE uuid_set (i int, u uuid);
+INSERT INTO uuid_set (i, u) VALUES
+(1, '0197a7a9-b48b-7c70-be05-e376afc66ee1'), (2, '0197a7a9-b48b-7c71-92cb-eb724822bb0f'), (3, '0197a7a9-b48b-7c72-bd57-49f981f064fd'), (4, '0197a7a9-b48b-7c73-b521-91172c2e770a'),
+(5, '0197a7a9-b48b-7c74-a2a4-dcdbce635d11'), (6, '0197a7a9-b48b-7c75-a810-8acf630e634f'), (7, '0197a7a9-b48b-7c76-b616-69e64a802b5c'), (8, '0197a7a9-b48b-7c77-b54f-c5f3d64d68d0'),
+(9, '0197a7a9-b48b-7c78-ab14-78b3dd81dbbc'), (10, '0197a7a9-b48b-7c79-92c7-7dde3bea6252'), (11, '0197a7a9-b48b-7c7a-8d9e-5afc3bf15234'), (12, '0197a7a9-b48b-7c7b-bc49-7150f16d8d63'),
+(13, '0197a7a9-b48b-7c7c-aa7a-60d47bf04ff8'), (14, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (15, '0197a7a9-b48b-7c7e-9ebb-acf63f5b625e'), (16, '0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a'),
+(17, '0197a7a9-b48b-7c80-a534-4eda33d89b41'), (18, '0197a7a9-b48b-7c81-abaf-e4d27888f6ea'), (19, '0197a7a9-b48b-7c82-a07c-bb5278039b67'), (20, '0197a7a9-b48b-7c83-9df3-2826632fcb42'),
+(21, '0197a7a9-b48b-7c84-8588-dc4e6f10a5be'), (22, '0197a7a9-b48b-7c85-98a4-5ba69598ba88'), (23, '0197a7a9-b48b-7c86-9a96-69906846edf4'), (24, '0197a7a9-b48b-7c87-843a-d0c409e538d2'),
+(25, '0197a7a9-b48b-7c88-a9c9-8e03283979dd'), (26, '0197a7a9-b48c-7c88-b962-5f38a5f5bb19'), (27, '0197a7a9-b48c-7c89-ad12-19c425cfe319'), (28, '0197a7a9-b48c-7c8a-9652-43b070f806b6'),
+(29, '0197a7a9-b48c-7c8b-8b95-2e4b27b7c359'), (30, '0197a7a9-b48c-7c8c-9230-5a1b6a126d4e'), (31, '0197a7a9-b48c-7c8d-98e9-3622fe1418ae'), (32, '0197a7a9-b48c-7c8e-b262-e91dcf84f985'),
+(33, '0197a7a9-b48c-7c8f-90c0-1036d19e438e'), (34, '0197a7a9-b48c-7c90-9fcb-f092518ae1e6'), (35, '0197a7a9-b48c-7c91-bf68-433e366f751d'), (36, '0197a7a9-b48c-7c92-95b6-82cb29498e5a'),
+(37, '0197a7a9-b48c-7c93-9397-6ebbb9d4194d'), (38, '0197a7a9-b48c-7c94-8484-f47122e2dea3'), (39, '0197a7a9-b48c-7c95-a6e5-fe8d062f4e3c'), (40, '0197a7a9-b48c-7c96-914c-690b7930262f'),
+(41, '0197a7a9-b48c-7c97-ac2b-473d61e0c396'), (42, '0197a7a9-b48c-7c98-93bd-ca093b30f6e8'), (43, '0197a7a9-b48c-7c99-b906-7fa2180536d3'), (44, '0197a7a9-b48c-7c9a-a090-fe01428ccefc'),
+(45, '0197a7a9-b48c-7c9b-9319-de9dd58deeee'), (46, '0197a7a9-b48c-7c9c-a9d4-ed6f3e6a41b7'), (47, '0197a7a9-b48c-7c9d-8036-4141e0780323'), (48, '0197a7a9-b48c-7c9e-bfbe-f00eb49ed7f2'),
+(49, '0197a7a9-b48c-7c9f-8ffe-71cf00a0c0c0'), (50, '0197a7a9-b48c-7ca0-822f-95ced2f95702'), (51, '0197a7a9-b48c-7ca1-8c8a-66582aec95fa'), (52, '0197a7a9-b48c-7ca2-95c3-fe80362a2251'),
+(53, '0197a7a9-b48c-7ca3-855f-f681b254a8c8'), (54, '0197a7a9-b48c-7ca4-856b-a562eca93c3f'), (55, '0197a7a9-b48c-7ca5-a30e-37c247fb4c46'), (56, '0197a7a9-b48c-7ca6-9e78-a148d54a44ac'),
+(57, '0197a7a9-b48c-7ca7-badb-4b650bf5bf5f'), (58, '0197a7a9-b48c-7ca8-8275-a8590869ef13'), (59, '0197a7a9-b48c-7ca9-b328-b54c3901223c'), (60, '0197a7a9-b48c-7caa-a15d-f5564e4e552c'),
+(61, '0197a7a9-b48c-7cab-a4ac-017259746322'), (62, '0197a7a9-b48c-7cac-bda5-74ef12abd6b8'), (63, '0197a7a9-b48c-7cad-a3cd-0e4c93eaba80'), (64, '0197a7a9-b48c-7cae-9667-de4a226418df'),
+(65, '0197a7a9-b48c-7caf-8aa2-067619170f32'), (66, '0197a7a9-b48c-7cb0-ba8c-91d9e8920845'), (67, '0197a7a9-b48c-7cb1-9681-a62bfffe9237'), (68, '0197a7a9-b48c-7cb2-b78b-037e5ee26ff6'),
+(69, '0197a7a9-b48c-7cb3-ac27-e24382445188'), (70, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (71, '0197a7a9-b48b-7c7e-9ebb-acf63f5b625e'), (72, '0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a'),
+(73, '0197a7a9-b48b-7c80-a534-4eda33d89b41'), (74, '0197a7a9-b48b-7c81-abaf-e4d27888f6ea'), (75, '0197a7a9-b48b-7c82-a07c-bb5278039b67'), (76, '0197a7a9-b48b-7c83-9df3-2826632fcb42'),
+(77, '0197a7a9-b48b-7c84-8588-dc4e6f10a5be'), (78, '0197a7a9-b48b-7c85-98a4-5ba69598ba88'), (79, '0197a7a9-b48b-7c86-9a96-69906846edf4'), (80, '0197a7a9-b48b-7c87-843a-d0c409e538d2'),
+(81, '0197a7a9-b48b-7c88-a9c9-8e03283979dd'), (82, '0197a7a9-b48c-7c88-b962-5f38a5f5bb19'), (83, '0197a7a9-b48c-7c89-ad12-19c425cfe319'), (84, '0197a7a9-b48c-7c8a-9652-43b070f806b6'),
+(85, '0197a7a9-b48c-7c8b-8b95-2e4b27b7c359'), (86, '0197a7a9-b48c-7c8c-9230-5a1b6a126d4e'), (87, '0197a7a9-b48c-7c8d-98e9-3622fe1418ae'), (88, '0197a7a9-b48c-7c8e-b262-e91dcf84f985'),
+(89, '0197a7a9-b48c-7c8f-90c0-1036d19e438e'), (90, '0197a7a9-b48c-7c90-9fcb-f092518ae1e6'), (91, '0197a7a9-b48c-7c91-bf68-433e366f751d'), (92, '0197a7a9-b48c-7c92-95b6-82cb29498e5a'),
+(93, '0197a7a9-b48c-7c93-9397-6ebbb9d4194d'), (94, '0197a7a9-b48c-7c94-8484-f47122e2dea3'), (95, '0197a7a9-b48c-7c95-a6e5-fe8d062f4e3c'), (96, '0197a7a9-b48c-7c96-914c-690b7930262f'),
+(97, '0197a7a9-b48c-7c97-ac2b-473d61e0c396'), (98, '0197a7a9-b48c-7c98-93bd-ca093b30f6e8'), (99, '0197a7a9-b48c-7c99-b906-7fa2180536d3'), (100, '0197a7a9-b48c-7c9a-a090-fe01428ccefc');
+SELECT
+  $$
+  select item from base_uuids order by rn
+  $$ AS "QUERY"
+\gset
+\set TABLE_NAME base_uuids
+\set TYPE uuid
+\set COMPRESSION_CMD _timescaledb_internal.compress_uuid(item)
+\set DECOMPRESS_FORWARD_CMD _timescaledb_internal.decompress_forward(c::_timescaledb_internal.compressed_data, NULL::uuid)
+\set DECOMPRESS_REVERSE_CMD _timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compressed_data, NULL::uuid)
+SET timescaledb.enable_uuid_compression = on;
+-- basic test, flipping values between UUID v4s, UUID v7s and NULLs
+CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, NULL::uuid as item FROM (SELECT generate_series(1, 1000) item) sub;
+UPDATE base_uuids SET item = gen_random_uuid() WHERE rn % 4 = 0;
+UPDATE base_uuids SET item = (SELECT u FROM uuid_set WHERE i = rn % 100) WHERE rn % 4 = 1;
+UPDATE base_uuids SET item = (SELECT u FROM uuid_set WHERE i = rn % 97) WHERE rn % 4 = 2;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |            6124
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_uuids;
+-- all NULLs and a single UUID v7
+CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, NULL::uuid as item FROM (SELECT generate_series(1, 1000) item) sub;
+UPDATE base_uuids SET item = '0197a7a9-b48b-7c74-a2a4-dcdbce635d11' WHERE rn = 1;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ ARRAY     | t         |              85
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_uuids;
+-- no NULLs
+CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, NULL::uuid as item FROM (SELECT generate_series(1, 1000) item) sub;
+UPDATE base_uuids SET item = (SELECT u FROM uuid_set WHERE i = rn % 100);
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |            2092
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_uuids;
+-- flipping values between two UUID v7s and NULLs
+CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, NULL::uuid as item FROM (SELECT generate_series(1, 1000) item) sub;
+UPDATE base_uuids SET item = '0197a7a9-b48b-7c74-a2a4-dcdbce635d11' WHERE rn % 3 = 0;
+UPDATE base_uuids SET item = '0197a7a9-b48b-7c74-a2a4-dcdbce635d12' WHERE rn % 3 = 1;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm  | has_nulls | compressed size 
+------------+-----------+-----------------
+ DICTIONARY | t         |             320
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_uuids;
+-- test with a set of UUID v7s
+CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, u as item FROM uuid_set ORDER BY i;
+\ir include/compression_test.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO errors
+ algorithm | has_nulls | compressed size 
+-----------+-----------+-----------------
+ UUID      | f         |             944
+(1 row)
+
+                                   ?column?                                    | count 
+-------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed forward (expect 0) |     0
+(1 row)
+
+                                    ?column?                                    | count 
+--------------------------------------------------------------------------------+-------
+ Number of rows different between original and decompressed reversed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                              | count 
+----------------------------------------------------------------------------------------------------+-------
+ Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
+(1 row)
+
+                                              ?column?                                               | ?column? 
+-----------------------------------------------------------------------------------------------------+----------
+ Test that deserialization, decompression, recompression, and serialization results in the same text | t
+(1 row)
+
+DROP TABLE base_uuids;
+RESET timescaledb.enable_uuid_compression;
+DROP table uuid_set;
 -----------------------------------------------
 -- Interesting corrupt data found by fuzzing --
 -----------------------------------------------
@@ -1810,11 +2025,11 @@ group by 2, 3 order by 1 desc
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
     18 | true        | true
-    15 | XX001       | XX001
+    14 | XX001       | XX001
      8 | 08P01       | 08P01
      2 | 3F000       | 3F000
+     2 | false       | false
      1 | 22021       | 22021
-     1 | false       | false
 (6 rows)
 
 \set algo dictionary

@@ -79,3 +79,6 @@ CREATE PROCEDURE _timescaledb_functions.policy_compression_execute(
 )
 AS $$ BEGIN END $$ LANGUAGE PLPGSQL;
 
+INSERT INTO _timescaledb_catalog.compression_algorithm( id, version, name, description) values
+( 7, 1, 'COMPRESSION_ALGORITHM_UUID', 'uuid');
+
