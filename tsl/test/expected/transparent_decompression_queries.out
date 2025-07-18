@@ -94,7 +94,7 @@ GROUP BY 2, 3;
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=267841 loops=1)
                Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
-               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=43200 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=43200 loops=1)
                      Vectorized Filter: ("time" < "timestamp"(now()))
                      ->  Index Scan using compress_hyper_4_10_chunk_device_id_measure_id__ts_meta_min_idx on compress_hyper_4_10_chunk (actual rows=44 loops=1)
                            Index Cond: (_ts_meta_min_1 < now())
@@ -195,7 +195,7 @@ WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
    Sort Method: quicksort 
    ->  Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
          Chunks excluded during startup: 0
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
                Filter: check_equal_228(rtt)
                Rows Removed by Filter: 2
                Vectorized Filter: (ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)

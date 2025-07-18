@@ -791,7 +791,7 @@ VACUUM ANALYZE test_ordering;
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+ Custom Scan (ColumnarScan) on _hyper_13_20_chunk
    ->  Sort
          Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
          ->  Seq Scan on compress_hyper_14_21_chunk
@@ -812,7 +812,7 @@ VACUUM ANALYZE test_ordering;
  Sort
    Sort Key: _hyper_13_20_chunk."time"
    ->  Append
-         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
                ->  Sort
                      Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_14_21_chunk
@@ -828,7 +828,7 @@ VACUUM ANALYZE test_ordering;
  Sort
    Sort Key: _hyper_13_20_chunk."time"
    ->  Append
-         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
                ->  Sort
                      Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_14_21_chunk
@@ -881,11 +881,11 @@ VACUUM ANALYZE test_ordering;
 --------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
-   ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_13_20_chunk
          ->  Sort
                Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_14_21_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_13_22_chunk
          ->  Sort
                Sort Key: compress_hyper_14_23_chunk._ts_meta_min_1, compress_hyper_14_23_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_14_23_chunk

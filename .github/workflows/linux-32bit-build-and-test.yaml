@@ -59,6 +59,7 @@ jobs:
           compress_bloom_sparse_debug
           compress_qualpushdown_saop
           compression_allocation
+          net
           pg_dump
           telemetry
           transparent_decompress_chunk-*

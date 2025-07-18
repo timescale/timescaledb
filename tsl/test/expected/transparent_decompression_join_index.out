@@ -60,7 +60,7 @@ order by test.time;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
    Join Filter: (((_hyper_1_1_chunk.a)::text = (test_copy.a)::text) AND (_hyper_1_1_chunk.b = test_copy.b))
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          Filter: (("time" >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND ("time" <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
          ->  Sort
                Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
@@ -128,7 +128,7 @@ full join query_params q2
          Merge Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
          ->  Sort
                Sort Key: _hyper_1_1_chunk.a
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      ->  Seq Scan on compress_hyper_2_2_chunk
          ->  Materialize
                ->  CTE Scan on query_params q

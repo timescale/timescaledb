@@ -22,70 +22,70 @@ select count(compress_chunk(x)) from show_chunks('t') x;
 
 vacuum freeze analyze t;
 explain select * from t;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=68)
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=68)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=78)
 (2 rows)
 
 explain select * from t where s = '1';
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=68)
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=68)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=1 width=78)
          Filter: (s = '1'::text)
 (3 rows)
 
 explain select * from t where c = '100';
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=68)
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=68)
    Vectorized Filter: (c = '100'::text)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=78)
 (3 rows)
 
 explain select ts from t;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=4)
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=4)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=44)
 (2 rows)
 
 explain select ts from t where s = '1';
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=4)
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=4)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=1 width=46)
          Filter: (s = '1'::text)
 (3 rows)
 
 explain select ts from t where c = '100';
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=4)
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=4)
    Vectorized Filter: (c = '100'::text)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=76)
 (3 rows)
 
 explain select ts, s from t;
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=36)
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=36)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=46)
 (2 rows)
 
 explain select ts, s from t where s = '1';
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=36)
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=36)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=1 width=46)
          Filter: (s = '1'::text)
 (3 rows)
 
 explain select ts, s from t where c = '100';
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=36)
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=36)
    Vectorized Filter: (c = '100'::text)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=78)
 (3 rows)
