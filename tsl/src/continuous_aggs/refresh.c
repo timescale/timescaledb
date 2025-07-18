@@ -5,8 +5,6 @@
  */
 #include <postgres.h>
 
-#include "bgw/job.h"
-#include "bgw_policy/policies_v2.h"
 #include <access/xact.h>
 #include <executor/spi.h>
 #include <fmgr.h>
@@ -20,6 +18,8 @@
 #include <utils/lsyscache.h>
 #include <utils/snapmgr.h>
 
+#include "bgw_policy/policies_v2.h"
+#include "continuous_aggs/invalidation_multi.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "guc.h"
@@ -85,6 +85,35 @@ static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 static void fill_bucket_offset_origin(const ContinuousAgg *cagg,
 									  const InternalTimeRange *const refresh_window,
 									  NullableDatum *offset, NullableDatum *origin);
+
+/*
+ * Get all hypertables that are using WAL-invalidations.
+ */
+static List *
+get_all_wal_using_hypertables(void)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	List *hypertables = NIL;
+
+	/* Collect OID of all tables using continuous aggregates */
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
+								   Anum_continuous_agg_raw_hypertable_id,
+								   &isnull);
+
+		Assert(!isnull);
+		int32 hypertable_id = DatumGetInt32(datum);
+		Oid relid = ts_hypertable_id_to_relid(hypertable_id, false);
+		if (!has_invalidation_trigger(relid))
+			hypertables = list_append_unique_int(hypertables, hypertable_id);
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return hypertables;
+}
 
 static Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
@@ -856,7 +885,32 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	}
 
 	if (process_hypertable_invalidations)
-		invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
+	{
+		/*
+		 * If we are using trigger-based invalidations, we can process the
+		 * invalidations for the associated hypertable only and later read the
+		 * invalidations for other hypertables, but when using WAL-based
+		 * invalidation we need to process all of the hypertables that are
+		 * currently using WAL.
+		 *
+		 * We want to prevent any changes to how invalidations are collected
+		 * in the meantime since changing the invalidation collection method
+		 * while this is running might cause problems and miss invalidations.
+		 *
+		 * Concurrency on the replication slot is controlled using some
+		 * special sauce in ReplicationSlotAcquire(), which is called inside
+		 * pg_logical_slot_get_changes_guts().
+		 *
+		 * This will currently generate an error rather than blocking on the
+		 * lock, so we need to add a separate lock to ensure a blocking
+		 * behaviour.
+		 */
+		if (has_invalidation_trigger(
+				ts_hypertable_id_to_relid(cagg->data.raw_hypertable_id, false)))
+			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
+		else
+			multi_invalidation_process_hypertable_log(get_all_wal_using_hypertables());
+	}
 
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();

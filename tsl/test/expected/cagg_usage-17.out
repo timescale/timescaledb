@@ -604,7 +604,7 @@ ORDER BY 1;
 (2 rows)
 
 \set ON_ERROR_STOP 1
-SELECT count(*) FROM invalidation_slots;
+SELECT count(*) FROM invalidation_slots WHERE database = current_database();
  count 
 -------
      0
