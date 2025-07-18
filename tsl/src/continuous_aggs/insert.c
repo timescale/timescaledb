@@ -16,6 +16,7 @@
 #include <miscadmin.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <utils/hsearch.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
@@ -234,15 +235,22 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	int32 hypertable_id;
 
 	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
-		elog(ERROR, "must supply hypertable id");
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("must supply hypertable id"));
 
 	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
 	hypertable_id = atol(hypertable_id_str);
 
 	if (!CALLED_AS_TRIGGER(fcinfo))
-		elog(ERROR, "continuous agg trigger function must be called by trigger manager");
+		ereport(ERROR,
+				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				errmsg("function \"%s\" was not called by trigger manager",
+					   get_func_name(fcinfo->flinfo->fn_oid)));
 	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event) || !TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
-		elog(ERROR, "continuous agg trigger function must be called in per row after trigger");
+		ereport(ERROR,
+				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				errmsg("continuous agg trigger function must be called in per row after trigger"));
 	execute_cagg_trigger(hypertable_id,
 						 trigdata->tg_relation,
 						 trigdata->tg_trigtuple,

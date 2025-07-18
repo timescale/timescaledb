@@ -547,12 +547,9 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 								  Oid chunk_relid, const char *name)
 {
 	Constraint *constr = NULL;
-	bool isvarlena;
 	Node *rangedef;
 	ColumnRef *colref;
-	Datum startdat, enddat;
 	List *compexprs = NIL;
-	Oid outfuncid;
 	Oid col_type;
 	int attno;
 
@@ -564,8 +561,8 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 	colref->location = -1;
 
 	/*
-	 * Convert the ranges to the appropriate text/string representation for the
-	 * specific type. But first get this column type.
+	 * Get the column type for later converting the internal format
+	 * to string.
 	 *
 	 * Get the attribute number in the HT for this column, and map to the chunk
 	 */
@@ -574,19 +571,14 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 	col_type = get_atttype(main_table_relid, attno);
 
 	rangedef = (Node *) colref;
-	getTypeOutputInfo(col_type, &outfuncid, &isvarlena);
-	startdat = ts_internal_to_time_value(info->range_start, col_type);
-	enddat = ts_internal_to_time_value(info->range_end, col_type);
-
-	/* Convert internal format datums to string (output) datums */
-	startdat = OidFunctionCall1(outfuncid, startdat);
-	enddat = OidFunctionCall1(outfuncid, enddat);
 
 	/* Elide range constraint for +INF or -INF */
 	if (info->range_start != PG_INT64_MIN)
 	{
 		A_Const *start_const = makeNode(A_Const);
-		memcpy(&start_const->val, makeString(DatumGetCString(startdat)), sizeof(start_const->val));
+		memcpy(&start_const->val,
+			   makeString(ts_internal_to_time_string(info->range_start, col_type)),
+			   sizeof(start_const->val));
 		start_const->location = -1;
 		A_Expr *ge_expr = makeSimpleA_Expr(AEXPR_OP, ">=", rangedef, (Node *) start_const, -1);
 		compexprs = lappend(compexprs, ge_expr);
@@ -595,7 +587,9 @@ create_col_stats_check_constraint(const Form_chunk_column_stats info, Oid main_t
 	if (info->range_end != PG_INT64_MAX)
 	{
 		A_Const *end_const = makeNode(A_Const);
-		memcpy(&end_const->val, makeString(DatumGetCString(enddat)), sizeof(end_const->val));
+		memcpy(&end_const->val,
+			   makeString(ts_internal_to_time_string(info->range_end, col_type)),
+			   sizeof(end_const->val));
 		end_const->location = -1;
 		A_Expr *lt_expr = makeSimpleA_Expr(AEXPR_OP, "<", rangedef, (Node *) end_const, -1);
 		compexprs = lappend(compexprs, lt_expr);

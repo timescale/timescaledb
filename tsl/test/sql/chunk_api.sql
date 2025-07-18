@@ -34,12 +34,16 @@ SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}');
 -- Same dimension twice
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}');
--- Bad bounds format
+-- Bad bounds value
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+-- Bad bounds value
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["badtimestamp", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 -- Bad slices format
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 -- Bad slices json
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}');
+-- Bad bound type
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [true, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 \set ON_ERROR_STOP 1
 
 -- Test that granting insert on tables allow create_chunk to be

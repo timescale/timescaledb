@@ -1,4 +1,16 @@
 name: Release - Feature Freeze Ceremony
+
+#
+# Feature Freeze
+# 
+# prereq: needs approval from another person to run the action (environment)
+#
+# 1. creates the release branch X.Y.x, if and if the branch does not exist yet
+# 2. generates CHANGELOG and opens PR for it
+# 3. generates the release artefacts for the next versions
+# 4. bumps the version in version.config to minor + 1 if and only if a .0 release is done
+#
+
 on:
   workflow_dispatch:
 
@@ -37,14 +49,64 @@ jobs:
 
           echo "Release branch: $RELEASE_BRANCH"
 
+      - name: Check if release branch exists
+        id: check_branch
+        run: |
+          if git ls-remote --heads origin ${{ env.RELEASE_BRANCH }} | grep -q ${{ env.RELEASE_BRANCH }}; then
+            echo "Branch ${{ env.RELEASE_BRANCH }} exists!"
+            echo "branch_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "branch_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      # -------------------------------------------------------
+      #
+      # Only running for new minor releases
+      #
+      # -------------------------------------------------------
+      
+      # Bump minor in main for minor releases
+      - name: Bump minor version on main if next release is a new minor
+        if: endsWith(env.NEXT_VERSION, '.0')
+        id: bump_minor_version_on_main
+        run: |
+          NEXT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          NEXT_MAIN_VERSION=$(echo "$NEXT_MAIN_VERSION" | awk -F. '{printf "%d.%d.0-dev", $1, $2 + 1}')
+          sed -i "s/^version = .*/version = $NEXT_MAIN_VERSION/" version.config
+          echo "NEXT_MAIN_VERSION=${NEXT_MAIN_VERSION}" >> $GITHUB_ENV
+
+      # Submit PR for new version changes on main
+      - name: Create Pull Request for next version on main
+        if: steps.bump_minor_version_on_main.conclusion == 'success'
+        id: cpr_next_version_main
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          branch: "release/${{ env.NEXT_VERSION }}-${{ env.NEXT_MAIN_VERSION }}"
+          base: "main"
+          delete-branch: true
+          title: "Bump version to ${{ env.NEXT_MAIN_VERSION }}"
+          labels: |
+            release
+          add-paths: |
+            version.config
+      
       # Create `2.XX.x` release branch of `main`
       # Release branch is a dependency for the next steps
+      # only execute this step on .0 releases
       - name: Create Release Branch
+        if: steps.check_branch.outputs.branch_exists == 'false'
         uses: peterjgrainger/action-create-branch@v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         with:
           branch: '${{ env.RELEASE_BRANCH }}'
+
+      # -------------------------------------------------------
+      #
+      # Runs for every release
+      #
+      # -------------------------------------------------------
 
       - name: Generate the CHANGELOG
         run: |
@@ -60,6 +122,10 @@ jobs:
           branch: "release/${{ env.NEXT_VERSION }}--changelog"
           base: ${{ env.RELEASE_BRANCH }}
           delete-branch: true
+          reviewers: |
+            @philkra
+            @brandonpurcell-dev
+            @atovpeko
           title: "Release ${{ env.NEXT_VERSION }}"
           labels: |
             release

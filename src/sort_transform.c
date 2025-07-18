@@ -318,7 +318,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 				newec->ec_collation = orig->ec_collation;
 				newec->ec_members = NIL;
 				newec->ec_sources = list_copy(orig->ec_sources);
-				newec->ec_derives = list_copy(orig->ec_derives);
+				newec->ec_derives_list = list_copy(orig->ec_derives_list);
 				newec->ec_relids = bms_copy(orig->ec_relids);
 				newec->ec_has_const = orig->ec_has_const;
 
@@ -454,7 +454,7 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	new_pk = make_canonical_pathkey(root,
 									transformed,
 									last_pk->pk_opfamily,
-									last_pk->pk_strategy,
+									last_pk->pk_cmptype,
 									last_pk->pk_nulls_first);
 
 	/*

@@ -40,7 +40,7 @@
 #include "vector_predicates.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
-	.CustomName = "DecompressChunk",
+	.CustomName = "ColumnarScan",
 	.CreateCustomScanState = decompress_chunk_state_create,
 };
 
@@ -995,6 +995,9 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 	cost_sort(&sort_path,
 			  root,
 			  NIL,
+#if PG18_GE
+			  lefttree->disabled_nodes,
+#endif
 			  lefttree->total_cost,
 			  lefttree->plan_rows,
 			  lefttree->plan_width,
@@ -1235,11 +1238,11 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				Oid sortop = get_opfamily_member(pk->pk_opfamily,
 												 var->vartype,
 												 var->vartype,
-												 pk->pk_strategy);
+												 pk->pk_cmptype);
 				if (!OidIsValid(sortop)) /* should not happen */
 					elog(ERROR,
 						 "missing operator %d(%u,%u) in opfamily %u",
-						 pk->pk_strategy,
+						 pk->pk_cmptype,
 						 var->vartype,
 						 var->vartype,
 						 pk->pk_opfamily);
@@ -1276,7 +1279,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 			/* Find the operator in pg_amop --- failure shouldn't happen */
 			Oid opfamily, opcintype;
-			int16 strategy;
+			CompareType strategy;
 			if (!get_ordering_op_properties(list_nth_oid(sort_ops, i),
 											&opfamily,
 											&opcintype,

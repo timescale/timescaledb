@@ -56,6 +56,24 @@ ts_with_clause_filter(const List *def_elems, List **within_namespace, List **not
 
 static Datum parse_arg(WithClauseDefinition arg, DefElem *def);
 
+static char *
+ts_with_clause_definition_names(const WithClauseDefinition *args, Size nargs)
+{
+	StringInfoData buf;
+	Size i;
+
+	initStringInfo(&buf);
+
+	for (i = 0; i < nargs; i++)
+	{
+		if (i > 0)
+			appendStringInfoString(&buf, ", ");
+		appendStringInfoString(&buf, args[i].arg_names[0]);
+	}
+
+	return buf.data;
+}
+
 /*
  * Deserialize and apply the values in a WITH clause based on the on_arg table.
  *
@@ -111,7 +129,9 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 		if (!argument_recognized)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("unrecognized parameter \"%s.%s\"", def->defnamespace, def->defname)));
+					 errmsg("unrecognized parameter \"%s.%s\"", def->defnamespace, def->defname),
+					 errhint("Valid timescaledb parameters are: %s",
+							 ts_with_clause_definition_names(args, nargs))));
 	}
 
 	return results;
@@ -120,17 +140,11 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 extern TSDLLEXPORT char *
 ts_with_clause_result_deparse_value(const WithClauseResult *result)
 {
-	Oid oid = result->definition->type_id;
-	Ensure(OidIsValid(oid), "argument \"%d\" has invalid OID", oid);
+	Ensure(OidIsValid(result->definition->type_id),
+		   "argument \"%d\" has invalid OID",
+		   result->definition->type_id);
 
-	Oid in_fn;
-	bool typIsVarlena pg_attribute_unused();
-
-	getTypeOutputInfo(oid, &in_fn, &typIsVarlena);
-	Ensure(OidIsValid(in_fn), "no output function for type with OID %d", oid);
-
-	char *val = OidOutputFunctionCall(in_fn, result->parsed);
-	return val;
+	return ts_datum_to_string(result->parsed, result->definition->type_id);
 }
 
 static Datum

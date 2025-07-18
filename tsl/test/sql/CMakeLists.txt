@@ -13,11 +13,14 @@ set(TEST_FILES
     cagg_invalidation.sql
     cagg_policy.sql
     cagg_policy_move.sql
+    cagg_policy_concurrent.sql
+    cagg_plugin.sql
     cagg_refresh.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_column_stats.sql
+    columnar_scan_cost.sql
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
@@ -46,31 +49,12 @@ set(TEST_FILES
     compression_settings.sql
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
+    compression_uuid.sql
     compression_trigger.sql
     create_table_with.sql
     custom_hashagg.sql
-    decompress_chunk_cost.sql
     decompress_index.sql
-    foreign_keys.sql
-    hypercore_columnar.sql
-    hypercore_constraints.sql
-    hypercore_copy.sql
-    hypercore_cursor.sql
-    hypercore_ddl.sql
-    hypercore_delete.sql
-    hypercore_dump_restore.sql
-    hypercore_index_btree.sql
-    hypercore_index_hash.sql
-    hypercore_insert.sql
-    hypercore_join.sql
-    hypercore_merge.sql
-    hypercore_policy.sql
-    hypercore_stats.sql
-    hypercore_trigger.sql
-    hypercore_types.sql
-    hypercore_update.sql
-    hypercore_vacuum.sql
-    hypercore_vacuum_full.sql
+    foreign_keys_test.sql
     merge_append_partially_compressed.sql
     merge_chunks.sql
     merge_compress.sql
@@ -110,6 +94,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
+    attach_chunk.sql
     bgw_custom.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
@@ -151,13 +136,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_policy_run.sql
     decompress_memory.sql
     decompress_vector_qual.sql
+    detach_chunk.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql
     exp_cagg_origin.sql
     exp_cagg_timezone.sql
-    hypercore.sql
-    hypercore_create.sql
-    hypercore_scans.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
@@ -194,14 +177,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
-  list(
-    APPEND
-    TEST_FILES
-    cagg_planning.sql
-    hypercore_parallel.sql
-    hypercore_vectoragg.sql
-    skip_scan_dagg.sql
-    plan_skip_scan_dagg.sql)
+  list(APPEND TEST_FILES cagg_planning.sql skip_scan_dagg.sql
+       plan_skip_scan_dagg.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
@@ -227,10 +204,11 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     cagg_invalidation
+    cagg_plugin
     cagg_policy_incremental
-    hypercore
     move
     reorder
+    split_chunk
     telemetry_stats)
 
 # Check if PostgreSQL was compiled with JIT support

@@ -1125,9 +1125,6 @@ LOG:  statement: WITH
   broken AS (SELECT decode(left(part, -32), 'hex') partialb FROM sample)
 SELECT _timescaledb_functions.finalize_agg('sum(numeric)', null, null, null, broken.partialb, null::numeric) sumb
   FROM broken;
-DEBUG:  capture_ExecutorStart - rtable #0: (null)
-DEBUG:  capture_ExecutorStart - rtable #1: (null)
-DEBUG:  capture_ExecutorStart - rtable #2: saved_partials
 DEBUG:  inner_agg_deserialize - deserializing partial
 DETAIL:  mcxt: ExprContext
 DEBUG:  inner_agg_deserialize - attempting repair of serialized partial

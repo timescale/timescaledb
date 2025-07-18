@@ -1,6 +1,8 @@
 set(SOURCES
     chunk_api.c
     chunk.c
+    chunk_merge.c
+    chunk_split.c
     chunkwise_agg.c
     init.c
     partialize_finalize.c
@@ -110,5 +112,4 @@ add_subdirectory(bgw_policy)
 add_subdirectory(compression)
 add_subdirectory(continuous_aggs)
 add_subdirectory(import)
-add_subdirectory(hypercore)
 add_subdirectory(nodes)

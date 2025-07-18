@@ -948,9 +948,9 @@ SET client_min_messages TO ERROR;
 CALL run_job(:compressjob_id);
 ERROR:  columnstore policy failure
 DETAIL:  Failed to convert '20' chunks to columnstore. Successfully converted '11' chunks.
-CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean,boolean,boolean) line 118 at RAISE
-SQL statement "CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time, hypercore_use_access_method)"
-PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 65 at CALL
+CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean,boolean) line 118 at RAISE
+SQL statement "CALL _timescaledb_functions.policy_compression_execute(job_id, htid, lag_value::INTERVAL, maxchunks, verbose_log, recompress_enabled, reindex_enabled, use_creation_time)"
+PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 62 at CALL
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 -- 31 uncompressed chunks (0 - uncompressed, 1 - compressed)

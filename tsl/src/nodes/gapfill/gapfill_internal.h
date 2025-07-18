@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+#include <datatype/timestamp.h>
 #include <nodes/execnodes.h>
 
 /*
