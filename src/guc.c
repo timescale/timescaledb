@@ -105,7 +105,7 @@ TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = false;
-TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
+TSDLLEXPORT int ts_guc_compression_batch_size_limit = 10000;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 bool ts_guc_enable_event_triggers = false;
@@ -810,9 +810,9 @@ _guc_init(void)
 							"uncompressed tuples."
 							"Setting this to 0 defaults to the max batch size of 1000.",
 							&ts_guc_compression_batch_size_limit,
-							1000,
+							10000,
 							1,
-							1000,
+							10000,
 							PGC_USERSET,
 							0,
 							NULL,
