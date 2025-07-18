@@ -28,6 +28,7 @@
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
+#include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
@@ -811,6 +812,10 @@ static void
 cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
 			CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options)
 {
+	/* Prepare event trigger state and invoke ddl_command_start triggers */
+	EventTriggerBeginCompleteQuery();
+	EventTriggerDDLCommandStart((Node *) stmt);
+
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
 	MatTableColumnInfo mattblinfo;
@@ -1043,6 +1048,11 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
 	else if (slot_prepared)
 		cagg_add_logical_decoding_slot_finalize();
+
+	/* Collect information and invoke ddl_command_end triggers */
+	EventTriggerCollectSimpleCommand(view_address, InvalidObjectAddress, (Node *) stmt);
+	EventTriggerDDLCommandEnd((Node *) stmt);
+	EventTriggerEndCompleteQuery();
 }
 
 DDLResult
@@ -1104,6 +1114,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 											  schema_name,
 											  stmt->into->rel->relname,
 											  true);
+
 	cagg_create(stmt, &viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
 
 	/* Insert the MIN of the time dimension type for the new watermark */
