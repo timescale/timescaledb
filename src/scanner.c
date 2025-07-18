@@ -97,8 +97,12 @@ index_scanner_beginscan(ScannerCtx *ctx)
 {
 	InternalScannerCtx *ictx = &ctx->internal;
 
-	ictx->scan.index_scan =
-		index_beginscan(ctx->tablerel, ctx->indexrel, ctx->snapshot, ctx->nkeys, ctx->norderbys);
+	ictx->scan.index_scan = index_beginscan_compat(ctx->tablerel,
+												   ctx->indexrel,
+												   ctx->snapshot,
+												   NULL,
+												   ctx->nkeys,
+												   ctx->norderbys);
 	ictx->scan.index_scan->xs_want_itup = ctx->want_itup;
 	index_rescan(ictx->scan.index_scan, ctx->scankey, ctx->nkeys, NULL, ctx->norderbys);
 	return ictx->scan;

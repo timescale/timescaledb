@@ -1,0 +1,108 @@
+name: Nightly - Update smoke test on release branch
+
+# QA: run the upgrade smoke tests with the last 10 releases 
+# against the the next version.
+# Requires upstream GitHub action to deploy the last commit
+# from the release branch to the QA service in Cloud
+
+"on":
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/nightly_cloud_smoke_test.yaml
+
+jobs:
+  get-next-version:
+    runs-on: ubuntu-latest
+    outputs:
+      next_version: ${{ steps.fetch.outputs.next_version }}
+    steps:
+    - name: Get next version
+      # Get newest release branch with most recent commits
+      id: fetch
+      run: |
+        RELEASE_BRANCH=$(git ls-remote --heads https://github.com/timescale/timescaledb.git | \
+          grep -Eo 'refs/heads/[2-9]+\.[0-9]+\.x' | \
+          sed 's|refs/heads/||' | \
+          sort -V | \
+          tail -n1)
+        echo "current release branch: ${RELEASE_BRANCH}"
+        curl --fail -o version.config "https://raw.githubusercontent.com/timescale/timescaledb/refs/heads/${RELEASE_BRANCH}/version.config"
+        NEXT_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+        echo "next version: ${NEXT_VERSION} .."
+        echo "next_version=${NEXT_VERSION}" >> "$GITHUB_OUTPUT"
+
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Fetch TimescaleDB releases
+        id: fetch-releases
+        run: |
+          releases=$(curl -s \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/timescale/timescaledb/releases?per_page=10" \
+            | jq -r '.[].tag_name')
+          
+          # Convert to JSON array format for matrix
+          matrix_json=$(echo "$releases" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "releases=$matrix_json" >> $GITHUB_OUTPUT
+          
+          # Also output for debugging
+          echo "Found releases:"
+          echo "$releases"
+
+      - name: Set matrix output
+        id: set-matrix
+        run: |
+          matrix='{"version": ${{ steps.fetch-releases.outputs.releases }}}'
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+          echo $matrix
+
+  test-version:
+    needs: [generate-matrix, get-next-version]
+    runs-on: ubuntu-latest
+    strategy:
+      # run sequentially
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+      max-parallel: 1
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        # we want the right version of Postgres for handling any dump file
+        run: |
+          sudo apt-get update
+          sudo apt-get install gnupg postgresql-common 
+          yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+          sudo apt-get update
+          sudo apt-get install postgresql-17 
+    
+      - name: "Run update smoke test with v${{ matrix.version }} to ${{needs.get-next-version.outputs.next_version}}"
+        # Now run the test.  Currently the cloud instance is always up.
+        # only run the test if the versions are not equal
+        run: |
+          PATH="/usr/lib/postgresql/17/bin:$PATH"
+          ./scripts/test_update_smoke.sh \
+              ${{ matrix.version }} \
+              ${{needs.get-next-version.outputs.next_version}} \
+              "${{ secrets.DB_TEAM_QA_SERVICE_CONNECTION_STRING }}"
+      
+      - name: Show logs
+        if: always()
+        run: |
+          ls -l /tmp/smoketest*/*
+          cat /tmp/smoketest*/*
+        
+      - name: Upload Artifacts
+        # Save the logs, so if there is a failure we'll have a better
+        # chance to understand what went wrong.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cloud Update test smoke
+          path: /tmp/smoketest*/*

@@ -184,7 +184,7 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 static MinMaxResult
 minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[2])
 {
-	IndexScanDesc scan = index_beginscan(rel, idxrel, GetTransactionSnapshot(), 0, 0);
+	IndexScanDesc scan = index_beginscan_compat(rel, idxrel, GetTransactionSnapshot(), NULL, 0, 0);
 	TupleTableSlot *slot = table_slot_create(rel, NULL);
 	bool nulls[2] = { true, true };
 	int i;

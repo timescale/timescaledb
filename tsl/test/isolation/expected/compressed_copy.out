@@ -1,6 +1,6 @@
 Parsed test spec with 2 sessions
 
-starting permutation: s1_begin s2_begin s1_copy s2_copy s1_commit s2_commit
+starting permutation: s1_begin s2_begin s1_copy s2_copy s2_commit s1_commit
 step s1_begin: 
   BEGIN;
 
@@ -15,11 +15,10 @@ COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-01-01 0:00:00,d1,0.5' WI
 
 step s2_copy: 
 COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-01-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
- <waiting ...>
-step s1_commit: 
+
+step s2_commit: 
   COMMIT;
 
-step s2_copy: <... completed>
-step s2_commit: 
+step s1_commit: 
   COMMIT;
 

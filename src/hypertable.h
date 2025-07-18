@@ -116,6 +116,7 @@ extern int ts_hypertable_delete_by_id(int32 hypertable_id);
 extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(const Hypertable *ht,
 															  CreateTrigStmt *stmt,
 															  const char *query);
+extern TSDLLEXPORT void ts_hypertable_drop_invalidation_replication_slot(const char *slot_name);
 extern TSDLLEXPORT void ts_hypertable_drop_trigger(Oid relid, const char *trigger_name);
 extern TSDLLEXPORT void ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior);
 

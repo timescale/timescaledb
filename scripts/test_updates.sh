@@ -115,6 +115,8 @@ echo -e "\nUpdate test finished for ${VERSIONS}\n"
 
 if [ $FAIL_COUNT -gt 0 ]; then
   echo -e "Failed versions: ${FAILED_VERSIONS}\n"
+  echo -e "Postgres errors:\n"
+  find update_test -name postgres.log -exec grep ERROR {} \;
 else
   echo -e "All tests succeeded.\n"
 fi

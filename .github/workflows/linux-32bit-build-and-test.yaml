@@ -59,9 +59,7 @@ jobs:
           compress_bloom_sparse_debug
           compress_qualpushdown_saop
           compression_allocation
-          hypercore_parallel
-          hypercore_vacuum
-          hypercore_vectoragg
+          net
           pg_dump
           telemetry
           transparent_decompress_chunk-*
@@ -71,9 +69,8 @@ jobs:
           vector_agg_text
           vector_agg_uuid_segmentby
           vectorized_aggregation
-          net
         SKIPS: chunk_adaptive histogram_test-*
-        EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
+        EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}

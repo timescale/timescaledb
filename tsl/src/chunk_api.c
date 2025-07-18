@@ -20,6 +20,7 @@
 #include <fmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
+#include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <utils/array.h>
@@ -32,6 +33,7 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_api.h"
+#include "debug_point.h"
 #include "error_utils.h"
 #include "errors.h"
 #include "hypercube.h"
@@ -174,14 +176,35 @@ hypercube_from_jsonb(Jsonb *json, const Hyperspace *hs, const char **parse_error
 				goto out_err;
 			}
 
-			if (v.type != jbvNumeric)
+			if (v.type == jbvString)
 			{
-				err = psprintf("constraint for dimension \"%s\" is not numeric", name);
+				if (!IS_TIMESTAMP_TYPE(dim->fd.column_type))
+				{
+					err =
+						psprintf("constraint for dimension \"%s\" can be string only for date time",
+								 name);
+					goto out_err;
+				}
+
+				char *v_str = (char *) palloc(v.val.string.len + 1);
+				memcpy(v_str, v.val.string.val, v.val.string.len);
+				v_str[v.val.string.len] = '\0';
+				range[i] = ts_time_value_from_arg(CStringGetDatum(v_str),
+												  InvalidOid,
+												  dim->fd.column_type,
+												  true);
+			}
+			else if (v.type == jbvNumeric)
+			{
+				range[i] = DatumGetInt64(
+					DirectFunctionCall1(numeric_int8, NumericGetDatum(v.val.numeric)));
+			}
+			else
+			{
+				err = psprintf("constraint for dimension \"%s\" should be either numeric or string",
+							   name);
 				goto out_err;
 			}
-
-			range[i] =
-				DatumGetInt64(DirectFunctionCall1(numeric_int8, NumericGetDatum(v.val.numeric)));
 		}
 
 		type = JsonbIteratorNext(&it, &v, false);
@@ -358,6 +381,7 @@ chunk_create(PG_FUNCTION_ARGS)
 												 schema_name,
 												 table_name,
 												 chunk_table_relid,
+												 InvalidOid,
 												 &created);
 	Assert(NULL != chunk);
 
@@ -370,4 +394,162 @@ chunk_create(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_TS_INTERNAL_ERROR), errmsg("could not create tuple from chunk")));
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
+}
+
+/*
+ * Detach a chunk from a hypertable.
+ */
+Datum
+chunk_detach(PG_FUNCTION_ARGS)
+{
+	Oid chunk_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Cache *hcache;
+	Hypertable *ht;
+	Chunk *chunk;
+	Oid ht_rel;
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (!OidIsValid(chunk_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk relation OID")));
+
+	DEBUG_WAITPOINT("chunk_detach_before_lock");
+
+	ht_rel = ts_hypertable_id_to_relid(ts_chunk_get_hypertable_id_by_reloid(chunk_relid), true);
+	if (!OidIsValid(ht_rel))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("hypertable not found for the chunk")));
+
+	/* Take the same locks taken by PostgreSQL partitioning to be consistent */
+	LockRelationOid(ht_rel, ShareUpdateExclusiveLock);
+	LockRelationOid(chunk_relid, AccessExclusiveLock);
+
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
+	Assert(chunk != NULL);
+
+	ht = ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
+	Assert(ht != NULL);
+
+	if (!object_ownercheck(RelationRelationId, ht->main_table_relid, GetUserId()))
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   get_relkind_objtype(get_rel_relkind(ht->main_table_relid)),
+					   get_rel_name(ht->main_table_relid));
+
+	if (ts_chunk_is_compressed(chunk))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot detach compressed chunk \"%s\"", get_rel_name(chunk_relid)),
+				 errhint("Decompress the chunk first.")));
+
+	if (chunk->fd.osm_chunk)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot detach OSM chunk \"%s\"", get_rel_name(chunk_relid))));
+
+	AlterTableCmd cmd = {
+		.type = T_AlterTableCmd,
+		.subtype = AT_DropInherit,
+		.def = (Node *) makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
+	};
+	AlterTableStmt stmt = {
+		.type = T_AlterTableStmt,
+		.cmds = list_make1(&cmd),
+		.relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
+	};
+
+	ts_alter_table_with_event_trigger(chunk->table_id, (Node *) &stmt, list_make1(&cmd), false);
+
+	ts_chunk_detach_by_relid(chunk_relid);
+
+	ts_cache_release(&hcache);
+
+	PG_RETURN_VOID();
+}
+
+/*
+ * Attach an existing relation to a hypertable as a chunk.
+ */
+Datum
+chunk_attach(PG_FUNCTION_ARGS)
+{
+	Oid ht_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Oid chunk_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+	Jsonb *slices = PG_ARGISNULL(2) ? NULL : PG_GETARG_JSONB_P(2);
+	Cache *hcache;
+	Hypertable *ht;
+	Hypercube *hc;
+	Chunk PG_USED_FOR_ASSERTS_ONLY *chunk;
+	bool created;
+
+	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	if (!OidIsValid(chunk_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk relation OID")));
+
+	if (!OidIsValid(ht_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid hypertable relation OID")));
+
+	if (chunk_relid == ht_relid)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("chunk relation cannot be the same as hypertable relation")));
+
+	if (NULL == slices)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid dimension slices argument"),
+				 errhint("Provide a json-formatted definition of dimensional constraints for the "
+						 "chunk partition.")));
+
+	DEBUG_WAITPOINT("chunk_attach_before_lock");
+
+	/* Take the same locks taken by PostgreSQL partitioning to be consistent */
+	LockRelationOid(ht_relid, ShareUpdateExclusiveLock);
+	LockRelationOid(chunk_relid, AccessExclusiveLock);
+
+	/* Only owner is allowed */
+	if (!object_ownercheck(RelationRelationId, chunk_relid, GetUserId()))
+		aclcheck_error(ACLCHECK_NOT_OWNER,
+					   get_relkind_objtype(get_rel_relkind(chunk_relid)),
+					   get_rel_name(chunk_relid));
+
+	if (is_inheritance_child(chunk_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot attach chunk that is already a child of another table")));
+
+	if (ts_is_hypertable(chunk_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot attach hypertable as a chunk")));
+
+	/* Check if the table still exists after taking the lock */
+	if (!SearchSysCacheExists1(RELOID, ObjectIdGetDatum(chunk_relid)))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_TABLE),
+				 errmsg("relation with OID %u does not exist", chunk_relid)));
+
+	check_privileges_for_creating_chunk(ht_relid);
+	ht = ts_hypertable_cache_get_cache_and_entry(ht_relid, CACHE_FLAG_NONE, &hcache);
+	Assert(ht != NULL);
+
+	hc = get_hypercube_from_slices(slices, ht);
+	Assert(hc != NULL);
+
+	chunk = ts_chunk_find_or_create_without_cuts(ht,
+												 hc,
+												 get_namespace_name(get_rel_namespace(chunk_relid)),
+												 get_rel_name(chunk_relid),
+												 chunk_relid,
+												 InvalidOid,
+												 &created);
+	Assert(chunk != NULL);
+	ts_cache_release(&hcache);
+
+	PG_RETURN_VOID();
 }

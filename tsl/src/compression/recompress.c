@@ -21,8 +21,6 @@
 #include "create.h"
 #include "debug_assert.h"
 #include "guc.h"
-#include "hypercore/hypercore_handler.h"
-#include "hypercore/utils.h"
 #include "indexing.h"
 #include "recompress.h"
 #include "ts_catalog/array_utils.h"
@@ -324,7 +322,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	HeapTuple compressed_tuple;
 	IndexScanDesc index_scan =
-		index_beginscan(compressed_chunk_rel, index_rel, snapshot, num_segmentby, 0);
+		index_beginscan_compat(compressed_chunk_rel, index_rel, snapshot, NULL, num_segmentby, 0);
 
 	bool found_tuple = fetch_uncompressed_chunk_into_tuplesort(input_tuplesortstate,
 															   uncompressed_chunk_rel,
@@ -533,23 +531,6 @@ finish:
 	pfree(index_scankeys);
 	pfree(orderby_scankeys);
 
-	/* Need to rebuild indexes if the relation is using hypercore
-	 * TAM. Alternatively, we could insert into indexes when inserting into
-	 * the compressed rel. */
-	if (uncompressed_chunk_rel->rd_tableam == hypercore_routine())
-	{
-		ReindexParams params = {
-			.options = 0,
-			.tablespaceOid = InvalidOid,
-		};
-
-#if PG17_GE
-		reindex_relation(NULL, RelationGetRelid(uncompressed_chunk_rel), 0, &params);
-#else
-		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, &params);
-#endif
-	}
-
 	/* If we can quickly upgrade the lock, lets try updating the chunk status to fully
 	 * compressed. But we need to check if there are any uncompressed tuples in the
 	 * relation since somebody might have inserted new tuples while we were recompressing.
@@ -689,7 +670,6 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 	 * non-compressed relation. */
 
 	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, 0);
-	hypercore_scan_set_skip_compressed(scan, true);
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -716,11 +696,7 @@ recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel
 {
 	tuplesort_performsort(tuplesortstate);
 	row_compressor_reset(row_compressor);
-	row_compressor_append_sorted_rows(row_compressor,
-									  tuplesortstate,
-									  RelationGetDescr(compressed_chunk_rel),
-									  compressed_chunk_rel,
-									  writer);
+	row_compressor_append_sorted_rows(row_compressor, tuplesortstate, compressed_chunk_rel, writer);
 	tuplesort_reset(tuplesortstate);
 	CommandCounterIncrement();
 }
@@ -904,10 +880,7 @@ static void
 try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel)
 {
 	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, GetLatestSnapshot(), 0, 0);
-	hypercore_scan_set_skip_compressed(scan, true);
-	ScanDirection scan_dir = uncompressed_chunk_rel->rd_tableam == hypercore_routine() ?
-								 ForwardScanDirection :
-								 BackwardScanDirection;
+	ScanDirection scan_dir = BackwardScanDirection;
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
 	/* Doing a backwards scan with assumption that newly inserted tuples

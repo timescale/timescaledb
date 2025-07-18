@@ -229,6 +229,8 @@ typedef struct RowCompressor
 	/* memory context reset per-row is stored */
 	MemoryContext per_row_ctx;
 
+	/* The descriptor of the uncompressed tuple we're processing */
+	TupleDesc in_desc;
 	/* The descriptor of the compressed tuple we're generating */
 	TupleDesc out_desc;
 
@@ -265,6 +267,9 @@ typedef struct RowCompressor
 	/* Callback called on every flush. The ntuples argument is the number of
 	 * tuples flushed. Typically used for progress reporting. */
 	void (*on_flush)(struct RowCompressor *rowcompress, uint64 ntuples);
+
+	Tuplesortstate *sort_state;
+	int64 tuples_to_sort; /* number of tuples to sort with tuplesort */
 } RowCompressor;
 
 /*
@@ -368,7 +373,7 @@ extern void row_compressor_init(RowCompressor *row_compressor, const Compression
 								const TupleDesc compressed_tupdesc);
 
 RowCompressor *row_compressor_alloc(void);
-extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer);
+extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
 									TupleTableSlot *slot);
 extern void tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer);
@@ -378,9 +383,10 @@ extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern HeapTuple row_compressor_build_tuple(RowCompressor *row_compressor);
 extern void row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups);
+extern void row_compressor_append_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
-											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
-											  Relation in_rel, BulkWriter *writer);
+											  Tuplesortstate *sorted_rel, Relation in_rel,
+											  BulkWriter *writer);
 extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
 									  const CompressionSettings *settings);
 

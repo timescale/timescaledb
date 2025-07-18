@@ -738,7 +738,7 @@ get_direct_view_oid(int32 mat_hypertable_id)
 
 	/* Prepare index scan */
 	IndexScanDesc indexscan =
-		index_beginscan(cagg_rel, cagg_idx_rel, GetTransactionSnapshot(), 1, 0);
+		index_beginscan_compat(cagg_rel, cagg_idx_rel, GetTransactionSnapshot(), NULL, 1, 0);
 	index_rescan(indexscan, scankeys, 1, NULL, 0);
 
 	/* Read tuple from relation */

@@ -33,6 +33,9 @@ extern DeltaDeltaCompressor *delta_delta_compressor_alloc(void);
 extern void delta_delta_compressor_append_null(DeltaDeltaCompressor *compressor);
 extern void delta_delta_compressor_append_value(DeltaDeltaCompressor *compressor, int64 next_val);
 extern void *delta_delta_compressor_finish(DeltaDeltaCompressor *compressor);
+extern size_t delta_delta_compressor_compressed_size(DeltaDeltaCompressor *compressor,
+													 size_t *nulls_size /* out */);
+extern void *delta_delta_compressor_finish_into(DeltaDeltaCompressor *compressor, void *dest);
 
 extern DecompressionIterator *
 delta_delta_decompression_iterator_from_datum_forward(Datum deltadelta_compressed,

@@ -6,9 +6,17 @@
 #pragma once
 
 #include <postgres.h>
+#include "bgw_policy/job.h"
 #include "dimension.h"
 #include <continuous_aggs/materialize.h>
 #include <utils/jsonb.h>
+
+typedef enum PolicyRefreshOffsetOverlapResult
+{
+	POLICY_REFRESH_OFFSET_OVERLAP,		 /* overlap but not exact */
+	POLICY_REFRESH_OFFSET_OVERLAP_EQUAL, /* exact match */
+	POLICY_REFRESH_OFFSET_OVERLAP_NONE,	 /* no overlap */
+} PolicyRefreshOffsetOverlapResult;
 
 extern Datum policy_refresh_cagg_add(PG_FUNCTION_ARGS);
 extern Datum policy_refresh_cagg_proc(PG_FUNCTION_ARGS);
@@ -33,3 +41,9 @@ Datum policy_refresh_cagg_add_internal(
 	NullableDatum buckets_per_batch, NullableDatum max_batches_per_execution,
 	NullableDatum refresh_newest_first);
 Datum policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists);
+
+PolicyRefreshOffsetOverlapResult policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg,
+																		Jsonb *policy_config,
+																		int32 existing_job_id);
+
+bool policy_refresh_cagg_check_if_last_policy(PolicyContinuousAggData *policy_data);

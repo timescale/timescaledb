@@ -1,4 +1,12 @@
 name: Release - Post Release Ceremony
+
+#
+# Post Release Workflow
+#
+# 1. generate the artefacts to forward port to main and open PR for it
+# 2. bump the next patch number + 1 on the release branch and open PR for it
+# 
+
 "on":
   release:
     types: [published]
@@ -9,8 +17,17 @@ permissions:
   pull-requests: write
 
 jobs:
-  post-release-ceremony:
-    name: Post Release Ceremony
+  docs:
+    name: Post Release Ceremony - Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate list of GUCs
+        run: |
+          gh workflow run tsdb-refresh-gucs-list.yaml -R timescale/docs -f tag=${{ github.event.release.tag_name }}
+
+  main-branch:
+    name: Post Release Ceremony - main branch
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +38,7 @@ jobs:
         run: |
           ./scripts/release/build_post_release_artefacts.sh ${{ github.event.release.tag_name }}
 
-      - name: Create Pull Request for forward ported artefacts
+      - name: PR for forward ported artefacts
         id: cpr_fwdp
         uses: peter-evans/create-pull-request@v7
         with:
@@ -48,3 +65,58 @@ jobs:
         if: ${{ steps.cpr_fwdp.outputs.pull-request-number }}
         run: |
           echo "Pull Request: ${{ steps.cpr_fwdp.outputs.pull-request-url }}"
+
+  release-branch:
+    name: Post Release Ceremony - release branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Bump to next version on release branch
+        run: |
+          TAGGED_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          if [[ "$TAGGED_VERSION" != "$${{ github.event.release.tag_name }}" ]]; then
+            echo "The tag: ${{ github.event.release.tag_name }} and the release version ${TAGGED_VERSION} do not match." >&2
+            exit 1
+          fi
+
+          RELEASE_BRANCH="${TAGGED_VERSION/%.d/.x}"
+          NEXT_VERSION=$(echo "$TAGGED_VERSION" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
+          
+          echo "tagged version: ${TAGGED_VERSION}"
+          echo "next version: ${NEXT_VERSION}"
+
+          # adjust version.config file
+          sed -i \
+            -e "s/^version = .*/version = $NEXT_VERSION/" \
+            -e "s/^previous_version = .*/previous_version = $TAGGED_VERSION/" \
+            version.config
+
+          cat version.config
+
+          echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
+          echo "RELEASE_BRANCH=${RELEASE_BRANCH}" >> $GITHUB_ENV
+
+      - name: PR for next version on release branch
+        id: cpr_next_version
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          branch: "release/${{ github.event.release.tag_name }}--bump-to-next-version"
+          base: ${{ env.RELEASE_BRANCH }}
+          delete-branch: true
+          title: "Bump to next version: ${{ env.NEXT_VERSION }}"
+          body: "Change to the next patch version ${{ env.NEXT_VERSION }} after the release of ${{ github.event.release.tag_name }}."
+          labels: |
+            release
+          add-paths: |
+            version.config
+      
+      - name: "Validate patch version bump PR"
+        if: ${{ steps.cpr_next_version.outputs.pull-request-number }}
+        run: |
+          echo "Pull Request: ${{ steps.cpr_next_version.outputs.pull-request-url }}"
