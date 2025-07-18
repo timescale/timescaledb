@@ -25,7 +25,6 @@
 #include <utils/rls.h>
 
 #include "compat/compat.h"
-#include "chunk_dispatch.h"
 #include "chunk_index.h"
 #include "chunk_insert_state.h"
 #include "debug_point.h"
@@ -43,34 +42,6 @@ prepare_constr_expr(Expr *node)
 	result = ExecInitExpr(node, NULL);
 
 	return result;
-}
-
-static inline ModifyTableState *
-get_modifytable_state(const ChunkDispatch *dispatch)
-{
-	return dispatch->dispatch_state->mtstate;
-}
-
-static inline ModifyTable *
-get_modifytable(const ChunkDispatch *dispatch)
-{
-	return castNode(ModifyTable, get_modifytable_state(dispatch)->ps.plan);
-}
-
-OnConflictAction
-ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
-{
-	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
-		return ONCONFLICT_NONE;
-	return get_modifytable(dispatch)->onConflictAction;
-}
-
-static CmdType
-chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
-{
-	return (dispatch->dispatch_state == NULL || dispatch->dispatch_state->mtstate == NULL) ?
-			   CMD_INSERT :
-			   dispatch->dispatch_state->mtstate->operation;
 }
 
 /*
@@ -392,7 +363,7 @@ set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
 }
 
 /* Change the projections to work with chunks instead of hypertables */
-static void
+void
 adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsertState *cis,
 				   Oid rowtype)
 {
@@ -437,135 +408,6 @@ adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsert
 		if (onConflictAction == ONCONFLICT_UPDATE)
 			setup_on_conflict_state(ht_rri, mtstate, cis, chunk_map);
 	}
-}
-
-/*
- * Create new insert chunk state.
- *
- * This is essentially a ResultRelInfo for a chunk. Initialization of the
- * ResultRelInfo should be similar to ExecInitModifyTable().
- */
-extern ChunkInsertState *
-ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
-{
-	ChunkInsertState *state;
-	Relation rel, parent_rel;
-	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
-													  "chunk insert state memory context",
-													  ALLOCSET_DEFAULT_SIZES);
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
-	ResultRelInfo *relinfo;
-	const Chunk *chunk;
-
-	/* permissions NOT checked here; were checked at hypertable level */
-	if (check_enable_rls(chunk_relid, InvalidOid, false) == RLS_ENABLED)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("hypertables do not support row-level security")));
-
-	/*
-	 * Since we insert data and won't modify metadata, a RowExclusiveLock
-	 * should be sufficient. This should conflict with any metadata-modifying
-	 * operations as they should take higher-level locks (ShareLock and
-	 * above).
-	 */
-	DEBUG_WAITPOINT("chunk_insert_before_lock");
-	rel = table_open(chunk_relid, RowExclusiveLock);
-
-	/*
-	 * A concurrent chunk operation (e.g., compression) might have changed the
-	 * chunk metadata before we got a lock, so re-read it.
-	 *
-	 * This works even in higher levels of isolation since catalog data is
-	 * always read from latest snapshot.
-	 */
-	chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Assert(chunk->relkind == RELKIND_RELATION);
-	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
-
-	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
-	relinfo = create_chunk_result_relation_info(dispatch->hypertable_result_rel_info,
-												rel,
-												dispatch->estate);
-	CheckValidResultRelCompat(relinfo, chunk_dispatch_get_cmd_type(dispatch), NIL);
-
-	state = palloc0(sizeof(ChunkInsertState));
-	state->cds = dispatch->dispatch_state;
-	state->counters = dispatch->counters;
-	state->mctx = cis_context;
-	state->rel = rel;
-	state->result_relation_info = relinfo;
-	state->estate = dispatch->estate;
-	ts_set_compression_status(state, chunk);
-
-	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(relinfo, onconflict_action != ONCONFLICT_NONE);
-
-	if (relinfo->ri_TrigDesc != NULL)
-	{
-		TriggerDesc *tg = relinfo->ri_TrigDesc;
-
-		/* instead of triggers can only be created on VIEWs */
-		Assert(!tg->trig_insert_instead_row);
-
-		/*
-		 * A statement that targets a parent table in an inheritance or
-		 * partitioning hierarchy does not cause the statement-level triggers
-		 * of affected child tables to be fired; only the parent table's
-		 * statement-level triggers are fired. However, row-level triggers
-		 * of any affected child tables will be fired.
-		 * During chunk creation we only copy ROW trigger to chunks so
-		 * statement triggers should not exist on chunks.
-		 */
-		if (tg->trig_insert_after_statement || tg->trig_insert_before_statement)
-			elog(ERROR, "statement trigger on chunk table not supported");
-	}
-
-	parent_rel = table_open(dispatch->hypertable->main_table_relid, AccessShareLock);
-
-	/* Set tuple conversion map, if tuple needs conversion. We don't want to
-	 * convert tuples going into foreign tables since these are actually sent to
-	 * data nodes for insert on that node's local hypertable. */
-	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
-		state->hyper_to_chunk_map =
-			convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
-
-	adjust_projections(dispatch->hypertable_result_rel_info,
-					   dispatch->dispatch_state->mtstate,
-					   state,
-					   RelationGetForm(rel)->reltype);
-
-	/* Need a tuple table slot to store tuples going into this chunk. We don't
-	 * want this slot tied to the executor's tuple table, since that would tie
-	 * the slot's lifetime to the entire length of the execution and we want
-	 * to be able to dynamically create and destroy chunk insert
-	 * state. Otherwise, memory might blow up when there are many chunks being
-	 * inserted into. This also means that the slot needs to be destroyed with
-	 * the chunk insert state. */
-	state->slot = MakeSingleTupleTableSlot(RelationGetDescr(relinfo->ri_RelationDesc),
-										   table_slot_callbacks(relinfo->ri_RelationDesc));
-	table_close(parent_rel, AccessShareLock);
-
-	state->hypertable_relid = chunk->hypertable_relid;
-	state->chunk_id = chunk->fd.id;
-
-	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-	{
-#if PG16_LT
-		RangeTblEntry *rte =
-			rt_fetch(relinfo->ri_RangeTableIndex, dispatch->estate->es_range_table);
-
-		Assert(rte != NULL);
-
-		state->user_id = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
-#else
-		state->user_id = ExecGetResultRelCheckAsUser(relinfo, state->estate);
-#endif
-	}
-
-	MemoryContextSwitchTo(old_mcxt);
-
-	return state;
 }
 
 void

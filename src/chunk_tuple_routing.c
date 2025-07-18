@@ -42,7 +42,7 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 										   estate->es_query_cxt,
 										   ts_guc_max_open_chunks_per_insert);
 
-	ctr->onConflictAction = ONCONFLICT_NONE;
+	ctr->counters->onConflictAction = ONCONFLICT_NONE;
 	return ctr;
 }
 
@@ -200,7 +200,7 @@ chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr)
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(relinfo, ctr->onConflictAction != ONCONFLICT_NONE);
+		ExecOpenIndices(relinfo, ctr->counters->onConflictAction != ONCONFLICT_NONE);
 
 	if (relinfo->ri_TrigDesc != NULL)
 	{
@@ -225,6 +225,17 @@ chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr)
 	parent_rel = table_open(ctr->hypertable->main_table_relid, AccessShareLock);
 	state->hyper_to_chunk_map =
 		convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
+
+	/*
+	 * In COPY context we do not have a ModifyTableState
+	 */
+	if (ctr->mht_state)
+	{
+		adjust_projections(ctr->hypertable_rri,
+						   ctr->mht_state->mt_state,
+						   state,
+						   RelationGetForm(rel)->reltype);
+	}
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
 	 * want this slot tied to the executor's tuple table, since that would tie
