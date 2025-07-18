@@ -731,3 +731,44 @@ ERROR:  config must not be NULL
 SELECT _timescaledb_functions.policy_retention_check(NULL);
 ERROR:  config must not be NULL
 \set ON_ERROR_STOP 1
+-- `add_compression_policy()` and `add_columnstore_policy()` share the same
+-- C-function, but their arguments have different names and hence they are
+-- supposed to have slightly different error messages
+create table test_errors (time timestamptz NOT NULL, a int, b int);
+select create_hypertable('test_errors', 'time');
+     create_hypertable     
+---------------------------
+ (12,public,test_errors,t)
+(1 row)
+
+alter table test_errors set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_errors" is set to ""
+NOTICE:  default order by for hypertable "test_errors" is set to ""time" DESC"
+create materialized view test_errors_cagg
+with (timescaledb.continuous, timescaledb.materialized_only=false) as
+select time_bucket('1 week', time) as bucket from test_errors group by 1;
+NOTICE:  continuous aggregate "test_errors_cagg" is already up-to-date
+alter materialized view test_errors_cagg SET (timescaledb.compress);
+NOTICE:  defaulting compress_orderby to bucket
+SELECT add_continuous_aggregate_policy('test_errors_cagg', '1 year', '1 day', '1 hour');
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1011
+(1 row)
+
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+select add_compression_policy('test_errors', compress_after => NULL);
+ERROR:  need to specify one of "compress_after" or "compress_created_before"
+CALL add_columnstore_policy('test_errors', after => NULL);
+ERROR:  need to specify one of "after" or "created_before"
+select add_compression_policy('test_errors', compress_after => '1 day');
+ERROR:  unsupported "compress_after" argument type, expected type : interval
+CALL add_columnstore_policy('test_errors', after => '1 day');
+ERROR:  unsupported "after" argument type, expected type : interval
+select add_compression_policy('test_errors_cagg', compress_created_before => '1 day'::interval);
+ERROR:  cannot use "compress_created_before" with continuous aggregate "test_errors_cagg" 
+CALL add_columnstore_policy('test_errors_cagg', created_before => '1 day'::interval);
+ERROR:  cannot use "created_before" with continuous aggregate "test_errors_cagg" 
+\set ON_ERROR_STOP 1
