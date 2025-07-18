@@ -37,7 +37,7 @@
  */
 
 #define BLOOM1_FALSE_POSITIVES 0.022
-#define BLOOM1_BITS_PER_ELEMENT 6
+#define BLOOM1_HASHES 6
 
 /*
  * Limit the bits belonging to the particular elements to a small contiguous
@@ -260,7 +260,7 @@ bloom1_insert_to_compressed_row(void *builder_, RowCompressor *compressor)
 	 * (2) n = -m1 * log(1 - p ^ (1/k)) / k.
 	 */
 	const double m0 = orig_num_bits;
-	const double k = BLOOM1_BITS_PER_ELEMENT;
+	const double k = BLOOM1_HASHES;
 	const double p = BLOOM1_FALSE_POSITIVES;
 	const double t = orig_bits_set;
 	const double m1 = -log(1 - t / m0) / (log(1 - 1 / m0) * log(1 - pow(p, 1 / k)));
@@ -384,7 +384,7 @@ bloom1_update_val(void *builder_, Datum needle)
 	const uint64 datum_hash_1 =
 		calculate_hash(builder->hash_function, builder->hash_function_finfo, needle);
 	const uint32 absolute_mask = num_bits - 1;
-	for (int i = 0; i < BLOOM1_BITS_PER_ELEMENT; i++)
+	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		const uint32 absolute_bit_index = bloom1_get_one_offset(datum_hash_1, i) & absolute_mask;
 		const uint32 word_index = absolute_bit_index >> log2_word_bits;
@@ -544,7 +544,7 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	const uint64 datum_hash_1 =
 		calculate_hash(context->hash_function_pointer, context->hash_function_finfo, needle);
 	const uint32 absolute_mask = num_bits - 1;
-	for (int i = 0; i < BLOOM1_BITS_PER_ELEMENT; i++)
+	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
 		const uint32 absolute_bit_index = bloom1_get_one_offset(datum_hash_1, i) & absolute_mask;
 		const uint32 word_index = absolute_bit_index >> log2_word_bits;
@@ -619,7 +619,7 @@ bloom1_estimate_ndistinct(struct varlena *bloom)
 {
 	const double m = bloom1_num_bits(bloom);
 	const double t = pg_popcount(bloom1_words_buf(bloom), m / 8);
-	const double k = BLOOM1_BITS_PER_ELEMENT;
+	const double k = BLOOM1_HASHES;
 	return log(1 - t / m) / (k * log(1 - 1 / m));
 }
 
