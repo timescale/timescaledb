@@ -562,6 +562,8 @@ multi_invalidation_move_invalidations(MultiInvalidationState *state)
 	args[1] = Int32GetDatum(ts_guc_cagg_wal_batch_size);
 	args[2] = PointerGetDatum(array);
 
+	TS_DEBUG_LOG("array: %s", datum_as_string(TEXTARRAYOID, args[2], false));
+
 	while (true)
 	{
 		CatalogSecurityContext sec_ctx;
