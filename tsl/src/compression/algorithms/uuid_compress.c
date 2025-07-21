@@ -14,15 +14,28 @@
 #include "lib/hyperloglog.h"
 #include "null.h"
 #include "simple8b_rle.h"
+#include "utils/palloc.h"
 
 #ifdef TS_USE_UMASH
 #include "import/umash.h"
 #endif
 
+typedef union UuidType
+{
+	uint64 components[2];
+	pg_uuid_t uuid;
+} UuidType;
+
+typedef enum
+{
+	UUID_COMPRESS_SUBTYPE_DELTADELTA = 0,
+	UUID_COMPRESS_SUBTYPE_COUNT = 1, /* Must be last */
+} UuidCompressSubtype;
+
 typedef struct UuidCompressed
 {
 	CompressedDataHeaderFields; /* this uses 5 bytes */
-	uint8 padding;				/* padding to get the size to even bytes */
+	uint8 subtype;
 	uint16 num_nulls;
 	uint32 timestamp_size;
 	uint32 rand_b_and_variant_size;
@@ -30,14 +43,20 @@ typedef struct UuidCompressed
 	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
 } UuidCompressed;
 
+static void
+pg_attribute_unused() assertions(void)
+{
+	StaticAssertStmt(sizeof(UuidCompressed) == 16, "UuidCompressed wrong size");
+	StaticAssertStmt(offsetof(UuidCompressed, alignment_sentinel) % MAXIMUM_ALIGNOF == 0,
+					 "variable sized data must be 8-byte aligned");
+}
+
 typedef struct UuidDecompressionIterator
 {
 	DecompressionIterator base;
-	int32 position;		   /* position within the total */
-	int32 total_elements;  /* total number of entries plus nulls */
-	int32 values_position; /* position in the non-null values */
-	DecompressionIterator *timestamp_iter;
-	pg_uuid_t *uuid_buffer; /* preallocate buffer and prefill with the rand_b_and_variant */
+	int32 position;			 /* position within the total */
+	int32 total_elements;	 /* total number of entries plus nulls */
+	ArrowArray *uuid_buffer; /* init does a decompress_all to get this */
 } UuidDecompressionIterator;
 
 /*
@@ -234,6 +253,7 @@ uuid_compressor_finish(UuidCompressor *compressor)
 	compressed->num_nulls = compressor->num_nulls;
 	Ensure(compressed->num_nulls == compressor->num_nulls,
 		   "unexpected number of nulls, it doesn't fit into the header");
+	compressed->subtype = UUID_COMPRESS_SUBTYPE_DELTADELTA;
 	compressed->timestamp_size = timestamp_compressed_size;
 	compressed->rand_b_and_variant_size = rand_b_and_variant_compressed_size;
 
@@ -266,12 +286,10 @@ uuid_compressor_finish(UuidCompressor *compressor)
 			}
 			else
 			{
-				uint64_t components[2];
-				components[0] = pg_hton64(DatumGetInt64(r.val));
-				components[1] = compressor->rand_b_and_variant.data[value_position];
-				pg_uuid_t uuid;
-				memcpy(uuid.data, components, sizeof(components));
-				dictionary_compressor_append(dict_compressor, UUIDPGetDatum(&uuid));
+				UuidType uuid_type;
+				uuid_type.components[0] = pg_hton64(DatumGetInt64(r.val));
+				uuid_type.components[1] = compressor->rand_b_and_variant.data[value_position];
+				dictionary_compressor_append(dict_compressor, UUIDPGetDatum(&uuid_type.uuid));
 				++value_position;
 			}
 		}
@@ -312,30 +330,32 @@ uuid_decompression_iterator_try_next_forward(DecompressionIterator *iter)
 
 	UuidDecompressionIterator *uuid_iter = (UuidDecompressionIterator *) iter;
 
-	DecompressResult r =
-		delta_delta_decompression_iterator_try_next_forward(uuid_iter->timestamp_iter);
-	if (r.is_done)
-	{
-		CheckCompressedData(uuid_iter->position >= uuid_iter->total_elements);
+	Assert(uuid_iter->uuid_buffer != NULL);
+	Assert(uuid_iter->uuid_buffer->buffers != NULL);
+	Assert(uuid_iter->uuid_buffer->buffers[1] != NULL);
+
+	const uint64 *validity_bitmap = uuid_iter->uuid_buffer->buffers[0];
+	UuidType *uuid_values = (UuidType *) uuid_iter->uuid_buffer->buffers[1];
+
+	if (uuid_iter->position >= uuid_iter->total_elements)
 		return (DecompressResult){
 			.is_done = true,
 		};
-	}
 
-	if (r.is_null)
+	/* check nulls */
+	if (validity_bitmap != NULL)
 	{
-		uuid_iter->position++;
-		return (DecompressResult){
-			.is_null = true,
-		};
+		if (!arrow_row_is_valid(validity_bitmap, uuid_iter->position))
+		{
+			uuid_iter->position++;
+			return (DecompressResult){
+				.is_null = true,
+			};
+		}
 	}
 
-	pg_uuid_t *current_uuid = &uuid_iter->uuid_buffer[uuid_iter->values_position];
-	uuid_iter->values_position++;
+	UuidType *current_uuid = &uuid_values[uuid_iter->position];
 	uuid_iter->position++;
-
-	uint64 first_part = pg_hton64(DatumGetInt64(r.val));
-	memcpy(current_uuid->data, &first_part, sizeof(first_part));
 
 	return (DecompressResult){
 		.val = PointerGetDatum(current_uuid),
@@ -361,32 +381,33 @@ uuid_decompression_iterator_try_next_reverse(DecompressionIterator *iter)
 
 	UuidDecompressionIterator *uuid_iter = (UuidDecompressionIterator *) iter;
 
-	DecompressResult r =
-		delta_delta_decompression_iterator_try_next_reverse(uuid_iter->timestamp_iter);
-	if (r.is_done)
-	{
-		CheckCompressedData(uuid_iter->position == -1);
-		CheckCompressedData(uuid_iter->values_position == -1);
+	Assert(uuid_iter->uuid_buffer != NULL);
+	Assert(uuid_iter->uuid_buffer->buffers != NULL);
+	Assert(uuid_iter->uuid_buffer->buffers[1] != NULL);
+
+	const uint64 *validity_bitmap = uuid_iter->uuid_buffer->buffers[0];
+	UuidType *uuid_values = (UuidType *) uuid_iter->uuid_buffer->buffers[1];
+
+	if (uuid_iter->position < 0)
 		return (DecompressResult){
 			.is_done = true,
 		};
-	}
 
-	if (r.is_null)
+	/* check nulls */
+	if (validity_bitmap != NULL)
 	{
-		uuid_iter->position--;
-		return (DecompressResult){
-			.is_null = true,
-		};
+		if (!arrow_row_is_valid(validity_bitmap, uuid_iter->position))
+		{
+			uuid_iter->position--;
+			return (DecompressResult){
+				.is_null = true,
+			};
+		}
 	}
 
-	Assert(uuid_iter->values_position >= 0);
-	pg_uuid_t *current_uuid = &uuid_iter->uuid_buffer[uuid_iter->values_position];
-	uuid_iter->values_position--;
+	Assert(uuid_iter->position >= 0);
+	UuidType *current_uuid = &uuid_values[uuid_iter->position];
 	uuid_iter->position--;
-
-	uint64 first_part = pg_hton64(DatumGetInt64(r.val));
-	memcpy(current_uuid->data, &first_part, sizeof(first_part));
 
 	return (DecompressResult){
 		.val = PointerGetDatum(current_uuid),
@@ -410,6 +431,7 @@ uuid_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 	const UuidCompressed *data = (UuidCompressed *) header;
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_UUID);
 
+	pq_sendbyte(buffer, data->subtype);
 	pq_sendint16(buffer, data->num_nulls);
 	pq_sendint32(buffer, data->timestamp_size);
 	pq_sendint32(buffer, data->rand_b_and_variant_size);
@@ -427,6 +449,8 @@ extern Datum
 uuid_compressed_recv(StringInfo buffer)
 {
 	size_t total_compressed_sized = 0;
+	uint8 subtype = pq_getmsgbyte(buffer);
+	CheckCompressedData(subtype < UUID_COMPRESS_SUBTYPE_COUNT);
 	uint16 num_nulls = pq_getmsgint(buffer, 2);
 	uint32 timestamp_size = pq_getmsgint32(buffer);
 	uint32 rand_b_and_variant_size = pq_getmsgint32(buffer);
@@ -436,6 +460,7 @@ uuid_compressed_recv(StringInfo buffer)
 
 	char *result = palloc(total_compressed_sized);
 	UuidCompressed *compressed = (UuidCompressed *) result;
+	compressed->subtype = subtype;
 	compressed->num_nulls = num_nulls;
 	compressed->timestamp_size = timestamp_size;
 	compressed->rand_b_and_variant_size = rand_b_and_variant_size;
@@ -526,6 +551,102 @@ tsl_uuid_compressor_finish(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(compressed);
 }
 
+extern ArrowArray *
+uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+{
+	Assert(element_type == UUIDOID);
+
+	MemoryContext old_context;
+	ArrowArray *timestamp_array = NULL;
+
+	void *detoasted = PG_DETOAST_DATUM(compressed);
+	StringInfoData si = { .data = detoasted, .len = VARSIZE(compressed) };
+	UuidCompressed *header = consumeCompressedData(&si, sizeof(UuidCompressed));
+	char *timestamp_compressed_data = NULL;
+	char *rand_b_and_variant_compressed_data;
+
+	CheckCompressedData(header->compression_algorithm == COMPRESSION_ALGORITHM_UUID);
+	CheckCompressedData(header->subtype == UUID_COMPRESS_SUBTYPE_DELTADELTA);
+	CheckCompressedData(header->timestamp_size > 0);
+	CheckCompressedData(header->rand_b_and_variant_size > 0);
+
+	timestamp_compressed_data = consumeCompressedData(&si, header->timestamp_size);
+	rand_b_and_variant_compressed_data =
+		consumeCompressedData(&si, header->rand_b_and_variant_size);
+
+	int32 num_values = (int32) (header->rand_b_and_variant_size / sizeof(uint64));
+	int32 total_elements = (int32) header->num_nulls + num_values;
+	CheckCompressedData(num_values > 0);
+
+	old_context = MemoryContextSwitchTo(dest_mctx);
+
+	/* Make sure we use a 128bit aligned buffer */
+	char *unaligned = (char *) palloc((total_elements * sizeof(UuidType)) + 15);
+	UuidType *uuid_buffer = (UuidType *) TYPEALIGN(16, unaligned);
+
+	/*
+	 * Note : the validity bits from the delta delta compression is directly usable
+	 *        in the result array, but the decompressed ingegers will be replaced
+	 *        with the UUIDs
+	 */
+	timestamp_array = delta_delta_decompress_all(PointerGetDatum(timestamp_compressed_data),
+												 INT8OID,
+												 CurrentMemoryContext);
+
+	CheckCompressedData(timestamp_array->length == total_elements);
+	CheckCompressedData(timestamp_array->null_count == header->num_nulls);
+
+	uint64 *rand_b_and_variant = (uint64 *) palloc(header->rand_b_and_variant_size);
+	memcpy(rand_b_and_variant, rand_b_and_variant_compressed_data, header->rand_b_and_variant_size);
+
+	uint64 *validity_bitmap = NULL;
+	uint64 *timestamp_values = (uint64 *) timestamp_array->buffers[1];
+
+	if (header->num_nulls > 0)
+	{
+		Assert(timestamp_array->buffers[0] != NULL);
+		validity_bitmap = (uint64 *) timestamp_array->buffers[0];
+
+		int value_position = 0;
+		for (int i = 0; i < total_elements; i++)
+		{
+			if (arrow_row_is_valid(validity_bitmap, i))
+			{
+				Assert(value_position < num_values);
+				uuid_buffer[i].components[0] = pg_ntoh64(timestamp_values[i]);
+				uuid_buffer[i].components[1] = rand_b_and_variant[value_position];
+				++value_position;
+			}
+		}
+	}
+	else
+	{
+		for (int i = 0; i < total_elements; i++)
+		{
+			uuid_buffer[i].components[0] = pg_ntoh64(timestamp_values[i]);
+			uuid_buffer[i].components[1] = rand_b_and_variant[i];
+		}
+	}
+
+	/*
+	 * At this point I combined the uncompressed data in the rand_b_and_variant array
+	 * and the freshly decompressed data from the delta delta bulk decompressison.
+	 * I now free the temp data. Note that `timestamp_values` is the same pointer
+	 * as timestamp_array->buffers[1] , the second buffer in the ArrowArray.
+	 * This will be replaced with the uuid array.
+	 * */
+	pfree(rand_b_and_variant);
+	pfree(timestamp_values);
+	MemoryContextSwitchTo(old_context);
+
+	/*
+	 * This is the only fixup needed for the ArrowArray. Everything else
+	 * is valid data as generated by delta_delta_decompress_all()
+	 */
+	timestamp_array->buffers[1] = (uint8 *) uuid_buffer;
+	return timestamp_array;
+}
+
 /*
  * Local helpers
  */
@@ -571,38 +692,9 @@ decompression_iterator_init(UuidDecompressionIterator *iter, void *compressed, O
 {
 	Assert(element_type == UUIDOID);
 
-	StringInfoData si = { .data = compressed, .len = VARSIZE(compressed) };
-	UuidCompressed *header = consumeCompressedData(&si, sizeof(UuidCompressed));
-	char *timestamp_compressed_data;
-	char *rand_b_and_variant_compressed_data;
-
-	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_UUID);
-	timestamp_compressed_data = consumeCompressedData(&si, header->timestamp_size);
-	rand_b_and_variant_compressed_data =
-		consumeCompressedData(&si, header->rand_b_and_variant_size);
-
-	int32 num_values = (int32) (header->rand_b_and_variant_size / sizeof(uint64));
-	int32 total_elements = (int32) header->num_nulls + num_values;
-
-	CheckCompressedData(num_values > 0);
-
-	DecompressionIterator *timestamp_iter =
-		forward ?
-			delta_delta_decompression_iterator_from_datum_forward(PointerGetDatum(
-																	  timestamp_compressed_data),
-																  INT8OID) :
-			delta_delta_decompression_iterator_from_datum_reverse(PointerGetDatum(
-																	  timestamp_compressed_data),
-																  INT8OID);
-	uint64 *rand_b_and_variant = (uint64 *) palloc(header->rand_b_and_variant_size);
-	memcpy(rand_b_and_variant, rand_b_and_variant_compressed_data, header->rand_b_and_variant_size);
-	pg_uuid_t *uuid_buffer = (pg_uuid_t *) palloc(num_values * sizeof(pg_uuid_t));
-	for (int32 i = 0; i < num_values; i++)
-	{
-		uint64 components[2] = { 0, rand_b_and_variant[i] };
-		memcpy(uuid_buffer[i].data, components, sizeof(components));
-	}
-	pfree(rand_b_and_variant);
+	ArrowArray *arrow_array =
+		uuid_decompress_all(PointerGetDatum(compressed), element_type, CurrentMemoryContext);
+	int32 total_elements = arrow_array->length;
 
 	*iter = (UuidDecompressionIterator){
 		.base = { .compression_algorithm = COMPRESSION_ALGORITHM_UUID,
@@ -611,10 +703,8 @@ decompression_iterator_init(UuidDecompressionIterator *iter, void *compressed, O
 				  .try_next = (forward ? uuid_decompression_iterator_try_next_forward :
 										 uuid_decompression_iterator_try_next_reverse) },
 		.position = (forward ? 0 : total_elements - 1),
-		.timestamp_iter = timestamp_iter,
 		.total_elements = total_elements,
-		.values_position = (forward ? 0 : num_values - 1),
-		.uuid_buffer = uuid_buffer,
+		.uuid_buffer = arrow_array,
 	};
 }
 
