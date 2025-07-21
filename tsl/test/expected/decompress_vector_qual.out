@@ -13,7 +13,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table vectorqual set (timescaledb.compress, timescaledb.compress_segmentby = 'device');
-NOTICE:  default order by for hypertable "vectorqual" is set to "ts DESC"
 insert into vectorqual(ts, device, metric1, metric2) values ('2020-01-01 00:00:00', 1, 11, 12);
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
  count 
@@ -146,9 +145,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table arithmetic set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "arithmetic" is set to ""
-NOTICE:  default order by for hypertable "arithmetic" is set to "ts DESC"
 insert into arithmetic values (100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
     (101, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
 select count(compress_chunk(x, true)) from show_chunks('arithmetic') x;
@@ -630,9 +626,6 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
 (1 row)
 
 alter table singlebatch set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "singlebatch" is set to ""
-NOTICE:  default order by for hypertable "singlebatch" is set to "ts DESC"
 insert into singlebatch select '2022-02-02 02:02:02', metric2, device, metric3, metric4, tag from vectorqual;
 select count(compress_chunk(x, true)) from show_chunks('singlebatch') x;
  count 
@@ -1190,9 +1183,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table date_table set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "date_table" is set to ""
-NOTICE:  default order by for hypertable "date_table" is set to "ts DESC"
 insert into date_table values ('2021-01-01'), ('2021-01-02'),
     ('2021-01-03');
 select count(compress_chunk(x, true)) from show_chunks('date_table') x;
@@ -1252,7 +1242,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
-NOTICE:  default order by for hypertable "text_table" is set to "ts DESC"
 insert into text_table select x, 0 /*, default */ from generate_series(1, 1000) x;
 select count(compress_chunk(x, true)) from show_chunks('text_table') x;
  count 
@@ -1619,9 +1608,6 @@ NOTICE:  adding not-null constraint to column "t"
 (1 row)
 
 alter table nans set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "nans" is set to ""
-NOTICE:  default order by for hypertable "nans" is set to "t DESC"
 insert into nans select pow(2, n), x, x
     from unnest(array[null, 0, 1, 'nan', '-inf', '+inf']::float8[])
         with ordinality as x(x, n)
@@ -2953,9 +2939,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table bool_table set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "bool_table" is set to ""
-NOTICE:  default order by for hypertable "bool_table" is set to "ts DESC"
 insert into bool_table values (100, true), (101, false), (102, null);
 select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
  count 
@@ -3743,9 +3726,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table int_table set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "int_table" is set to ""
-NOTICE:  default order by for hypertable "int_table" is set to "ts DESC"
 insert into int_table values (100, NULL), (101, NULL), (102, NULL);
 select count(compress_chunk(x, true)) from show_chunks('int_table') x;
  count 

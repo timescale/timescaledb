@@ -14,7 +14,6 @@ SELECT table_name FROM create_hypertable('nulls_not_distinct', 'time');
 (1 row)
 
 ALTER TABLE nulls_not_distinct SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
-NOTICE:  default order by for hypertable "nulls_not_distinct" is set to ""time" DESC, label"
 INSERT INTO nulls_not_distinct SELECT '2024-01-01'::timestamptz + format('%s',i)::interval, 'd1', 'l1', i FROM generate_series(1,6000) g(i);
 INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', NULL, 'l1', 1);
 INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.5', 'd2', NULL, 1);

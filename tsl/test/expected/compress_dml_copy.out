@@ -12,7 +12,6 @@ NOTICE:  adding not-null constraint to column "ts"
 
 alter table cdmlcopy add unique (metric, ts);
 alter table cdmlcopy set (timescaledb.compress, timescaledb.compress_segmentby = 'metric');
-NOTICE:  default order by for hypertable "cdmlcopy" is set to "ts DESC"
 \copy cdmlcopy from stdin
 select count(compress_chunk(x)) from show_chunks('cdmlcopy') x;
  count 
