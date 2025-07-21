@@ -13,6 +13,7 @@
 #include <mb/pg_wchar.h>
 #include <utils/date.h>
 #include <utils/fmgroids.h>
+#include <utils/uuid.h>
 
 #include "compression/arrow_c_data_interface.h"
 
@@ -51,6 +52,12 @@ get_vector_const_predicate(Oid pg_predicate)
 
 		case F_BOOLEQ:
 			return vector_booleq;
+
+		case F_UUID_EQ:
+			return vector_uuideq;
+
+		case F_UUID_NE:
+			return vector_uuidne;
 
 		default:
 			/*
@@ -113,6 +120,75 @@ vector_booleq(const ArrowArray *arrow, Datum arg, uint64 *restrict result)
 		vector_booleantest(arrow, IS_FALSE, result);
 	}
 }
+
+typedef union UUIDBuffer
+{
+	uint64 components[2];
+	pg_uuid_t uuid;
+#ifdef HAVE_INT128
+	int128 i128;
+#endif
+} UUIDBuffer;
+
+#define VECTOR_CTYPE UUIDBuffer
+#define CONST_CTYPE UUIDBuffer
+#define CONST_CONVERSION(X) *((UUIDBuffer *) DatumGetPointer(X))
+#define PREDICATE_NAME NE
+#ifdef HAVE_INT128
+#define PREDICATE_EXPRESSION(X, Y) (((X).i128) != ((Y).i128))
+#else
+#define PREDICATE_EXPRESSION(X, Y)                                                                 \
+	((X.components[0]) != (Y.components[0]) || (X.components[1]) != (Y.components[1]))
+#endif
+#include "pred_vector_const_arithmetic_single.c"
+
+void
+vector_uuidne(const ArrowArray *arrow, Datum arg, uint64 *restrict result)
+{
+	pg_uuid_t *uuid = DatumGetUUIDP(arg);
+	/*
+	 * No assumptions are being made about the alignment of the argument UUID,
+	 * so we copy the values to a local variable. This is because uuid is defined as typalign 'c'.
+	 */
+	UUIDBuffer arg_values;
+	memcpy(&arg_values.uuid, uuid, sizeof(pg_uuid_t));
+	predicate_NE_UUIDBuffer_vector_UUIDBuffer_const(arrow, PointerGetDatum(&arg_values), result);
+}
+
+#undef VECTOR_CTYPE
+#undef CONST_CTYPE
+#undef CONST_CONVERSION
+#undef PG_PREDICATE
+
+#define VECTOR_CTYPE UUIDBuffer
+#define CONST_CTYPE UUIDBuffer
+#define CONST_CONVERSION(X) *((UUIDBuffer *) DatumGetPointer(X))
+#define PREDICATE_NAME EQ
+#ifdef HAVE_INT128
+#define PREDICATE_EXPRESSION(X, Y) (((X).i128) == ((Y).i128))
+#else
+#define PREDICATE_EXPRESSION(X, Y)                                                                 \
+	((X.components[0]) == (Y.components[0]) && (X.components[1]) == (Y.components[1]))
+#endif
+#include "pred_vector_const_arithmetic_single.c"
+
+void
+vector_uuideq(const ArrowArray *arrow, Datum arg, uint64 *restrict result)
+{
+	pg_uuid_t *uuid = DatumGetUUIDP(arg);
+	/*
+	 * No assumptions are being made about the alignment of the argument UUID,
+	 * so we copy the values to a local variable. This is because uuid is defined as typalign 'c'.
+	 */
+	UUIDBuffer arg_values;
+	memcpy(&arg_values.uuid, uuid, sizeof(pg_uuid_t));
+	predicate_EQ_UUIDBuffer_vector_UUIDBuffer_const(arrow, PointerGetDatum(&arg_values), result);
+}
+
+#undef VECTOR_CTYPE
+#undef CONST_CTYPE
+#undef CONST_CONVERSION
+#undef PG_PREDICATE
 
 void
 vector_booleantest(const ArrowArray *arrow, int test_type, uint64 *restrict result)
