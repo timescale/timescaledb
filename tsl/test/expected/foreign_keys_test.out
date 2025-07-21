@@ -300,7 +300,6 @@ SELECT table_name FROM create_hypertable('metrics', 'time');
 INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
 INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
 ALTER TABLE metrics SET(timescaledb.compress, timescaledb.compress_segmentby='device');
-psql:include/foreign_keys.sql:339: NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE ON UPDATE CASCADE, info text);
 -- should fail
@@ -367,7 +366,6 @@ CREATE TABLE ht(
 );
 SELECT table_name FROM create_hypertable('ht', 'time');
 ALTER TABLE ht SET(timescaledb.compress, timescaledb.compress_segmentby='fk_no_action,fk_restrict,fk_cascade,fk_set_null,fk_set_default');
-psql:include/foreign_keys.sql:417: NOTICE:  default order by for hypertable "ht" is set to ""time" DESC"
 \set ON_ERROR_STOP 0
 INSERT INTO fk_set_default(fk_set_default) VALUES ('default');
 INSERT INTO ht(time) VALUES ('2020-01-01');
@@ -992,7 +990,6 @@ SELECT table_name FROM create_hypertable('metrics', 'time');
 INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
 INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
 ALTER TABLE metrics SET(timescaledb.compress, timescaledb.compress_segmentby='device');
-psql:include/foreign_keys.sql:339: NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
 CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE ON UPDATE CASCADE, info text);
 -- should fail
@@ -1059,7 +1056,6 @@ CREATE TABLE ht(
 );
 SELECT table_name FROM create_hypertable('ht', 'time');
 ALTER TABLE ht SET(timescaledb.compress, timescaledb.compress_segmentby='fk_no_action,fk_restrict,fk_cascade,fk_set_null,fk_set_default');
-psql:include/foreign_keys.sql:417: NOTICE:  default order by for hypertable "ht" is set to ""time" DESC"
 \set ON_ERROR_STOP 0
 INSERT INTO fk_set_default(fk_set_default) VALUES ('default');
 INSERT INTO ht(time) VALUES ('2020-01-01');

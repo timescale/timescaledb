@@ -215,4 +215,20 @@ BEGIN;
 CREATE TABLE t24(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.enable_columnstore=false);
 SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
 ROLLBACK;
+BEGIN;
+CREATE TABLE t25(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't25'::regclass;
+ROLLBACK;
+BEGIN;
+-- don't allow empty orderby
+\set ON_ERROR_STOP 0
+CREATE TABLE t26(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby = '');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't26'::regclass;
+ROLLBACK;
+\set ON_ERROR_STOP 1
+-- can allow empty segmentby
+BEGIN;
+CREATE TABLE t27(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.segmentby = '');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't27'::regclass;
+ROLLBACK;
 

@@ -88,8 +88,9 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 	SelectStmt *select;
 	RawStmt *raw;
 
+	/* segmentby can have empty array */
 	if (strlen(inpstr) == 0)
-		return NULL;
+		return ts_array_add_element_text(NULL, NULL);
 
 	initStringInfo(&buf);
 
@@ -191,7 +192,11 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 	OrderBySettings settings = { 0 };
 
 	if (strlen(inpstr) == 0)
-		return settings;
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("ordering column can not be empty"),
+				 errhint("timescaledb.compress_orderby option must reference a valid "
+						 "column or be removed to use default settings.")));
 
 	initStringInfo(&buf);
 
@@ -301,6 +306,8 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 		settings.orderby_nullsfirst =
 			ts_array_add_element_bool(settings.orderby_nullsfirst, nullsfirst);
 	}
+
+	Ensure(settings.orderby, "orderby setting is NULL after parsing");
 
 	return settings;
 }

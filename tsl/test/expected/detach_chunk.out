@@ -172,7 +172,6 @@ ALTER TABLE detach_test SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'device'
 );
-NOTICE:  default order by for hypertable "detach_test" is set to "id DESC, "time" DESC"
 SELECT schema_name || '.' || table_name AS "COMPRESSED_CHUNK"
 FROM _timescaledb_functions.show_chunk((SELECT * FROM show_chunks('detach_test') LIMIT 1)); \gset
             COMPRESSED_CHUNK            
