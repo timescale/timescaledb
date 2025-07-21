@@ -71,7 +71,11 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 					ObjectIdGetDatum(valueid));
 
 		/* Prepare for scan */
+#if PG18_GE
+		detoaster->SnapshotToast = *get_toast_snapshot();
+#else
 		init_toast_snapshot(&detoaster->SnapshotToast);
+#endif
 		detoaster->toastscan = systable_beginscan_ordered(detoaster->toastrel,
 														  detoaster->index,
 														  &detoaster->SnapshotToast,

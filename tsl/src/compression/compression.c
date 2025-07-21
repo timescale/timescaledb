@@ -31,6 +31,7 @@
 #include "algorithms/dictionary.h"
 #include "algorithms/gorilla.h"
 #include "algorithms/null.h"
+#include "algorithms/uuid_compress.h"
 #include "batch_metadata_builder.h"
 #include "compression.h"
 #include "create.h"
@@ -38,7 +39,6 @@
 #include "debug_assert.h"
 #include "debug_point.h"
 #include "guc.h"
-#include "hypercore/hypercore_handler.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "nodes/modify_hypertable.h"
 #include "ts_catalog/array_utils.h"
@@ -66,6 +66,7 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_BOOL] = BOOL_COMPRESS_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_NULL] = NULL_COMPRESS_ALGORITHM_DEFINITION,
+	[COMPRESSION_ALGORITHM_UUID] = UUID_COMPRESS_ALGORITHM_DEFINITION,
 };
 
 static NameData compression_algorithm_name[] = {
@@ -76,6 +77,7 @@ static NameData compression_algorithm_name[] = {
 	[COMPRESSION_ALGORITHM_DELTADELTA] = { "DELTADELTA" },
 	[COMPRESSION_ALGORITHM_BOOL] = { "BOOL" },
 	[COMPRESSION_ALGORITHM_NULL] = { "NULL" },
+	[COMPRESSION_ALGORITHM_UUID] = { "UUID" },
 };
 
 Name
@@ -204,7 +206,6 @@ RelationDeleteAllRows(Relation rel, Snapshot snap)
 {
 	TupleTableSlot *slot = table_slot_create(rel, NULL);
 	TableScanDesc scan = table_beginscan(rel, snap, 0, NULL);
-	hypercore_scan_set_skip_compressed(scan, true);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -315,13 +316,8 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	 * matches the configuration so that we can skip sequential scan and
 	 * tuplesort.
 	 *
-	 * Note that Hypercore TAM doesn't support (re-)compression via index at
-	 * this point because the index covers also existing compressed tuples. It
-	 * could be supported for initial compression when there is no compressed
-	 * data, but for now just avoid it altogether since compression indexscan
-	 * isn't enabled by default anyway.
 	 */
-	if (ts_guc_enable_compression_indexscan && !REL_IS_HYPERCORE(in_rel))
+	if (ts_guc_enable_compression_indexscan)
 	{
 		List *in_rel_index_oids = RelationGetIndexList(in_rel);
 		foreach (lc, in_rel_index_oids)
@@ -470,7 +466,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	{
 		int64 nrows_processed = 0;
 
-		Assert(!REL_IS_HYPERCORE(in_rel));
 		elog(ts_guc_debug_compression_path_info ? INFO : DEBUG1,
 			 "using index \"%s\" to scan rows for converting to columnstore",
 			 get_rel_name(matched_index_rel->rd_id));
@@ -649,7 +644,6 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 	TupleTableSlot *slot;
 	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
 	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, NULL);
-	hypercore_scan_set_skip_compressed(scan, true);
 	slot = table_slot_create(in_rel, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
@@ -2329,6 +2323,9 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 		case COMPRESSION_ALGORITHM_NULL:
 			has_nulls = true;
 			break;
+		case COMPRESSION_ALGORITHM_UUID:
+			has_nulls = uuid_compressed_has_nulls(header);
+			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
 			break;
@@ -2372,6 +2369,9 @@ tsl_compressed_data_has_nulls(PG_FUNCTION_ARGS)
 			break;
 		case COMPRESSION_ALGORITHM_NULL:
 			has_nulls = true;
+			break;
+		case COMPRESSION_ALGORITHM_UUID:
+			has_nulls = uuid_compressed_has_nulls(header);
 			break;
 		default:
 			elog(ERROR, "unknown compression algorithm %d", header->compression_algorithm);
@@ -2422,6 +2422,12 @@ compression_get_default_algorithm(Oid typeoid)
 				return COMPRESSION_ALGORITHM_BOOL;
 			else
 				return COMPRESSION_ALGORITHM_ARRAY;
+
+		case UUIDOID:
+			if (ts_guc_enable_uuid_compression)
+				return COMPRESSION_ALGORITHM_UUID;
+			else
+				return COMPRESSION_ALGORITHM_DICTIONARY;
 
 		default:
 		{

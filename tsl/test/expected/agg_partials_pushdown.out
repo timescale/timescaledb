@@ -41,7 +41,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
                      Bulk Decompression: true
@@ -51,7 +51,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
                      Bulk Decompression: true
@@ -82,7 +82,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
                      Bulk Decompression: true
@@ -97,7 +97,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
                      Bulk Decompression: true
@@ -132,7 +132,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
                      Bulk Decompression: true
@@ -147,7 +147,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
                      Bulk Decompression: true
@@ -176,7 +176,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=10 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= ('2000-01-09 00:00:00+0'::cstring)::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= ('2000-02-01 00:00:00+0'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 15
@@ -214,7 +214,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_1_chunk.v0, _hyper_1_1_chunk.v1, _hyper_1_1_chunk.v2, _hyper_1_1_chunk.v3
                      Vectorized Filter: ((_hyper_1_1_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_1_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
                      Bulk Decompression: true
@@ -229,7 +229,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=25 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
                      Bulk Decompression: true
@@ -266,7 +266,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_2_chunk.v0)), (PARTIAL sum(_hyper_1_2_chunk.v1)), (PARTIAL sum(_hyper_1_2_chunk.v2)), (PARTIAL sum(_hyper_1_2_chunk.v3))
                Grouping Policy: all compressed batches
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=10 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=10 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Vectorized Filter: ((_hyper_1_2_chunk."time" >= ('2000-01-09 00:00:00+0'::cstring)::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= ('2000-02-01 00:00:00+0'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 15

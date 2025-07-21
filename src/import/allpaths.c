@@ -195,8 +195,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 			 */
 			Assert(chunk != NULL);
 
-			if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk) &&
-				!ts_is_hypercore_am(chunk->amoid))
+			if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk))
 			{
 				child_rel->indexlist = NIL;
 			}

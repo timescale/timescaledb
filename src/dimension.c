@@ -1714,11 +1714,7 @@ ts_dimension_info_out(PG_FUNCTION_ARGS)
 
 			if (OidIsValid(info->interval_type))
 			{
-				bool isvarlena;
-				Oid outfuncid;
-				getTypeOutputInfo(info->interval_type, &outfuncid, &isvarlena);
-				Assert(OidIsValid(outfuncid));
-				argvalstr = OidOutputFunctionCall(outfuncid, info->interval_datum);
+				argvalstr = ts_datum_to_string(info->interval_datum, info->interval_type);
 			}
 
 			appendStringInfo(&str,

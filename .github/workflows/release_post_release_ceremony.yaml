@@ -1,4 +1,12 @@
 name: Release - Post Release Ceremony
+
+#
+# Post Release Workflow
+#
+# 1. generate the artefacts to forward port to main and open PR for it
+# 2. bump the next patch number + 1 on the release branch and open PR for it
+# 
+
 "on":
   release:
     types: [published]
@@ -9,6 +17,15 @@ permissions:
   pull-requests: write
 
 jobs:
+  docs:
+    name: Post Release Ceremony - Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate list of GUCs
+        run: |
+          gh workflow run tsdb-refresh-gucs-list.yaml -R timescale/docs -f tag=${{ github.event.release.tag_name }}
+
   main-branch:
     name: Post Release Ceremony - main branch
     runs-on: ubuntu-latest

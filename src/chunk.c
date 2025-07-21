@@ -36,6 +36,7 @@
 #include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/hsearch.h>
+#include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/palloc.h>
 #include <utils/syscache.h>
@@ -1015,15 +1016,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 
 		if (chunk_exists)
 		{
-			Oid outfuncid = InvalidOid;
-			bool isvarlena;
-
-			Datum start_ts =
-				ts_internal_to_time_value(cube->slices[0]->fd.range_start, dim->fd.column_type);
-			Datum end_ts =
-				ts_internal_to_time_value(cube->slices[0]->fd.range_end, dim->fd.column_type);
-			getTypeOutputInfo(dim->fd.column_type, &outfuncid, &isvarlena);
-			Assert(!isvarlena);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
@@ -1031,8 +1023,10 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 							"with range  [%s %s] failed",
 							NameStr(ht->fd.schema_name),
 							NameStr(ht->fd.table_name),
-							DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
-							DatumGetCString(OidFunctionCall1(outfuncid, end_ts))),
+							ts_internal_to_time_string(cube->slices[0]->fd.range_start,
+													   dim->fd.column_type),
+							ts_internal_to_time_string(cube->slices[0]->fd.range_end,
+													   dim->fd.column_type)),
 					 errhint(
 						 "Hypertable has tiered data with time range that overlaps the insert")));
 		}
@@ -3459,13 +3453,17 @@ ts_chunk_set_partial(Chunk *chunk)
 	Assert(ts_chunk_is_compressed(chunk));
 	set_status = ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
 
-	/*
-	 * If the status was set then convert the corresponding
-	 * _timescaledb_catalog.chunk_column_stats entries "INVALID".
-	 */
 	if (set_status)
+	{
+		/*
+		 * If the status was set then convert the corresponding
+		 * _timescaledb_catalog.chunk_column_stats entries "INVALID".
+		 */
 		ts_chunk_column_stats_set_invalid(chunk->fd.hypertable_id, chunk->fd.id);
 
+		/* changed chunk status, so invalidate plans involving this chunk */
+		CacheInvalidateRelcacheByRelid(chunk->table_id);
+	}
 	return set_status;
 }
 

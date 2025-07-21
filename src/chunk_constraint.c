@@ -278,12 +278,10 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 									   const char *name)
 {
 	Constraint *constr = NULL;
-	bool isvarlena;
 	Node *dimdef;
 	ColumnRef *colref;
-	Datum startdat, enddat;
 	List *compexprs = NIL;
-	Oid outfuncid;
+	Oid type;
 
 	if (slice->fd.range_start == PG_INT64_MIN && slice->fd.range_end == PG_INT64_MAX)
 		return NULL;
@@ -308,16 +306,12 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 			/* The dimension has a time function to compute the time value so
 			 * need to convert the range values to the time type returned by
 			 * the partitioning function. */
-			getTypeOutputInfo(partinfo->partfunc.rettype, &outfuncid, &isvarlena);
-			startdat = ts_internal_to_time_value(slice->fd.range_start, partinfo->partfunc.rettype);
-			enddat = ts_internal_to_time_value(slice->fd.range_end, partinfo->partfunc.rettype);
+			type = partinfo->partfunc.rettype;
 		}
 		else
 		{
-			/* Closed dimension, just use the integer output function */
-			getTypeOutputInfo(INT8OID, &outfuncid, &isvarlena);
-			startdat = Int64GetDatum(slice->fd.range_start);
-			enddat = Int64GetDatum(slice->fd.range_end);
+			/* Closed dimension, just use the INT8 type */
+			type = INT8OID;
 		}
 	}
 	else
@@ -326,28 +320,24 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 		Assert(IS_OPEN_DIMENSION(dim));
 
 		dimdef = (Node *) colref;
-		getTypeOutputInfo(dim->fd.column_type, &outfuncid, &isvarlena);
-		startdat = ts_internal_to_time_value(slice->fd.range_start, dim->fd.column_type);
-		enddat = ts_internal_to_time_value(slice->fd.range_end, dim->fd.column_type);
+		type = dim->fd.column_type;
 	}
 
 	/*
-	 * Convert internal format datums to string (output) datums.
-	 *
 	 * We are forcing ISO datestyle here to prevent parsing errors with
 	 * certain timezone/datestyle combinations.
 	 */
 	int current_datestyle = DateStyle;
 	DateStyle = USE_ISO_DATES;
-	startdat = OidFunctionCall1(outfuncid, startdat);
-	enddat = OidFunctionCall1(outfuncid, enddat);
+	char *start_str = ts_internal_to_time_string(slice->fd.range_start, type);
+	char *end_str = ts_internal_to_time_string(slice->fd.range_end, type);
 	DateStyle = current_datestyle;
 
 	/* Elide range constraint for +INF or -INF */
 	if (slice->fd.range_start != PG_INT64_MIN)
 	{
 		A_Const *start_const = makeNode(A_Const);
-		memcpy(&start_const->val, makeString(DatumGetCString(startdat)), sizeof(start_const->val));
+		memcpy(&start_const->val, makeString(start_str), sizeof(start_const->val));
 		start_const->location = -1;
 		A_Expr *ge_expr = makeSimpleA_Expr(AEXPR_OP, ">=", dimdef, (Node *) start_const, -1);
 		compexprs = lappend(compexprs, ge_expr);
@@ -356,7 +346,7 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 	if (slice->fd.range_end != PG_INT64_MAX)
 	{
 		A_Const *end_const = makeNode(A_Const);
-		memcpy(&end_const->val, makeString(DatumGetCString(enddat)), sizeof(end_const->val));
+		memcpy(&end_const->val, makeString(end_str), sizeof(end_const->val));
 		end_const->location = -1;
 		A_Expr *lt_expr = makeSimpleA_Expr(AEXPR_OP, "<", dimdef, (Node *) end_const, -1);
 		compexprs = lappend(compexprs, lt_expr);
@@ -368,6 +358,9 @@ ts_chunk_constraint_dimensional_create(const Dimension *dim, const DimensionSlic
 	constr->deferrable = false;
 	constr->skip_validation = true;
 	constr->initially_valid = true;
+#if PG18_GE
+	constr->is_enforced = true;
+#endif
 
 	Assert(list_length(compexprs) >= 1);
 
