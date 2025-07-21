@@ -69,6 +69,7 @@ jobs:
       # run sequentially
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
       max-parallel: 1
+      fail-fast: false
     steps:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
