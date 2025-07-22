@@ -100,6 +100,8 @@ vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
 
 -- no statistics
+truncate estimate_count;
+vacuum analyze estimate_count;
 insert into estimate_count
 select t, d, 1
 from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,

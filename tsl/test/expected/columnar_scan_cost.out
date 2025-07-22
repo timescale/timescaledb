@@ -203,6 +203,8 @@ explain (analyze, timing off, summary off) select * from estimate_count;
 (5 rows)
 
 -- no statistics
+truncate estimate_count;
+vacuum analyze estimate_count;
 insert into estimate_count
 select t, d, 1
 from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
@@ -215,12 +217,12 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 (1 row)
 
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
- Append  (cost=0.04..8302.59 rows=531615 width=20) (actual rows=343830 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk  (cost=0.04..2563.66 rows=236169 width=20) (actual rows=114287 loops=1)
-         ->  Seq Scan on compress_hyper_4_17_chunk  (cost=0.00..201.97 rows=4697 width=88) (actual rows=1000 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_16_chunk  (cost=0.04..3080.85 rows=295446 width=20) (actual rows=229543 loops=1)
-         ->  Seq Scan on compress_hyper_4_18_chunk  (cost=0.00..126.39 rows=2939 width=88) (actual rows=1000 loops=1)
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Append  (cost=0.02..134617.60 rows=8960000 width=20) (actual rows=193000 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_19_chunk  (cost=0.02..44908.80 rows=4480000 width=20) (actual rows=64000 loops=1)
+         ->  Seq Scan on compress_hyper_4_21_chunk  (cost=0.00..108.80 rows=4480 width=88) (actual rows=1000 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_20_chunk  (cost=0.02..44908.80 rows=4480000 width=20) (actual rows=129000 loops=1)
+         ->  Seq Scan on compress_hyper_4_22_chunk  (cost=0.00..108.80 rows=4480 width=88) (actual rows=1000 loops=1)
 (5 rows)
 
