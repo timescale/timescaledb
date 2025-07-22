@@ -190,7 +190,6 @@ alter table svagg set (timescaledb.compress = false);
 alter table svagg add column x text;
 update svagg set x = repeat(s::text, 100);
 alter table svagg set (timescaledb.compress, timescaledb.compress_segmentby = 'x');
-NOTICE:  default order by for hypertable "svagg" is set to "s DESC"
 select count(compress_chunk(x)) from show_chunks('svagg') x;
  count 
 -------

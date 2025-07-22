@@ -13,7 +13,6 @@ NOTICE:  adding not-null constraint to column "a"
 insert into pvagg select 1, generate_series(1, 999);
 insert into pvagg select 2, generate_series(1001, 1999);
 alter table pvagg set (timescaledb.compress, timescaledb.compress_segmentby = 's');
-NOTICE:  default order by for hypertable "pvagg" is set to "a DESC"
 select count(compress_chunk(x)) from show_chunks('pvagg') x;
  count 
 -------
