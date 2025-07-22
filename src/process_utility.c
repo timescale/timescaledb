@@ -5028,7 +5028,7 @@ process_create_stmt(ProcessUtilityArgs *args)
 			if (!create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed)
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("hypertable option requires time_column"),
+						 errmsg("hypertable option requires partition_column"),
 						 errhint(
 							 "Use \"timescaledb.partition_column\" to specify the column to use as "
 							 "partitioning column.")));

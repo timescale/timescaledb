@@ -138,6 +138,8 @@ typedef struct Simple8bRleDecompressResult
 static inline void simple8brle_compressor_init(Simple8bRleCompressor *compressor);
 static inline Simple8bRleSerialized *
 simple8brle_compressor_finish(Simple8bRleCompressor *compressor);
+static inline char *simple8brle_compressor_finish_into(Simple8bRleCompressor *compressor,
+													   char *dest, size_t expected_size);
 static inline void simple8brle_compressor_append(Simple8bRleCompressor *compressor, uint64 val);
 static inline bool simple8brle_compressor_is_empty(Simple8bRleCompressor *compressor);
 
@@ -243,6 +245,33 @@ simple8brle_serialized_recv(StringInfo buffer)
 		data->slots[i] = pq_getmsgint64(buffer);
 
 	return data;
+}
+
+static inline void *
+simple8brle_serialized_recv_into(StringInfo buffer, void *dest, Simple8bRleSerialized **data_out)
+{
+	uint32 i;
+	uint32 num_elements = pq_getmsgint32(buffer);
+	CheckCompressedData(num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	uint32 num_blocks = pq_getmsgint32(buffer);
+	CheckCompressedData(num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	uint32 num_selector_slots = simple8brle_num_selector_slots_for_num_blocks(num_blocks);
+
+	Size compressed_size =
+		sizeof(Simple8bRleSerialized) + (num_blocks + num_selector_slots) * sizeof(uint64);
+	if (!AllocSizeIsValid(compressed_size))
+		ereport(ERROR,
+				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
+				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
+
+	*data_out = (Simple8bRleSerialized *) dest;
+	(*data_out)->num_elements = num_elements;
+	(*data_out)->num_blocks = num_blocks;
+
+	for (i = 0; i < num_blocks + num_selector_slots; i++)
+		(*data_out)->slots[i] = pq_getmsgint64(buffer);
+
+	return (char *) *data_out + compressed_size;
 }
 
 static void
@@ -501,6 +530,63 @@ simple8brle_compressor_finish(Simple8bRleCompressor *compressor)
 		   size_left);
 
 	return compressed;
+}
+
+static char *
+simple8brle_compressor_finish_into(Simple8bRleCompressor *compressor, char *dest,
+								   size_t expected_size)
+{
+	size_t size_left;
+	size_t selector_size;
+	size_t compressed_size;
+	char *end_ptr;
+	Simple8bRleSerialized *compressed;
+	uint64 bits;
+
+	simple8brle_compressor_flush(compressor);
+	if (compressor->num_elements == 0)
+		return dest;
+
+	Ensure(dest != NULL, "dest is NULL");
+
+	Assert(compressor->last_block_set);
+	simple8brle_compressor_push_block(compressor, compressor->last_block);
+
+	compressed_size = simple8brle_compressor_compressed_size(compressor);
+	Ensure(expected_size == compressed_size,
+		   "expected_size: %zu, compressed_size: %zu",
+		   expected_size,
+		   compressed_size);
+
+	compressed = (Simple8bRleSerialized *) dest;
+	Assert(bit_array_num_buckets(&compressor->selectors) > 0);
+	Assert(compressor->compressed_data.num_elements > 0);
+	Assert(compressor->compressed_data.num_elements ==
+		   simple8brle_compressor_num_selectors(compressor));
+
+	*compressed = (Simple8bRleSerialized){
+		.num_elements = compressor->num_elements,
+		.num_blocks = compressor->compressed_data.num_elements,
+	};
+
+	size_left = compressed_size - sizeof(*compressed);
+	Assert(size_left >= bit_array_data_bytes_used(&compressor->selectors));
+	selector_size = bit_array_output(&compressor->selectors, compressed->slots, size_left, &bits);
+
+	size_left -= selector_size;
+	Assert(size_left ==
+		   (compressor->compressed_data.num_elements * sizeof(*compressor->compressed_data.data)));
+	Assert(compressor->selectors.buckets.num_elements ==
+		   simple8brle_num_selector_slots_for_num_blocks(compressor->compressed_data.num_elements));
+
+	memcpy(compressed->slots + compressor->selectors.buckets.num_elements,
+		   compressor->compressed_data.data,
+		   size_left);
+
+	end_ptr = (char *) (compressed->slots + compressor->selectors.buckets.num_elements) + size_left;
+	Assert(end_ptr == dest + expected_size);
+
+	return end_ptr;
 }
 
 static void

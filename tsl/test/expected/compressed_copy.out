@@ -23,13 +23,13 @@ SET timescaledb.enable_direct_compress_copy_client_sorted = false;
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
  Append (actual rows=3000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=959 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=959 loops=1)
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1 loops=1)
    ->  Seq Scan on _hyper_1_3_chunk (actual rows=0 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk (actual rows=2041 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk (actual rows=2041 loops=1)
          ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
    ->  Seq Scan on _hyper_1_5_chunk (actual rows=0 loops=1)
 (7 rows)
@@ -45,10 +45,10 @@ ROLLBACK;
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
  Append (actual rows=3000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_7_chunk (actual rows=3000 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_7_chunk (actual rows=3000 loops=1)
          ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=3 loops=1)
    ->  Seq Scan on _hyper_1_7_chunk (actual rows=0 loops=1)
 (4 rows)
@@ -65,13 +65,13 @@ SET timescaledb.enable_direct_compress_copy_sort_batches = false;
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Append (actual rows=3000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_9_chunk (actual rows=959 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_9_chunk (actual rows=959 loops=1)
          ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=1 loops=1)
    ->  Seq Scan on _hyper_1_9_chunk (actual rows=0 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_11_chunk (actual rows=2041 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_11_chunk (actual rows=2041 loops=1)
          ->  Seq Scan on compress_hyper_2_12_chunk (actual rows=3 loops=1)
    ->  Seq Scan on _hyper_1_11_chunk (actual rows=0 loops=1)
 (7 rows)
@@ -87,10 +87,10 @@ ROLLBACK;
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Append (actual rows=3000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_13_chunk (actual rows=3000 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_13_chunk (actual rows=3000 loops=1)
          ->  Seq Scan on compress_hyper_2_14_chunk (actual rows=3 loops=1)
    ->  Seq Scan on _hyper_1_13_chunk (actual rows=0 loops=1)
 (4 rows)
@@ -112,13 +112,13 @@ SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Append (actual rows=6000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_15_chunk (actual rows=959 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_15_chunk (actual rows=959 loops=1)
          ->  Seq Scan on compress_hyper_2_17_chunk (actual rows=1 loops=1)
    ->  Seq Scan on _hyper_1_15_chunk (actual rows=959 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_16_chunk (actual rows=2041 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_16_chunk (actual rows=2041 loops=1)
          ->  Seq Scan on compress_hyper_2_18_chunk (actual rows=3 loops=1)
    ->  Seq Scan on _hyper_1_16_chunk (actual rows=2041 loops=1)
 (7 rows)
@@ -136,10 +136,10 @@ SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Append (actual rows=3000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_19_chunk (actual rows=3000 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_19_chunk (actual rows=3000 loops=1)
          ->  Seq Scan on compress_hyper_2_20_chunk (actual rows=3 loops=1)
    ->  Seq Scan on _hyper_1_19_chunk (actual rows=0 loops=1)
 (4 rows)
@@ -158,10 +158,10 @@ SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = false;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
  Append (actual rows=3000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_21_chunk (actual rows=3000 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_21_chunk (actual rows=3000 loops=1)
          ->  Seq Scan on compress_hyper_2_22_chunk (actual rows=3 loops=1)
    ->  Seq Scan on _hyper_1_21_chunk (actual rows=0 loops=1)
 (4 rows)
@@ -181,10 +181,10 @@ SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 0 0.2 9.8 | sed -e ''s!.[0-9]$!!'' | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,dI,0.I"' WITH (FORMAT CSV);
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
+                                   QUERY PLAN                                   
+--------------------------------------------------------------------------------
  Append (actual rows=50 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_23_chunk (actual rows=50 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_23_chunk (actual rows=50 loops=1)
          ->  Seq Scan on compress_hyper_2_24_chunk (actual rows=10 loops=1)
    ->  Seq Scan on _hyper_1_23_chunk (actual rows=0 loops=1)
 (4 rows)

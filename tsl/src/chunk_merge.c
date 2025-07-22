@@ -588,7 +588,6 @@ static double
 copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 				struct VacuumCutoffs *merged_cutoffs)
 {
-	const TableAmRoutine *tableam = NULL;
 	double num_tuples = 0.0;
 	double tups_vacuumed = 0.0;
 	double tups_recently_dead = 0.0;
@@ -617,9 +616,6 @@ copy_table_data(Relation fromrel, Relation torel, struct VacuumCutoffs *cutoffs,
 
 	if (MultiXactIdPrecedes(merged_cutoffs->MultiXactCutoff, cutoffs->MultiXactCutoff))
 		merged_cutoffs->MultiXactCutoff = cutoffs->MultiXactCutoff;
-
-	if (tableam != NULL)
-		fromrel->rd_tableam = tableam;
 
 	/* Close the relations before the heap swap, but keep the locks until
 	 * end of transaction. */

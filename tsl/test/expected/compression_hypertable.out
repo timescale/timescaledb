@@ -160,7 +160,7 @@ explain (analyze, verbose, timing off, costs off, summary off)
 select * from _timescaledb_internal._hyper_1_10_chunk;
                                                                                                                               QUERY PLAN                                                                                                                               
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: true
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
@@ -172,7 +172,7 @@ explain (analyze, verbose, timing off, costs off, summary off)
 select * from _timescaledb_internal._hyper_1_10_chunk;
                                                                                                                               QUERY PLAN                                                                                                                               
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: false
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)

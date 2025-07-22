@@ -79,11 +79,11 @@ jobs:
         compress_qualpushdown_saop
         compressed_copy
         compression_algos
+        compression_uuid
         bgw_launcher
         chunk_adaptive
         metadata
         telemetry
-        net
       SKIPS: >-
         bgw_db_scheduler
         bgw_db_scheduler_fixed

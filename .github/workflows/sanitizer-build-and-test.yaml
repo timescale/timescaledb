@@ -50,7 +50,7 @@ env:
 
   IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed net telemetry"
 
-  EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
+  EXTENSIONS: "postgres_fdw test_decoding"
 jobs:
   config:
     runs-on: ubuntu-latest

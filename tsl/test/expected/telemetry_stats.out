@@ -82,7 +82,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
 ----------------------------------------------------------
  {                                                       +
      "views": {                                          +
-         "num_relations": 2                              +
+         "num_relations": 3                              +
      },                                                  +
      "tables": {                                         +
          "heap_size": 0,                                 +
@@ -188,7 +188,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
 ----------------------------------------------------------
  {                                                       +
      "views": {                                          +
-         "num_relations": 2                              +
+         "num_relations": 3                              +
      },                                                  +
      "tables": {                                         +
          "heap_size": 73728,                             +
@@ -308,7 +308,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
 -----------------------------------------------------------
  {                                                        +
      "views": {                                           +
-         "num_relations": 2                               +
+         "num_relations": 3                               +
      },                                                   +
      "tables": {                                          +
          "heap_size": 73728,                              +

@@ -1,0 +1,1 @@
+Implements: #8393 Add specialized compression for UUIDs. Best suited for UUID v7, but still works with other UUID versions. This is experimental at the moment and backward compatibility is not guaranteed.

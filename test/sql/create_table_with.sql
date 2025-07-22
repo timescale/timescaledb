@@ -13,6 +13,7 @@ DROP TABLE t1;
 
 -- test error cases
 \set ON_ERROR_STOP 0
+\set VERBOSITY default
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
@@ -26,8 +27,12 @@ CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_de
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=2);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=-1);
 CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
-CREATE TABLE t3(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore,tsdb.hypertable,tsdb.partition_column='time');
+CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore,tsdb.hypertable,tsdb.partition_column='time');
+-- Test error hint for invalid timescaledb options during CREATE TABLE
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.invalid_option = true);
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.nonexistent_param = false);
 \set ON_ERROR_STOP 1
+\set VERBOSITY terse
 
 
 BEGIN;
