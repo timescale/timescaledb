@@ -37,20 +37,22 @@ require_notification: false
 
 # list of users and their app-specific usernames
 reviewers:
-  svenklemm: {}
-  mkindahl: {}
-  fabriziomello: {}
-  konskov: {}
-  erimatnor: {}
-  nikkhils: {}
+  "Poroma-Banerjee": {}
+  "natalya-aksman": {}
   akuzm: {}
-  gayyappan: {}
-  jnidzwetzki: {}
   antekresic: {}
+  dbeck: {}
+  erimatnor: {}
+  fabriziomello: {}
+  kpan2034: {}
+  melihmutlu: {}
+  mkindahl: {}
+  pnthao: {}
+  svenklemm: {}
 
 # list of users who will never be notified
 review_blacklist:
-  - horzsolt
+  - philkra
 
 # ignore changes to the test output files.
 # 1. because they usually will have equivalent .sql files
