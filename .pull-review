@@ -33,7 +33,7 @@ min_percent_authorship_for_extra_reviewer: 0
 min_lines_changed_for_extra_reviewer: 0
 
 # require a user to be listed in the reviewers section in order to be assigned to a pull request
-require_notification: false
+require_notification: true
 
 # list of users and their app-specific usernames
 reviewers:
@@ -47,12 +47,13 @@ reviewers:
   melihmutlu: {}
   mkindahl: {}
   natalya-aksman: {}
+  philkra: {}
   pnthao: {}
   svenklemm: {}
 
 # list of users who will never be notified
 review_blacklist:
-  - philkra
+  - timescale-automation
 
 # ignore changes to the test output files.
 # 1. because they usually will have equivalent .sql files
