@@ -38,7 +38,7 @@ CREATE TABLE public.merge_sort (time timestamp NOT NULL, measure_id integer NOT 
 SELECT create_hypertable('merge_sort', 'time');
 ALTER TABLE merge_sort SET (timescaledb.compress = true, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id, measure_id');
 
-INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'10 sec'::interval) g1(time);
+INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'5 sec'::interval) g1(time);
 
 --compress first chunk
 SELECT compress_chunk(ch) FROM show_chunks('merge_sort') ch LIMIT 1;
