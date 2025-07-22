@@ -99,7 +99,8 @@ compression_hypertable_create(Hypertable *ht, Oid owner, Oid tablespace_oid)
 }
 
 Oid
-compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid tablespace_oid)
+compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid tablespace_oid,
+						 CompressionSettings *settings)
 {
 	ObjectAddress tbladdress;
 	CatalogSecurityContext sec_ctx;
@@ -109,7 +110,6 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 #else
 	const char *const validnsps[] = HEAP_RELOPT_NAMESPACES;
 #endif
-	CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
 
 	Oid owner = ts_rel_get_owner(chunk->hypertable_relid);
 

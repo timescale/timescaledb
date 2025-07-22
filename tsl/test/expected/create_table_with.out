@@ -262,9 +262,6 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 
 INSERT INTO t13 SELECT '2025-01-01','d1',0.1;
 SELECT compress_chunk(show_chunks('t13'));
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t13" is set to ""
-NOTICE:  default order by for hypertable "t13" is set to ""time" DESC"
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_43_4_chunk
@@ -309,11 +306,10 @@ SELECT * FROM _timescaledb_catalog.compression_settings;
 ROLLBACK;
 BEGIN;
 CREATE TABLE t16(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.segment_by='device');
-NOTICE:  default order by for hypertable "t16" is set to ""time" DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
 -------+----------------+-----------+---------+--------------+--------------------
- t16   |                | {device}  | {time}  | {t}          | {t}
+ t16   |                | {device}  |         |              | 
 (1 row)
 
 ROLLBACK;
@@ -396,6 +392,34 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
  hypertable_name | compression_enabled 
 -----------------+---------------------
  t24             | f
+(1 row)
+
+ROLLBACK;
+BEGIN;
+CREATE TABLE t25(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't25'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ t25   |                |           |         |              | 
+(1 row)
+
+ROLLBACK;
+BEGIN;
+-- don't allow empty orderby
+\set ON_ERROR_STOP 0
+CREATE TABLE t26(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby = '');
+ERROR:  ordering column can not be empty
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't26'::regclass;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK;
+\set ON_ERROR_STOP 1
+-- can allow empty segmentby
+BEGIN;
+CREATE TABLE t27(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.segmentby = '');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't27'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ t27   |                | {}        |         |              | 
 (1 row)
 
 ROLLBACK;
