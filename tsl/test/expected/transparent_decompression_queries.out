@@ -55,6 +55,7 @@ select * from test_chartab order by mac_id , ts limit 2;
 
 VACUUM ANALYZE test_chartab;
 -- test constraintawareappend sort node handling
+SET work_mem to '16MB';
 SET enable_hashagg TO false;
 SET timescaledb.enable_chunkwise_aggregation TO false;
 SET max_parallel_workers_per_gather = 0;
@@ -163,6 +164,7 @@ GROUP BY 2, 3;
 RESET enable_hashagg;
 RESET timescaledb.enable_chunkwise_aggregation;
 RESET max_parallel_workers_per_gather;
+RESET work_mem;
 -- test if volatile function quals are applied to compressed chunks
 CREATE FUNCTION check_equal_228( intval INTEGER) RETURNS BOOL
 LANGUAGE PLPGSQL AS
