@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 SET enable_memoize TO false;
 SET enable_indexscan TO false;
+SET parallel_leader_participation TO off;
 -- test join on compressed time column
 -- #3079, #4465
 CREATE TABLE compressed_join_temp AS SELECT * FROM metrics ORDER BY time DESC LIMIT 10;
@@ -16,18 +17,18 @@ QUERY PLAN
    ->  Gather (actual rows=1 loops=1)
          Workers Planned: 2
          Workers Launched: 2
-         ->  Hash Join (actual rows=0 loops=3)
+         ->  Hash Join (actual rows=0 loops=2)
                Hash Cond: ((m_1."time" = t."time") AND (m_1.device_id = t.device_id))
-               ->  Parallel Append (actual rows=14394 loops=3)
+               ->  Parallel Append (actual rows=21590 loops=2)
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_1 (actual rows=17990 loops=1)
-                           ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_2 (actual rows=12595 loops=2)
-                           ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=2)
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_3 (actual rows=0 loops=2)
-                           ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=2)
-               ->  Hash (actual rows=10 loops=3)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_2 (actual rows=25190 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_3 (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               ->  Hash (actual rows=10 loops=2)
                      Buckets: 1024  Batches: 1 
-                     ->  Seq Scan on compressed_join_temp t (actual rows=10 loops=3)
+                     ->  Seq Scan on compressed_join_temp t (actual rows=10 loops=2)
 (16 rows)
 
 DROP TABLE compressed_join_temp;
