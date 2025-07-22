@@ -918,21 +918,42 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root, compression_info->settings, chunk_rel, compressed_rel, consider_partial);
-	set_baserel_size_estimates(root, compressed_rel);
-	double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
 
+	/*
+	 * Estimate the size of the compressed chunk table.
+	 */
+	set_baserel_size_estimates(root, compressed_rel);
+
+	/*
+	 * Estimate the size of decompressed chunk based on the compressed chunk.
+	 *
+	 * The tuple estimates derived from pg_class will be empty, so we have to
+	 * compute that based on the compressed relation as well. Wrong estimates
+	 * there lead to wrong join order choice and wrong low cost for Sort over
+	 * Append, and also different MergeAppend costs on Postgres before 17 due to
+	 * a bug there.
+	 */
+	const double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
+	const double new_tuples_estimate = compressed_rel->tuples * TARGET_COMPRESSED_BATCH_SIZE;
 	if (!compression_info->single_chunk)
 	{
-		/* adjust the parent's estimate by the diff of new and old estimate */
+		/*
+		 * Adjust the hypertable estimate by the diff of new and old chunk
+		 * estimate.
+		 */
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 		Assert(chunk_info->parent_reloid == ht->main_table_relid);
-		ht_relid = chunk_info->parent_relid;
+		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
 		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
+		hypertable_rel->tuples += (new_tuples_estimate - chunk_rel->tuples);
 	}
-
 	chunk_rel->rows = new_row_estimate;
+	chunk_rel->tuples = new_tuples_estimate;
 
+	/*
+	 * Create the paths for the compressed chunk table.
+	 */
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
 
 	/* compute parent relids of the chunk and use it to filter paths*/

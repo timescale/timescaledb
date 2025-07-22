@@ -565,29 +565,29 @@ WHERE mt.time > nd.start_time
     AND mt.device_id = nd.node
     AND mt.time < nd.stop_time
 ORDER BY time;
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
+                                           QUERY PLAN                                            
+-------------------------------------------------------------------------------------------------
  Sort (actual rows=48 loops=1)
    Sort Key: mt_1."time"
    Sort Method: quicksort 
    ->  Hash Join (actual rows=48 loops=1)
-         Hash Cond: (nd.node = mt_1.device_id)
+         Hash Cond: (mt_1.device_id = nd.node)
          Join Filter: ((mt_1."time" > nd.start_time) AND (mt_1."time" < nd.stop_time))
          Rows Removed by Join Filter: 289
-         ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
-         ->  Hash (actual rows=1540 loops=1)
+         ->  Append (actual rows=1541 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk mt_1 (actual rows=480 loops=1)
+                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk mt_2 (actual rows=960 loops=1)
+                     ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk mt_3 (actual rows=48 loops=1)
+                     ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk mt_4 (actual rows=48 loops=1)
+                     ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk mt_5 (actual rows=5 loops=1)
+                     ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+         ->  Hash (actual rows=1 loops=1)
                Buckets: 2048  Batches: 1 
-               ->  Append (actual rows=1541 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk mt_1 (actual rows=480 loops=1)
-                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk mt_2 (actual rows=960 loops=1)
-                           ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk mt_3 (actual rows=48 loops=1)
-                           ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk mt_4 (actual rows=48 loops=1)
-                           ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk mt_5 (actual rows=5 loops=1)
-                           ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+               ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
 (21 rows)
 
 --enable all joins after the tests
