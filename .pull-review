@@ -37,8 +37,7 @@ require_notification: false
 
 # list of users and their app-specific usernames
 reviewers:
-  "Poroma-Banerjee": {}
-  "natalya-aksman": {}
+  Poroma-Banerjee: {}
   akuzm: {}
   antekresic: {}
   dbeck: {}
@@ -47,6 +46,7 @@ reviewers:
   kpan2034: {}
   melihmutlu: {}
   mkindahl: {}
+  natalya-aksman: {}
   pnthao: {}
   svenklemm: {}
 
