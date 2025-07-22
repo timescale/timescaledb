@@ -52,8 +52,7 @@ set(MOD_FILES
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
-set(CURRENT_REV_FILE 2.21.0--2.20.3.sql
-    2.21.1--2.21.0.sql)
+set(CURRENT_REV_FILE 2.21.1--2.21.0.sql)
 
 # Files for generating old downgrade scripts. This should only include files for
 # downgrade from one version to its previous version since we do not support
