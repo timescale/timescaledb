@@ -6,7 +6,7 @@ accidentally triggering the load of a previous DB version.**
 
 ## 2.21.1 (2025-07-22)
 
-This release contains a bug fixe since the 2.21.0 release. We recommend that you upgrade at the next available opportunity.
+This release contains one bug fix since the 2.21.0 release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
 * [#8336](https://github.com/timescale/timescaledb/pull/8336) Fix generic plans for foreign key checks and prepared statements
