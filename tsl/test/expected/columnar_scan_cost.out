@@ -117,12 +117,12 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 
 vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
  Append  (cost=0.04..2988.00 rows=193000 width=20) (actual rows=193000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_3_chunk  (cost=0.04..685.00 rows=64000 width=20) (actual rows=64000 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_3_chunk  (cost=0.04..685.00 rows=64000 width=20) (actual rows=64000 loops=1)
          ->  Seq Scan on compress_hyper_4_5_chunk  (cost=0.00..45.00 rows=1000 width=88) (actual rows=1000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_4_chunk  (cost=0.05..1338.00 rows=129000 width=20) (actual rows=129000 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_4_chunk  (cost=0.05..1338.00 rows=129000 width=20) (actual rows=129000 loops=1)
          ->  Seq Scan on compress_hyper_4_6_chunk  (cost=0.00..48.00 rows=1000 width=88) (actual rows=1000 loops=1)
 (5 rows)
 
@@ -142,12 +142,12 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 
 vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
  Append  (cost=0.04..938.50 rows=57100 width=20) (actual rows=57100 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk  (cost=0.04..231.00 rows=19100 width=20) (actual rows=19100 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk  (cost=0.04..231.00 rows=19100 width=20) (actual rows=19100 loops=1)
          ->  Seq Scan on compress_hyper_4_9_chunk  (cost=0.00..40.00 rows=1000 width=88) (actual rows=1000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk  (cost=0.04..422.00 rows=38000 width=20) (actual rows=38000 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk  (cost=0.04..422.00 rows=38000 width=20) (actual rows=38000 loops=1)
          ->  Seq Scan on compress_hyper_4_10_chunk  (cost=0.00..42.00 rows=1000 width=88) (actual rows=1000 loops=1)
 (5 rows)
 
@@ -167,12 +167,12 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 
 vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Append  (cost=0.04..265.21 rows=12548 width=20) (actual rows=12559 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_11_chunk  (cost=0.04..83.50 rows=4550 width=20) (actual rows=4553 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_11_chunk  (cost=0.04..83.50 rows=4550 width=20) (actual rows=4553 loops=1)
          ->  Seq Scan on compress_hyper_4_13_chunk  (cost=0.00..38.00 rows=1000 width=88) (actual rows=1000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_12_chunk  (cost=0.04..118.97 rows=7997 width=20) (actual rows=8006 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_12_chunk  (cost=0.04..118.97 rows=7997 width=20) (actual rows=8006 loops=1)
          ->  Seq Scan on compress_hyper_4_14_chunk  (cost=0.00..39.00 rows=1000 width=88) (actual rows=1000 loops=1)
 (5 rows)
 
@@ -193,12 +193,12 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 
 vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
  Append  (cost=0.04..2348.10 rows=150807 width=20) (actual rows=150830 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk  (cost=0.04..545.81 rows=50281 width=20) (actual rows=50287 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk  (cost=0.04..545.81 rows=50281 width=20) (actual rows=50287 loops=1)
          ->  Seq Scan on compress_hyper_4_17_chunk  (cost=0.00..43.00 rows=1000 width=88) (actual rows=1000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_16_chunk  (cost=0.04..1048.26 rows=100526 width=20) (actual rows=100543 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_16_chunk  (cost=0.04..1048.26 rows=100526 width=20) (actual rows=100543 loops=1)
          ->  Seq Scan on compress_hyper_4_18_chunk  (cost=0.00..43.00 rows=1000 width=88) (actual rows=1000 loops=1)
 (5 rows)
 
@@ -215,12 +215,12 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 (1 row)
 
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
  Append  (cost=0.04..8302.59 rows=531615 width=20) (actual rows=343830 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_15_chunk  (cost=0.04..2563.66 rows=236169 width=20) (actual rows=114287 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk  (cost=0.04..2563.66 rows=236169 width=20) (actual rows=114287 loops=1)
          ->  Seq Scan on compress_hyper_4_17_chunk  (cost=0.00..201.97 rows=4697 width=88) (actual rows=1000 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_3_16_chunk  (cost=0.04..3080.85 rows=295446 width=20) (actual rows=229543 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_16_chunk  (cost=0.04..3080.85 rows=295446 width=20) (actual rows=229543 loops=1)
          ->  Seq Scan on compress_hyper_4_18_chunk  (cost=0.00..126.39 rows=2939 width=88) (actual rows=1000 loops=1)
 (5 rows)
 
