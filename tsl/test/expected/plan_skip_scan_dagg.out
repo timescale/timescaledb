@@ -5526,12 +5526,11 @@ basic DISTINCT queries on skip_scan_htcl
 :PREFIX SELECT DISTINCT count(DISTINCT dev), dev, 'q1_4' FROM :TABLE GROUP BY dev ORDER BY dev;
                                                                                  QUERY PLAN                                                                                 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort (actual rows=11 loops=1)
-   Sort Key: _hyper_5_9_chunk.dev
-   Sort Method: quicksort 
-   ->  HashAggregate (actual rows=11 loops=1)
-         Group Key: _hyper_5_9_chunk.dev, count(DISTINCT _hyper_5_9_chunk.dev)
-         Batches: 1 
+ Unique (actual rows=11 loops=1)
+   ->  Incremental Sort (actual rows=11 loops=1)
+         Sort Key: _hyper_5_9_chunk.dev, (count(DISTINCT _hyper_5_9_chunk.dev))
+         Presorted Key: _hyper_5_9_chunk.dev
+         Full-sort Groups: 1  Sort Method: quicksort 
          ->  GroupAggregate (actual rows=11 loops=1)
                Group Key: _hyper_5_9_chunk.dev
                ->  Merge Append (actual rows=44 loops=1)
@@ -5548,7 +5547,7 @@ basic DISTINCT queries on skip_scan_htcl
                      ->  Custom Scan (SkipScan) on _hyper_5_13_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_5_13_chunk (actual rows=11 loops=1)
                                  ->  Index Scan using compress_hyper_6_16_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_16_chunk (actual rows=11 loops=1)
-(22 rows)
+(21 rows)
 
 \qecho stable expression in targetlist on :TABLE
 stable expression in targetlist on skip_scan_htcl
