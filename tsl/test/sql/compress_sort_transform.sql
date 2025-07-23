@@ -33,7 +33,7 @@ VACUUM ANALYZE ht_metrics_partially_compressed;
 -- sort transform
 
 -- Grouping can use compressed data order.
-explain (analyze, timing off, summary off)
+:PREFIX
 select device, time_bucket('1 minute', time), count(*)
 from ht_metrics_partially_compressed
 group by 1, 2 order by 1, 2 limit 1;

@@ -37,56 +37,56 @@ generate_series(1,3) device;
 VACUUM ANALYZE ht_metrics_partially_compressed;
 -- sort transform
 -- Grouping can use compressed data order.
-explain (analyze, timing off, summary off)
+:PREFIX
 select device, time_bucket('1 minute', time), count(*)
 from ht_metrics_partially_compressed
 group by 1, 2 order by 1, 2 limit 1;
                                                                          QUERY PLAN                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit  (cost=161.17..161.44 rows=1 width=20) (actual rows=1 loops=1)
-   ->  Finalize GroupAggregate  (cost=161.17..964.93 rows=3000 width=20) (actual rows=1 loops=1)
+ Limit (actual rows=1 loops=1)
+   ->  Finalize GroupAggregate (actual rows=1 loops=1)
          Group Key: _hyper_1_1_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-         ->  Merge Append  (cost=161.17..792.43 rows=18000 width=20) (actual rows=3 loops=1)
+         ->  Merge Append (actual rows=3 loops=1)
                Sort Key: _hyper_1_1_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-               ->  Partial GroupAggregate  (cost=1.06..63.76 rows=3000 width=20) (actual rows=2 loops=1)
+               ->  Partial GroupAggregate (actual rows=2 loops=1)
                      Group Key: _hyper_1_1_chunk.device, time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.06..15.46 rows=1440 width=12) (actual rows=3 loops=1)
-                           ->  Sort  (cost=1.05..1.06 rows=3 width=56) (actual rows=1 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
+                           ->  Sort (actual rows=1 loops=1)
                                  Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
                                  Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_2_4_chunk  (cost=0.00..1.03 rows=3 width=56) (actual rows=3 loops=1)
-               ->  Partial GroupAggregate  (cost=66.55..113.65 rows=3000 width=20) (actual rows=2 loops=1)
+                                 ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+               ->  Partial GroupAggregate (actual rows=2 loops=1)
                      Group Key: _hyper_1_1_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
-                     ->  Sort  (cost=66.55..68.95 rows=960 width=12) (actual rows=3 loops=1)
+                     ->  Sort (actual rows=3 loops=1)
                            Sort Key: _hyper_1_1_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
                            Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_1_1_chunk  (cost=0.00..19.00 rows=960 width=12) (actual rows=960 loops=1)
-               ->  Partial GroupAggregate  (cost=1.06..65.02 rows=3000 width=20) (actual rows=1 loops=1)
+                           ->  Seq Scan on _hyper_1_1_chunk (actual rows=960 loops=1)
+               ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_1_2_chunk.device, time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk  (cost=1.06..16.18 rows=1512 width=12) (actual rows=2 loops=1)
-                           ->  Sort  (cost=1.05..1.06 rows=3 width=56) (actual rows=1 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2 loops=1)
+                           ->  Sort (actual rows=1 loops=1)
                                  Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1
                                  Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_2_5_chunk  (cost=0.00..1.03 rows=3 width=56) (actual rows=3 loops=1)
-               ->  Partial GroupAggregate  (cost=69.89..117.47 rows=3000 width=20) (actual rows=1 loops=1)
+                                 ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3 loops=1)
+               ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_1_2_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
-                     ->  Sort  (cost=69.89..72.41 rows=1008 width=12) (actual rows=2 loops=1)
+                     ->  Sort (actual rows=2 loops=1)
                            Sort Key: _hyper_1_2_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
                            Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_1_2_chunk  (cost=0.00..19.60 rows=1008 width=12) (actual rows=1008 loops=1)
-               ->  Partial GroupAggregate  (cost=1.06..47.43 rows=3000 width=20) (actual rows=1 loops=1)
+                           ->  Seq Scan on _hyper_1_2_chunk (actual rows=1008 loops=1)
+               ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_1_3_chunk.device, time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk  (cost=1.06..6.13 rows=507 width=12) (actual rows=2 loops=1)
-                           ->  Sort  (cost=1.05..1.06 rows=3 width=56) (actual rows=1 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=2 loops=1)
+                           ->  Sort (actual rows=1 loops=1)
                                  Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1
                                  Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_2_6_chunk  (cost=0.00..1.03 rows=3 width=56) (actual rows=3 loops=1)
-               ->  Partial GroupAggregate  (cost=21.48..62.37 rows=3000 width=20) (actual rows=1 loops=1)
+                                 ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
+               ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: _hyper_1_3_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
-                     ->  Sort  (cost=21.48..22.33 rows=339 width=12) (actual rows=2 loops=1)
+                     ->  Sort (actual rows=2 loops=1)
                            Sort Key: _hyper_1_3_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
                            Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_1_3_chunk  (cost=0.00..7.24 rows=339 width=12) (actual rows=339 loops=1)
+                           ->  Seq Scan on _hyper_1_3_chunk (actual rows=339 loops=1)
 (44 rows)
 
 -- Batch sorted merge.
