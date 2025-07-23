@@ -6,6 +6,8 @@
 SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
 SET timezone TO PST8PDT;
+CREATE VIEW invalidation_slots AS
+SELECT * FROM pg_replication_slots WHERE plugin = 'timescaledb-invalidations';
 -- START OF USAGE TEST --
 --First create your hypertable
 CREATE TABLE device_readings (
@@ -88,6 +90,7 @@ view_definition                   |  SELECT time_bucket('@ 1 hour'::interval, ob
                                   |    FROM device_readings                                                     +
                                   |   GROUP BY (time_bucket('@ 1 hour'::interval, observation_time)), device_id;
 finalized                         | t
+invalidate_using                  | trigger
 
 \x
 -- Refresh interval
@@ -601,4 +604,206 @@ ORDER BY 1;
  _hyper_12_19_chunk |            0 | t       |        
  _hyper_12_21_chunk |            0 | f       |        
 (2 rows)
+
+\set ON_ERROR_STOP 1
+SELECT count(*) FROM invalidation_slots;
+ count 
+-------
+     0
+(1 row)
+
+CREATE TABLE magic1(time timestamptz not null, device int, value float);
+CREATE TABLE magic2(time timestamptz not null, device int, value float);
+SELECT table_name FROM create_hypertable('magic1','time');
+ table_name 
+------------
+ magic1
+(1 row)
+
+SELECT table_name FROM create_hypertable('magic2','time');
+ table_name 
+------------
+ magic2
+(1 row)
+
+INSERT INTO magic1
+SELECT generate_series('1999-12-20'::timestamptz, '2000-02-01'::timestamptz, '12 day'::interval),
+       (100 * random())::int,
+       100 * random();
+INSERT INTO magic2
+SELECT generate_series('1999-12-20'::timestamptz, '2000-02-01'::timestamptz, '12 day'::interval),
+       (100 * random())::int,
+       100 * random();
+SELECT count(*) FROM invalidation_slots WHERE database = current_database();
+ count 
+-------
+     0
+(1 row)
+
+-- Creating a materialized view with a failure between adding the slot
+-- and finishing adding the slot should not leave a slot around.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE bad(time timestamptz not null, device int, value float);
+SELECT table_name FROM create_hypertable('bad','time');
+ table_name 
+------------
+ bad
+(1 row)
+
+-- We create such an error by setting the hypertable id sequence
+-- number to an already existing one, which will generate an error
+-- when adding the new hypertable data to the catalog.
+select currval('_timescaledb_catalog.hypertable_id_seq') - 1 as prev_htid \gset
+select setval('_timescaledb_catalog.hypertable_id_seq', :prev_htid, false);
+ setval 
+--------
+     18
+(1 row)
+
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW bad_summary_wal
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'wal')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM bad
+     GROUP BY 1,2;
+ERROR:  duplicate key value violates unique constraint "hypertable_pkey"
+\set ON_ERROR_STOP 1
+-- There should be no replication slot around.
+SELECT count(*) FROM invalidation_slots WHERE database = current_database();
+ count 
+-------
+     0
+(1 row)
+
+-- Advance the sequence again to consume the value we set before.
+SELECT FROM nextval('_timescaledb_catalog.hypertable_id_seq');
+--
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- Test the option "invalidate_using". This should create the continuous
+-- aggregate and there should be a replication slot.
+CREATE MATERIALIZED VIEW magic1_summary1_wal
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'wal')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM magic1
+     GROUP BY 1,2;
+NOTICE:  refreshing continuous aggregate "magic1_summary1_wal"
+SELECT count(*) FROM invalidation_slots WHERE database = current_database();
+ count 
+-------
+     1
+(1 row)
+
+-- Create another continuous aggregate on the same hypertable to be
+-- able to check that the slot remains after one continuous aggregate
+-- has been dropped.
+CREATE MATERIALIZED VIEW magic1_summary2_wal
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'wal')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM magic1
+     GROUP BY 1,2;
+NOTICE:  refreshing continuous aggregate "magic1_summary2_wal"
+SELECT count(*) FROM invalidation_slots WHERE database = current_database();
+ count 
+-------
+     1
+(1 row)
+
+-- Create another continuous aggregate on a different hypertable that
+-- uses WAL-based invalidation collection. This is used to check that
+-- the slot stays when we remove all continuous aggregates for a
+-- hypertable.
+CREATE MATERIALIZED VIEW magic2_summary1_wal
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'wal')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM magic2
+     GROUP BY 1,2;
+NOTICE:  refreshing continuous aggregate "magic2_summary1_wal"
+\set ON_ERROR_STOP 0
+-- This should error out since we are using trigger-based collection
+-- for "metrics".
+CREATE MATERIALIZED VIEW metrics_summary_wal
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'wal')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM metrics
+     GROUP BY 1,2;
+ERROR:  cannot use wal-based invalidation collection with hypertable that is using trigger-based invalidation collection
+-- This should error out since we are using WAL-based collection for
+-- "magic".
+CREATE MATERIALIZED VIEW magic1_summary1_trigger
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'trigger')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM magic1
+     GROUP BY 1,2;
+ERROR:  cannot use trigger-based invalidation collection with hypertable that is using wal-based invalidation collection
+-- This should error out because there is no such collection method.
+CREATE MATERIALIZED VIEW magic_summary1_magic
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'magic')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM magic1
+     GROUP BY 1,2;
+ERROR:  unrecognized value "magic" for invalidate_using
+\set ON_ERROR_STOP 1
+-- Check that it was actually written to the catalog
+SELECT hypertable_name, view_name, invalidate_using
+  FROM timescaledb_information.continuous_aggregates
+ WHERE view_name like 'magic_\_summary%';
+ hypertable_name |      view_name      | invalidate_using 
+-----------------+---------------------+------------------
+ magic1          | magic1_summary1_wal | wal
+ magic1          | magic1_summary2_wal | wal
+ magic2          | magic2_summary1_wal | wal
+(3 rows)
+
+SELECT count(*) FROM pg_replication_slots
+ WHERE plugin = 'timescaledb-invalidations'
+   AND database = current_database();
+ count 
+-------
+     1
+(1 row)
+
+DROP MATERIALIZED VIEW magic2_summary1_wal;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_36_chunk
+-- Slot should be there. We have another hypertable using WAL-based
+-- invalidation collection.
+SELECT count(*) FROM pg_replication_slots
+ WHERE plugin = 'timescaledb-invalidations'
+   AND database = current_database();
+ count 
+-------
+     1
+(1 row)
+
+DROP MATERIALIZED VIEW magic1_summary1_wal;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_34_chunk
+-- Slot should be there. We have yet another continuous aggregate for
+-- the hypertable using WAL-based invalidation collection.
+SELECT count(*) FROM pg_replication_slots
+ WHERE plugin = 'timescaledb-invalidations'
+   AND database = current_database();
+ count 
+-------
+     1
+(1 row)
+
+DROP MATERIALIZED VIEW magic1_summary2_wal;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_35_chunk
+-- Now slot should be gone and we should not have any continuous
+-- aggregates using WAL-based invalidation collection.
+SELECT count(*) FROM pg_replication_slots
+ WHERE plugin = 'timescaledb-invalidations'
+   AND database = current_database();
+ count 
+-------
+     0
+(1 row)
+
+SELECT hypertable_name, view_name, invalidate_using
+  FROM timescaledb_information.continuous_aggregates
+ WHERE view_name like 'magic_\_summary%';
+ hypertable_name | view_name | invalidate_using 
+-----------------+-----------+------------------
+(0 rows)
 

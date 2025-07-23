@@ -48,6 +48,7 @@ set(TEST_FILES
     compression_settings.sql
     compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
+    compression_uuid.sql
     compression_trigger.sql
     create_table_with.sql
     custom_hashagg.sql

@@ -438,6 +438,7 @@ test_delta()
 	for (i = 0; i < TEST_ELEMENTS; i++)
 		delta_delta_compressor_append_value(compressor, i);
 
+	TestAssertInt64Eq(delta_delta_compressor_compressed_size(compressor, NULL), 56);
 	compressed = DirectFunctionCall1(tsl_deltadelta_compressor_finish, PointerGetDatum(compressor));
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
 	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 56);
@@ -470,9 +471,11 @@ test_delta2()
 			delta_delta_compressor_append_value(compressor, i);
 	}
 
+	size_t calc_size = delta_delta_compressor_compressed_size(compressor, NULL);
 	compressed = DirectFunctionCall1(tsl_deltadelta_compressor_finish, PointerGetDatum(compressor));
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
 	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), 1664);
+	TestAssertInt64Eq(calc_size, 1664);
 
 	i = 0;
 	iter = delta_delta_decompression_iterator_from_datum_forward(compressed, INT8OID);
@@ -494,6 +497,7 @@ test_delta3(bool have_nulls, bool have_random)
 {
 	DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
 	Datum compressed;
+	size_t compressed_size;
 
 	int64 values[TEST_ELEMENTS];
 	bool nulls[TEST_ELEMENTS];
@@ -538,8 +542,12 @@ test_delta3(bool have_nulls, bool have_random)
 		}
 	}
 
+	size_t nulls_size;
+	compressed_size = delta_delta_compressor_compressed_size(compressor, &nulls_size);
+	TestAssertInt64Eq(compressed_size, delta_delta_compressor_compressed_size(compressor, NULL));
 	compressed = PointerGetDatum(delta_delta_compressor_finish(compressor));
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+	TestAssertInt64Eq(VARSIZE(DatumGetPointer(compressed)), compressed_size);
 
 	/* Forward decompression. */
 	DecompressionIterator *iter =
@@ -1013,20 +1021,30 @@ test_null()
 static void
 test_simple8b_rle_compressed_size(uint64 *elements, int num_elements)
 {
-	Simple8bRleCompressor compressor;
+	Simple8bRleCompressor compressor, compressor2;
+	void *dest = NULL;
 	simple8brle_compressor_init(&compressor);
+	simple8brle_compressor_init(&compressor2);
 
 	for (int i = 0; i < num_elements; i++)
 	{
 		simple8brle_compressor_append(&compressor, elements[i]);
+		simple8brle_compressor_append(&compressor2, elements[i]);
 	}
 
 	size_t compressed_size = simple8brle_compressor_compressed_const_size(&compressor);
+	dest = compressed_size > 0 ? palloc(compressed_size) : NULL;
+
+	/* finish_into must not fail even if the compressor is empty */
+	void *dest_past_end = simple8brle_compressor_finish_into(&compressor2, dest, compressed_size);
+
 	if (num_elements == 0)
 	{
+		TestAssertTrue(dest_past_end == NULL);
 		TestAssertInt64Eq(compressed_size, 0);
 		return;
 	}
+	TestAssertTrue(dest_past_end != NULL);
 
 	Simple8bRleSerialized *serialized = simple8brle_compressor_finish(&compressor);
 	size_t serialized_size = simple8brle_serialized_total_size(serialized);
@@ -1039,6 +1057,20 @@ test_simple8b_rle_compressed_size(uint64 *elements, int num_elements)
 	TestAssertInt64Eq(compressed_size, serialized_size);
 
 	pfree(serialized);
+	pfree(dest);
+}
+
+static void
+test_simple8b_rle_expected_size(uint64 *elements, int num_elements, int expected_size)
+{
+	Simple8bRleCompressor compressor;
+	simple8brle_compressor_init(&compressor);
+	for (int i = 0; i < num_elements; i++)
+	{
+		simple8brle_compressor_append(&compressor, elements[i]);
+	}
+	size_t compressed_size = simple8brle_compressor_compressed_const_size(&compressor);
+	TestAssertInt64Eq(compressed_size, expected_size);
 }
 
 static void
@@ -1060,6 +1092,13 @@ test_simple8b_rle()
 		131072, 131071, 65535, 16777216, 16777211, 16777215, 4294967296ULL,
 		12884901888ULL
 	};
+
+	uint64 elements_corner_case[] = {
+		0, 1, 0, 1, 0, 1, 0, 1,   0, 1, 0, 1, 0, 1, 0, 1,
+		0, 1, 0, 1, 0, 1, 0, 1,   0, 1, 0, 1, 0, 1, 0, 1,
+		0, 1, 0, 1, 0, 1, 0, 1,   0, 1, 0, 1, 0, 1, 0, 1,
+		0, 1, 0, 1, 0, 1, 0, 1,   0, 1, 0, 1, 0, 1, 0, 0xFFFFFFFFULL,
+	};
 	/* clang-format on */
 
 	int n = sizeof(elements) / sizeof(*elements);
@@ -1067,11 +1106,265 @@ test_simple8b_rle()
 	{
 		test_simple8b_rle_compressed_size(elements, i);
 	}
+
+	/* test corner cases */
+	test_simple8b_rle_expected_size(elements_corner_case, 63, 24);
+	test_simple8b_rle_expected_size(elements_corner_case, 64, 48);
+
+	/* set the last value to a two bit one, so the 1 bit values are only extended to 2 bits */
+	elements_corner_case[63] = 3;
+	test_simple8b_rle_expected_size(elements_corner_case, 64, 32);
+
+	/* make this less favourable for the 1 bit values */
+	elements_corner_case[60] = 0xFFFFFFFFFFFFFFFFULL;
+	test_simple8b_rle_expected_size(elements_corner_case, 61, 56);
+}
+
+static void
+compare_datum_ptr(Datum datum1, Datum datum2, const char *msg)
+{
+	char *ptr1 = DatumGetPointer(datum1);
+	char *ptr2 = DatumGetPointer(datum2);
+	TestAssertTrue(ptr1 != NULL);
+	TestAssertTrue(ptr2 != NULL);
+	size_t size1 = VARSIZE_ANY(datum1);
+	size_t size2 = VARSIZE_ANY(datum2);
+	TestAssertInt64Eq(size1, size2);
+	int memcmp_result = memcmp(ptr1, ptr2, size1);
+	if (memcmp_result != 0)
+	{
+		elog(WARNING, "memcmp failed: %s, size: %zu, memcmp result: %d", msg, size1, memcmp_result);
+		TestAssertInt64Eq(memcmp_result, 0);
+	}
+}
+
+static void
+test_delta_size_and_placement(const int32 *values, int n, int expected_size)
+{
+	size_t var_size;
+	size_t calc_size;
+
+	Datum pass1 = (Datum) 0;
+	Datum pass2 = (Datum) 0;
+	Datum pass3 = (Datum) 0;
+
+	/* First pass, obtain a reference and verify expected size is legit */
+	{
+		DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
+		for (int i = 0; i < n; i++)
+		{
+			/* Zero values are treated as nulls */
+			if (values[i] == 0)
+				delta_delta_compressor_append_null(compressor);
+			else
+				delta_delta_compressor_append_value(compressor, values[i]);
+		}
+		pass1 = (Datum) delta_delta_compressor_finish(compressor);
+		var_size = DatumGetPointer(pass1) == NULL ? 0 : VARSIZE(DatumGetPointer(pass1));
+		TestAssertInt64Eq((int64) var_size, (int64) expected_size);
+
+		if (expected_size > 0)
+		{
+			StringInfoData buf;
+			bytea *sent;
+			StringInfoData transmission;
+			DeltaDeltaCompressed *compressed_recv;
+
+			pq_begintypsend(&buf);
+			deltadelta_compressed_send((CompressedDataHeader *) pass1, &buf);
+			sent = pq_endtypsend(&buf);
+
+			transmission = (StringInfoData){
+				.data = VARDATA(sent),
+				.len = VARSIZE(sent),
+				.maxlen = VARSIZE(sent),
+			};
+
+			compressed_recv =
+				(DeltaDeltaCompressed *) DatumGetPointer(deltadelta_compressed_recv(&transmission));
+			DecompressionIterator *iter =
+				delta_delta_decompression_iterator_from_datum_forward(PointerGetDatum(
+																		  compressed_recv),
+																	  INT8OID);
+			int i = 0;
+			for (DecompressResult r = delta_delta_decompression_iterator_try_next_forward(iter);
+				 !r.is_done;
+				 r = delta_delta_decompression_iterator_try_next_forward(iter))
+			{
+				if (values[i] == 0)
+					TestAssertTrue(r.is_null);
+				else
+				{
+					TestAssertTrue(!r.is_null);
+					TestAssertInt64Eq(DatumGetInt64(r.val), values[i]);
+				}
+				i += 1;
+			}
+			TestAssertInt64Eq(i, n);
+		}
+	}
+
+	/* Second pass, verify that the compressed data size calculation is idempotent and
+	 * produces a valid result */
+	{
+		DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
+		bool has_nulls = false;
+		for (int i = 0; i < n; i++)
+		{
+			/* Zero values are treated as nulls */
+			if (values[i] == 0)
+			{
+				delta_delta_compressor_append_null(compressor);
+				has_nulls = true;
+			}
+			else
+				delta_delta_compressor_append_value(compressor, values[i]);
+		}
+		size_t nulls_size = 0;
+		calc_size = delta_delta_compressor_compressed_size(compressor, &nulls_size);
+		TestAssertTrue((has_nulls && calc_size > 0) == (nulls_size > 0));
+		TestAssertInt64Eq(calc_size, expected_size);
+		pass2 = (Datum) delta_delta_compressor_finish(compressor);
+		/* Make sure the compressed data size is the same as the var size */
+		TestAssertInt64Eq((int64) calc_size, (int64) var_size);
+		/* And the var size is the same as in the previous calculation */
+		var_size = DatumGetPointer(pass2) == NULL ? 0 : VARSIZE(DatumGetPointer(pass2));
+		TestAssertInt64Eq((int64) var_size, (int64) expected_size);
+	}
+
+	/* Third pass, verify that we can use the calculated size and serialize the
+	 * compressed data into a buffer which results the same data as in the previous
+	 * passes */
+	{
+		DeltaDeltaCompressor *compressor = delta_delta_compressor_alloc();
+		for (int i = 0; i < n; i++)
+		{
+			/* Zero values are treated as nulls */
+			if (values[i] == 0)
+			{
+				delta_delta_compressor_append_null(compressor);
+			}
+			else
+				delta_delta_compressor_append_value(compressor, values[i]);
+		}
+
+		size_t est_size = delta_delta_compressor_compressed_size(compressor, NULL);
+		TestAssertInt64Eq(est_size, expected_size);
+
+		pass3 = (Datum) palloc0(est_size + 4);
+		char *pass3_ptr = DatumGetPointer(pass3);
+		pass3_ptr[est_size] = 0xDE;
+		pass3_ptr[est_size + 1] = 0xAD;
+		pass3_ptr[est_size + 2] = 0xBE;
+		pass3_ptr[est_size + 3] = 0xEF;
+
+		char *result =
+			(char *) delta_delta_compressor_finish_into(compressor, DatumGetPointer(pass3));
+
+		if (expected_size == 0)
+		{
+			TestAssertTrue(result == DatumGetPointer(pass3));
+			return;
+		}
+
+		TestAssertTrue(DatumGetPointer(pass3) != NULL);
+		TestAssertTrue(result != NULL);
+		TestAssertTrue(result != DatumGetPointer(pass3));
+		TestAssertTrue(result == pass3_ptr + est_size);
+		size_t pass3_size = VARSIZE(DatumGetPointer(pass3));
+		TestAssertInt64Eq(pass3_size, est_size);
+		TestAssertInt64Eq(pass3_size, VARSIZE(DatumGetPointer(pass1)));
+		TestAssertInt64Eq(pass3_size, VARSIZE(DatumGetPointer(pass2)));
+
+		TestAssertInt64Eq((unsigned char) result[0], 0xDE);
+		TestAssertInt64Eq((unsigned char) result[1], 0xAD);
+		TestAssertInt64Eq((unsigned char) result[2], 0xBE);
+		TestAssertInt64Eq((unsigned char) result[3], 0xEF);
+
+		compare_datum_ptr(pass1, pass3, "pass1 and pass3");
+		compare_datum_ptr(pass2, pass3, "pass2 and pass3");
+	}
+}
+
+static void
+test_delta_size_and_placements()
+{
+	int32 single_value[] = { 1 };
+	int32 triple[] = { 1, 2, 3 };
+	int32 nulls[] = { 0, 0 };
+	int32 mixed[] = { 1, 0, 100 };
+	int32 large[] = { 0, 1,	 10,  100,	1000,  10000,  100000,	1000000,  10000000,	 100000000,
+					  0, 2,	 20,  200,	2000,  20000,  200000,	2000000,  20000000,	 200000000,
+					  0, 3,	 30,  300,	3000,  30000,  300000,	3000000,  30000000,	 300000000,
+					  0, 4,	 40,  400,	4000,  40000,  400000,	4000000,  40000000,	 400000000,
+					  0, 5,	 50,  500,	5000,  50000,  500000,	5000000,  50000000,	 500000000,
+					  0, 6,	 60,  600,	6000,  60000,  600000,	6000000,  60000000,	 600000000,
+					  0, 7,	 70,  700,	7000,  70000,  700000,	7000000,  70000000,	 700000000,
+					  0, 8,	 80,  800,	8000,  80000,  800000,	8000000,  80000000,	 800000000,
+					  0, 9,	 90,  900,	9000,  90000,  900000,	9000000,  90000000,	 900000000,
+					  0, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000,
+					  0, 11, 110, 1100, 11000, 110000, 1100000, 11000000, 110000000, 1100000000,
+					  0, 12, 120, 1200, 12000, 120000, 1200000, 12000000, 120000000, 1200000000,
+					  0, 13, 130, 1300, 13000, 130000, 1300000, 13000000, 130000000, 1300000000,
+					  0, 14, 140, 1400, 14000, 140000, 1400000, 14000000, 140000000, 1400000000,
+					  0, 15, 150, 1500, 15000, 150000, 1500000, 15000000, 150000000, 1500000000,
+					  0, 16, 160, 1600, 16000, 160000, 1600000, 16000000, 160000000, 1600000000,
+					  0, 17, 170, 1700, 17000, 170000, 1700000, 17000000, 170000000, 1700000000,
+					  0, 18, 180, 1800, 18000, 180000, 1800000, 18000000, 180000000, 1800000000,
+					  0, 19, 190, 1900, 19000, 190000, 1900000, 19000000, 190000000, 1900000000 };
+
+	test_delta_size_and_placement(single_value, sizeof(single_value) / sizeof(*single_value), 48);
+	test_delta_size_and_placement(triple, sizeof(triple) / sizeof(*triple), 48);
+	test_delta_size_and_placement(nulls, sizeof(nulls) / sizeof(*nulls), 0);
+	test_delta_size_and_placement(mixed, sizeof(mixed) / sizeof(*mixed), 72);
+	test_delta_size_and_placement(large, 2, 72);
+	test_delta_size_and_placement(large, 3, 72);
+	test_delta_size_and_placement(large, 4, 72);
+	test_delta_size_and_placement(large, 5, 72);
+	test_delta_size_and_placement(large, 6, 80);
+	test_delta_size_and_placement(large, 7, 80);
+	test_delta_size_and_placement(large, 8, 80);
+	test_delta_size_and_placement(large, 9, 88);
+	test_delta_size_and_placement(large, 10, 88);
+	test_delta_size_and_placement(large, 13, 96);
+	test_delta_size_and_placement(large, 20, 120);
+	test_delta_size_and_placement(large, 24, 136);
+	test_delta_size_and_placement(large, 30, 152);
+	test_delta_size_and_placement(large, 35, 168);
+	test_delta_size_and_placement(large, 40, 184);
+	test_delta_size_and_placement(large, 46, 208);
+	test_delta_size_and_placement(large, 50, 224);
+	test_delta_size_and_placement(large, 57, 248);
+	test_delta_size_and_placement(large, 60, 256);
+	test_delta_size_and_placement(large, 68, 288);
+	test_delta_size_and_placement(large, 70, 296);
+	test_delta_size_and_placement(large, 79, 328);
+	test_delta_size_and_placement(large, 80, 328);
+	test_delta_size_and_placement(large, 90, 368);
+	test_delta_size_and_placement(large, 100, 400);
+	test_delta_size_and_placement(large, 102, 408);
+	test_delta_size_and_placement(large, 110, 432);
+	test_delta_size_and_placement(large, 113, 440);
+	test_delta_size_and_placement(large, 120, 464);
+	test_delta_size_and_placement(large, 124, 488);
+	test_delta_size_and_placement(large, 130, 520);
+	test_delta_size_and_placement(large, 135, 544);
+	test_delta_size_and_placement(large, 140, 560);
+	test_delta_size_and_placement(large, 146, 584);
+	test_delta_size_and_placement(large, 150, 600);
+	test_delta_size_and_placement(large, 157, 640);
+	test_delta_size_and_placement(large, 160, 648);
+	test_delta_size_and_placement(large, 168, 680);
+	test_delta_size_and_placement(large, 170, 688);
+	test_delta_size_and_placement(large, 180, 728);
 }
 
 Datum
 ts_test_compression(PG_FUNCTION_ARGS)
 {
+	/* Some tests to verify the size of the compressed data with the delta delta compressor */
+	test_delta_size_and_placements();
+
 	test_int_array();
 	test_string_array();
 	test_int_dictionary();

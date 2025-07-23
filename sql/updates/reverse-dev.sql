@@ -1,4 +1,9 @@
+ALTER EXTENSION timescaledb DROP VIEW timescaledb_information.continuous_aggregates;
+
+DROP VIEW timescaledb_information.continuous_aggregates;
+
 DROP FUNCTION _timescaledb_functions.cagg_parse_invalidation_record(BYTEA);
+DROP FUNCTION _timescaledb_functions.has_invalidation_trigger(regclass);
 
 CREATE FUNCTION ts_hypercore_handler(internal) RETURNS table_am_handler
 AS '@MODULE_PATHNAME@', 'ts_hypercore_handler' LANGUAGE C;
@@ -91,3 +96,7 @@ _timescaledb_functions.policy_compression_execute(
   useam               BOOLEAN = NULL)
 AS $$ BEGIN END $$ LANGUAGE PLPGSQL;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.generate_uuid_v7;
+DROP FUNCTION IF EXISTS _timescaledb_functions.uuid_v7_from_timestamptz;
+DROP FUNCTION IF EXISTS _timescaledb_functions.timestamptz_from_uuid_v7;
+DROP FUNCTION IF EXISTS _timescaledb_functions.uuid_version;

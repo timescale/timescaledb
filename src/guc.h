@@ -119,14 +119,15 @@ extern char *ts_current_timestamp_mock;
 
 extern TSDLLEXPORT int ts_guc_debug_toast_tuple_target;
 
-#ifdef TS_DEBUG
 typedef enum DebugRequireOption
 {
 	DRO_Allow = 0,
 	DRO_Forbid,
-	DRO_Require
+	DRO_Require,
+	DRO_Force,
 } DebugRequireOption;
 
+#ifdef TS_DEBUG
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_qual;
 
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
@@ -136,7 +137,7 @@ extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
 extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
 extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
 
-extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
+extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_batch_sorted_merge;
 
 extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
 

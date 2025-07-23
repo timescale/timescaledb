@@ -1046,7 +1046,21 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 		path_copy->custom_path.path.pathkeys = sort_info->decompressed_sort_pathkeys;
 		cost_batch_sorted_merge(root, compression_info, path_copy, compressed_path);
 
+		if (ts_guc_debug_require_batch_sorted_merge == DRO_Force)
+		{
+			path_copy->custom_path.path.startup_cost = cpu_tuple_cost;
+			path_copy->custom_path.path.total_cost = 2 * cpu_tuple_cost;
+		}
+
 		decompressed_paths = lappend(decompressed_paths, path_copy);
+	}
+	else if (ts_guc_debug_require_batch_sorted_merge == DRO_Require ||
+			 ts_guc_debug_require_batch_sorted_merge == DRO_Force)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("debug: batch sorted merge is required but not possible at planning "
+						"time")));
 	}
 
 	/*
