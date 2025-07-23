@@ -113,27 +113,31 @@ full join query_params q
 full join query_params q2
     on q2.b = test.b
 ;
-                              QUERY PLAN                               
------------------------------------------------------------------------
- Hash Full Join
-   Hash Cond: (_hyper_1_1_chunk.b = q2.b)
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Merge Full Join
+   Merge Cond: (_hyper_1_1_chunk.b = q2.b)
    CTE query_params
      ->  Unique
            ->  Sort
                  Sort Key: test_copy.a, ((test_copy.b + 1))
                  ->  Seq Scan on test_copy
                        Filter: ((a)::text = ANY ('{lat,lon}'::text[]))
-   ->  Merge Full Join
-         Merge Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
-         ->  Sort
-               Sort Key: _hyper_1_1_chunk.a
-               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-                     ->  Seq Scan on compress_hyper_2_2_chunk
-         ->  Materialize
-               ->  CTE Scan on query_params q
-   ->  Hash
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk.b
+         ->  Merge Full Join
+               Merge Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
+               ->  Sort
+                     Sort Key: _hyper_1_1_chunk.a
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Sort
+                     Sort Key: q.a
+                     ->  CTE Scan on query_params q
+   ->  Sort
+         Sort Key: q2.b
          ->  CTE Scan on query_params q2
-(18 rows)
+(22 rows)
 
 reset enable_seqscan;
 reset jit;

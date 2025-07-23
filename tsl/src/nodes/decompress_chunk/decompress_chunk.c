@@ -707,7 +707,7 @@ cost_decompress_chunk(PlannerInfo *root, const CompressionInfo *compression_info
 
 	/* total_cost is cost for fetching all tuples */
 	// path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
-	path->rows = compressed_path->rows * estimate_compressed_batch_size(root, compression_info);
+	path->rows = compressed_path->rows * compression_info->compressed_batch_size;
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 }
 
@@ -1074,6 +1074,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	RelOptInfo *compressed_rel = compression_info->compressed_rel;
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
+
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root,
 				   compression_info->settings,
@@ -1086,6 +1087,13 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	set_compressed_baserel_size_estimates(root, compressed_rel, compression_info);
 
 	/*
+	 * Estimate the size of the compressed batch from Postgres
+	 * statistics.
+	 */
+	compression_info->compressed_batch_size =
+		estimate_compressed_batch_size(root, compression_info);
+
+	/*
 	 * Estimate the size of decompressed chunk based on the compressed chunk.
 	 *
 	 * The tuple estimates derived from pg_class will be empty, so we have to
@@ -1094,9 +1102,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	 * Append, and also different MergeAppend costs on Postgres before 17 due to
 	 * a bug there.
 	 */
-	const double batch_size = estimate_compressed_batch_size(root, compression_info);
-	const double new_row_estimate = compressed_rel->rows * batch_size;
-	const double new_tuples_estimate = compressed_rel->tuples * batch_size;
+	const double new_row_estimate = compressed_rel->rows * compression_info->compressed_batch_size;
+	const double new_tuples_estimate =
+		compressed_rel->tuples * compression_info->compressed_batch_size;
 	if (!compression_info->single_chunk)
 	{
 		/*
@@ -1107,8 +1115,13 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 		Assert(chunk_info->parent_reloid == ht->main_table_relid);
 		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
-		hypertable_rel->tuples += (new_tuples_estimate - chunk_rel->tuples);
+		const double delta = new_row_estimate - chunk_rel->rows;
+		hypertable_rel->rows += delta;
+		/*
+		 * For appendrel, set tuples to the same value as rows,
+		 * like set_append_rel_size() does.
+		 */
+		hypertable_rel->tuples += delta;
 	}
 	chunk_rel->rows = new_row_estimate;
 	chunk_rel->tuples = new_tuples_estimate;
