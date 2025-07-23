@@ -10,9 +10,6 @@ SELECT table_name FROM create_hypertable('i3719', 'time');
 (1 row)
 
 ALTER TABLE i3719 SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "i3719" is set to ""
-NOTICE:  default order by for hypertable "i3719" is set to ""time" DESC"
 INSERT INTO i3719 VALUES('2021-01-01 00:00:00', 'chunk 1');
 SELECT count(compress_chunk(c)) FROM show_chunks('i3719') c;
  count 
@@ -83,7 +80,6 @@ ALTER TABLE mytab SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'a, c'
 );
-NOTICE:  default order by for hypertable "mytab" is set to ""time" DESC"
 -- get first chunk name
 SELECT chunk_schema || '.' || chunk_name as "chunk_table"
        FROM timescaledb_information.chunks
@@ -178,9 +174,6 @@ SELECT table_name FROM create_hypertable('row_locks', 'time');
 (1 row)
 
 ALTER TABLE row_locks SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "row_locks" is set to ""
-NOTICE:  default order by for hypertable "row_locks" is set to ""time" DESC"
 INSERT INTO row_locks VALUES('2021-01-01 00:00:00');
 SELECT count(compress_chunk(c)) FROM show_chunks('row_locks') c;
  count 
@@ -210,7 +203,6 @@ SELECT table_name FROM create_hypertable('lazy_decompress', 'time');
 (1 row)
 
 ALTER TABLE lazy_decompress SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
-NOTICE:  default order by for hypertable "lazy_decompress" is set to ""time" DESC"
 INSERT INTO lazy_decompress SELECT '2024-01-01'::timestamptz + format('%s',i)::interval, 'd1', i FROM generate_series(1,6000) g(i);
 SELECT count(compress_chunk(c)) FROM show_chunks('lazy_decompress') c;
  count 
@@ -430,7 +422,6 @@ SELECT table_name FROM create_hypertable('direct_delete', 'time');
 (1 row)
 
 ALTER TABLE direct_delete SET (timescaledb.compress, timescaledb.compress_segmentby = 'device, reading');
-NOTICE:  default order by for hypertable "direct_delete" is set to ""time" DESC"
 INSERT INTO direct_delete VALUES
 ('2021-01-01', 'd1', 'r1', 1.0),
 ('2021-01-01', 'd1', 'r2', 1.0),
@@ -926,7 +917,6 @@ SELECT table_name FROM create_hypertable('t8241', 'time');
 INSERT INTO t8241(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
 INSERT INTO t8241(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
 ALTER TABLE t8241 SET(timescaledb.compress, timescaledb.compress_segmentby='device');
-NOTICE:  default order by for hypertable "t8241" is set to ""time" DESC"
 SELECT count(compress_chunk(ch)) FROM show_chunks('t8241') ch;
  count 
      1

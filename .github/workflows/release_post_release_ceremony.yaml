@@ -17,6 +17,15 @@ permissions:
   pull-requests: write
 
 jobs:
+  docs:
+    name: Post Release Ceremony - Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate list of GUCs
+        run: |
+          gh workflow run tsdb-refresh-gucs-list.yaml -R timescale/docs -f tag=${{ github.event.release.tag_name }}
+
   main-branch:
     name: Post Release Ceremony - main branch
     runs-on: ubuntu-latest

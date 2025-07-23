@@ -21,7 +21,6 @@ insert into mvagg select generate_series(1, 2 * pow(10, 6)::int) t, 1 s0, 1 s1;
 -- Otherwise we might get GroupAggregate with Sort which uses linear memory in
 -- the number of compressed batches.
 alter table mvagg set (timescaledb.compress, timescaledb.compress_segmentby='s0, s1');
-NOTICE:  default order by for hypertable "mvagg" is set to "t DESC"
 -- Need to inflate the estimated cardinalities of segmentby columns, again to
 -- force the hash aggregation.
 insert into mvagg select -1 - x t, -x s0, -x s1 from generate_series(1, 1000) x;

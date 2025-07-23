@@ -130,14 +130,14 @@ ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
 	uint64 timestamp = (pg_ntoh64(timestamp_be)) >> 16;
 
 	/* Get the sub ms part as well, reversing the scaling */
-	uint32 subms_timestamp = ((uuid->data[6] << 8) | uuid->data[7]) * 1000 / (1 << 12);
+	uint32 subms_timestamp = (((uuid->data[6] & 0xF) << 8) | uuid->data[7]) * 1000 / (1 << 12);
 
 	/* Milliseconds timestamp from PG Epoch (2000-01-01) */
-	uint64 timestamp_micros =
+	uint64 timestamp_millis =
 		(timestamp - ((uint64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY) * 1000ULL);
 
 	/* Add up the whole to get microseconds */
-	TimestampTz ts = timestamp_micros * 1000 + subms_timestamp;
+	TimestampTz ts = timestamp_millis * 1000 + subms_timestamp;
 
 	return TimestampTzGetDatum(ts);
 }

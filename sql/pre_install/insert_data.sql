@@ -10,4 +10,6 @@ insert into _timescaledb_catalog.compression_algorithm( id, version, name, descr
 ( 3, 1, 'COMPRESSION_ALGORITHM_GORILLA', 'gorilla'),
 ( 4, 1, 'COMPRESSION_ALGORITHM_DELTADELTA', 'deltadelta'),
 ( 5, 1, 'COMPRESSION_ALGORITHM_BOOL', 'bool'),
-( 6, 1, 'COMPRESSION_ALGORITHM_NULL', 'null');
+( 6, 1, 'COMPRESSION_ALGORITHM_NULL', 'null'),
+( 7, 1, 'COMPRESSION_ALGORITHM_UUID', 'uuid');
+
