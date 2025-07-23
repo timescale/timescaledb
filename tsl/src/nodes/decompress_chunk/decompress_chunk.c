@@ -1094,8 +1094,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	 * Append, and also different MergeAppend costs on Postgres before 17 due to
 	 * a bug there.
 	 */
-	const double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
-	const double new_tuples_estimate = compressed_rel->tuples * TARGET_COMPRESSED_BATCH_SIZE;
+	const double batch_size = estimate_compressed_batch_size(root, compression_info);
+	const double new_row_estimate = compressed_rel->rows * batch_size;
+	const double new_tuples_estimate = compressed_rel->tuples * batch_size;
 	if (!compression_info->single_chunk)
 	{
 		/*
