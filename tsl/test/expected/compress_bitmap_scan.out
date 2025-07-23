@@ -45,7 +45,7 @@ select * from bscan where id = 1 or id = 2 or id = 3 or id = 4 or id = 5
                                                                                                                                                                                                                                                                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=72 loops=1)
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=40 loops=1)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=40 loops=1)
          Output: _hyper_1_1_chunk.ts, _hyper_1_1_chunk.s, _hyper_1_1_chunk.id, _hyper_1_1_chunk.payload
          Vectorized Filter: ((_hyper_1_1_chunk.id = 1) OR (_hyper_1_1_chunk.id = 2) OR (_hyper_1_1_chunk.id = 3) OR (_hyper_1_1_chunk.id = 4) OR (_hyper_1_1_chunk.id = 5) OR (_hyper_1_1_chunk.id = 6) OR (_hyper_1_1_chunk.id = 7) OR (_hyper_1_1_chunk.id = 8))
          Rows Removed by Filter: 43960
@@ -55,7 +55,7 @@ select * from bscan where id = 1 or id = 2 or id = 3 or id = 4 or id = 5
                Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_2, compress_hyper_2_3_chunk._ts_meta_max_2, compress_hyper_2_3_chunk.ts, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.id, compress_hyper_2_3_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_3_chunk.payload
                Filter: (((compress_hyper_2_3_chunk._ts_meta_min_1 <= 1) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 1)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 2) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 2)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 3) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 3)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 4) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 4)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 5) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 5)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 6) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 6)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 7) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 7)) OR ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 8) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 8)))
                Rows Removed by Filter: 673
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=32 loops=1)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=32 loops=1)
          Output: _hyper_1_2_chunk.ts, _hyper_1_2_chunk.s, _hyper_1_2_chunk.id, _hyper_1_2_chunk.payload
          Vectorized Filter: ((_hyper_1_2_chunk.id = 1) OR (_hyper_1_2_chunk.id = 2) OR (_hyper_1_2_chunk.id = 3) OR (_hyper_1_2_chunk.id = 4) OR (_hyper_1_2_chunk.id = 5) OR (_hyper_1_2_chunk.id = 6) OR (_hyper_1_2_chunk.id = 7) OR (_hyper_1_2_chunk.id = 8))
          Rows Removed by Filter: 35968
@@ -75,7 +75,7 @@ select * from bscan where id = 1 or id = 2
                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                   
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=18 loops=1)
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=10 loops=1)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=10 loops=1)
          Output: _hyper_1_1_chunk.ts, _hyper_1_1_chunk.s, _hyper_1_1_chunk.id, _hyper_1_1_chunk.payload
          Vectorized Filter: ((_hyper_1_1_chunk.id = 1) OR (_hyper_1_1_chunk.id = 2))
          Rows Removed by Filter: 13990
@@ -90,7 +90,7 @@ select * from bscan where id = 1 or id = 2
                            Index Cond: ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 1) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 1))
                      ->  Bitmap Index Scan on compress_hyper_2_3_chunk_s__ts_meta_min_1__ts_meta_max_1__t_idx (actual rows=14 loops=1)
                            Index Cond: ((compress_hyper_2_3_chunk._ts_meta_min_1 <= 2) AND (compress_hyper_2_3_chunk._ts_meta_max_1 >= 2))
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk (actual rows=8 loops=1)
+   ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk (actual rows=8 loops=1)
          Output: _hyper_1_2_chunk.ts, _hyper_1_2_chunk.s, _hyper_1_2_chunk.id, _hyper_1_2_chunk.payload
          Vectorized Filter: ((_hyper_1_2_chunk.id = 1) OR (_hyper_1_2_chunk.id = 2))
          Rows Removed by Filter: 11992
@@ -123,7 +123,7 @@ where (t2.id = 1 or t2.id = 2)
          Sort Key: t2_1.s
          Sort Method: quicksort 
          ->  Append (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk t2_1 (actual rows=10 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk t2_1 (actual rows=10 loops=1)
                      Output: t2_1.ts, t2_1.s, t2_1.id, t2_1.payload
                      Vectorized Filter: ((t2_1.id = 1) OR (t2_1.id = 2))
                      Rows Removed by Filter: 13990
@@ -138,7 +138,7 @@ where (t2.id = 1 or t2.id = 2)
                                        Index Cond: ((compress_hyper_2_3_chunk_1._ts_meta_min_1 <= 1) AND (compress_hyper_2_3_chunk_1._ts_meta_max_1 >= 1))
                                  ->  Bitmap Index Scan on compress_hyper_2_3_chunk_s__ts_meta_min_1__ts_meta_max_1__t_idx (actual rows=14 loops=1)
                                        Index Cond: ((compress_hyper_2_3_chunk_1._ts_meta_min_1 <= 2) AND (compress_hyper_2_3_chunk_1._ts_meta_max_1 >= 2))
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk t2_2 (actual rows=8 loops=1)
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk t2_2 (actual rows=8 loops=1)
                      Output: t2_2.ts, t2_2.s, t2_2.id, t2_2.payload
                      Vectorized Filter: ((t2_2.id = 1) OR (t2_2.id = 2))
                      Rows Removed by Filter: 11992
@@ -160,7 +160,7 @@ where (t2.id = 1 or t2.id = 2)
                Sort Key: t1_1.s
                Sort Method: quicksort 
                ->  Append (actual rows=674 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk t1_1 (actual rows=337 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk t1_1 (actual rows=337 loops=1)
                            Output: t1_1.ts, t1_1.s, t1_1.id, t1_1.payload
                            Vectorized Filter: (t1_1.payload = '-537'::integer)
                            Rows Removed by Filter: 259321
@@ -170,7 +170,7 @@ where (t2.id = 1 or t2.id = 2)
                                  Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_2, compress_hyper_2_3_chunk._ts_meta_max_2, compress_hyper_2_3_chunk.ts, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.id, compress_hyper_2_3_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_3_chunk.payload
                                  Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_3_chunk._ts_meta_v2_bloom1_payload, '-537'::integer)
                                  Rows Removed by Filter: 441
-                     ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk t1_2 (actual rows=337 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk t1_2 (actual rows=337 loops=1)
                            Output: t1_2.ts, t1_2.s, t1_2.id, t1_2.payload
                            Vectorized Filter: (t1_2.payload = '-537'::integer)
                            Rows Removed by Filter: 258227

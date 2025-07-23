@@ -355,15 +355,18 @@ INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 VACUUM ANALYZE mytab_prep;
 -- plan should be invalidated to return results from the uncompressed chunk also
 EXPLAIN (COSTS OFF) EXECUTE p1;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
- Sort
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Merge Append
    Sort Key: _hyper_9_10_chunk.a, _hyper_9_10_chunk.c, _hyper_9_10_chunk."time" DESC
-   ->  Append
-         ->  Custom Scan (DecompressChunk) on _hyper_9_10_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
+         ->  Sort
+               Sort Key: compress_hyper_10_11_chunk.a, compress_hyper_10_11_chunk.c, compress_hyper_10_11_chunk._ts_meta_min_1 DESC, compress_hyper_10_11_chunk._ts_meta_max_1 DESC
                ->  Seq Scan on compress_hyper_10_11_chunk
+   ->  Sort
+         Sort Key: _hyper_9_10_chunk.a, _hyper_9_10_chunk.c, _hyper_9_10_chunk."time" DESC
          ->  Seq Scan on _hyper_9_10_chunk
-(6 rows)
+(9 rows)
 
 EXECUTE p1;
              time             | a | b | c 
@@ -385,7 +388,7 @@ VACUUM ANALYZE mytab_prep;
 EXPLAIN (COSTS OFF) EXECUTE p1;
                                                                                   QUERY PLAN                                                                                  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_9_10_chunk
+ Custom Scan (ColumnarScan) on _hyper_9_10_chunk
    ->  Sort
          Sort Key: compress_hyper_10_11_chunk.a, compress_hyper_10_11_chunk.c, compress_hyper_10_11_chunk._ts_meta_min_1 DESC, compress_hyper_10_11_chunk._ts_meta_max_1 DESC
          ->  Seq Scan on compress_hyper_10_11_chunk
@@ -460,7 +463,7 @@ EXPLAIN (COSTS OFF) SELECT count(*) FROM mytab where a = 2;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
  Aggregate
-   ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_11_12_chunk
          ->  Index Scan using compress_hyper_12_13_chunk_a_c__ts_meta_min_1__ts_meta_max__idx on compress_hyper_12_13_chunk
                Index Cond: (a = 2)
 (4 rows)

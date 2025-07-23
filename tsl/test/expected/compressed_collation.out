@@ -42,7 +42,7 @@ explain (costs off)
 select * from compressed_collation_ht order by name;
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Index Scan using compress_hyper_2_2_chunk_name_idx on compress_hyper_2_2_chunk
 (2 rows)
 

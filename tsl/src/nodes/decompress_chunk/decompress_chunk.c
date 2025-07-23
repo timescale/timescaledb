@@ -41,7 +41,7 @@
 #include "utils.h"
 
 static CustomPathMethods decompress_chunk_path_methods = {
-	.CustomName = "DecompressChunk",
+	.CustomName = "ColumnarScan",
 	.PlanCustomPath = decompress_chunk_plan_create,
 };
 
