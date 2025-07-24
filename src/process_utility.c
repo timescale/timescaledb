@@ -4909,7 +4909,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	if (!parse_results[AlterTableFlagColumnstore].is_default ||
 		!parse_results[AlterTableFlagOrderBy].is_default ||
 		!parse_results[AlterTableFlagSegmentBy].is_default ||
-		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default)
+		!parse_results[AlterTableFlagCompressChunkTimeInterval].is_default ||
+		!parse_results[AlterTableFlagIndex].is_default)
 		ts_cm_functions->process_compress_table(ht, parse_results);
 
 	return DDL_DONE;
@@ -4932,7 +4933,8 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 
 	parse_results = ts_alter_table_reset_with_clause_parse(compress_options);
 	if (parse_results[AlterTableFlagOrderBy].is_default &&
-		parse_results[AlterTableFlagSegmentBy].is_default)
+		parse_results[AlterTableFlagSegmentBy].is_default &&
+		parse_results[AlterTableFlagIndex].is_default)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -4950,6 +4952,11 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 		settings->fd.orderby = NULL;
 		settings->fd.orderby_desc = NULL;
 		settings->fd.orderby_nullsfirst = NULL;
+	}
+
+	if (!parse_results[AlterTableFlagIndex].is_default)
+	{
+		settings->fd.index = NULL;
 	}
 
 	ts_compression_settings_update(settings);

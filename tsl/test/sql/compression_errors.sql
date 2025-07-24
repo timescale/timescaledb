@@ -111,7 +111,9 @@ ALTER TABLE foo RESET (timescaledb.compress_orderby);
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
 ALTER TABLE foo RESET (timescaledb.compress_segmentby);
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
-ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='c');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_index = 'bloom(c)');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ALTER TABLE foo RESET (timescaledb.compress_index);
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
 -- should fail
 ALTER TABLE foo RESET (timescaledb.compress);
