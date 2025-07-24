@@ -17,17 +17,20 @@ ALTER TABLE ht_metrics_compressed SET (timescaledb.compress, timescaledb.compres
 
 INSERT INTO ht_metrics_compressed
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'6 hour') time,
+FROM generate_series('2020-01-02 00:00:00+00'::timestamptz,'2020-01-18 00:00:00+00'::timestamptz,'6 hour') time,
 generate_series(1,3) device;
 
 SELECT compress_chunk(c) FROM show_chunks('ht_metrics_compressed') c;
+
 -- make them partially compressed
 INSERT INTO ht_metrics_compressed
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'9 hour') time,
+FROM generate_series('2020-01-02 00:00:00+00'::timestamptz,'2020-01-18 00:00:00+00'::timestamptz,'9 hour') time,
 generate_series(1,3) device;
 
 VACUUM ANALYZE ht_metrics_compressed;
+
+SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group by 1 order by 2;
 
 -- chunkAppend eligible queries (from tsbench)
 -- sort is not pushed down
