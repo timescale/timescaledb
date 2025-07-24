@@ -180,5 +180,5 @@ We welcome contributions to TimescaleDB! See [Contributing](https://github.com/t
 
 ## Learn about TigerData
 
-TigerData is PostgreSQL made powerful. To learn more about the company and its products, visit [tigerdata.com](https://www.tigerdata.com).
+TigerData is the fastest PostgreSQL for transactional, analytical and agentic workloads. To learn more about the company and its products, visit [tigerdata.com](https://www.tigerdata.com).
 
