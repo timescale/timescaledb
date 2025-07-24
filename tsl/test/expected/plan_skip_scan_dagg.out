@@ -3943,19 +3943,29 @@ stable expression in targetlist on skip_scan_htc
 ---------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=1000 loops=1)
    Group Key: _hyper_3_5_chunk."time"
-   ->  Sort (actual rows=10020 loops=1)
+   ->  Merge Append (actual rows=10020 loops=1)
          Sort Key: _hyper_3_5_chunk."time", _hyper_3_5_chunk.dev
-         Sort Method: quicksort 
-         ->  Append (actual rows=10020 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk."time", _hyper_3_5_chunk.dev
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                      ->  Seq Scan on compress_hyper_4_26_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk."time", _hyper_3_6_chunk.dev
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=2505 loops=1)
                      ->  Seq Scan on compress_hyper_4_27_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.dev
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=2505 loops=1)
                      ->  Seq Scan on compress_hyper_4_28_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk."time", _hyper_3_8_chunk.dev
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=2505 loops=1)
                      ->  Seq Scan on compress_hyper_4_29_chunk (actual rows=11 loops=1)
-(14 rows)
+(24 rows)
 
 -- Cannot do SkipScan if we group on 2+ columns
 :PREFIX SELECT count(DISTINCT dev), dev, tableoid::regclass, 'q2_11' FROM :TABLE GROUP BY dev, tableoid ORDER BY dev, tableoid;
@@ -3963,19 +3973,29 @@ stable expression in targetlist on skip_scan_htc
 ---------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=44 loops=1)
    Group Key: _hyper_3_5_chunk.dev, skip_scan_htc.tableoid
-   ->  Sort (actual rows=10020 loops=1)
+   ->  Merge Append (actual rows=10020 loops=1)
          Sort Key: _hyper_3_5_chunk.dev, skip_scan_htc.tableoid
-         Sort Method: quicksort 
-         ->  Append (actual rows=10020 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk.tableoid
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                      ->  Seq Scan on compress_hyper_4_26_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_6_chunk.dev, _hyper_3_6_chunk.tableoid
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=2505 loops=1)
                      ->  Seq Scan on compress_hyper_4_27_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_7_chunk.dev, _hyper_3_7_chunk.tableoid
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=2505 loops=1)
                      ->  Seq Scan on compress_hyper_4_28_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: _hyper_3_8_chunk.dev, _hyper_3_8_chunk.tableoid
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=2505 loops=1)
                      ->  Seq Scan on compress_hyper_4_29_chunk (actual rows=11 loops=1)
-(14 rows)
+(24 rows)
 
 \qecho LIMIT queries on :TABLE
 LIMIT queries on skip_scan_htc
@@ -4184,20 +4204,33 @@ stable expression in targetlist on skip_scan_htc
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
-   ->  Sort (actual rows=10020 loops=1)
+   ->  Merge Append (actual rows=10020 loops=1)
          Sort Key: (length(_hyper_3_5_chunk.dev_name))
-         Sort Method: quicksort 
-         ->  Result (actual rows=10020 loops=1)
-               ->  Append (actual rows=10020 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: (length(_hyper_3_5_chunk.dev_name))
+               Sort Method: quicksort 
+               ->  Result (actual rows=2505 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                            ->  Seq Scan on compress_hyper_4_30_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: (length(_hyper_3_6_chunk.dev_name))
+               Sort Method: quicksort 
+               ->  Result (actual rows=2505 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=2505 loops=1)
                            ->  Seq Scan on compress_hyper_4_31_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: (length(_hyper_3_7_chunk.dev_name))
+               Sort Method: quicksort 
+               ->  Result (actual rows=2505 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=2505 loops=1)
                            ->  Seq Scan on compress_hyper_4_32_chunk (actual rows=11 loops=1)
+         ->  Sort (actual rows=2505 loops=1)
+               Sort Key: (length(_hyper_3_8_chunk.dev_name))
+               Sort Method: quicksort 
+               ->  Result (actual rows=2505 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=2505 loops=1)
                            ->  Seq Scan on compress_hyper_4_33_chunk (actual rows=11 loops=1)
-(14 rows)
+(27 rows)
 
 -- DISTINCT aggs grouped on their TEXT args
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
