@@ -195,6 +195,55 @@ HINT:  The timescaledb.compress_orderby option must reference distinct column.
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='c');
+-- test alter reset
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                | {c}       | {a,b}   | {f,f}        | {f,f}
+(1 row)
+
+ALTER TABLE foo RESET (timescaledb.compress_orderby);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                | {c}       |         |              | 
+(1 row)
+
+ALTER TABLE foo RESET (timescaledb.compress_segmentby);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                |           |         |              | 
+(1 row)
+
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='c');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                | {c}       | {a,b}   | {f,f}        | {f,f}
+(1 row)
+
+-- should fail
+ALTER TABLE foo RESET (timescaledb.compress);
+ERROR:  only columnstore options segmentby and orderby can be reset
+ALTER TABLE foo RESET (timescaledb.compress, timescaledb.compress_segmentby, timescaledb.compress_orderby);
+ALTER TABLE foo RESET (timescaledb.compress_segmentby = 'a', timescaledb.compress_orderby);
+ERROR:  RESET must not include values for parameters
+ALTER TABLE foo RESET (timescaledb.compress_segmentby = '');
+ERROR:  RESET must not include values for parameters
+-- should succeed
+ALTER TABLE foo RESET (timescaledb.compress_segmentby, timescaledb.compress_orderby);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                |           |         |              | 
+(1 row)
+
+ALTER TABLE foo SET (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='');
+create table foo_fake (a integer, b integer, c integer, t text, p point);
+ALTER TABLE foo_fake RESET (timescaledb.compress_segmentby);
+DROP TABLE foo_fake;
 --ddl on ht with compression
 ALTER TABLE foo DROP COLUMN a;
 ERROR:  cannot drop column named in partition key
@@ -203,8 +252,6 @@ ALTER TABLE foo DROP COLUMN b;
 ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
 ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
 ERROR:  column "t" of relation "_hyper_10_2_chunk" contains null values
-ALTER TABLE foo RESET (timescaledb.compress);
-ERROR:  columnstore options cannot be reset
 --can add constraints as long as no data is compressed
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
 ALTER TABLE foo ADD CONSTRAINT unq UNIQUE(a);
@@ -263,7 +310,7 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', t
 ALTER TABLE foo set (timescaledb.compress='f');
 ERROR:  cannot disable columnstore on hypertable with columnstore chunks
 ALTER TABLE foo reset (timescaledb.compress);
-ERROR:  columnstore options cannot be reset
+ERROR:  only columnstore options segmentby and orderby can be reset
 SELECT decompress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
 ERROR:  missing columnstore-enabled hypertable
 --should succeed

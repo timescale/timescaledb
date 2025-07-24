@@ -103,12 +103,35 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'b, b'
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='c');
+
+-- test alter reset
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ALTER TABLE foo RESET (timescaledb.compress_orderby);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ALTER TABLE foo RESET (timescaledb.compress_segmentby);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='c');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+-- should fail
+ALTER TABLE foo RESET (timescaledb.compress);
+ALTER TABLE foo RESET (timescaledb.compress, timescaledb.compress_segmentby, timescaledb.compress_orderby);
+ALTER TABLE foo RESET (timescaledb.compress_segmentby = 'a', timescaledb.compress_orderby);
+ALTER TABLE foo RESET (timescaledb.compress_segmentby = '');
+
+-- should succeed
+ALTER TABLE foo RESET (timescaledb.compress_segmentby, timescaledb.compress_orderby);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ALTER TABLE foo SET (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='');
+
+create table foo_fake (a integer, b integer, c integer, t text, p point);
+ALTER TABLE foo_fake RESET (timescaledb.compress_segmentby);
+DROP TABLE foo_fake;
 
 --ddl on ht with compression
 ALTER TABLE foo DROP COLUMN a;
 ALTER TABLE foo DROP COLUMN b;
 ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
-ALTER TABLE foo RESET (timescaledb.compress);
 
 --can add constraints as long as no data is compressed
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);

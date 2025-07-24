@@ -4218,7 +4218,8 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 			}
 			case AT_ResetRelOptions:
 			case AT_ReplaceRelOptions:
-				process_altertable_reset_options(cmd, ht);
+				if (ht)
+					process_altertable_reset_options(cmd, ht);
 				break;
 			case AT_SetTableSpace:
 				if (NULL == ht)
@@ -4919,16 +4920,39 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 {
 	List *pg_options = NIL, *compress_options = NIL;
 	List *inpdef = NIL;
+	WithClauseResult *parse_results = NULL;
+
 	/* is this a compress table stmt */
 	Assert(IsA(cmd->def, List));
 	inpdef = (List *) cmd->def;
 	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
 
-	if (compress_options)
+	if (!compress_options)
+		return DDL_CONTINUE;
+
+	parse_results = ts_alter_table_reset_with_clause_parse(compress_options);
+	if (parse_results[AlterTableFlagOrderBy].is_default &&
+		parse_results[AlterTableFlagSegmentBy].is_default)
+	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("columnstore options cannot be reset")));
+				 errmsg("only columnstore options segmentby and orderby can be reset")));
+	}
 
+	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
+	if (!parse_results[AlterTableFlagSegmentBy].is_default)
+	{
+		settings->fd.segmentby = NULL;
+	}
+
+	if (!parse_results[AlterTableFlagOrderBy].is_default)
+	{
+		settings->fd.orderby = NULL;
+		settings->fd.orderby_desc = NULL;
+		settings->fd.orderby_nullsfirst = NULL;
+	}
+
+	ts_compression_settings_update(settings);
 	return DDL_CONTINUE;
 }
 
