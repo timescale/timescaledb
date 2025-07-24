@@ -271,8 +271,6 @@ SELECT (SELECT count(*) FROM normal) num_inserted_rows,
 
 -- Add compression
 ALTER TABLE hyper SET (timescaledb.compress);
-NOTICE:  default segment by for hypertable "hyper" is set to "device"
-NOTICE:  default order by for hypertable "hyper" is set to ""time" DESC"
 SELECT compress_chunk(c)
 FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
              compress_chunk             

@@ -5,7 +5,7 @@
 create table sparse(ts int, value float);
 select create_hypertable('sparse', 'ts');
 insert into sparse select x, x from generate_series(1, 10000) x;
-alter table sparse set (timescaledb.compress);
+alter table sparse set (timescaledb.compress, timescaledb.order_by='ts desc');
 
 -- When the chunks are compressed, minmax metadata are created for columns that
 -- have btree indexes.

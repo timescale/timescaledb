@@ -11,8 +11,12 @@ NOTICE:  adding not-null constraint to column "ts"
  (1,public,t,t)
 (1 row)
 
+\set ON_ERROR_STOP 0
 alter table t set(timescaledb.compress, timescaledb.compress_segmentby = 'ts',
     timescaledb.compress_orderby = '');
+ERROR:  ordering column can not be empty
+\set ON_ERROR_STOP 1
+alter table t set(timescaledb.compress, timescaledb.compress_segmentby = 'ts');
 insert into t select generate_series(1, 10000);
 select count(*) from t;
  count 

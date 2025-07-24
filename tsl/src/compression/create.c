@@ -75,8 +75,14 @@ is_sparse_index_type(const char *type)
 static void validate_hypertable_for_compression(Hypertable *ht);
 static List *build_columndefs(CompressionSettings *settings, Oid src_reloid);
 static ColumnDef *build_columndef_singlecolumn(const char *colname, Oid typid);
-static void compression_settings_update(Hypertable *ht, CompressionSettings *settings,
-										WithClauseResult *with_clause_options);
+static void compression_settings_set_manually_for_create(Hypertable *ht,
+														 CompressionSettings *settings,
+														 WithClauseResult *with_clause_options);
+static void compression_settings_set_manually_for_alter(Hypertable *ht,
+														CompressionSettings *settings,
+														WithClauseResult *with_clause_options);
+static void compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
+											  WithClauseResult *with_clause_options);
 
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
@@ -541,18 +547,21 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 												  NULL,
 												  NULL,
 												  NULL);
-
-		Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
-		compression_settings_update(ht, settings, ts_alter_table_with_clause_parse(NIL));
 	}
+
+	Hypertable *ht = ts_hypertable_get_by_id(src_chunk->fd.hypertable_id);
+	compression_settings_set_defaults(ht, settings, ts_alter_table_with_clause_parse(NIL));
 
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;
 	else
 	{
 		List *column_defs = build_columndefs(settings, src_chunk->table_id);
-		compress_chunk->table_id =
-			compression_chunk_create(src_chunk, compress_chunk, column_defs, tablespace_oid);
+		compress_chunk->table_id = compression_chunk_create(src_chunk,
+															compress_chunk,
+															column_defs,
+															tablespace_oid,
+															settings);
 	}
 
 	if (!OidIsValid(compress_chunk->table_id))
@@ -683,7 +692,8 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 				const char *attname = get_attname(settings->fd.relid, attnums[j], false);
 
 				/* is colno a segment-by or order_by column */
-				if (!form->conindid && !ts_array_is_member(settings->fd.segmentby, attname) &&
+				if (!form->conindid && (settings->fd.segmentby && settings->fd.orderby) &&
+					!ts_array_is_member(settings->fd.segmentby, attname) &&
 					!ts_array_is_member(settings->fd.orderby, attname))
 					ereport(WARNING,
 							(errmsg("column \"%s\" should be used for segmenting or ordering",
@@ -739,7 +749,8 @@ validate_existing_indexes(Hypertable *ht, CompressionSettings *settings)
 			if (attno == 0)
 				continue; /* skip check for expression column */
 			const char *attname = get_attname(ht->main_table_relid, attno, false);
-			if (!ts_array_is_member(settings->fd.segmentby, attname) &&
+			if ((settings->fd.segmentby && settings->fd.orderby) &&
+				!ts_array_is_member(settings->fd.segmentby, attname) &&
 				!ts_array_is_member(settings->fd.orderby, attname))
 				ereport(WARNING,
 						(errmsg("column \"%s\" should be used for segmenting or ordering",
@@ -889,6 +900,11 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 		return disable_compression(ht, with_clause_options);
 	}
 
+	if (!with_clause_options[AlterTableFlagCompressChunkTimeInterval].is_default)
+	{
+		update_compress_chunk_time_interval(ht, with_clause_options);
+	}
+
 	settings = ts_compression_settings_get(ht->main_table_relid);
 	if (!settings)
 	{
@@ -900,7 +916,7 @@ tsl_process_compress_table(Hypertable *ht, WithClauseResult *with_clause_options
 												  NULL);
 	}
 
-	compression_settings_update(ht, settings, with_clause_options);
+	compression_settings_set_manually_for_alter(ht, settings, with_clause_options);
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
@@ -1104,7 +1120,7 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 	if (!isnull)
 	{
 		message = DatumGetTextPP(datum);
-		elog(WARNING,
+		elog(LOG_SERVER_ONLY,
 			 "there was some uncertainty picking the default segment by for the hypertable: %s",
 			 text_to_cstring(message));
 	}
@@ -1126,10 +1142,6 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	initStringInfo(&result);
 	ts_array_append_stringinfo(column_res, &result);
-	elog(NOTICE,
-		 "default segment by for hypertable \"%s\" is set to \"%s\"",
-		 get_rel_name(ht->main_table_relid),
-		 result.data);
 
 	elog(LOG_SERVER_ONLY,
 		 "segment_by default: hypertable=\"%s\" columns=\"%s\" function: \"%s.%s\" confidence=%d",
@@ -1220,7 +1232,7 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	if (!isnull)
 	{
 		message = DatumGetTextPP(datum);
-		elog(WARNING,
+		elog(LOG_SERVER_ONLY,
 			 "there was some uncertainty picking the default order by for the hypertable: %s",
 			 text_to_cstring(message));
 	}
@@ -1244,17 +1256,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	else
 		orderby = "";
 
-	if (*orderby == '\0')
-		ereport(NOTICE,
-				(errmsg("default order by for hypertable \"%s\" is set to \"\"",
-						get_rel_name(ht->main_table_relid))),
-				errdetail("Segmentwise recompression will be disabled"));
-	else
-		elog(NOTICE,
-			 "default order by for hypertable \"%s\" is set to \"%s\"",
-			 get_rel_name(ht->main_table_relid),
-			 orderby);
-
 	elog(LOG_SERVER_ONLY,
 		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"%s.%s\" confidence=%d",
 		 get_rel_name(ht->main_table_relid),
@@ -1262,22 +1263,51 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 		 get_namespace_name(get_func_namespace(orderby_fn)),
 		 get_func_name(orderby_fn),
 		 confidence);
+
+	if (*orderby == '\0')
+	{
+		return (OrderBySettings){ 0 };
+	}
+
 	return ts_compress_parse_order_collist(orderby, ht);
 }
 
 static void
-compression_settings_update(Hypertable *ht, CompressionSettings *settings,
-							WithClauseResult *with_clause_options)
+compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
+								  WithClauseResult *with_clause_options)
 {
 	/* orderby arrays should always be in sync either all NULL or none */
 	Assert(
 		(settings->fd.orderby && settings->fd.orderby_desc && settings->fd.orderby_nullsfirst) ||
 		(!settings->fd.orderby && !settings->fd.orderby_desc && !settings->fd.orderby_nullsfirst));
 
-	if (!with_clause_options[AlterTableFlagCompressChunkTimeInterval].is_default)
+	if (settings->fd.orderby || !with_clause_options[AlterTableFlagOrderBy].is_default)
+		return;
+
+	/* get default settings which will be stored at chunk level */
+	if (!settings->fd.segmentby && with_clause_options[AlterTableFlagSegmentBy].is_default)
 	{
-		update_compress_chunk_time_interval(ht, with_clause_options);
+		settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
 	}
+
+	OrderBySettings obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);
+	settings->fd.orderby = obs.orderby;
+	settings->fd.orderby_desc = obs.orderby_desc;
+	settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
+}
+
+static void
+compression_settings_set_manually_for_alter(Hypertable *ht, CompressionSettings *settings,
+											WithClauseResult *with_clause_options)
+{
+	/* orderby arrays should always be in sync either all NULL or none */
+	Assert(
+		(settings->fd.orderby && settings->fd.orderby_desc && settings->fd.orderby_nullsfirst) ||
+		(!settings->fd.orderby && !settings->fd.orderby_desc && !settings->fd.orderby_nullsfirst));
+
+	if (with_clause_options[AlterTableFlagSegmentBy].is_default &&
+		with_clause_options[AlterTableFlagOrderBy].is_default)
+		return;
 
 	if (!with_clause_options[AlterTableFlagSegmentBy].is_default)
 	{
@@ -1285,30 +1315,47 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 			ts_compress_hypertable_parse_segment_by(with_clause_options[AlterTableFlagSegmentBy],
 													ht);
 	}
-	else if (!settings->fd.segmentby && !settings->fd.orderby &&
-			 with_clause_options[AlterTableFlagOrderBy].is_default)
-	{
-		settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
-	}
 
-	if (!with_clause_options[AlterTableFlagOrderBy].is_default || !settings->fd.orderby)
+	if (!with_clause_options[AlterTableFlagOrderBy].is_default)
 	{
-		OrderBySettings obs;
-		if (with_clause_options[AlterTableFlagOrderBy].is_default)
-		{
-			obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);
-		}
-		else
-		{
-			obs = ts_compress_hypertable_parse_order_by(with_clause_options[AlterTableFlagOrderBy],
-														ht);
-			obs = add_time_to_order_by_if_not_included(obs, settings->fd.segmentby, ht);
-		}
+		OrderBySettings obs =
+			ts_compress_hypertable_parse_order_by(with_clause_options[AlterTableFlagOrderBy], ht);
+		obs = add_time_to_order_by_if_not_included(obs, settings->fd.segmentby, ht);
 		settings->fd.orderby = obs.orderby;
 		settings->fd.orderby_desc = obs.orderby_desc;
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
 	}
 
+	/* update manual settings */
+	ts_compression_settings_update(settings);
+}
+
+static void
+compression_settings_set_manually_for_create(Hypertable *ht, CompressionSettings *settings,
+											 WithClauseResult *with_clause_options)
+{
+	if (with_clause_options[CreateTableFlagSegmentBy].is_default &&
+		with_clause_options[CreateTableFlagOrderBy].is_default)
+		return;
+
+	if (!with_clause_options[CreateTableFlagSegmentBy].is_default)
+	{
+		settings->fd.segmentby =
+			ts_compress_hypertable_parse_segment_by(with_clause_options[CreateTableFlagSegmentBy],
+													ht);
+	}
+
+	if (!with_clause_options[CreateTableFlagOrderBy].is_default)
+	{
+		OrderBySettings obs =
+			ts_compress_hypertable_parse_order_by(with_clause_options[CreateTableFlagOrderBy], ht);
+		obs = add_time_to_order_by_if_not_included(obs, settings->fd.segmentby, ht);
+		settings->fd.orderby = obs.orderby;
+		settings->fd.orderby_desc = obs.orderby_desc;
+		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
+	}
+
+	/* update manual settings */
 	ts_compression_settings_update(settings);
 }
 
@@ -1454,45 +1501,10 @@ tsl_compression_enable(Hypertable *ht, WithClauseResult *with_clause_options)
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
 	Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
-	if (!with_clause_options[CreateTableFlagOrderBy].is_default ||
-		!with_clause_options[CreateTableFlagSegmentBy].is_default)
-	{
-		CompressionSettings *settings = ts_compression_settings_create(ht->main_table_relid,
-																	   InvalidOid,
-																	   NULL,
-																	   NULL,
-																	   NULL,
-																	   NULL);
+	CompressionSettings *settings =
+		ts_compression_settings_create(ht->main_table_relid, InvalidOid, NULL, NULL, NULL, NULL);
 
-		if (!with_clause_options[CreateTableFlagSegmentBy].is_default)
-		{
-			settings->fd.segmentby =
-				ts_compress_hypertable_parse_segment_by(with_clause_options
-															[CreateTableFlagSegmentBy],
-														ht);
-		}
-
-		if (!with_clause_options[CreateTableFlagOrderBy].is_default || !settings->fd.orderby)
-		{
-			OrderBySettings obs;
-			if (with_clause_options[CreateTableFlagOrderBy].is_default)
-			{
-				obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);
-			}
-			else
-			{
-				obs = ts_compress_hypertable_parse_order_by(with_clause_options
-																[CreateTableFlagOrderBy],
-															ht);
-				obs = add_time_to_order_by_if_not_included(obs, settings->fd.segmentby, ht);
-			}
-			settings->fd.orderby = obs.orderby;
-			settings->fd.orderby_desc = obs.orderby_desc;
-			settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
-		}
-
-		ts_compression_settings_update(settings);
-	}
+	compression_settings_set_manually_for_create(ht, settings, with_clause_options);
 	int compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
 	ts_hypertable_set_compressed(ht, compress_htid);
 }
