@@ -707,34 +707,6 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	DecompressChunkPath *path_copy = copy_decompress_chunk_path((DecompressChunkPath *) path);
 
 	/*
-	 * Sorting might require a projection to evaluate the sorting keys. It is
-	 * added during Plan creation by prepare_sort_from_pathkeys(). However, we
-	 * must account for the costs of projection already at the Path stage.
-	 * One synthetic example is calculating min(x1 + x2 + ....), where the argument
-	 * of min() is a heavy expression. We choose between normal aggregation and a
-	 * special optimization for min() added by build_minmax_path(): an InitPlan
-	 * that does ORDER BY <argument> + LIMIT 1. The aggregate costs always account
-	 * for calculating the argument expression (see get_agg_clause_costs()). The
-	 * sorting must as well, otherwise the sorting plan will always have lower
-	 * costs, even when it's subpotimal in practice. The sorting cost with
-	 * LIMIT 1 is essentially linear in the number of input tuples (see
-	 * cost_tuplesort()).
-	 * There is another complication: normally, the cost of expressions in
-	 * targetlist is accounted for by the PathTarget.cost. However, the relation
-	 * targetlists don't have the argument expression and only have the plain
-	 * source Vars used there. The expression is added only later by
-	 * apply_scanjoin_target_to_paths(), after we have already chosen the best
-	 * path. Because of this, we have to account for it here in a hacky way.
-	 * For further improvements, we might research what the Postgres declarative
-	 * partitioning code does for this case, because it must have a similar
-	 * problem.
-	 */
-	path_copy->custom_path.path.startup_cost += sort_info->decompressed_sort_pathkeys_cost.startup;
-	path_copy->custom_path.path.total_cost +=
-		path_copy->custom_path.path.rows *
-		(cpu_tuple_cost + sort_info->decompressed_sort_pathkeys_cost.per_tuple);
-
-	/*
 	 * Create the Sort path.
 	 */
 	Path *sorted_path = (Path *) create_sort_path(root,
