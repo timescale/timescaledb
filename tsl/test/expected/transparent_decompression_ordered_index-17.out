@@ -990,39 +990,52 @@ FROM device_tbl d
     AND m.time < '2000-01-01 0:00:00+0'::text::timestamptz
 WHERE m.device_id = 7
 ORDER BY m.v0;
-                                                                                  QUERY PLAN                                                                                   
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort (actual rows=1 loops=1)
-   Sort Key: m_1.v0
-   Sort Method: quicksort 
-   ->  Nested Loop Left Join (actual rows=1 loops=1)
-         Join Filter: ((m_1."time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (m_1."time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
-         ->  Append (actual rows=1 loops=1)
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join (actual rows=1 loops=1)
+   Join Filter: ((m_1."time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (m_1."time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
+   ->  Merge Append (actual rows=1 loops=1)
+         Sort Key: m_1.v0
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: m_1.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m_1 (actual rows=0 loops=1)
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=0 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 5
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: m_2.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m_2 (actual rows=0 loops=1)
                      ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=0 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 5
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: m_3.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk m_3 (actual rows=0 loops=1)
                      ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=0 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 1
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: m_4.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk m_4 (actual rows=0 loops=1)
                      ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=0 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 1
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: m_5.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk m_5 (actual rows=1 loops=1)
                      ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=1 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 4
-         ->  Materialize (actual rows=0 loops=1)
-               ->  Seq Scan on device_tbl d (actual rows=0 loops=1)
-                     Filter: (device_id = 7)
-                     Rows Removed by Filter: 7
-(30 rows)
+   ->  Materialize (actual rows=0 loops=1)
+         ->  Seq Scan on device_tbl d (actual rows=0 loops=1)
+               Filter: (device_id = 7)
+               Rows Removed by Filter: 7
+(43 rows)
 
 SET timescaledb.enable_chunk_append TO TRUE;
 -- github bug 2917 with UNION ALL that references compressed ht
