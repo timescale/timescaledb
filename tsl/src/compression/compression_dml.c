@@ -27,7 +27,6 @@
 #include <compression/wal_utils.h>
 #include <expression_utils.h>
 #include <indexing.h>
-#include <nodes/chunk_dispatch/chunk_dispatch.h>
 #include <nodes/chunk_dispatch/chunk_insert_state.h>
 #include <nodes/decompress_chunk/vector_dict.h>
 #include <nodes/decompress_chunk/vector_predicates.h>
@@ -1177,9 +1176,9 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 			return constraints;
 	}
 
-	if (constraints->covered && cis->cds && cis->cds->dispatch)
+	if (constraints->covered && cis)
 	{
-		constraints->on_conflict = ts_chunk_dispatch_get_on_conflict_action(cis->cds->dispatch);
+		constraints->on_conflict = cis->counters->onConflictAction;
 	}
 
 	return constraints;
