@@ -1908,9 +1908,9 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 --------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
-   ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
-         ->  Sort
-               Sort Key: compress_hyper_34_123_chunk._ts_meta_min_1
+   ->  Sort
+         Sort Key: _hyper_33_120_chunk."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
                ->  Seq Scan on compress_hyper_34_123_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_33_121_chunk
          ->  Sort
@@ -2157,9 +2157,9 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 --------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
-   ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
-         ->  Sort
-               Sort Key: compress_hyper_34_127_chunk._ts_meta_min_1
+   ->  Sort
+         Sort Key: _hyper_33_120_chunk."time"
+         ->  Custom Scan (ColumnarScan) on _hyper_33_120_chunk
                ->  Seq Scan on compress_hyper_34_127_chunk
    ->  Custom Scan (ColumnarScan) on _hyper_33_121_chunk
          ->  Sort
