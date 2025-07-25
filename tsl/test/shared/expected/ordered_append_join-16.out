@@ -647,11 +647,11 @@ QUERY PLAN
          ->  Materialize (actual rows=100 loops=1)
                ->  Append (actual rows=100 loops=1)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                           Index Cond: ((device_id = 1) AND (device_id = 1))
+                           Index Cond: (device_id = 1)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                           Index Cond: ((device_id = 1) AND (device_id = 1))
+                           Index Cond: (device_id = 1)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                           Index Cond: ((device_id = 1) AND (device_id = 1))
+                           Index Cond: (device_id = 1)
 (18 rows)
 
 -- test JOIN on time column with implicit join
@@ -1539,11 +1539,11 @@ QUERY PLAN
          ->  Materialize (actual rows=100 loops=1)
                ->  Append (actual rows=100 loops=1)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                           Index Cond: ((device_id = 1) AND (device_id = 1))
+                           Index Cond: (device_id = 1)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                           Index Cond: ((device_id = 1) AND (device_id = 1))
+                           Index Cond: (device_id = 1)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                           Index Cond: ((device_id = 1) AND (device_id = 1))
+                           Index Cond: (device_id = 1)
 (18 rows)
 
 -- test JOIN on time column with implicit join
@@ -2433,13 +2433,13 @@ QUERY PLAN
                ->  Append (actual rows=100 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1 loops=1)
-                                 Index Cond: ((device_id = 1) AND (device_id = 1))
+                                 Index Cond: (device_id = 1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_2 (never executed)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
-                                 Index Cond: ((device_id = 1) AND (device_id = 1))
+                                 Index Cond: (device_id = 1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_3 (never executed)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
-                                 Index Cond: ((device_id = 1) AND (device_id = 1))
+                                 Index Cond: (device_id = 1)
 (24 rows)
 
 -- test JOIN on time column with implicit join
@@ -3825,13 +3825,13 @@ QUERY PLAN
                ->  Append (actual rows=100 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1 loops=1)
-                                 Index Cond: ((device_id = 1) AND (device_id = 1))
+                                 Index Cond: (device_id = 1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_2 (never executed)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
-                                 Index Cond: ((device_id = 1) AND (device_id = 1))
+                                 Index Cond: (device_id = 1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_3 (never executed)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
-                                 Index Cond: ((device_id = 1) AND (device_id = 1))
+                                 Index Cond: (device_id = 1)
 (24 rows)
 
 -- test JOIN on time column with implicit join
