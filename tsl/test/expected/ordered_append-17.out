@@ -2347,23 +2347,22 @@ LIMIT 1;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
-         Order: metrics_compressed."time"
-         Chunks excluded during startup: 1
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: _hyper_3_13_chunk."time"
-               Sort Method: top-N heapsort 
+   ->  Sort (actual rows=1 loops=1)
+         Sort Key: metrics_compressed."time"
+         Sort Method: top-N heapsort 
+         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=26390 loops=1)
+               Chunks excluded during startup: 1
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=20 loops=1)
                            Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-         ->  Sort (never executed)
-               Sort Key: _hyper_3_14_chunk."time"
-               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (never executed)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=8400 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_4_17_chunk (never executed)
+                     Rows Removed by Filter: 1790
+                     ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=15 loops=1)
                            Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-(17 rows)
+                           Rows Removed by Filter: 15
+(16 rows)
 
 -- test constraint exclusion
 :PREFIX
