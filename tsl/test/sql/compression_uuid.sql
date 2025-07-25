@@ -3,8 +3,15 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 --install necessary functions for tests
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\ir include/compression_utils.sql
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
+SET timescaledb.enable_uuid_compression = on;
+CREATE TABLE t (ts int, u uuid);
+SELECT create_hypertable('t', 'ts', chunk_time_interval => 500);
+ALTER TABLE t SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+INSERT INTO t SELECT g AS ts, NULL AS uuid FROM generate_series(1, 3000) g;
 
 -- The first hundred elements are generated with the Go uuid v7 routines
 CREATE TABLE uuids (i int, u uuid);
@@ -35,11 +42,129 @@ INSERT INTO uuids (i, u) VALUES
 (93, '0197a7a9-b48c-7c93-9397-6ebbb9d4194d'), (94, '0197a7a9-b48c-7c94-8484-f47122e2dea3'), (95, '0197a7a9-b48c-7c95-a6e5-fe8d062f4e3c'), (96, '0197a7a9-b48c-7c96-914c-690b7930262f'),
 (97, '0197a7a9-b48c-7c97-ac2b-473d61e0c396'), (98, '0197a7a9-b48c-7c98-93bd-ca093b30f6e8'), (99, '0197a7a9-b48c-7c99-b906-7fa2180536d3'), (100, '0197a7a9-b48c-7c9a-a090-fe01428ccefc');
 
+-- set data to be compressed with the uuid compressor
+UPDATE t SET u = (select u from uuids where i = ts) where ts <= 100;
+
+-- set data to be compressed with the dictionary compressor
+UPDATE t SET u = (select u from uuids where i = ts%100) where ts > 1000 and ts <= 2000;
+
+-- add random UUID v4s to the data
+UPDATE t SET u = gen_random_uuid() where ts > 2000;
+
+-- compress the data
+SELECT compress_chunk(show_chunks('t'));
+
+-- decompress the data
+SELECT decompress_chunk(show_chunks('t'));
+
+-- disable uuid compression and compress the data again
+SET timescaledb.enable_uuid_compression = off;
+SELECT compress_chunk(show_chunks('t'));
+
+CREATE TABLE mixed_compressed (ts int, u uuid);
+SELECT create_hypertable('mixed_compressed', 'ts', chunk_time_interval => 500);
+ALTER TABLE mixed_compressed SET (timescaledb.compress, timescaledb.compress_orderby = 'ts');
+
+-- the new UUID compression is OFF at this point, so we use the original method
+-- add the base uuids to the data and compress it
+INSERT INTO mixed_compressed SELECT i, u FROM uuids;
+INSERT INTO mixed_compressed SELECT i+100 as i, NULL as u FROM uuids;
+
+-- compress the data
+SELECT compress_chunk(show_chunks('mixed_compressed'));
+
+-- enable uuid compression and compress the data again
+-- and add the base uuids to the data again
+SET timescaledb.enable_uuid_compression = on;
+INSERT INTO mixed_compressed SELECT i+1000 as i, u FROM uuids;
+INSERT INTO mixed_compressed SELECT i+1100 as i, NULL as u FROM uuids;
+
+-- compress the data
+SELECT compress_chunk(show_chunks('mixed_compressed'));
+
+-- now turn it off again and add the whole data twice
+SET timescaledb.enable_uuid_compression = off;
+INSERT INTO mixed_compressed SELECT i+2000, u FROM uuids;
+INSERT INTO mixed_compressed SELECT i+2200, u FROM uuids;
+INSERT INTO mixed_compressed SELECT i+2300 as i, NULL as u FROM uuids;
+
+-- compress the data again
+SELECT compress_chunk(show_chunks('mixed_compressed'));
+
+-- turn it on again and do the same
+SET timescaledb.enable_uuid_compression = off;
+INSERT INTO mixed_compressed SELECT i+3000, u FROM uuids;
+INSERT INTO mixed_compressed SELECT i+3200, u FROM uuids;
+INSERT INTO mixed_compressed SELECT i+3300 as i, NULL as u FROM uuids;
+
+-- compress the data again
+SELECT compress_chunk(show_chunks('mixed_compressed'));
+
+-- check the compression algorithm for the compressed chunks
+CREATE TABLE compressed_chunks AS
+SELECT
+	format('%I.%I', comp.schema_name, comp.table_name)::regclass as compressed_chunk,
+	ccs.compressed_heap_size,
+	ccs.compressed_toast_size,
+	ccs.compressed_index_size,
+	ccs.numrows_pre_compression,
+	ccs.numrows_post_compression
+FROM
+	show_chunks('mixed_compressed') c
+	INNER JOIN _timescaledb_catalog.chunk cat
+		ON (c = format('%I.%I', cat.schema_name, cat.table_name)::regclass)
+	INNER JOIN _timescaledb_catalog.chunk comp
+		ON (cat.compressed_chunk_id = comp.id)
+	INNER JOIN _timescaledb_catalog.compression_chunk_size ccs
+		ON (comp.id = ccs.compressed_chunk_id);
+
+CREATE TABLE compression_info (compressed_chunk regclass, result text, compressed_size int, num_rows int);
+
+DO $$
+DECLARE
+	table_ref regclass;
+BEGIN
+	FOR table_ref IN
+		SELECT compressed_chunk as table_ref FROM compressed_chunks
+	LOOP
+		EXECUTE format(
+			'INSERT INTO compression_info (
+				SELECT
+					%L::regclass as compressed_chunk,
+					(_timescaledb_functions.compressed_data_info(u))::text as result,
+					sum(pg_column_size(u)::int) as compressed_size,
+					count(*) as num_rows
+				FROM %s
+				GROUP BY 1,2)',
+			table_ref, table_ref
+		);
+	END LOOP;
+END;
+$$;
+
+SELECT
+	ci.*,
+	ccs.compressed_toast_size,
+	ccs.numrows_pre_compression,
+	ccs.numrows_post_compression
+FROM
+	compression_info ci
+	INNER JOIN compressed_chunks ccs
+		ON (ci.compressed_chunk = ccs.compressed_chunk)
+ORDER BY
+	1,2,3;
+
+-- -------------------------------
+-- Test the new UUID v7 functions
+-- -------------------------------
+
 -- The next 3 items are generated with the new functions
+BEGIN;
 INSERT INTO uuids VALUES (101, _timescaledb_functions.uuid_v7_from_timestamptz('2025-07-02:03:04:05'::timestamptz));
 INSERT INTO uuids VALUES (102, _timescaledb_functions.uuid_v7_from_timestamptz('2029-01-02:03:04:05'::timestamptz));
 INSERT INTO uuids VALUES (103, _timescaledb_functions.uuid_v7_from_timestamptz('2059-02-03:04:05:06'::timestamptz));
 INSERT INTO uuids VALUES (104, _timescaledb_functions.uuid_v7_from_timestamptz('2100-07-08:09:10:11'::timestamptz));
+COMMIT;
 
 SELECT
   to_char(_timescaledb_functions.timestamptz_from_uuid_v7(u), 'YYYY-MM-DD:HH24:MI:SS'),
@@ -51,6 +176,7 @@ GROUP BY 1,2
 ORDER BY 1,2;
 
 -- Add some v4 timestamps for sanity check
+BEGIN;
 INSERT INTO uuids VALUES (105, _timescaledb_functions.generate_uuid());
 INSERT INTO uuids VALUES (106, _timescaledb_functions.generate_uuid());
 INSERT INTO uuids VALUES (107, _timescaledb_functions.generate_uuid());
@@ -59,6 +185,17 @@ INSERT INTO uuids VALUES (107, _timescaledb_functions.generate_uuid());
 INSERT INTO uuids VALUES (108, _timescaledb_functions.generate_uuid_v7());
 INSERT INTO uuids VALUES (109, _timescaledb_functions.generate_uuid_v7());
 INSERT INTO uuids VALUES (110, _timescaledb_functions.generate_uuid_v7());
+COMMIT;
+
+-- There is a test flakyness that I want to debug with this:
+SELECT
+  i,
+  _timescaledb_functions.uuid_version(u)
+FROM
+  uuids
+WHERE
+  i > 100
+ORDER BY 1;
 
 -- The version numbers should make sense
 SELECT
@@ -94,3 +231,11 @@ FROM
 WHERE
   (x.ts - x.ts2) > '00:00:00.000001' OR (x.ts - x.ts2) < '-00:00:00.000001';
 
+-- Cleanup
+DROP TABLE t;
+DROP TABLE subms;
+DROP TABLE uuids;
+DROP TABLE mixed_compressed;
+DROP TABLE compressed_chunks;
+DROP TABLE compression_info;
+RESET timescaledb.enable_uuid_compression;

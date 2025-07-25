@@ -12,9 +12,6 @@ SELECT table_name FROM create_hypertable('comp_conflicts_1','time');
 (1 row)
 
 ALTER TABLE comp_conflicts_1 SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "comp_conflicts_1" is set to ""
-NOTICE:  default order by for hypertable "comp_conflicts_1" is set to ""time" DESC"
 -- implicitly create chunk
 INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1);
 -- sanity check behaviour without compression
@@ -117,7 +114,6 @@ SELECT table_name FROM create_hypertable('comp_conflicts_2','time');
 (1 row)
 
 ALTER TABLE comp_conflicts_2 SET (timescaledb.compress, timescaledb.compress_segmentby='');
-NOTICE:  default order by for hypertable "comp_conflicts_2" is set to ""time" DESC, device"
 -- implicitly create chunk
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1);
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d2',0.2);
@@ -205,7 +201,6 @@ SELECT table_name FROM create_hypertable('comp_conflicts_3','time');
 (1 row)
 
 ALTER TABLE comp_conflicts_3 SET (timescaledb.compress,timescaledb.compress_segmentby='device, label');
-NOTICE:  default order by for hypertable "comp_conflicts_3" is set to ""time" DESC"
 -- implicitly create chunk
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
@@ -609,7 +604,6 @@ ALTER TABLE compressed_ht SET (
 	timescaledb.compress,
 	timescaledb.compress_segmentby = 'sensor_id'
 );
-NOTICE:  default order by for hypertable "compressed_ht" is set to ""time" DESC"
 SELECT COMPRESS_CHUNK(SHOW_CHUNKS('compressed_ht'));
 INFO:  using tuplesort to scan rows from "_hyper_9_9_chunk" for converting to columnstore
 INFO:  using tuplesort to scan rows from "_hyper_9_10_chunk" for converting to columnstore

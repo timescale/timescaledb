@@ -32,8 +32,10 @@
 #include "compression/algorithms/gorilla.h"
 #include "compression/algorithms/null.h"
 #include "compression/algorithms/simple8b_rle.h"
+#include "compression/algorithms/uuid_compress.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/batch_metadata_builder_minmax.h"
+#include "uuid.h"
 
 #define TEST_ELEMENTS 1015
 
@@ -1359,6 +1361,243 @@ test_delta_size_and_placements()
 	test_delta_size_and_placement(large, 180, 728);
 }
 
+static Datum *
+generate_uuidv7(int n)
+{
+	Assert(n > 0);
+	Datum *uuids = palloc(n * sizeof(Datum));
+
+	/* seed the random number generator */
+	srand(1);
+
+	for (int i = 0; i < n; ++i)
+	{
+		uuids[i] = UUIDPGetDatum(ts_create_uuid_v7_from_timestamptz(GetCurrentTimestamp()));
+	}
+
+	return uuids;
+}
+
+static void
+test_uuid_dictionary_simple()
+{
+	/* Make sure dictionary makes sense by only compressing 1/4 of the elements */
+	Datum *uuids = generate_uuidv7((TEST_ELEMENTS + 3) / 4);
+	Compressor *compressor = dictionary_compressor_for_type(UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		compressor->append_val(compressor, uuids[i / 4]);
+	}
+
+	Datum compressed = (Datum) compressor->finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	/* The dictionary compression may recompress the data id Array compression would save space.
+	 * Make sure it is not the case here. */
+	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
+
+	DecompressionIterator *iter =
+		tsl_dictionary_decompression_iterator_from_datum_forward(compressed, UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = dictionary_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i / 4])));
+	}
+}
+
+static void
+test_uuid_array_simple()
+{
+	Datum *uuids = generate_uuidv7(TEST_ELEMENTS);
+	Compressor *compressor = array_compressor_for_type(UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		compressor->append_val(compressor, uuids[i]);
+	}
+
+	Datum compressed = (Datum) compressor->finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
+
+	DecompressionIterator *iter =
+		tsl_array_decompression_iterator_from_datum_forward(compressed, UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = array_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
+	}
+}
+
+static void
+test_uuid_compressor_simple(int null_modulo, int value_modulo)
+{
+	Datum *uuids = generate_uuidv7(TEST_ELEMENTS);
+	UuidCompressor *compressor = uuid_compressor_alloc();
+	bool has_nulls = false;
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		if ((null_modulo > 0 && i % null_modulo == 0) ||
+			(value_modulo > 0 && i % value_modulo != 0))
+		{
+			uuid_compressor_append_null(compressor);
+			has_nulls = true;
+			continue;
+		}
+
+		pg_uuid_t *uuid = DatumGetUUIDP(uuids[i]);
+		uuid_compressor_append_value(compressor, *uuid);
+	}
+
+	Datum compressed = (Datum) uuid_compressor_finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+	TestAssertTrue(DatumGetBool(DirectFunctionCall1(tsl_compressed_data_has_nulls, compressed)) ==
+				   has_nulls);
+
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_UUID);
+
+	DecompressionIterator *iter =
+		uuid_decompression_iterator_from_datum_forward(compressed, UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = uuid_decompression_iterator_try_next_forward(iter);
+		if ((null_modulo > 0 && i % null_modulo == 0) ||
+			(value_modulo > 0 && i % value_modulo != 0))
+		{
+			TestAssertTrue(r.is_null);
+			continue;
+		}
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
+	}
+	TestAssertTrue(uuid_decompression_iterator_try_next_forward(iter).is_done);
+
+	iter = uuid_decompression_iterator_from_datum_reverse(compressed, UUIDOID);
+
+	for (int i = TEST_ELEMENTS - 1; i >= 0; --i)
+	{
+		DecompressResult r = uuid_decompression_iterator_try_next_reverse(iter);
+		if ((null_modulo > 0 && i % null_modulo == 0) ||
+			(value_modulo > 0 && i % value_modulo != 0))
+		{
+			TestAssertTrue(r.is_null);
+			continue;
+		}
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
+	}
+	TestAssertTrue(uuid_decompression_iterator_try_next_reverse(iter).is_done);
+
+	{
+		StringInfoData buf;
+		bytea *sent;
+		StringInfoData transmission;
+		UuidCompressed *compressed_recv;
+
+		pq_begintypsend(&buf);
+		uuid_compressed_send((CompressedDataHeader *) compressed, &buf);
+		sent = pq_endtypsend(&buf);
+
+		transmission = (StringInfoData){
+			.data = VARDATA(sent),
+			.len = VARSIZE(sent),
+			.maxlen = VARSIZE(sent),
+		};
+
+		compressed_recv = (UuidCompressed *) DatumGetPointer(uuid_compressed_recv(&transmission));
+		DecompressionIterator *iter =
+			uuid_decompression_iterator_from_datum_forward(PointerGetDatum(compressed_recv),
+														   UUIDOID);
+		int i = 0;
+		for (DecompressResult r = uuid_decompression_iterator_try_next_forward(iter); !r.is_done;
+			 r = uuid_decompression_iterator_try_next_forward(iter))
+		{
+			if ((null_modulo > 0 && i % null_modulo == 0) ||
+				(value_modulo > 0 && i % value_modulo != 0))
+			{
+				TestAssertTrue(r.is_null);
+				i++;
+				continue;
+			}
+			TestAssertTrue(!r.is_done);
+			TestAssertTrue(DatumGetPointer(r.val) != NULL);
+			TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
+			i++;
+		}
+		TestAssertTrue(uuid_decompression_iterator_try_next_forward(iter).is_done);
+		TestAssertInt64Eq(i, TEST_ELEMENTS);
+	}
+}
+
+static void
+test_uuid_compressor_switch_to_dictionary(int modulo)
+{
+	/* Make sure the compressor switches to dictionary compression when the cardinality is
+	 * not high enough to justify the overhead of the uuid compressor.
+	 */
+	Datum *uuids = generate_uuidv7(TEST_ELEMENTS);
+	UuidCompressor *compressor = uuid_compressor_alloc();
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		pg_uuid_t *uuid = DatumGetUUIDP(uuids[i % modulo]);
+		uuid_compressor_append_value(compressor, *uuid);
+	}
+
+	Datum compressed = (Datum) uuid_compressor_finish(compressor);
+	TestAssertTrue(DatumGetPointer(compressed) != NULL);
+
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
+
+	DecompressionIterator *iter =
+		tsl_dictionary_decompression_iterator_from_datum_forward(compressed, UUIDOID);
+
+	for (int i = 0; i < TEST_ELEMENTS; ++i)
+	{
+		DecompressResult r = dictionary_decompression_iterator_try_next_forward(iter);
+		TestAssertTrue(!r.is_done);
+		TestAssertTrue(DatumGetPointer(r.val) != NULL);
+		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i % modulo])));
+	}
+}
+
+static void
+test_uuid()
+{
+	bool old_value = ts_guc_enable_uuid_compression;
+	ts_guc_enable_uuid_compression = true;
+	test_uuid_dictionary_simple();
+	test_uuid_array_simple();
+	test_uuid_compressor_simple(0, 0);
+	test_uuid_compressor_simple(0, 5);
+	test_uuid_compressor_simple(0, 10);
+	test_uuid_compressor_simple(0, 100);
+	test_uuid_compressor_simple(2, 0);
+	test_uuid_compressor_simple(5, 0);
+	test_uuid_compressor_simple(10, 0);
+	test_uuid_compressor_simple(100, 0);
+	test_uuid_compressor_switch_to_dictionary(2);
+	test_uuid_compressor_switch_to_dictionary(20);
+	test_uuid_compressor_switch_to_dictionary(200);
+	ts_guc_enable_uuid_compression = old_value;
+}
+
 Datum
 ts_test_compression(PG_FUNCTION_ARGS)
 {
@@ -1384,6 +1623,7 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	test_bool();
 	test_null();
 	test_simple8b_rle();
+	test_uuid();
 
 	/* Some tests for zig-zag encoding overflowing the original element width. */
 	test_delta4(test_delta4_case1, sizeof(test_delta4_case1) / sizeof(*test_delta4_case1));
