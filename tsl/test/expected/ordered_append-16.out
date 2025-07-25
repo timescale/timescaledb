@@ -2448,18 +2448,19 @@ LIMIT 1;
                                                                                         QUERY PLAN                                                                                        
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_compressed."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=3595 loops=1)
-               Chunks excluded during startup: 1
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time"
+         Chunks excluded during startup: 1
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_3_14_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=3595 loops=1)
                      Vectorized Filter: (("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < ('2000-01-08'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 6405
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=10 loops=1)
                            Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 20
-(12 rows)
+(13 rows)
 
 -- Disable hash aggregation to get a deterministic test output
 SET enable_hashagg = OFF;
@@ -2971,17 +2972,24 @@ LIMIT 3;
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
+   ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_3_13_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: _hyper_3_13_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=20 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_3_14_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_3_15_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=30 loops=1)
-(11 rows)
+(18 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -3019,17 +3027,24 @@ LIMIT 3;
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
+   ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_3_13_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: _hyper_3_13_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_13_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_4_16_chunk (actual rows=20 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_3_14_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_14_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_4_17_chunk (actual rows=30 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_3_15_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_4_18_chunk (actual rows=30 loops=1)
-(11 rows)
+(18 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
@@ -3479,55 +3494,86 @@ SELECT time
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2) OR time > '2000-01-06'
 ORDER BY time ASC;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort (actual rows=56853 loops=1)
-   Sort Key: _hyper_5_19_chunk."time"
-   Sort Method: quicksort 
-   ->  Append (actual rows=56853 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=3598 loops=1)
-               Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-               ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=4 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-         ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=3598 loops=1)
-               Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-               ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=4 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-                     Rows Removed by Filter: 8
-         ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=0 loops=1)
-               Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-               ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=0 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-                     Rows Removed by Filter: 4
-         ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=5038 loops=1)
-               Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-               ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-         ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (actual rows=14632 loops=1)
-               Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-               Rows Removed by Filter: 406
-               ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=16 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-                     Rows Removed by Filter: 2
-         ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (actual rows=4797 loops=1)
-               Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-               Rows Removed by Filter: 203
-               ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=5 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-                     Rows Removed by Filter: 1
-         ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=5038 loops=1)
-               Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-               ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=6 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-         ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=15114 loops=1)
-               Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-               ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=18 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-         ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=5038 loops=1)
-               Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-               ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6 loops=1)
-                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
-(46 rows)
+                                                                        QUERY PLAN                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=56853 loops=1)
+   Order: metrics_space_compressed."time"
+   ->  Merge Append (actual rows=7196 loops=1)
+         Sort Key: _hyper_5_19_chunk."time"
+         ->  Sort (actual rows=3598 loops=1)
+               Sort Key: _hyper_5_19_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=3598 loops=1)
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=4 loops=1)
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Sort (actual rows=3598 loops=1)
+               Sort Key: _hyper_5_20_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=3598 loops=1)
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=4 loops=1)
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Rows Removed by Filter: 8
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: _hyper_5_21_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=0 loops=1)
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=0 loops=1)
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Rows Removed by Filter: 4
+   ->  Merge Append (actual rows=24467 loops=1)
+         Sort Key: _hyper_5_22_chunk."time"
+         ->  Sort (actual rows=5038 loops=1)
+               Sort Key: _hyper_5_22_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=5038 loops=1)
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Sort (actual rows=14632 loops=1)
+               Sort Key: _hyper_5_23_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (actual rows=14632 loops=1)
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     Rows Removed by Filter: 406
+                     ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=16 loops=1)
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Rows Removed by Filter: 2
+         ->  Sort (actual rows=4797 loops=1)
+               Sort Key: _hyper_5_24_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (actual rows=4797 loops=1)
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     Rows Removed by Filter: 203
+                     ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=5 loops=1)
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                           Rows Removed by Filter: 1
+   ->  Merge Append (actual rows=25190 loops=1)
+         Sort Key: _hyper_5_25_chunk."time"
+         ->  Sort (actual rows=5038 loops=1)
+               Sort Key: _hyper_5_25_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=5038 loops=1)
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=6 loops=1)
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Sort (actual rows=15114 loops=1)
+               Sort Key: _hyper_5_26_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=15114 loops=1)
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=18 loops=1)
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Sort (actual rows=5038 loops=1)
+               Sort Key: _hyper_5_27_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=5038 loops=1)
+                     Filter: ((device_id = ANY ('{1,2}'::integer[])) OR ("time" > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+                     ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6 loops=1)
+                           Filter: ((device_id = ANY ('{1,2}'::integer[])) OR (_ts_meta_max_1 > 'Thu Jan 06 00:00:00 2000 PST'::timestamp with time zone))
+(77 rows)
 
 -- queries without ORDER BY shouldnt use ordered append
 SET enable_seqscan TO false;
@@ -5014,29 +5060,54 @@ LIMIT 3;
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
+   ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_5_19_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: _hyper_5_19_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=4 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: _hyper_5_20_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=10794 loops=1)
                      ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=12 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_21_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=4 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_22_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_23_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=18 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_24_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_25_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_26_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=18 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_27_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6 loops=1)
-(23 rows)
+(48 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -5106,29 +5177,54 @@ LIMIT 3;
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
+   ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_5_19_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: _hyper_5_19_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_19_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_6_28_chunk (actual rows=4 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: _hyper_5_20_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_20_chunk (actual rows=10794 loops=1)
                      ->  Seq Scan on compress_hyper_6_29_chunk (actual rows=12 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_21_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_21_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_6_30_chunk (actual rows=4 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_22_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_22_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_6_31_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_23_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_23_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_6_32_chunk (actual rows=18 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_24_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_24_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_6_33_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_25_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_25_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_6_34_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_26_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_26_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_6_35_chunk (actual rows=18 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_5_27_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (ColumnarScan) on _hyper_5_27_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_6_36_chunk (actual rows=6 loops=1)
-(23 rows)
+(48 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
