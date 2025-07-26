@@ -14,7 +14,7 @@ create table test_schema.test_table(time BIGINT, temp float8, device_id text, de
 SELECT * FROM _timescaledb_functions.get_create_command('test_table');
 \set ON_ERROR_STOP 1
 
-\dt "test_schema".*
+SELECT * FROM test.relation WHERE schema = 'test_schema';
 \d _timescaledb_catalog.chunk
 
 create table test_schema.test_table_no_not_null(time BIGINT, device_id text);
@@ -200,7 +200,7 @@ create table test_schema.test_1dim(time timestamp, temp float);
 select create_hypertable('test_schema.test_1dim', 'time');
 SELECT * FROM _timescaledb_functions.get_create_command('test_1dim');
 
-\dt "test_schema".*
+SELECT * FROM test.relation WHERE schema = 'test_schema';
 
 select create_hypertable('test_schema.test_1dim', 'time', if_not_exists => true);
 
