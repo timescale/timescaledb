@@ -533,14 +533,17 @@ CREATE TABLE test_ordering(time int);
 SELECT table_name FROM create_hypertable('test_ordering','time',chunk_time_interval:=100);
 ALTER TABLE test_ordering SET (timescaledb.compress,timescaledb.compress_orderby='time desc');
 INSERT INTO test_ordering VALUES (5),(4),(3);
+VACUUM ANALYZE test_ordering;
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
+
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
 VACUUM ANALYZE test_ordering;
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
+
 INSERT INTO test_ordering SELECT 1;
 VACUUM ANALYZE test_ordering;
 
