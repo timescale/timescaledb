@@ -120,6 +120,8 @@ echo "**** Update files in directory ${BASE_DIR}/test/sql/updates"
 cd ${BASE_DIR}/test/sql/updates
 
 $PSQL -c '\conninfo'
+$PSQL -c "ALTER DATABASE tsdb SET timescaledb.enable_compression_ratio_warnings = 'off'";
+
 
 # shellcheck disable=SC2207 # Prefer mapfile or read -a to split command output (or quote to avoid splitting).
 missing=($(missing_versions $CURRENT_VERSION $NEXT_VERSION))
