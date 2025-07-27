@@ -137,15 +137,12 @@ jobs:
             
             The version numbers in your PR do not meet the requirements, to indicate a acknowledged loader change.
             
-            | File | ${{ github.event.pull_request.base.ref }} Branch | PR Branch | Expected |
+            | File | ${{ github.event.pull_request.base.ref }} | PR | Expected |
             |------|-------------|-----------|----------|
             | \`src/loader/bgw_interface.c:const int32 ts_bgw_loader_api_version\` | ${bgwMain} | ${bgwPr} | ${parseInt(bgwMain) + 1} |
             | \`src/bgw/launcher_interface.c:#define MIN_LOADER_API_VERSION\` | ${launcherMain} | ${launcherPr} | ${parseInt(launcherMain) + 1} |
             
-            **Requirements:**
-            Both version numbers must be incremented by 1 from the ${{ github.event.pull_request.base.ref }} branch
-            
-            Please update the version numbers and push your changes.`;
+            **Requirements:** Both version numbers must be incremented by 1 from the ${{ github.event.pull_request.base.ref }} branch. Please update the version numbers and push your changes.`;
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
