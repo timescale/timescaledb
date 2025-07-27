@@ -1,6 +1,8 @@
 name: Check for loader changes
 "on":
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
 jobs:
   check_loader_change:
     name: Check for loader changes
@@ -41,7 +43,7 @@ jobs:
           fi
 
   check_loader_version_bump:
-    name: Check for loader version was bumped 
+    name: Check if loader version is incremented for required restart
     # If the label is present, validate the loader version is bumped
     if: ${{ contains(github.event.pull_request.labels.*.name, 'upgrade-requires-restart') }}
     runs-on: timescaledb-runner-arm64
@@ -51,10 +53,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout main branch
-        run: git checkout main
+      - name: Checkout ${{ github.event.pull_request.base.ref }} branch
+        run: git checkout ${{ github.event.pull_request.base.ref }}
 
-      - name: Extract versions from main branch
+      - name: Extract versions from ${{ github.event.pull_request.base.ref }} branch
         id: upstream-versions
         run: |
           # Extract version from bgw_interface.c
@@ -65,7 +67,7 @@ jobs:
           LAUNCHER_VERSION_MAIN=$(grep -oP '#define MIN_LOADER_API_VERSION \K\d+' src/bgw/launcher_interface.c || echo "0")
           echo "launcher_version_main=$LAUNCHER_VERSION_MAIN" >> $GITHUB_OUTPUT
 
-          echo "Main branch:"
+          echo "${{ github.event.pull_request.base.ref }} branch:"
           echo "src/loader/bgw_interface.c:const int32 ts_bgw_loader_api_version = $BGW_VERSION_MAIN"
           echo "src/bgw/launcher_interface.c:#define MIN_LOADER_API_VERSION $LAUNCHER_VERSION_MAIN"
 
@@ -119,7 +121,7 @@ jobs:
           if [ "$VALIDATION_FAILED" = true ]; then
             echo ""
             echo "Version validation failed. Please ensure:"
-            echo "1. Both version numbers are incremented by exactly 1 from main branch"
+            echo "1. Both version numbers are incremented by exactly 1 from ${{ github.event.pull_request.base.ref }} branch"
             echo "2. Both files have the same version number"
             exit 1
           fi
@@ -138,13 +140,13 @@ jobs:
             
             The version numbers in your PR do not meet the requirements, to indicate a acknowledge change.
             
-            | File | Main Branch | PR Branch | Expected |
+            | File | ${{ github.event.pull_request.base.ref }} Branch | PR Branch | Expected |
             |------|-------------|-----------|----------|
             | \`src/loader/bgw_interface.c\` | ${bgwMain} | ${bgwPr} | ${parseInt(bgwMain) + 1} |
             | \`src/bgw/launcher_interface.c\` | ${launcherMain} | ${launcherPr} | ${parseInt(launcherMain) + 1} |
             
             **Requirements:**
-            Both version numbers must be incremented by 1 from the main branch
+            Both version numbers must be incremented by 1 from the ${{ github.event.pull_request.base.ref }} branch
             
             Please update the version numbers and push your changes.`;
             
@@ -154,5 +156,3 @@ jobs:
               repo: context.repo.repo,
               body: comment
             });
-
-          
