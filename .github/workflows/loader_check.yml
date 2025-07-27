@@ -43,7 +43,7 @@ jobs:
           fi
 
   check_loader_version_bump:
-    name: Check if loader version is incremented for required restart
+    name: Check if loader versions are incremented for required restart
     # If the label is present, validate the loader version is bumped
     if: ${{ contains(github.event.pull_request.labels.*.name, 'upgrade-requires-restart') }}
     runs-on: timescaledb-runner-arm64
@@ -119,14 +119,11 @@ jobs:
           fi
           
           if [ "$VALIDATION_FAILED" = true ]; then
-            echo ""
-            echo "Version validation failed. Please ensure:"
-            echo "1. Both version numbers are incremented by exactly 1 from ${{ github.event.pull_request.base.ref }} branch"
-            echo "2. Both files have the same version number"
+            echo "Version validation failed. Please ensure: Both version numbers are incremented by exactly 1 from ${{ github.event.pull_request.base.ref }} branch"
             exit 1
           fi
 
-      - name: Comment on PR (if validation fails)
+      - name: Add comment to PR (if validation fails)
         if: failure()
         uses: actions/github-script@v7
         with:
@@ -136,14 +133,14 @@ jobs:
             const launcherMain = '${{ steps.upstream-versions.outputs.launcher_version_main }}';
             const launcherPr = '${{ steps.pr-versions.outputs.launcher_version_pr }}';
             
-            const comment = `## ❌ Version Validation Failed
+            const comment = `## ❌ Loader Version Validation Failed
             
-            The version numbers in your PR do not meet the requirements, to indicate a acknowledge change.
+            The version numbers in your PR do not meet the requirements, to indicate a acknowledged loader change.
             
             | File | ${{ github.event.pull_request.base.ref }} Branch | PR Branch | Expected |
             |------|-------------|-----------|----------|
-            | \`src/loader/bgw_interface.c\` | ${bgwMain} | ${bgwPr} | ${parseInt(bgwMain) + 1} |
-            | \`src/bgw/launcher_interface.c\` | ${launcherMain} | ${launcherPr} | ${parseInt(launcherMain) + 1} |
+            | \`src/loader/bgw_interface.c:const int32 ts_bgw_loader_api_version\` | ${bgwMain} | ${bgwPr} | ${parseInt(bgwMain) + 1} |
+            | \`src/bgw/launcher_interface.c:#define MIN_LOADER_API_VERSION\` | ${launcherMain} | ${launcherPr} | ${parseInt(launcherMain) + 1} |
             
             **Requirements:**
             Both version numbers must be incremented by 1 from the ${{ github.event.pull_request.base.ref }} branch
