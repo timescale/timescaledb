@@ -1,6 +1,8 @@
 name: Check for loader changes
 "on":
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
 jobs:
   check_loader_change:
     name: Check for loader changes
@@ -40,3 +42,111 @@ jobs:
             fi
           fi
 
+  check_loader_version_bump:
+    name: Check if loader versions are incremented for required restart
+    # If the label is present, validate the loader version is bumped
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'upgrade-requires-restart') }}
+    runs-on: timescaledb-runner-arm64
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout ${{ github.event.pull_request.base.ref }} branch
+        run: git checkout ${{ github.event.pull_request.base.ref }}
+
+      - name: Extract versions from ${{ github.event.pull_request.base.ref }} branch
+        id: upstream-versions
+        run: |
+          # Extract version from bgw_interface.c
+          BGW_VERSION_MAIN=$(grep -oP 'const int32 ts_bgw_loader_api_version = \K\d+' src/loader/bgw_interface.c || echo "0")
+          echo "bgw_version_main=$BGW_VERSION_MAIN" >> $GITHUB_OUTPUT
+          
+          # Extract version from launcher_interface.c
+          LAUNCHER_VERSION_MAIN=$(grep -oP '#define MIN_LOADER_API_VERSION \K\d+' src/bgw/launcher_interface.c || echo "0")
+          echo "launcher_version_main=$LAUNCHER_VERSION_MAIN" >> $GITHUB_OUTPUT
+
+          echo "${{ github.event.pull_request.base.ref }} branch:"
+          echo "src/loader/bgw_interface.c:const int32 ts_bgw_loader_api_version = $BGW_VERSION_MAIN"
+          echo "src/bgw/launcher_interface.c:#define MIN_LOADER_API_VERSION $LAUNCHER_VERSION_MAIN"
+
+      - name: Checkout PR branch
+        run: git checkout ${{ github.event.pull_request.head.sha }}
+
+      - name: Extract versions from PR branch
+        id: pr-versions
+        run: |
+          # Extract version from bgw_interface.c
+          BGW_VERSION_PR=$(grep -oP 'const int32 ts_bgw_loader_api_version = \K\d+' src/loader/bgw_interface.c || echo "0")
+          echo "bgw_version_pr=$BGW_VERSION_PR" >> $GITHUB_OUTPUT
+          
+          # Extract version from launcher_interface.c
+          LAUNCHER_VERSION_PR=$(grep -oP '#define MIN_LOADER_API_VERSION \K\d+' src/bgw/launcher_interface.c || echo "0")
+          echo "launcher_version_pr=$LAUNCHER_VERSION_PR" >> $GITHUB_OUTPUT
+          
+          echo "PR:"
+          echo "src/loader/bgw_interface.c:const int32 ts_bgw_loader_api_version = $BGW_VERSION_PR"
+          echo "src/bgw/launcher_interface.c:#define MIN_LOADER_API_VERSION $LAUNCHER_VERSION_PR"
+
+      - name: Validate version increments
+        run: |
+          BGW_MAIN=${{ steps.upstream-versions.outputs.bgw_version_main }}
+          BGW_PR=${{ steps.pr-versions.outputs.bgw_version_pr }}
+          LAUNCHER_MAIN=${{ steps.upstream-versions.outputs.launcher_version_main }}
+          LAUNCHER_PR=${{ steps.pr-versions.outputs.launcher_version_pr }}
+          
+          echo "Validating version increments..."
+          echo "bgw_interface.c: $BGW_MAIN -> $BGW_PR (expected: $((BGW_MAIN + 1)))"
+          echo "launcher_interface.c: $LAUNCHER_MAIN -> $LAUNCHER_PR (expected: $((LAUNCHER_MAIN + 1)))"
+          
+          VALIDATION_FAILED=false
+          
+          # Check bgw_interface version
+          if [ "$BGW_PR" -ne "$((BGW_MAIN + 1))" ]; then
+            echo "❌ ERROR: bgw_interface.c version should be incremented by 1, expected: $((BGW_MAIN + 1)), Found: $BGW_PR"
+            VALIDATION_FAILED=true
+          else
+            echo "✅ bgw_interface.c version correctly incremented"
+          fi
+          
+          # Check launcher_interface.c version
+          if [ "$LAUNCHER_PR" -ne "$((LAUNCHER_MAIN + 1))" ]; then
+            echo "❌ ERROR: launcher_interface.c version should be incremented by 1, expected: $((LAUNCHER_MAIN + 1)), Found: $LAUNCHER_PR"
+            VALIDATION_FAILED=true
+          else
+            echo "✅ launcher_interface.c version correctly incremented"
+          fi
+          
+          if [ "$VALIDATION_FAILED" = true ]; then
+            echo "Version validation failed. Please ensure: Both version numbers are incremented by exactly 1 from ${{ github.event.pull_request.base.ref }} branch"
+            exit 1
+          fi
+
+      - name: Add comment to PR (if validation fails)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const bgwMain = '${{ steps.upstream-versions.outputs.bgw_version_main }}';
+            const bgwPr = '${{ steps.pr-versions.outputs.bgw_version_pr }}';
+            const launcherMain = '${{ steps.upstream-versions.outputs.launcher_version_main }}';
+            const launcherPr = '${{ steps.pr-versions.outputs.launcher_version_pr }}';
+            
+            const comment = `## ❌ Loader Version Validation Failed
+            
+            The version numbers in your PR do not meet the requirements, to indicate a acknowledged loader change.
+            
+            | File | ${{ github.event.pull_request.base.ref }} | PR | Expected |
+            |------|-------------|-----------|----------|
+            | \`src/loader/bgw_interface.c:const int32 ts_bgw_loader_api_version\` | ${bgwMain} | ${bgwPr} | ${parseInt(bgwMain) + 1} |
+            | \`src/bgw/launcher_interface.c:#define MIN_LOADER_API_VERSION\` | ${launcherMain} | ${launcherPr} | ${parseInt(launcherMain) + 1} |
+            
+            **Requirements:** Both version numbers must be incremented by 1 from the ${{ github.event.pull_request.base.ref }} branch. Please update the version numbers and push your changes.`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
