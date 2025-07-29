@@ -72,7 +72,6 @@ order by test.time;
 
 -- Also test outer join for better coverage of nullability handling.
 -- This test case generates a nullable equivalence member for test.b.
-explain (costs off)
 with query_params as (
     select distinct a, b + 1 as b
     from test_copy
@@ -84,6 +83,8 @@ full join query_params q
     on q.a = test.a
 full join query_params q2
     on q2.b = test.b
+order by test.a, test.b
+limit 1
 ;
 
 reset enable_seqscan;

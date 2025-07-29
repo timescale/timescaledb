@@ -100,7 +100,6 @@ order by test.time;
 
 -- Also test outer join for better coverage of nullability handling.
 -- This test case generates a nullable equivalence member for test.b.
-explain (costs off)
 with query_params as (
     select distinct a, b + 1 as b
     from test_copy
@@ -112,26 +111,13 @@ full join query_params q
     on q.a = test.a
 full join query_params q2
     on q2.b = test.b
+order by test.a, test.b
+limit 1
 ;
-                              QUERY PLAN                               
------------------------------------------------------------------------
- Hash Full Join
-   Hash Cond: (_hyper_1_1_chunk.b = q2.b)
-   CTE query_params
-     ->  Unique
-           ->  Sort
-                 Sort Key: test_copy.a, ((test_copy.b + 1))
-                 ->  Seq Scan on test_copy
-                       Filter: ((a)::text = ANY ('{lat,lon}'::text[]))
-   ->  Hash Full Join
-         Hash Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Seq Scan on compress_hyper_2_2_chunk
-         ->  Hash
-               ->  CTE Scan on query_params q
-   ->  Hash
-         ->  CTE Scan on query_params q2
-(16 rows)
+  a  | b 
+-----+---
+ lat | 1
+(1 row)
 
 reset enable_seqscan;
 reset jit;
