@@ -43,3 +43,23 @@ explain select * from costtab where ts = 5000;
 explain select * from costtab where fi = 200 and ts = 5000;
 
 explain select * from costtab where s = '1' or (fi = 200 and ts = 5000);
+
+
+-- Test a high-cardinality orderby column
+create table highcard(ts int) with (tsdb.hypertable, tsdb.partition_column = 'ts',
+    tsdb.compress_orderby = 'ts', tsdb.chunk_interval = 10000000);
+insert into highcard select generate_series(1, 1000000);
+select count(compress_chunk(x)) from show_chunks('highcard') x;
+vacuum freeze analyze highcard;
+
+explain (analyze, timing off, summary off)
+select * from highcard where ts > 200000 and ts < 300000;
+
+explain (analyze, timing off, summary off)
+select * from highcard where ts = 500000;
+
+explain (analyze, timing off, summary off)
+select * from highcard where ts < 500000;
+
+explain (analyze, timing off, summary off)
+select * from highcard where ts > 500000;

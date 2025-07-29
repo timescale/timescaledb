@@ -137,3 +137,59 @@ explain select * from costtab where s = '1' or (fi = 200 and ts = 5000);
          Filter: ((s = '1'::text) OR ((_ts_meta_v2_min_fi <= '200'::double precision) AND (_ts_meta_v2_max_fi >= '200'::double precision) AND (_ts_meta_min_1 <= 5000) AND (_ts_meta_max_1 >= 5000)))
 (4 rows)
 
+-- Test a high-cardinality orderby column
+create table highcard(ts int) with (tsdb.hypertable, tsdb.partition_column = 'ts',
+    tsdb.compress_orderby = 'ts', tsdb.chunk_interval = 10000000);
+NOTICE:  adding not-null constraint to column "ts"
+insert into highcard select generate_series(1, 1000000);
+select count(compress_chunk(x)) from show_chunks('highcard') x;
+ count 
+-------
+     1
+(1 row)
+
+vacuum freeze analyze highcard;
+explain (analyze, timing off, summary off)
+select * from highcard where ts > 200000 and ts < 300000;
+                                                                                  QUERY PLAN                                                                                  
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_3_3_chunk  (cost=0.43..1005.58 rows=99000 width=4) (actual rows=99999 loops=1)
+   Vectorized Filter: ((ts > 200000) AND (ts < 300000))
+   Rows Removed by Filter: 1
+   ->  Index Scan using compress_hyper_4_4_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_4_chunk  (cost=0.28..15.58 rows=99 width=44) (actual rows=100 loops=1)
+         Index Cond: ((_ts_meta_min_1 < 300000) AND (_ts_meta_max_1 > 200000))
+(5 rows)
+
+explain (analyze, timing off, summary off)
+select * from highcard where ts = 500000;
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_3_3_chunk  (cost=18.70..28.70 rows=1000 width=4) (actual rows=1 loops=1)
+   Vectorized Filter: (ts = 500000)
+   Rows Removed by Filter: 999
+   ->  Index Scan using compress_hyper_4_4_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_4_chunk  (cost=0.28..18.70 rows=1 width=44) (actual rows=1 loops=1)
+         Index Cond: ((_ts_meta_min_1 <= 500000) AND (_ts_meta_max_1 >= 500000))
+(5 rows)
+
+explain (analyze, timing off, summary off)
+select * from highcard where ts < 500000;
+                                                                                  QUERY PLAN                                                                                   
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_3_3_chunk  (cost=0.32..5001.61 rows=498000 width=4) (actual rows=499999 loops=1)
+   Vectorized Filter: (ts < 500000)
+   Rows Removed by Filter: 1
+   ->  Index Scan using compress_hyper_4_4_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_4_chunk  (cost=0.28..21.61 rows=498 width=44) (actual rows=500 loops=1)
+         Index Cond: (_ts_meta_min_1 < 500000)
+(5 rows)
+
+explain (analyze, timing off, summary off)
+select * from highcard where ts > 500000;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_3_3_chunk  (cost=0.05..5035.50 rows=501000 width=4) (actual rows=500000 loops=1)
+   Vectorized Filter: (ts > 500000)
+   ->  Seq Scan on compress_hyper_4_4_chunk  (cost=0.00..25.50 rows=501 width=44) (actual rows=500 loops=1)
+         Filter: (_ts_meta_max_1 > 500000)
+         Rows Removed by Filter: 500
+(5 rows)
+
