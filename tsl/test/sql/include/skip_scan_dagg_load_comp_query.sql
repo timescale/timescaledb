@@ -48,9 +48,11 @@ SET max_parallel_workers_per_gather = 0;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC LIMIT 3;
 
 \qecho range queries on :TABLE
+set enable_seqscan to off;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time BETWEEN 100 AND 300 GROUP BY dev;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time < 200 GROUP BY dev;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time > 800 GROUP BY dev;
+reset enable_seqscan;
 
 -- Various tests for "segmentby = 'dev'"
 ---------------------------------------
