@@ -91,6 +91,7 @@ def build_debug_config(overrides):
             "os": "ubuntu-22.04",
             "pg_extra_args": "--enable-debug --enable-cassert --with-llvm LLVM_CONFIG=llvm-config-14",
             "pg_extensions": "postgres_fdw test_decoding",
+            "installcheck": True,
             "pginstallcheck": True,
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
         }
@@ -201,6 +202,20 @@ m["include"].append(
             "cc": "clang-14",
             "cxx": "clang++-14",
             "tsdb_build_args": "-DLINTER=ON -DWARNINGS_AS_ERRORS=ON",
+        }
+    )
+)
+
+# test building against PG18beta2
+m["include"].append(
+    build_debug_config(
+        {
+            "pg": "18beta2",
+            "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
+            "tsdb_build_args": "-DEXPERIMENTAL=ON -DWARNINGS_AS_ERRORS=OFF",
+            "installcheck": False,
+            "pginstallcheck": False,
+            "coverage": False,
         }
     )
 )
