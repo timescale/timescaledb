@@ -29,14 +29,16 @@ select * from test_chartab order by mac_id , ts limit 2;
 VACUUM ANALYZE test_chartab;
 
 -- test constraintawareappend sort node handling
+SET work_mem to '16MB';
 SET enable_hashagg TO false;
 SET timescaledb.enable_chunkwise_aggregation TO false;
+SET max_parallel_workers_per_gather = 0;
 
 CREATE TABLE public.merge_sort (time timestamp NOT NULL, measure_id integer NOT NULL, device_id integer NOT NULL, value float);
 SELECT create_hypertable('merge_sort', 'time');
 ALTER TABLE merge_sort SET (timescaledb.compress = true, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id, measure_id');
 
-INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'1h'::interval) g1(time);
+INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM generate_series('2000-01-01'::timestamp,'2000-02-01'::timestamp,'5 sec'::interval) g1(time);
 
 --compress first chunk
 SELECT compress_chunk(ch) FROM show_chunks('merge_sort') ch LIMIT 1;
@@ -65,6 +67,8 @@ GROUP BY 2, 3;
 
 RESET enable_hashagg;
 RESET timescaledb.enable_chunkwise_aggregation;
+RESET max_parallel_workers_per_gather;
+RESET work_mem;
 
 -- test if volatile function quals are applied to compressed chunks
 CREATE FUNCTION check_equal_228( intval INTEGER) RETURNS BOOL
