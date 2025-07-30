@@ -11,6 +11,7 @@
 #include <access/stratnum.h>
 #include <access/tupdesc.h>
 #include <catalog/pg_collation.h>
+#include <executor/spi.h>
 #include <executor/tuptable.h>
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
@@ -22,6 +23,7 @@
 #include <rewrite/rewriteManip.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
+#include <utils/datum.h>
 #include <utils/syscache.h>
 
 #include "chunk.h"
@@ -781,6 +783,76 @@ ts_chunk_column_stats_lookup(int32 hypertable_id, int32 chunk_id, const char *co
 	return form_range;
 }
 
+static bool
+chunk_get_minmax(const Chunk *chunk, Oid col_type, const char *col_name, Datum *minmax)
+{
+	StringInfoData command;
+	int res;
+
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
+	initStringInfo(&command);
+	appendStringInfo(&command,
+					 "SELECT pg_catalog.min(%s), pg_catalog.max(%s) FROM %s.%s",
+					 quote_identifier(col_name),
+					 quote_identifier(col_name),
+					 quote_identifier(NameStr(chunk->fd.schema_name)),
+					 quote_identifier(NameStr(chunk->fd.table_name)));
+
+	/*
+	 * SPI_connect will switch MemoryContext so we need to keep track
+	 * of caller context as we need to copy the values into caller
+	 * context.
+	 */
+	MemoryContext caller = CurrentMemoryContext;
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("could not get the min/max values for column \"%s\" of chunk \"%s.%s\"",
+						 col_name,
+						 chunk->fd.schema_name.data,
+						 chunk->fd.table_name.data))));
+
+	pfree(command.data);
+
+	Datum min, max;
+	bool isnull_min = false, isnull_max = false;
+	min = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull_min);
+	max = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull_max);
+	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == col_type);
+	Assert(SPI_gettypeid(SPI_tuptable->tupdesc, 2) == col_type);
+
+	bool found = !isnull_min && !isnull_max;
+	if (found)
+	{
+		bool typbyval;
+		int16 typlen;
+		get_typlenbyval(col_type, &typlen, &typbyval);
+
+		/* Copy the values into caller context */
+		MemoryContext spi = MemoryContextSwitchTo(caller);
+		minmax[0] = datumCopy(min, typbyval, typlen);
+		minmax[1] = datumCopy(max, typbyval, typlen);
+		MemoryContextSwitchTo(spi);
+	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	return found;
+}
+
 /*
  * Update column dimension ranges in the catalog for the
  * provided chunk (it's assumed that the chunk is locked
@@ -821,7 +893,7 @@ ts_chunk_column_stats_calculate(const Hypertable *ht, const Chunk *chunk)
 		col_type = get_atttype(chunk->table_id, attno);
 
 		/* calculate the min/max range for this column on this chunk */
-		if (ts_chunk_get_minmax(chunk->table_id, col_type, attno, "column range", minmax))
+		if (chunk_get_minmax(chunk, col_type, col_name, minmax))
 		{
 			Form_chunk_column_stats range;
 			int64 min = ts_time_value_to_internal(minmax[0], col_type);

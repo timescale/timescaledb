@@ -135,6 +135,7 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' AND chunk_name = :'CH_NAME';
 
 -- The chunk entry should become "valid" again
+SELECT min(sensor_id), max(sensor_id) FROM :CH_NAME;
 SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_ID';
 
 -- A query using a WHERE clause on "sensor_id" column will scan the proper chunk
@@ -310,3 +311,19 @@ SELECT enable_chunk_skipping('sample_table', 'temperature');
 SELECT show_chunks('sample_table') AS "CH_NAME" order by 1 limit 1 \gset
 SELECT compress_chunk(:'CH_NAME');
 SELECT * FROM _timescaledb_catalog.chunk_column_stats;
+
+-- Check min/max ranges for partial chunks with segmentby columns get recalculated correctly by seementwise recompression
+CREATE TABLE chunk_skipping(time timestamptz,device text, updated_at timestamptz)
+WITH (tsdb.hypertable, tsdb.partition_column='time',tsdb.segmentby='device');
+
+SELECT enable_chunk_skipping('chunk_skipping', 'updated_at');
+
+INSERT INTO chunk_skipping SELECT '2025-01-01', 'd1', '2025-01-01';
+SELECT compress_chunk(show_chunks('chunk_skipping'));
+
+SELECT * from chunk_skipping where updated_at < '2026-01-01';
+
+INSERT INTO chunk_skipping SELECT '2025-01-01', 'd2', '2026-01-01';
+SELECT compress_chunk(show_chunks('chunk_skipping'));
+
+SELECT * from chunk_skipping where updated_at < '2026-01-01';
