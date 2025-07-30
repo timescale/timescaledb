@@ -4,6 +4,7 @@
 
 SET enable_memoize TO false;
 SET enable_indexscan TO false;
+SET max_parallel_workers_per_gather = 0;
 
 -- test join on compressed time column
 -- #3079, #4465
