@@ -552,6 +552,8 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 		Var *var = castNode(Var, lfirst(lc));
 		var->varattno = context.max_to_min[var->varattno];
 	}
+
+	pfree(storage);
 }
 
 static CompressionInfo *
