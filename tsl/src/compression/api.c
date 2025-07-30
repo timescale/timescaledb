@@ -503,27 +503,11 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
 
-	/*
-	 * Calculate and add the column dimension ranges for the src chunk. This has to
-	 * be done before the compression. In case of recompression, the logic will get the
-	 * min/max entries for the uncompressed portion and reconcile and update the existing
-	 * entry for ht/chunk/column combination. This case handles:
-	 *
-	 * * INSERTs into uncompressed chunk
-	 * * UPDATEs into uncompressed chunk
-	 *
-	 * In case of DELETEs, the entries won't exist in the uncompressed chunk, but since
-	 * we are deleting, we will stay within the earlier computed max/min range. This
-	 * means that the chunk will not get pruned for a larger range of values. This will
-	 * work ok enough if only a few of the compressed chunks get DELETEs down the line.
-	 * In the future, we can look at computing min/max entries in the compressed chunk
-	 * using the batch metadata and then recompute the range to handle DELETE cases.
-	 */
-	if (cxt.srcht->range_space)
-		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk);
-
 	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
 	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
+
+	if (cxt.srcht->range_space)
+		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk);
 
 	if (new_compressed_chunk)
 	{
