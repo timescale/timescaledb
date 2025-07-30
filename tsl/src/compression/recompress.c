@@ -186,22 +186,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 		}
 	}
 
-	/*
-	 * Calculate and add the column dimension ranges for the src chunk used by chunk skipping
-	 * feature. This has to be done before the compression. In case of recompression, the logic will
-	 * get the min/max entries for the uncompressed portion and reconcile and update the existing
-	 * entry for ht/chunk/column combination. This case handles:
-	 *
-	 * * INSERTs into uncompressed chunk
-	 * * UPDATEs into uncompressed chunk
-	 *
-	 * In case of DELETEs, the entries won't exist in the uncompressed chunk, but since
-	 * we are deleting, we will stay within the earlier computed max/min range. This
-	 * means that the chunk will not get pruned for a larger range of values. This will
-	 * work ok enough if only a few of the compressed chunks get DELETEs down the line.
-	 * In the future, we can look at computing min/max entries in the compressed chunk
-	 * using the batch metadata and then recompute the range to handle DELETE cases.
-	 */
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
 	if (ht->range_space)
 		ts_chunk_column_stats_calculate(ht, uncompressed_chunk);

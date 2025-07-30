@@ -276,9 +276,9 @@ table_has_minmax_index(Oid relid, Oid atttype, Name attname, AttrNumber attnum)
  *
  * Returns true iff min and max is found, otherwise false.
  */
-bool
-ts_chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, const char *call_context,
-					Datum minmax[2])
+static bool
+chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, const char *call_context,
+				 Datum minmax[2])
 {
 	Relation rel = table_open(relid, AccessShareLock);
 	NameData attname;
@@ -484,11 +484,11 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 
 		slice_interval = slice->fd.range_end - slice->fd.range_start;
 
-		if (ts_chunk_get_minmax(chunk->table_id,
-								dim->fd.column_type,
-								attno,
-								"adaptive chunking",
-								minmax))
+		if (chunk_get_minmax(chunk->table_id,
+							 dim->fd.column_type,
+							 attno,
+							 "adaptive chunking",
+							 minmax))
 		{
 			int64 min = ts_time_value_to_internal(minmax[0], dim->fd.column_type);
 			int64 max = ts_time_value_to_internal(minmax[1], dim->fd.column_type);
