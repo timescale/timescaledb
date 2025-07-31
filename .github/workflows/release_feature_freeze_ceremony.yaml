@@ -137,10 +137,6 @@ jobs:
             --head $BRANCH \
             --label "release,changelog")
           echo "✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## CHANGELOG (preview)" >> $GITHUB_STEP_SUMMARY
-          echo "$BODY" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
 
       # Rework version.config and up & down grade scripts
       - uses: actions/checkout@v4
