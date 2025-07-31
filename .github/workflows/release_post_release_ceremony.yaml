@@ -55,7 +55,6 @@ jobs:
             --body "$BODY" \
             --base main \
             --head $BRANCH \
-            --delete-branch \
             --label "release")
           echo "# ✅ Forward ported release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
 
@@ -104,6 +103,5 @@ jobs:
             --body "Change to the next patch version $NEXT_VERSION after the release of ${{ github.event.release.tag_name }}." \
             --base $RELEASE_BRANCH \
             --head $BRANCH \
-            --delete-branch \
             --label "release")
           echo "# ✅ Bump to next patch version: $PR_URL" >> $GITHUB_STEP_SUMMARY

@@ -83,7 +83,6 @@ jobs:
             --title "Increase minor version $NEXT_MAIN_VERSION" \
             --base main \
             --head $BRANCH \
-            --delete-branch \
             --label "release")
           echo "# ✅ minor version increase on main: $PR_URL" >> $GITHUB_STEP_SUMMARY
       
@@ -129,7 +128,6 @@ jobs:
             --body "$BODY" \
             --base ${{ env.RELEASE_BRANCH }} \
             --head $BRANCH \
-            --delete-branch \
             --label "release,changelog")
           echo "# ✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -154,6 +152,5 @@ jobs:
             --title "Release ${{ env.NEXT_VERSION }}" \
             --base ${{ env.RELEASE_BRANCH }} \
             --head $BRANCH \
-            --delete-branch \
             --label "release")
           echo "# ✅ Release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
