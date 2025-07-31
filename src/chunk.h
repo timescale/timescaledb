@@ -102,7 +102,7 @@ typedef struct ChunkScanCtx
 	const Hypertable *ht;
 	const Point *point;
 	unsigned int num_complete_chunks;
-	int num_processed;
+	uint64 num_processed;
 	bool early_abort;
 	LOCKMODE lockmode;
 
