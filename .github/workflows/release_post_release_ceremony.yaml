@@ -60,7 +60,7 @@ jobs:
             --base main \
             --head $BRANCH \
             --label "release")
-          echo "# ✅ Forward ported release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Forward ported release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
 
   release-branch:
     name: Post Release Ceremony - release branch
@@ -95,7 +95,7 @@ jobs:
             -e "s/^previous_version = .*/previous_version = $TAGGED_VERSION/" \
             version.config
 
-          echo "# ✅ setting next patch version $TAGGED_VERSION in version.config" >> $GITHUB_STEP_SUMMARY
+          echo "✅ setting next patch version $TAGGED_VERSION in version.config" >> $GITHUB_STEP_SUMMARY
           cat version.config >> $GITHUB_STEP_SUMMARY
 
           BRANCH="release/bump-${{ github.event.release.tag_name }}-to-$NEXT_VERSION"
@@ -110,4 +110,4 @@ jobs:
             --base $RELEASE_BRANCH \
             --head $BRANCH \
             --label "release")
-          echo "# ✅ Bump to next patch version: $PR_URL" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Bump to next patch version: $PR_URL" >> $GITHUB_STEP_SUMMARY
