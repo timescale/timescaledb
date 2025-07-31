@@ -5,6 +5,7 @@ name: Release - Feature Freeze Ceremony
 # 
 # prereq: needs approval from another person to run the action (environment)
 #
+# 0. bump minor -dev version in version.config on main, if and only if it's a .0 release
 # 1. creates the release branch X.Y.x, if and if the branch does not exist yet
 # 2. generates CHANGELOG and opens PR for it
 # 3. generates the release artefacts for the next versions
@@ -32,7 +33,7 @@ jobs:
 
       - name: Configure git
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name "timescale-automation"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Install Dependencies
@@ -52,11 +53,9 @@ jobs:
           echo "CURRENT_VERSION=${CURRENT_VERSION}" >> $GITHUB_ENV
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
 
-          echo "Release branch: $RELEASE_BRANCH"
-
           echo "# 🚀 Release v${NEXT_VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "Current version: `v$CURRENT_VERSION`" >> $GITHUB_STEP_SUMMARY
-          echo "Release branch: $RELEASE_BRANCH" >> $GITHUB_STEP_SUMMARY
+          echo "Current version: \`$CURRENT_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "Release branch: \`$RELEASE_BRANCH\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
       # -------------------------------------------------------
@@ -73,28 +72,20 @@ jobs:
           NEXT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           NEXT_MAIN_VERSION=$(echo "$NEXT_MAIN_VERSION" | awk -F. '{printf "%d.%d.0-dev", $1, $2 + 1}')
           sed -i "s/^version = .*/version = $NEXT_MAIN_VERSION/" version.config
-          echo "NEXT_MAIN_VERSION=${NEXT_MAIN_VERSION}" >> $GITHUB_ENV
 
-      # Submit PR for new version changes on main
-      - name: Create Pull Request for next version on main
-        if: steps.bump_minor_version_on_main.conclusion == 'success'
-        id: cpr_next_version_main
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: "release/${{ env.NEXT_VERSION }}-${{ env.NEXT_MAIN_VERSION }}"
-          base: "main"
-          delete-branch: true
-          title: "Bump version to ${{ env.NEXT_MAIN_VERSION }}"
-          labels: |
-            release
-          add-paths: |
-            version.config
+          BRANCH="release/bump-main-to-$NEXT_MAIN_VERSION"
+          git checkout -b $BRANCH
+          git add version.config
+          git commit -m "Increase minor version $NEXT_MAIN_VERSION"
+          git push origin $BRANCH
 
-      - name: "Validate minor version bump PR"
-        if: ${{ steps.cpr_next_version_main.outputs.pull-request-number }}
-        run: |
-          echo "# ✅ created PR to increase minor version on `main`: ${{ steps.cpr_changelog.outputs.pull-request-url }}" >> $GITHUB_STEP_SUMMARY
+          PR_URL=$(gh pr create \
+            --title "Increase minor version $NEXT_MAIN_VERSION" \
+            --base main \
+            --head $BRANCH \
+            --delete-branch \
+            --label "release")
+          echo "# ✅ minor version increase on main: $PR_URL" >> $GITHUB_STEP_SUMMARY
       
       # Create `2.XX.x` release branch of `main`
       # Release branch is a dependency for the next steps
@@ -140,7 +131,7 @@ jobs:
             --head $BRANCH \
             --delete-branch \
             --label "release,changelog")
-          echo "# ✅ CHANGELOG: $PR:URL" >> $GITHUB_STEP_SUMMARY
+          echo "# ✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## CHANGELOG (preview)" >> $GITHUB_STEP_SUMMARY
           echo "$BODY" >> $GITHUB_STEP_SUMMARY
@@ -165,4 +156,4 @@ jobs:
             --head $BRANCH \
             --delete-branch \
             --label "release")
-          echo "# ✅ Release artefacts: $PR:URL" >> $GITHUB_STEP_SUMMARY
+          echo "# ✅ Release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY

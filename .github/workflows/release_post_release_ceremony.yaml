@@ -57,7 +57,7 @@ jobs:
             --head $BRANCH \
             --delete-branch \
             --label "release")
-          echo "# ✅ Forward ported release artefacts: $PR:URL" >> $GITHUB_STEP_SUMMARY
+          echo "# ✅ Forward ported release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
 
   release-branch:
     name: Post Release Ceremony - release branch
@@ -106,4 +106,4 @@ jobs:
             --head $BRANCH \
             --delete-branch \
             --label "release")
-          echo "# ✅ Bump to next patch version: $PR:URL" >> $GITHUB_STEP_SUMMARY
+          echo "# ✅ Bump to next patch version: $PR_URL" >> $GITHUB_STEP_SUMMARY
