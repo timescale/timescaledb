@@ -22,6 +22,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: git config
+        run: |
+          git config user.name "timescale-automation"
+          git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name }}
