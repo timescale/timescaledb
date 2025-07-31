@@ -144,7 +144,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ env.RELEASE_BRANCH }}
-      - name: Curate minor release artefacts
+      - name: Generate release artefacts
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
@@ -156,11 +156,11 @@ jobs:
           git commit -m "release artefacts from ${{ env.CURRENT_VERSION }} to ${{ env.NEXT_VERSION }}"
           git push origin $BRANCH
 
-          printf '%b- CHANGELOG\n- set previous_version in version.config\n- adjust CMakeList.txt with up & down grade files' > $BODY
+          BODY="- CHANGELOG\n- set previous_version in version.config\n- adjust CMakeList.txt with up & down grade files"
 
           PR_URL=$(gh pr create \
             --title "Release artefacts ${{ env.NEXT_VERSION }}" \
-            --body "$BODY" \
+            --body "${BODY//\\n/$\n}" \
             --base ${{ env.RELEASE_BRANCH }} \
             --head $BRANCH \
             --label "release")
