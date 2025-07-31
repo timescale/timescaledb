@@ -23,6 +23,8 @@ jobs:
 
     steps:
       - name: Generate list of GUCs
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           if gh workflow run tsdb-refresh-gucs-list.yaml -R timescale/docs -f tag=${{ github.event.release.tag_name }}; then
             echo "✅ Triggered generation of GUC list in docs" >> $GITHUB_STEP_SUMMARY
@@ -39,6 +41,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Forward port changes to main
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           ./scripts/release/build_post_release_artefacts.sh ${{ github.event.release.tag_name }}
 
@@ -69,6 +73,8 @@ jobs:
           ref: ${{ github.event.release.tag_name }}
 
       - name: Bump to next version on release branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           TAGGED_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           if [[ "$TAGGED_VERSION" != "$${{ github.event.release.tag_name }}" ]]; then

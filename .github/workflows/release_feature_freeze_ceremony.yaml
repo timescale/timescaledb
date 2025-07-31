@@ -137,6 +137,8 @@ jobs:
 
       # Rework version.config and up & down grade scripts
       - name: Curate minor release artefacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           ./scripts/release/build_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
 
