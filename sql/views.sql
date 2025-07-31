@@ -375,7 +375,8 @@ CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings A
 		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
 		array_to_string(segmentby,',') AS segmentby,
 		un.orderby,
-    d.compress_interval_length
+    d.compress_interval_length,
+    s.index AS index
   FROM _timescaledb_catalog.hypertable ht
   JOIN LATERAL (
     SELECT
@@ -403,7 +404,8 @@ CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
 		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
 		format('%I.%I',ch.schema_name,ch.table_name)::regclass AS chunk,
 		array_to_string(segmentby,',') AS segmentby,
-		un.orderby
+		un.orderby,
+    s.index AS index
 	FROM _timescaledb_catalog.hypertable ht
     INNER JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
     INNER JOIN _timescaledb_catalog.compression_settings s ON (format('%I.%I',ch.schema_name,ch.table_name)::regclass = s.relid)

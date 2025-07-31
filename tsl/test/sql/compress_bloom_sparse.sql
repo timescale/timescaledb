@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
 
 -- helper function: float -> pseudorandom float [-0.5..0.5]
 create or replace function mix(x anyelement) returns float8 as $$
@@ -27,6 +28,7 @@ alter table bloom set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'x');
 select count(compress_chunk(x)) from show_chunks('bloom') x;
+select * from settings;
 vacuum full analyze bloom;
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
@@ -252,6 +254,10 @@ create table badtable(ts int, s int, b badint);
 
 select create_hypertable('badtable', 'ts');
 
+\set ON_ERROR_STOP 0
+alter table badtable set (timescaledb.compress, timescaledb.compress_orderby = '"ts" desc', timescaledb.compress_segmentby = 's',
+    timescaledb.compress_index = 'bloom("b")');
+\set ON_ERROR_STOP 1
 alter table badtable set (timescaledb.compress, timescaledb.compress_segmentby = 's',
     timescaledb.compress_orderby = 'ts');
 
@@ -309,6 +315,7 @@ as
 -- Recompress after creating the hash functions
 select count(compress_chunk(x)) from show_chunks('badtable') x;
 
+select * from settings;
 vacuum full analyze badtable;
 
 -- Verify that we actually got the bloom filter index.

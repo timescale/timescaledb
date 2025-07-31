@@ -8,6 +8,7 @@
 #include <common/jsonapi.h>
 #include <fmgr.h>
 #include <utils/builtins.h>
+#include <utils/fmgroids.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
 
@@ -242,4 +243,124 @@ ts_jsonb_get_interval_field(const Jsonb *json, const char *key)
 		DirectFunctionCall3(interval_in, CStringGetDatum(interval_str), InvalidOid, -1);
 
 	return DatumGetIntervalP(interval_datum);
+}
+
+bool
+ts_jsonb_equal(Jsonb *left, Jsonb *right)
+{
+	/* Quick exit if both are NULL or point to same thing. */
+	if (left == right)
+		return true;
+
+	if (left == NULL || right == NULL)
+		return false;
+
+	Assert(left != NULL && right != NULL);
+
+	Datum result = DirectFunctionCall2(jsonb_eq, PointerGetDatum(left), PointerGetDatum(right));
+
+	return DatumGetBool(result);
+}
+
+/*
+ * Searches and replaces any occurrences of a matching key value pair (strings only).
+ * Compatible with nested and array jsonbs
+ */
+Jsonb *
+ts_jsonb_replace_key_value_str_field(Jsonb *jb, const char *key, const char *old, const char *new,
+									 bool *replaced)
+{
+	JsonbParseState *state = NULL;
+	JsonbIterator *it;
+	JsonbValue v, *res = NULL;
+	JsonbIteratorToken r;
+	*replaced = false;
+
+	if (JB_ROOT_IS_SCALAR(jb))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("cannot replace from scalar")));
+
+	if (JB_ROOT_COUNT(jb) == 0)
+		return jb;
+
+	it = JsonbIteratorInit(&jb->root);
+
+	while ((r = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
+	{
+		if (r == WJB_KEY && v.type == jbvString && ((int) strlen(key) == v.val.string.len) &&
+			strncmp(key, v.val.string.val, v.val.string.len) == 0)
+		{
+			JsonbValue change_value;
+			r = JsonbIteratorNext(&it, &change_value, false);
+			Assert(r == WJB_VALUE);
+			if (change_value.type != jbvString)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("Jsonb value if of type \"%s\", but expected of type string",
+								JsonbTypeName(&change_value))));
+			}
+
+			if (((int) strlen(old) == change_value.val.string.len) &&
+				strncmp(old, change_value.val.string.val, change_value.val.string.len) == 0)
+			{
+				*replaced = true;
+
+				change_value.val.string.val = (char *) new;
+				change_value.val.string.len = strlen(new);
+			}
+
+			pushJsonbValue(&state, WJB_KEY, &v);
+			pushJsonbValue(&state, WJB_VALUE, &change_value);
+			continue;
+		}
+		res = pushJsonbValue(&state, r, r < WJB_BEGIN_ARRAY ? &v : NULL);
+	}
+	return JsonbValueToJsonb(res);
+}
+
+/*
+ * searches for any occurrences of a matching key value pair. compatible with nested and
+ * array jsonbs
+ */
+bool
+ts_jsonb_has_key_value_str_field(Jsonb *jb, const char *key, const char *value)
+{
+	JsonbIterator *it;
+	JsonbValue v;
+	JsonbIteratorToken r;
+
+	if (jb == NULL || JB_ROOT_COUNT(jb) == 0)
+		return false;
+
+	if (JB_ROOT_IS_SCALAR(jb))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("cannot find from scalar")));
+
+	it = JsonbIteratorInit(&jb->root);
+
+	while ((r = JsonbIteratorNext(&it, &v, false)) != WJB_DONE)
+	{
+		if (r == WJB_KEY && v.type == jbvString && ((int) strlen(key) == v.val.string.len) &&
+			strncmp(key, v.val.string.val, v.val.string.len) == 0)
+		{
+			r = JsonbIteratorNext(&it, &v, false);
+			Assert(r == WJB_VALUE);
+			if (v.type != jbvString)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("Jsonb value if of type \"%s\", but expected type \"string\"",
+								JsonbTypeName(&v))));
+			}
+
+			if (((int) strlen(value) == v.val.string.len) &&
+				strncmp(value, v.val.string.val, v.val.string.len) == 0)
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
