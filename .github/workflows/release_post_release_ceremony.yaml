@@ -3,6 +3,7 @@ name: Release - Post Release Ceremony
 #
 # Post Release Workflow
 #
+# 0. trigger the generate GUCs workflow in the docs repo
 # 1. generate the artefacts to forward port to main and open PR for it
 # 2. bump the next patch number + 1 on the release branch and open PR for it
 # 
@@ -18,14 +19,16 @@ permissions:
 
 jobs:
   docs:
-    name: Post Release Ceremony - Documentation
+    name: Post Release Ceremonies
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.release.tag_name }}
-      - name: Generate list of GUCs
+      - name: git config
+        run: |
+          git config user.name "timescale-automation"
+          git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
+
+      - name: Generate list of GUCs for docs
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
@@ -35,11 +38,6 @@ jobs:
             echo "❌ docs workflow to generate the GUCs failed" >> $GITHUB_STEP_SUMMARY
           fi
 
-  main-branch:
-    name: Post Release Ceremony - main branch
-    runs-on: ubuntu-latest
-
-    steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name }}
@@ -66,11 +64,6 @@ jobs:
             --label "release")
           echo "✅ Forward ported release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
 
-  release-branch:
-    name: Post Release Ceremony - release branch
-    runs-on: ubuntu-latest
-
-    steps:
       - name: Get next versions
         run: |
           TAGGED_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)

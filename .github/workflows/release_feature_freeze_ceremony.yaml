@@ -31,6 +31,11 @@ jobs:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
 
+      - name: git config
+        run: |
+          git config user.name "timescale-automation"
+          git config user.email "123763385+github-actions[bot]@users.noreply.github.com"
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
