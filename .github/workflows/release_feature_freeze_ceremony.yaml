@@ -162,6 +162,7 @@ jobs:
 
           PR_URL=$(gh pr create \
             --title "Release ${{ env.NEXT_VERSION }}" \
+            --body "$BODY" \
             --base ${{ env.RELEASE_BRANCH }} \
             --head $BRANCH \
             --label "release")
