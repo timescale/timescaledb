@@ -94,13 +94,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           if git ls-remote --heads origin "${{ env.RELEASE_BRANCH }}" | grep -q "${{ env.RELEASE_BRANCH }}"; then
-            echo "✅ release branch exists" >> $GITHUB_STEP_SUMMARY
+            echo "✓ the \`${{ env.RELEASE_BRANCH }}\` release branch exists" >> $GITHUB_STEP_SUMMARY
           else
             gh api repos/${{ github.repository }}/git/refs \
               --method POST \
               --field ref="refs/heads/${{ env.RELEASE_BRANCH }}" \
               --field sha="${{ github.sha }}"
-            echo "✅ release branch created" >> $GITHUB_STEP_SUMMARY
+            echo "✅ the \`${{ env.RELEASE_BRANCH }}\` release branch created" >> $GITHUB_STEP_SUMMARY
           fi
 
       # -------------------------------------------------------
