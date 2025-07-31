@@ -116,7 +116,7 @@ jobs:
       # Generate the CHANGELOG and submit it in a separate PR
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.NEXT_VERSION }}
+          ref: ${{ env.RELEASE_BRANCH }}
       - name: Generate and create Pull Request for CHANGELOG
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
@@ -145,7 +145,7 @@ jobs:
       # Rework version.config and up & down grade scripts
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.NEXT_VERSION }}
+          ref: ${{ env.RELEASE_BRANCH }}
       - name: Curate minor release artefacts
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
