@@ -54,8 +54,9 @@ jobs:
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
 
           echo "# 🚀 Release v${NEXT_VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "Current version: \`$CURRENT_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "Previous version: \`$CURRENT_VERSION\`" >> $GITHUB_STEP_SUMMARY
           echo "Release branch: \`$RELEASE_BRANCH\`" >> $GITHUB_STEP_SUMMARY
+          echo "Workflow branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
       # -------------------------------------------------------
@@ -118,7 +119,7 @@ jobs:
           BODY=$(head -n 19 CHANGELOG.md | tail -n 10)
 
           BRANCH="release/${{ env.NEXT_VERSION }}-changelog"
-          git checkout -b $BRANCH
+          git checkout -b $BRANCH ${{ env.RELEASE_BRANCH }}
           git add .unreleased/* CHANGELOG.md
           git commit -m "CHANGELOG ${{ env.NEXT_VERSION }}"
           git push origin $BRANCH
@@ -143,7 +144,7 @@ jobs:
           ./scripts/release/build_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
 
           BRANCH="release/${{ env.CURRENT_VERSION }}-${{ env.NEXT_VERSION }}"
-          git checkout -b $BRANCH
+          git checkout -b $BRANCH ${{ env.RELEASE_BRANCH }}
           git add version.config sql/updates/*.sql sql/CMakeLists.txt
           git commit -m "release artefacts from ${{ env.CURRENT_VERSION }} to ${{ env.NEXT_VERSION }}"
           git push origin $BRANCH
