@@ -559,9 +559,9 @@ NOTICE:  defaulting compress_orderby to time_bucket
 SELECT add_continuous_aggregate_policy('i2980_cagg2', '10 day'::interval, '6 day'::interval);
 ERROR:  function add_continuous_aggregate_policy(unknown, interval, interval) does not exist at character 8
 SELECT add_compression_policy('i2980_cagg2', '3'::integer);
-ERROR:  unsupported compress_after argument type, expected type : interval
+ERROR:  unsupported "compress_after" argument type, expected type : interval
 SELECT add_compression_policy('i2980_cagg2', 13::integer);
-ERROR:  unsupported compress_after argument type, expected type : interval
+ERROR:  unsupported "compress_after" argument type, expected type : interval
 SELECT materialization_hypertable_schema || '.' || materialization_hypertable_name AS "MAT_TABLE_NAME"
 FROM timescaledb_information.continuous_aggregates
 WHERE view_name = 'i2980_cagg2'
