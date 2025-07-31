@@ -71,13 +71,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.release.tag_name }}
-
-      - name: Bump to next version on release branch
-        env:
-          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+      - name: Get next versions
         run: |
           TAGGED_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           if [[ "$TAGGED_VERSION" != "$${{ github.event.release.tag_name }}" ]]; then
@@ -88,28 +82,40 @@ jobs:
 
           RELEASE_BRANCH="${TAGGED_VERSION/%.d/.x}"
           NEXT_VERSION=$(echo "$TAGGED_VERSION" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')
-          
-          echo "tagged version: ${TAGGED_VERSION}"
-          echo "next version: ${NEXT_VERSION}"
+
+          echo "TAGGED_VERSION=${TAGGED_VERSION}" >> $GITHUB_ENV
+          echo "RELEASE_BRANCH=${RELEASE_BRANCH}" >> $GITHUB_ENV
+          echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+
+      - name: Bump to next version on release branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+        run: |
+          echo "Tagged version: ${{ env.TAGGED_VERSION }}"
+          echo "Next version: ${{ env.NEXT_VERSION }}" 
 
           # adjust version.config file
           sed -i \
-            -e "s/^version = .*/version = $NEXT_VERSION/" \
-            -e "s/^previous_version = .*/previous_version = $TAGGED_VERSION/" \
+            -e "s/^version = .*/version = ${{ env.NEXT_VERSION }}/" \
+            -e "s/^previous_version = .*/previous_version = ${{ env.TAGGED_VERSION }}/" \
             version.config
 
-          echo "✅ setting next patch version $TAGGED_VERSION in version.config" >> $GITHUB_STEP_SUMMARY
+          echo "✅ setting next patch version ${{ env.TAGGED_VERSION }} in version.config" >> $GITHUB_STEP_SUMMARY
           cat version.config >> $GITHUB_STEP_SUMMARY
 
-          BRANCH="release/bump-${{ github.event.release.tag_name }}-to-$NEXT_VERSION"
+          BRANCH="release/bump-${{ github.event.release.tag_name }}-to-${{ env.NEXT_VERSION }}"
           git checkout -b $BRANCH
           git add version.config
-          git commit -m "Bump to next patch version $NEXT_VERSION"
+          git commit -m "Bump to next patch version ${{ env.NEXT_VERSION }}"
           git push origin $BRANCH
 
           PR_URL=$(gh pr create \
             --title "Forwardport ${{ github.event.release.tag_name }}" \
-            --body "Change to the next patch version $NEXT_VERSION after the release of ${{ github.event.release.tag_name }}." \
+            --body "Change to the next patch version ${{ env.NEXT_VERSION }} after the release of ${{ github.event.release.tag_name }}." \
             --base $RELEASE_BRANCH \
             --head $BRANCH \
             --label "release")
