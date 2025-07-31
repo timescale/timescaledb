@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   release-feature-freeze-ceremony:
-    name: Release - Feature Freeze & CHANGELOG
+    name: Release - Feature Freeze
     runs-on: ubuntu-latest
     environment:
       name: Release Ceremonies
@@ -30,11 +30,6 @@ jobs:
     steps:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
-
-      - name: Configure git
-        run: |
-          git config user.name "timescale-automation"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Install Dependencies
         run: |
@@ -47,15 +42,16 @@ jobs:
         run: |
           NEXT_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
-          RELEASE_BRANCH="${NEXT_VERSION/%.0/.x}"
+          RELEASE_BRANCH="${NEXT_VERSION/%.[0-9]/.x}"
 
           echo "RELEASE_BRANCH=${RELEASE_BRANCH}" >> $GITHUB_ENV
           echo "CURRENT_VERSION=${CURRENT_VERSION}" >> $GITHUB_ENV
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
 
           echo "# 🚀 Release v${NEXT_VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "Current version: \`$CURRENT_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "Previous version: \`$CURRENT_VERSION\`" >> $GITHUB_STEP_SUMMARY
           echo "Release branch: \`$RELEASE_BRANCH\`" >> $GITHUB_STEP_SUMMARY
+          echo "Workflow branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
       # -------------------------------------------------------
@@ -65,9 +61,13 @@ jobs:
       # -------------------------------------------------------
       
       # Bump minor in main for minor releases
+      - uses: actions/checkout@v4
+        with:
+          ref: main
       - name: Bump minor version on main if next release is a new minor
         if: endsWith(env.NEXT_VERSION, '.0')
-        id: bump_minor_version_on_main
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           NEXT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           NEXT_MAIN_VERSION=$(echo "$NEXT_MAIN_VERSION" | awk -F. '{printf "%d.%d.0-dev", $1, $2 + 1}')
@@ -81,11 +81,11 @@ jobs:
 
           PR_URL=$(gh pr create \
             --title "Increase minor version $NEXT_MAIN_VERSION" \
+            --body "Bump to next minor for the upcoming ${{ env.CURRENT_VERSION }} release" \
             --base main \
             --head $BRANCH \
-            --delete-branch \
             --label "release")
-          echo "# ✅ minor version increase on main: $PR_URL" >> $GITHUB_STEP_SUMMARY
+          echo "* ✅ minor version increase on main: $PR_URL" >> $GITHUB_STEP_SUMMARY
       
       # Create `2.XX.x` release branch of `main`
       # Release branch is a dependency for the next steps
@@ -95,13 +95,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           if git ls-remote --heads origin "${{ env.RELEASE_BRANCH }}" | grep -q "${{ env.RELEASE_BRANCH }}"; then
-            echo "# ✅ release branch exists" >> $GITHUB_STEP_SUMMARY
+            echo "* ✓ the \`${{ env.RELEASE_BRANCH }}\` release branch exists" >> $GITHUB_STEP_SUMMARY
           else
             gh api repos/${{ github.repository }}/git/refs \
               --method POST \
               --field ref="refs/heads/${{ env.RELEASE_BRANCH }}" \
               --field sha="${{ github.sha }}"
-            echo "# ✅ release branch created" >> $GITHUB_STEP_SUMMARY
+            echo "* ✅ the \`${{ env.RELEASE_BRANCH }}\` release branch created" >> $GITHUB_STEP_SUMMARY
           fi
 
       # -------------------------------------------------------
@@ -111,12 +111,15 @@ jobs:
       # -------------------------------------------------------
 
       # Generate the CHANGELOG and submit it in a separate PR
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
       - name: Generate and create Pull Request for CHANGELOG
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           ./scripts/changelog/generate.sh 
-          BODY=$(head -n 19 CHANGELOG.md | tail -n 10)
+          BODY=$(head -n 19 CHANGELOG.md | tail -n 20)
 
           BRANCH="release/${{ env.NEXT_VERSION }}-changelog"
           git checkout -b $BRANCH
@@ -129,16 +132,16 @@ jobs:
             --body "$BODY" \
             --base ${{ env.RELEASE_BRANCH }} \
             --head $BRANCH \
-            --delete-branch \
             --label "release,changelog")
-          echo "# ✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## CHANGELOG (preview)" >> $GITHUB_STEP_SUMMARY
-          echo "$BODY" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "* ✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
 
       # Rework version.config and up & down grade scripts
-      - name: Curate minor release artefacts
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_BRANCH }}
+      - name: Generate release artefacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           ./scripts/release/build_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
 
@@ -151,9 +154,9 @@ jobs:
           BODY="- CHANGELOG\n- set previous_version in version.config\n- adjust CMakeList.txt with up & down grade files"
 
           PR_URL=$(gh pr create \
-            --title "Release ${{ env.NEXT_VERSION }}" \
+            --title "Release artefacts ${{ env.NEXT_VERSION }}" \
+            --body "${BODY//\\n/$\n}" \
             --base ${{ env.RELEASE_BRANCH }} \
             --head $BRANCH \
-            --delete-branch \
             --label "release")
-          echo "# ✅ Release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
+          echo "* ✅ Release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
