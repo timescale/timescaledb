@@ -71,7 +71,8 @@ jobs:
           ref: main
       - name: Bump minor version on main if next release is a new minor
         if: endsWith(env.NEXT_VERSION, '.0')
-        id: bump_minor_version_on_main
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           NEXT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           NEXT_MAIN_VERSION=$(echo "$NEXT_MAIN_VERSION" | awk -F. '{printf "%d.%d.0-dev", $1, $2 + 1}')
