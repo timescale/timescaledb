@@ -86,6 +86,7 @@ jobs:
 
           PR_URL=$(gh pr create \
             --title "Increase minor version $NEXT_MAIN_VERSION" \
+            --body "Bump to next minor for the upcoming ${{ env.CURRENT_VERSION }} release" \
             --base main \
             --head $BRANCH \
             --label "release")
@@ -123,7 +124,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           ./scripts/changelog/generate.sh 
-          BODY=$(head -n 19 CHANGELOG.md | tail -n 10)
+          BODY=$(head -n 19 CHANGELOG.md | tail -n 20)
 
           BRANCH="release/${{ env.NEXT_VERSION }}-changelog"
           git checkout -b $BRANCH
