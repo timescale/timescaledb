@@ -24,7 +24,11 @@ jobs:
     steps:
       - name: Generate list of GUCs
         run: |
-          gh workflow run tsdb-refresh-gucs-list.yaml -R timescale/docs -f tag=${{ github.event.release.tag_name }}
+          if gh workflow run tsdb-refresh-gucs-list.yaml -R timescale/docs -f tag=${{ github.event.release.tag_name }}; then
+            echo "✅ Triggered generation of GUC list in docs" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ docs workflow to generate the GUCs failed" >> $GITHUB_STEP_SUMMARY
+          fi
 
   main-branch:
     name: Post Release Ceremony - main branch
@@ -38,33 +42,22 @@ jobs:
         run: |
           ./scripts/release/build_post_release_artefacts.sh ${{ github.event.release.tag_name }}
 
-      - name: PR for forward ported artefacts
-        id: cpr_fwdp
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: "release/${{ github.event.release.tag_name }}--forwardport"
-          base: "main"
-          delete-branch: true
-          title: "Forwardport ${{ github.event.release.tag_name }}"
-          body: |
-              - CHANGELOG
-              - set previous_version in version.config
-              - adjust CMakeList.txt with up & down grade files
-              - TODO removed .unreleased files
-          labels: |
-            release
-          add-paths: |
-            .unreleased/*
-            CHANGELOG.md
-            version.config
-            sql/updates/*.sql
-            sql/CMakeLists.txt
-      
-      - name: "Validate next version PR"
-        if: ${{ steps.cpr_fwdp.outputs.pull-request-number }}
-        run: |
-          echo "Pull Request: ${{ steps.cpr_fwdp.outputs.pull-request-url }}"
+          BRANCH="release/${{ github.event.release.tag_name }}-main"
+          git checkout -b $BRANCH
+          git add version.config sql/updates/*.sql sql/CMakeLists.txt .unreleased/* CHANGELOG.md
+          git commit -m "forward port release artefacts of ${{ github.event.release.tag_name }} to main"
+          git push origin $BRANCH
+
+          BODY="- CHANGELOG\n- set previous_version in version.config\n- adjust CMakeList.txt with up & down grade files\n- removed .unreleased files"
+
+          PR_URL=$(gh pr create \
+            --title "Forwardport ${{ github.event.release.tag_name }}" \
+            --body "$BODY" \
+            --base main \
+            --head $BRANCH \
+            --delete-branch \
+            --label "release")
+          echo "# ✅ Forward ported release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
 
   release-branch:
     name: Post Release Ceremony - release branch
@@ -81,6 +74,7 @@ jobs:
           TAGGED_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           if [[ "$TAGGED_VERSION" != "$${{ github.event.release.tag_name }}" ]]; then
             echo "The tag: ${{ github.event.release.tag_name }} and the release version ${TAGGED_VERSION} do not match." >&2
+            echo "❌ tagged version ${{ github.event.release.tag_name }} is not matching the current version $TAGGED_VERSION" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
@@ -96,27 +90,20 @@ jobs:
             -e "s/^previous_version = .*/previous_version = $TAGGED_VERSION/" \
             version.config
 
-          cat version.config
+          echo "# ✅ setting next patch version $TAGGED_VERSION in version.config" >> $GITHUB_STEP_SUMMARY
+          cat version.config >> $GITHUB_STEP_SUMMARY
 
-          echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
-          echo "RELEASE_BRANCH=${RELEASE_BRANCH}" >> $GITHUB_ENV
+          BRANCH="release/bump-${{ github.event.release.tag_name }}-to-$NEXT_VERSION"
+          git checkout -b $BRANCH
+          git add version.config
+          git commit -m "Bump to next patch version $NEXT_VERSION"
+          git push origin $BRANCH
 
-      - name: PR for next version on release branch
-        id: cpr_next_version
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: "release/${{ github.event.release.tag_name }}--bump-to-next-version"
-          base: ${{ env.RELEASE_BRANCH }}
-          delete-branch: true
-          title: "Bump to next version: ${{ env.NEXT_VERSION }}"
-          body: "Change to the next patch version ${{ env.NEXT_VERSION }} after the release of ${{ github.event.release.tag_name }}."
-          labels: |
-            release
-          add-paths: |
-            version.config
-      
-      - name: "Validate patch version bump PR"
-        if: ${{ steps.cpr_next_version.outputs.pull-request-number }}
-        run: |
-          echo "Pull Request: ${{ steps.cpr_next_version.outputs.pull-request-url }}"
+          PR_URL=$(gh pr create \
+            --title "Forwardport ${{ github.event.release.tag_name }}" \
+            --body "Change to the next patch version $NEXT_VERSION after the release of ${{ github.event.release.tag_name }}." \
+            --base $RELEASE_BRANCH \
+            --head $BRANCH \
+            --delete-branch \
+            --label "release")
+          echo "# ✅ Bump to next patch version: $PR_URL" >> $GITHUB_STEP_SUMMARY

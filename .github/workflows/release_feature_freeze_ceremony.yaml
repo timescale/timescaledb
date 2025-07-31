@@ -5,6 +5,7 @@ name: Release - Feature Freeze Ceremony
 # 
 # prereq: needs approval from another person to run the action (environment)
 #
+# 0. bump minor -dev version in version.config on main, if and only if it's a .0 release
 # 1. creates the release branch X.Y.x, if and if the branch does not exist yet
 # 2. generates CHANGELOG and opens PR for it
 # 3. generates the release artefacts for the next versions
@@ -30,6 +31,11 @@ jobs:
       - name: Checkout TimescaleDB
         uses: actions/checkout@v4
 
+      - name: Configure git
+        run: |
+          git config user.name "timescale-automation"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
@@ -47,17 +53,10 @@ jobs:
           echo "CURRENT_VERSION=${CURRENT_VERSION}" >> $GITHUB_ENV
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
 
-          echo "Release branch: $RELEASE_BRANCH"
-
-      - name: Check if release branch exists
-        id: check_branch
-        run: |
-          if git ls-remote --heads origin ${{ env.RELEASE_BRANCH }} | grep -q ${{ env.RELEASE_BRANCH }}; then
-            echo "Branch ${{ env.RELEASE_BRANCH }} exists!"
-            echo "branch_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "branch_exists=false" >> $GITHUB_OUTPUT
-          fi
+          echo "# 🚀 Release v${NEXT_VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "Current version: \`$CURRENT_VERSION\`" >> $GITHUB_STEP_SUMMARY
+          echo "Release branch: \`$RELEASE_BRANCH\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
       # -------------------------------------------------------
       #
@@ -73,34 +72,37 @@ jobs:
           NEXT_MAIN_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           NEXT_MAIN_VERSION=$(echo "$NEXT_MAIN_VERSION" | awk -F. '{printf "%d.%d.0-dev", $1, $2 + 1}')
           sed -i "s/^version = .*/version = $NEXT_MAIN_VERSION/" version.config
-          echo "NEXT_MAIN_VERSION=${NEXT_MAIN_VERSION}" >> $GITHUB_ENV
 
-      # Submit PR for new version changes on main
-      - name: Create Pull Request for next version on main
-        if: steps.bump_minor_version_on_main.conclusion == 'success'
-        id: cpr_next_version_main
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: "release/${{ env.NEXT_VERSION }}-${{ env.NEXT_MAIN_VERSION }}"
-          base: "main"
-          delete-branch: true
-          title: "Bump version to ${{ env.NEXT_MAIN_VERSION }}"
-          labels: |
-            release
-          add-paths: |
-            version.config
+          BRANCH="release/bump-main-to-$NEXT_MAIN_VERSION"
+          git checkout -b $BRANCH
+          git add version.config
+          git commit -m "Increase minor version $NEXT_MAIN_VERSION"
+          git push origin $BRANCH
+
+          PR_URL=$(gh pr create \
+            --title "Increase minor version $NEXT_MAIN_VERSION" \
+            --base main \
+            --head $BRANCH \
+            --delete-branch \
+            --label "release")
+          echo "# ✅ minor version increase on main: $PR_URL" >> $GITHUB_STEP_SUMMARY
       
       # Create `2.XX.x` release branch of `main`
       # Release branch is a dependency for the next steps
       # only execute this step on .0 releases
       - name: Create Release Branch
-        if: steps.check_branch.outputs.branch_exists == 'false'
-        uses: peterjgrainger/action-create-branch@v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-        with:
-          branch: '${{ env.RELEASE_BRANCH }}'
+        run: |
+          if git ls-remote --heads origin "${{ env.RELEASE_BRANCH }}" | grep -q "${{ env.RELEASE_BRANCH }}"; then
+            echo "# ✅ release branch exists" >> $GITHUB_STEP_SUMMARY
+          else
+            gh api repos/${{ github.repository }}/git/refs \
+              --method POST \
+              --field ref="refs/heads/${{ env.RELEASE_BRANCH }}" \
+              --field sha="${{ github.sha }}"
+            echo "# ✅ release branch created" >> $GITHUB_STEP_SUMMARY
+          fi
 
       # -------------------------------------------------------
       #
@@ -108,60 +110,50 @@ jobs:
       #
       # -------------------------------------------------------
 
-      - name: Generate the CHANGELOG
+      # Generate the CHANGELOG and submit it in a separate PR
+      - name: Generate and create Pull Request for CHANGELOG
+        env:
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           ./scripts/changelog/generate.sh 
-          head -n 19 CHANGELOG.md | tail -n 10
+          BODY=$(head -n 19 CHANGELOG.md | tail -n 10)
 
-      # Generate the CHANGELOG and submit it in a separate PR
-      - name: Create Pull Request for CHANGELOG
-        id: cpr_changelog
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: "release/${{ env.NEXT_VERSION }}--changelog"
-          base: ${{ env.RELEASE_BRANCH }}
-          delete-branch: true
-          reviewers: |
-            @philkra
-            @brandonpurcell-dev
-            @atovpeko
-          title: "Release ${{ env.NEXT_VERSION }}"
-          labels: |
-            release
-            changelog
-          add-paths: |
-            .unreleased/*
-            CHANGELOG.md
+          BRANCH="release/${{ env.NEXT_VERSION }}-changelog"
+          git checkout -b $BRANCH
+          git add .unreleased/* CHANGELOG.md
+          git commit -m "CHANGELOG ${{ env.NEXT_VERSION }}"
+          git push origin $BRANCH
 
-      - name: "Validate CHANGELOG PR"
-        if: ${{ steps.cpr_changelog.outputs.pull-request-number }}
-        run: |
-          echo "Pull Request: ${{ steps.cpr_changelog.outputs.pull-request-url }}"
+          PR_URL=$(gh pr create \
+            --title "Release ${{ env.NEXT_VERSION }}" \
+            --body "$BODY" \
+            --base ${{ env.RELEASE_BRANCH }} \
+            --head $BRANCH \
+            --delete-branch \
+            --label "release,changelog")
+          echo "# ✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## CHANGELOG (preview)" >> $GITHUB_STEP_SUMMARY
+          echo "$BODY" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
       # Rework version.config and up & down grade scripts
       - name: Curate minor release artefacts
         run: |
           ./scripts/release/build_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
 
-      # Submit PR for new version changes 
-      - name: Create Pull Request for next version changes on release branch
-        id: cpr_next_version_changes
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
-          branch: "release/${{ env.NEXT_VERSION }}--next"
-          base: ${{ env.RELEASE_BRANCH }}
-          delete-branch: true
-          title: "Bump version to ${{ env.NEXT_VERSION }}"
-          labels: |
-            release
-          add-paths: |
-            version.config
-            sql/updates/*.sql
-            sql/CMakeLists.txt
+          BRANCH="release/${{ env.CURRENT_VERSION }}-${{ env.NEXT_VERSION }}"
+          git checkout -b $BRANCH
+          git add version.config sql/updates/*.sql sql/CMakeLists.txt
+          git commit -m "release artefacts from ${{ env.CURRENT_VERSION }} to ${{ env.NEXT_VERSION }}"
+          git push origin $BRANCH
 
-      - name: "Validate next version PR"
-        if: ${{ steps.cpr_next_version_changes.outputs.pull-request-number }}
-        run: |
-          echo "Pull Request: ${{ steps.cpr_next_version_changes.outputs.pull-request-url }}"
+          BODY="- CHANGELOG\n- set previous_version in version.config\n- adjust CMakeList.txt with up & down grade files"
+
+          PR_URL=$(gh pr create \
+            --title "Release ${{ env.NEXT_VERSION }}" \
+            --base ${{ env.RELEASE_BRANCH }} \
+            --head $BRANCH \
+            --delete-branch \
+            --label "release")
+          echo "# ✅ Release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
