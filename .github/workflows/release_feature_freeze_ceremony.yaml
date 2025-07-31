@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   release-feature-freeze-ceremony:
-    name: Release - Feature Freeze & CHANGELOG
+    name: Release - Feature Freeze
     runs-on: ubuntu-latest
     environment:
       name: Release Ceremonies
