@@ -66,6 +66,9 @@ jobs:
       # -------------------------------------------------------
       
       # Bump minor in main for minor releases
+      - uses: actions/checkout@v4
+        with:
+          ref: main
       - name: Bump minor version on main if next release is a new minor
         if: endsWith(env.NEXT_VERSION, '.0')
         id: bump_minor_version_on_main
@@ -111,6 +114,9 @@ jobs:
       # -------------------------------------------------------
 
       # Generate the CHANGELOG and submit it in a separate PR
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.NEXT_VERSION }}
       - name: Generate and create Pull Request for CHANGELOG
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
@@ -119,7 +125,7 @@ jobs:
           BODY=$(head -n 19 CHANGELOG.md | tail -n 10)
 
           BRANCH="release/${{ env.NEXT_VERSION }}-changelog"
-          git checkout -b $BRANCH ${{ env.RELEASE_BRANCH }}
+          git checkout -b $BRANCH
           git add .unreleased/* CHANGELOG.md
           git commit -m "CHANGELOG ${{ env.NEXT_VERSION }}"
           git push origin $BRANCH
@@ -137,6 +143,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
       # Rework version.config and up & down grade scripts
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.NEXT_VERSION }}
       - name: Curate minor release artefacts
         env:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
@@ -144,7 +153,7 @@ jobs:
           ./scripts/release/build_release_artefacts.sh ${{ env.CURRENT_VERSION }} ${{ env.NEXT_VERSION }}
 
           BRANCH="release/${{ env.CURRENT_VERSION }}-${{ env.NEXT_VERSION }}"
-          git checkout -b $BRANCH ${{ env.RELEASE_BRANCH }}
+          git checkout -b $BRANCH
           git add version.config sql/updates/*.sql sql/CMakeLists.txt
           git commit -m "release artefacts from ${{ env.CURRENT_VERSION }} to ${{ env.NEXT_VERSION }}"
           git push origin $BRANCH
