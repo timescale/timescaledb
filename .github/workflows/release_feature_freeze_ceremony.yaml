@@ -88,7 +88,7 @@ jobs:
             --base main \
             --head $BRANCH \
             --label "release")
-          echo "✅ minor version increase on main: $PR_URL" >> $GITHUB_STEP_SUMMARY
+          echo "* ✅ minor version increase on main: $PR_URL" >> $GITHUB_STEP_SUMMARY
       
       # Create `2.XX.x` release branch of `main`
       # Release branch is a dependency for the next steps
@@ -98,13 +98,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
         run: |
           if git ls-remote --heads origin "${{ env.RELEASE_BRANCH }}" | grep -q "${{ env.RELEASE_BRANCH }}"; then
-            echo "✓ the \`${{ env.RELEASE_BRANCH }}\` release branch exists" >> $GITHUB_STEP_SUMMARY
+            echo "* ✓ the \`${{ env.RELEASE_BRANCH }}\` release branch exists" >> $GITHUB_STEP_SUMMARY
           else
             gh api repos/${{ github.repository }}/git/refs \
               --method POST \
               --field ref="refs/heads/${{ env.RELEASE_BRANCH }}" \
               --field sha="${{ github.sha }}"
-            echo "✅ the \`${{ env.RELEASE_BRANCH }}\` release branch created" >> $GITHUB_STEP_SUMMARY
+            echo "* ✅ the \`${{ env.RELEASE_BRANCH }}\` release branch created" >> $GITHUB_STEP_SUMMARY
           fi
 
       # -------------------------------------------------------
@@ -136,7 +136,7 @@ jobs:
             --base ${{ env.RELEASE_BRANCH }} \
             --head $BRANCH \
             --label "release,changelog")
-          echo "✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
+          echo "* ✅ CHANGELOG: $PR_URL" >> $GITHUB_STEP_SUMMARY
 
       # Rework version.config and up & down grade scripts
       - uses: actions/checkout@v4
@@ -162,4 +162,4 @@ jobs:
             --base ${{ env.RELEASE_BRANCH }} \
             --head $BRANCH \
             --label "release")
-          echo "✅ Release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
+          echo "* ✅ Release artefacts: $PR_URL" >> $GITHUB_STEP_SUMMARY
