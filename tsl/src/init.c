@@ -31,6 +31,7 @@
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
+#include "continuous_aggs/invalidation_multi.h"
 #include "continuous_aggs/invalidation_record.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
