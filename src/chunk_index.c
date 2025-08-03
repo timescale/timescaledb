@@ -41,6 +41,8 @@ static bool chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hy
 static Oid ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_indexrel,
 												 Relation chunkrel, IndexInfo *indexinfo,
 												 bool isconstraint, Oid index_tablespace);
+static bool ts_chunk_index_get_by_indexrelid(const Chunk *chunk, Oid chunk_indexrelid,
+											 ChunkIndexMapping *cim_out);
 
 static List *
 create_index_colnames(Relation indexrel)
@@ -903,49 +905,25 @@ ts_chunk_index_get_by_indexrelid(const Chunk *chunk, Oid chunk_indexrelid,
 	return tuples_found > 0;
 }
 
-static ScanFilterResult
-chunk_hypertable_index_name_filter(const TupleInfo *ti, void *data)
+TSDLLEXPORT Oid
+ts_chunk_index_get_by_hypertable_indexrelid(Relation chunk_rel, Oid ht_indexoid)
 {
-	ChunkIndexMapping *cim = data;
-	const char *hypertable_indexname = get_rel_name(cim->parent_indexoid);
-	bool isnull;
-	Datum hypertable_indexname_datum =
-		slot_getattr(ti->slot, Anum_chunk_index_hypertable_index_name, &isnull);
+	List *indexlist = RelationGetIndexList(chunk_rel);
+	ListCell *lc;
+	Oid chunk_index_oid = InvalidOid;
 
-	Assert(!isnull);
+	foreach (lc, indexlist)
+	{
+		Oid indexoid = lfirst_oid(lc);
 
-	if (namestrcmp(DatumGetName(hypertable_indexname_datum), hypertable_indexname) == 0)
-		return SCAN_INCLUDE;
-
-	return SCAN_EXCLUDE;
-}
-
-TSDLLEXPORT bool
-ts_chunk_index_get_by_hypertable_indexrelid(const Chunk *chunk, Oid hypertable_indexrelid,
-											ChunkIndexMapping *cim_out)
-{
-	int tuples_found;
-	ScanKeyData scankey[1];
-
-	Assert(cim_out != NULL);
-
-	cim_out->parent_indexoid = hypertable_indexrelid;
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk->fd.id));
-
-	tuples_found = chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-									scankey,
-									1,
-									chunk_index_tuple_found,
-									chunk_hypertable_index_name_filter,
-									cim_out,
-									AccessShareLock);
-
-	return tuples_found > 0;
+		if (ts_indexing_compare(indexoid, ht_indexoid))
+		{
+			chunk_index_oid = indexoid;
+			break;
+		}
+	}
+	list_free(indexlist);
+	return chunk_index_oid;
 }
 
 typedef struct ChunkIndexRenameInfo
@@ -1134,53 +1112,32 @@ ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const ch
 								   &renameinfo);
 }
 
-static ScanTupleResult
-chunk_index_tuple_set_tablespace(TupleInfo *ti, void *data)
+void
+ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, char *tablespace)
 {
-	char *tablespace = data;
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
-	Oid schemaoid = ts_chunk_get_schema_id(chunk_index->chunk_id, false);
-	Oid indexrelid = get_relname_relid(NameStr(chunk_index->index_name), schemaoid);
-	AlterTableCmd *cmd = makeNode(AlterTableCmd);
-	List *cmds = NIL;
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.id);
+	ListCell *lc;
 
-	cmd->subtype = AT_SetTableSpace;
-	cmd->name = tablespace;
-	cmds = lappend(cmds, cmd);
+	foreach (lc, chunks)
+	{
+		Chunk *chunk = lfirst(lc);
+		Relation chunk_rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Oid chunk_indexrelid =
+			ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, hypertable_indexrelid);
+		table_close(chunk_rel, NoLock);
 
-	ts_alter_table_with_event_trigger(indexrelid, NULL, cmds, false);
+		if (OidIsValid(chunk_indexrelid))
+		{
+			AlterTableCmd *cmd = makeNode(AlterTableCmd);
+			List *cmds = NIL;
 
-	if (should_free)
-		heap_freetuple(tuple);
+			cmd->subtype = AT_SetTableSpace;
+			cmd->name = tablespace;
+			cmds = lappend(cmds, cmd);
 
-	return SCAN_CONTINUE;
-}
-
-int
-ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid, const char *tablespace)
-{
-	ScanKeyData scankey[2];
-	char *indexname = get_rel_name(hypertable_indexrelid);
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(ht->fd.id));
-	ScanKeyInit(&scankey[1],
-				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				CStringGetDatum(indexname));
-
-	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-								   scankey,
-								   2,
-								   chunk_index_tuple_set_tablespace,
-								   NULL,
-								   (char *) tablespace);
+			ts_alter_table_with_event_trigger(chunk_indexrelid, NULL, cmds, false);
+		}
+	}
 }
 
 TSDLLEXPORT void

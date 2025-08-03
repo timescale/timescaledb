@@ -924,15 +924,15 @@ chunk_set_replica_identity(const Chunk *chunk)
 
 	if (stmt.identity_type == REPLICA_IDENTITY_INDEX)
 	{
-		ChunkIndexMapping idxm;
-
 		/* Lookup the corresponding chunk index. If this index is
 		 * dropped, the behavior is the same as NOTHING (as per PG
 		 * documentation). */
-		if (!ts_chunk_index_get_by_hypertable_indexrelid(chunk, ht_rel->rd_replidindex, &idxm))
-			stmt.identity_type = REPLICA_IDENTITY_NOTHING;
+		Oid chunk_index_relid =
+			ts_chunk_index_get_by_hypertable_indexrelid(ch_rel, ht_rel->rd_replidindex);
+		if (OidIsValid(chunk_index_relid))
+			stmt.name = get_rel_name(chunk_index_relid);
 		else
-			stmt.name = get_rel_name(idxm.indexoid);
+			stmt.identity_type = REPLICA_IDENTITY_NOTHING;
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
