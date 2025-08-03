@@ -1193,8 +1193,6 @@ ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid)
 	table_close(rel, AccessShareLock);
 }
 
-TS_FUNCTION_INFO_V1(ts_chunk_index_clone);
-
 static Oid
 chunk_index_duplicate_index(Relation hypertable_rel, Chunk *src_chunk, Oid chunk_index_oid,
 							Relation dest_chunk_rel, Oid index_tablespace)
@@ -1264,107 +1262,6 @@ ts_chunk_index_duplicate(Oid src_chunkrelid, Oid dest_chunkrelid, List **src_ind
 		*src_index_oids = index_oids;
 
 	return new_index_oids;
-}
-
-TS_FUNCTION_INFO_V1(chunk_index_clone);
-Datum
-ts_chunk_index_clone(PG_FUNCTION_ARGS)
-{
-	Oid chunk_index_oid = PG_GETARG_OID(0);
-	if (!OidIsValid(chunk_index_oid))
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk index")));
-
-	Relation chunk_index_rel;
-	Relation hypertable_rel;
-	Relation chunk_rel;
-	Oid constraint_oid;
-	Oid new_chunk_indexrelid;
-	Chunk *chunk;
-	ChunkIndexMapping cim;
-
-	chunk_index_rel = index_open(chunk_index_oid, AccessShareLock);
-
-	chunk = ts_chunk_get_by_relid(chunk_index_rel->rd_index->indrelid, true);
-	ts_chunk_index_get_by_indexrelid(chunk, chunk_index_oid, &cim);
-
-	ts_hypertable_permissions_check(cim.hypertableoid, GetUserId());
-
-	hypertable_rel = table_open(cim.hypertableoid, AccessShareLock);
-
-	/* Need ShareLock on the heap relation we are creating indexes on */
-	chunk_rel = table_open(chunk_index_rel->rd_index->indrelid, ShareLock);
-
-	constraint_oid = get_index_constraint(cim.parent_indexoid);
-
-	new_chunk_indexrelid = chunk_relation_index_create(hypertable_rel,
-													   chunk_index_rel,
-													   chunk_rel,
-													   OidIsValid(constraint_oid),
-													   InvalidOid);
-
-	table_close(chunk_rel, NoLock);
-
-	table_close(hypertable_rel, AccessShareLock);
-
-	index_close(chunk_index_rel, AccessShareLock);
-
-	PG_RETURN_OID(new_chunk_indexrelid);
-}
-
-TS_FUNCTION_INFO_V1(ts_chunk_index_replace);
-
-Datum
-ts_chunk_index_replace(PG_FUNCTION_ARGS)
-{
-	Oid chunk_index_oid_old = PG_GETARG_OID(0);
-	if (!OidIsValid(chunk_index_oid_old))
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk index")));
-
-	Oid chunk_index_oid_new = PG_GETARG_OID(1);
-	if (!OidIsValid(chunk_index_oid_new))
-		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid chunk index")));
-
-	Relation index_rel;
-	Chunk *chunk;
-	ChunkIndexMapping cim;
-
-	Oid constraint_oid;
-	char *name;
-
-	index_rel = index_open(chunk_index_oid_old, ShareLock);
-
-	/* check permissions */
-	chunk = ts_chunk_get_by_relid(index_rel->rd_index->indrelid, true);
-	ts_chunk_index_get_by_indexrelid(chunk, chunk_index_oid_old, &cim);
-	ts_hypertable_permissions_check(cim.hypertableoid, GetUserId());
-
-	name = pstrdup(RelationGetRelationName(index_rel));
-	constraint_oid = get_index_constraint(chunk_index_oid_old);
-
-	index_close(index_rel, NoLock);
-
-	if (OidIsValid(constraint_oid))
-	{
-		ObjectAddress constraintobj = {
-			.classId = ConstraintRelationId,
-			.objectId = constraint_oid,
-		};
-
-		performDeletion(&constraintobj, DROP_RESTRICT, 0);
-	}
-	else
-	{
-		ObjectAddress idxobj = {
-			.classId = RelationRelationId,
-			.objectId = chunk_index_oid_old,
-		};
-
-		performDeletion(&idxobj, DROP_RESTRICT, 0);
-	}
-
-	RenameRelationInternal(chunk_index_oid_new, name, false, true);
-
-	PG_RETURN_VOID();
 }
 
 void
