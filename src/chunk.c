@@ -134,7 +134,7 @@ static void chunk_scan_ctx_init(ChunkScanCtx *ctx, const Hypertable *ht, const P
 static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
 static void chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube);
 static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk,
-											 uint16 limit);
+											 uint64 limit);
 static Datum show_chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
 static int chunk_point_find_chunk_id(const Hypertable *ht, const Point *p);
@@ -924,15 +924,15 @@ chunk_set_replica_identity(const Chunk *chunk)
 
 	if (stmt.identity_type == REPLICA_IDENTITY_INDEX)
 	{
-		ChunkIndexMapping idxm;
-
 		/* Lookup the corresponding chunk index. If this index is
 		 * dropped, the behavior is the same as NOTHING (as per PG
 		 * documentation). */
-		if (!ts_chunk_index_get_by_hypertable_indexrelid(chunk, ht_rel->rd_replidindex, &idxm))
-			stmt.identity_type = REPLICA_IDENTITY_NOTHING;
+		Oid chunk_index_relid =
+			ts_chunk_index_get_by_hypertable_indexrelid(ch_rel, ht_rel->rd_replidindex);
+		if (OidIsValid(chunk_index_relid))
+			stmt.name = get_rel_name(chunk_index_relid);
 		else
-			stmt.name = get_rel_name(idxm.indexoid);
+			stmt.identity_type = REPLICA_IDENTITY_NOTHING;
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
@@ -1791,7 +1791,7 @@ chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube)
  * Returns the number of processed chunks.
  */
 static int
-chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk, uint16 limit)
+chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk, uint64 limit)
 {
 	HASH_SEQ_STATUS status;
 	ChunkScanEntry *entry;
@@ -2274,7 +2274,7 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 
 	/* Get all the chunks from the context */
 	chunk_scan_ctx.data = &data;
-	chunk_scan_ctx_foreach_chunk_stub(&chunk_scan_ctx, chunk_scan_context_add_chunk, -1);
+	chunk_scan_ctx_foreach_chunk_stub(&chunk_scan_ctx, chunk_scan_context_add_chunk, 0);
 	/*
 	 * only affects ctx.htab Got all the chunk already so can now safely
 	 * destroy the context

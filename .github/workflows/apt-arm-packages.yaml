@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
+        image: [ "debian:11-slim", "debian:12-slim", "ubuntu:22.04", "ubuntu:24.04" ]
         pg: [ 15, 16, 17 ]
 
     steps:

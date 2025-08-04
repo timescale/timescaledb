@@ -491,6 +491,13 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	return &iterator->base;
 }
 
+static ArrowArray *tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type,
+												 MemoryContext dest_mctx);
+static ArrowArray *tsl_text_array_decompress_all(Datum compressed_array, Oid element_type,
+												 MemoryContext dest_mctx);
+static ArrowArray *tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type,
+												 MemoryContext dest_mctx);
+
 /* Pass through to the specialized functions below for BOOL and TEXT */
 ArrowArray *
 tsl_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext dest_mctx)
@@ -501,14 +508,16 @@ tsl_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext
 			return tsl_bool_array_decompress_all(compressed_array, element_type, dest_mctx);
 		case TEXTOID:
 			return tsl_text_array_decompress_all(compressed_array, element_type, dest_mctx);
+		case UUIDOID:
+			return tsl_uuid_array_decompress_all(compressed_array, element_type, dest_mctx);
 		default:
-			elog(ERROR, "unsupported array type %u", element_type);
+			elog(ERROR, "unsupported array type %u for bulk decompression", element_type);
 			break;
 	}
 	return NULL;
 }
 
-ArrowArray *
+static ArrowArray *
 tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext dest_mctx)
 {
 	Assert(element_type == BOOLOID);
@@ -575,11 +584,89 @@ tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	return result;
 }
 
+static ArrowArray *
+tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext dest_mctx)
+{
+	Assert(element_type == UUIDOID);
+	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
+	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
+	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+
+	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
+	CheckCompressedData(header->element_type == UUIDOID);
+
+	Simple8bRleSerialized *nulls_serialized = NULL;
+	if (header->has_nulls)
+	{
+		nulls_serialized = bytes_deserialize_simple8b_and_advance(&si);
+	}
+
+	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(&si);
+
+	const uint32 n_notnull = sizes_serialized->num_elements;
+	const uint32 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	const uint32 n_bytes = n_total * 16;
+
+	const uint64 *restrict compressed_non_null_values = (const uint64 *) (si.data + si.cursor);
+	CheckCompressedData(n_notnull * 16 <= (uint32) (si.len - si.cursor));
+
+	uint64 *restrict validity_bitmap = NULL;
+	uint64 *restrict values = MemoryContextAlloc(dest_mctx, n_bytes);
+
+	MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+	/* Decompress the nulls */
+	Simple8bRleBitArray validity_bits =
+		simple8brle_bitarray_decompress(nulls_serialized, /* inverted*/ true);
+	validity_bitmap = validity_bits.data;
+	MemoryContextSwitchTo(old_context);
+
+	/* Check the alignment of compressed_non_null_values */
+	if (((uintptr_t) compressed_non_null_values % 8) == 0)
+	{
+		int position = 0;
+		for (uint32 i = 0; i < n_total; i++)
+		{
+			if (arrow_row_is_valid(validity_bitmap, i))
+			{
+				/* Copy the 16 bytes of the UUID with simple assignment, because we know it is
+				 * aligned */
+				values[i * 2] = compressed_non_null_values[position * 2];
+				values[i * 2 + 1] = compressed_non_null_values[position * 2 + 1];
+				position++;
+			}
+		}
+	}
+	else
+	{
+		int position = 0;
+		for (uint32 i = 0; i < n_total; i++)
+		{
+			if (arrow_row_is_valid(validity_bitmap, i))
+			{
+				/* Copy the 16 bytes of the UUID with memcpy */
+				memcpy(&values[i * 2], &compressed_non_null_values[position * 2], 16);
+				position++;
+			}
+		}
+	}
+
+	ArrowArray *result =
+		MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + (sizeof(void *) * 2));
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = values;
+	result->n_buffers = 2;
+	result->buffers = buffers;
+	result->length = n_total;
+	result->null_count = n_total - n_notnull;
+	return result;
+}
+
 #define ELEMENT_TYPE uint32
 #include "simple8b_rle_decompress_all.h"
 #undef ELEMENT_TYPE
 
-ArrowArray *
+static ArrowArray *
 tsl_text_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext dest_mctx)
 {
 	Assert(element_type == TEXTOID);

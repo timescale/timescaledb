@@ -22,7 +22,7 @@ GRANT CREATE ON SCHEMA "one_Partition" TO :ROLE_DEFAULT_PERM_USER_2;
 
 --test creating and using schema as non-superuser
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
-\dt
+SELECT * FROM test.relation WHERE schema='public' ORDER BY schema, name;
 
 \set ON_ERROR_STOP 0
 SELECT * FROM "one_Partition";

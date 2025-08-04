@@ -3955,18 +3955,21 @@ process_altertable_chunk_replica_identity(Hypertable *ht, Oid chunk_relid, void 
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 		Oid hyper_schema_oid = get_rel_namespace(ht->main_table_relid);
 		Oid hyper_index_oid = get_relname_relid(stmt->name, hyper_schema_oid);
-		ChunkIndexMapping cim;
 
 		Assert(OidIsValid(hyper_index_oid));
 
-		if (!ts_chunk_index_get_by_hypertable_indexrelid(chunk, hyper_index_oid, &cim))
+		Relation chunk_rel = table_open(chunk_relid, AccessExclusiveLock);
+		Oid chunk_index_relid =
+			ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, hyper_index_oid);
+		table_close(chunk_rel, NoLock);
+		if (!OidIsValid(chunk_index_relid))
 			elog(ERROR,
 				 "chunk \"%s.%s\" has no index corresponding to hypertable index \"%s\"",
 				 NameStr(chunk->fd.schema_name),
 				 NameStr(chunk->fd.table_name),
 				 stmt->name);
 
-		stmt->name = get_rel_name(cim.indexoid);
+		stmt->name = get_rel_name(chunk_index_relid);
 	}
 
 	AlterTableInternal(chunk_relid, list_make1(cmd), false);

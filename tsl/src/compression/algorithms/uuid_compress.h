@@ -48,6 +48,8 @@ extern DecompressionIterator *uuid_decompression_iterator_from_datum_reverse(Dat
 
 extern void uuid_compressed_send(CompressedDataHeader *header, StringInfo buffer);
 
+extern ArrowArray *uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx);
+
 extern Datum uuid_compressed_recv(StringInfo buf);
 
 extern Compressor *uuid_compressor_for_type(Oid element_type);
@@ -56,7 +58,7 @@ extern Compressor *uuid_compressor_for_type(Oid element_type);
 	{                                                                                              \
 		.iterator_init_forward = uuid_decompression_iterator_from_datum_forward,                   \
 		.iterator_init_reverse = uuid_decompression_iterator_from_datum_reverse,                   \
-		.decompress_all = NULL, .compressed_data_send = uuid_compressed_send,                      \
+		.decompress_all = uuid_decompress_all, .compressed_data_send = uuid_compressed_send,       \
 		.compressed_data_recv = uuid_compressed_recv,                                              \
 		.compressor_for_type = uuid_compressor_for_type,                                           \
 		.compressed_data_storage = TOAST_STORAGE_EXTERNAL,                                         \
