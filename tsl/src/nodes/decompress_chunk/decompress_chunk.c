@@ -368,6 +368,194 @@ copy_decompress_chunk_path(DecompressChunkPath *src)
 	return dst;
 }
 
+/*
+ * Maps the attno of the min metadata column in the compressed chunk to the
+ * attno of the corresponding max metadata column. Zero if none or not applicable.
+ */
+typedef struct SelectivityEstimationContext
+{
+	AttrNumber *min_to_max;
+	AttrNumber *max_to_min;
+
+	List *vars;
+} SelectivityEstimationContext;
+
+/*
+ * Collect the Vars referencing the "min" metadata columns into the context->vars.
+ */
+static bool
+min_metadata_vars_collector(Node *orig_node, SelectivityEstimationContext *context)
+{
+	if (orig_node == NULL)
+	{
+		/*
+		 * An expression node can have a NULL field and the mutator will be
+		 * still called for it, so we have to handle this.
+		 */
+		return false;
+	}
+
+	if (!IsA(orig_node, Var))
+	{
+		/*
+		 * Recurse.
+		 */
+		return expression_tree_walker(orig_node, min_metadata_vars_collector, context);
+	}
+
+	Var *orig_var = castNode(Var, orig_node);
+	if (orig_var->varattno <= 0)
+	{
+		/*
+		 * We don't handle special variables. Not sure how it could happen though.
+		 */
+		return false;
+	}
+
+	AttrNumber replaced_attno = context->min_to_max[orig_var->varattno];
+	if (replaced_attno == InvalidAttrNumber)
+	{
+		/*
+		 * No replacement for this column.
+		 */
+		return false;
+	}
+
+	context->vars = lappend(context->vars, orig_var);
+	return false;
+}
+
+static void
+set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
+									  CompressionInfo *compression_info)
+{
+	/*
+	 * We need some custom selectivity estimation code for the compressed chunk
+	 * table, because some pushed down filters require special handling.
+	 *
+	 * An equality condition can be pushed down to the minmax sparse index
+	 * condition, and becomes x_min <= const and const <= x_max. Postgres
+	 * treats the part of this condition as independent, which leads to
+	 * significant overestimates when x has high cardinality, and therefore
+	 * not using the Index Scan. This stems from the fact that Postgres doesn't
+	 * know that x_max is always just very slightly more than x_min for the
+	 * given compressed batch.
+
+	 * To work around this, temporarily replace all conditions on x_min with
+	 * conditions on x_max before feeding them to the Postgres clauselist
+	 * selectivity functions. Since the range of x_min to x_max for a given
+	 * batch is small relative to the range of x in the entire chunk, this
+	 * should not introduce much error, but at the same time allow Postgres to
+	 * see the correlation.
+	 *
+	 * We do this here for the entire baserestrictinfo and not per-rinfo as we
+	 * add them during filter pushdown, because the Postgres clauselist
+	 * selectivity estimator must see the entire clause list to detect the range
+	 * conditions.
+	 *
+	 * First, build the correspondence of min metadata attno -> max metadata
+	 * attno for all minmax metadata.
+	 */
+	AttrNumber *storage =
+		palloc0(2 * sizeof(AttrNumber) * compression_info->compressed_rel->max_attr);
+	SelectivityEstimationContext context = {
+		.min_to_max = &storage[0],
+		.max_to_min = &storage[compression_info->compressed_rel->max_attr],
+	};
+
+	for (int uncompressed_attno = 1; uncompressed_attno <= compression_info->chunk_rel->max_attr;
+		 uncompressed_attno++)
+	{
+		if (get_rte_attribute_is_dropped(compression_info->chunk_rte, uncompressed_attno))
+		{
+			/* Skip the dropped column. */
+			continue;
+		}
+
+		const char *attname = get_attname(compression_info->chunk_rte->relid,
+										  uncompressed_attno,
+										  /* missing_ok = */ false);
+		const int16 orderby_pos =
+			ts_array_position(compression_info->settings->fd.orderby, attname);
+
+		if (orderby_pos == 0)
+		{
+			/*
+			 * This reasoning is only applicable to orderby columns, where each
+			 * batch is a thin slice of the entire range of the column. It also does
+			 * not have many intersections, because the compressed batches mostly
+			 * follow the total order of orderby columns, that is relaxed for the
+			 * last orderby  columns or unordered chunks.This does not necessarily
+			 * hold for non-orderby columns that can also have a sparse index.
+			 */
+			continue;
+		}
+
+		AttrNumber min_attno =
+			compressed_column_metadata_attno(compression_info->settings,
+											 compression_info->chunk_rte->relid,
+											 uncompressed_attno,
+											 compression_info->compressed_rte->relid,
+											 "min");
+		AttrNumber max_attno =
+			compressed_column_metadata_attno(compression_info->settings,
+											 compression_info->chunk_rte->relid,
+											 uncompressed_attno,
+											 compression_info->compressed_rte->relid,
+											 "max");
+
+		if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+		{
+			continue;
+		}
+
+		context.min_to_max[min_attno] = max_attno;
+		context.max_to_min[max_attno] = min_attno;
+	}
+
+	/*
+	 * Then, replace all conditions on min metadata column with conditions on
+	 * max metadata column.
+	 */
+	ListCell *lc;
+	foreach (lc, rel->baserestrictinfo)
+	{
+		RestrictInfo *orig_restrictinfo = castNode(RestrictInfo, lfirst(lc));
+		Node *orig_clause = (Node *) orig_restrictinfo->clause;
+		expression_tree_walker(orig_clause, min_metadata_vars_collector, &context);
+	}
+
+	/*
+	 * Temporarily replace "min" with "max" in-place to save on memory allocations.
+	 */
+	foreach (lc, context.vars)
+	{
+		Var *var = castNode(Var, lfirst(lc));
+
+		Assert(var->varattno != InvalidAttrNumber);
+		Assert(context.min_to_max[var->varattno] != InvalidAttrNumber);
+		Assert(context.max_to_min[context.min_to_max[var->varattno]] == var->varattno);
+
+		var->varattno = context.min_to_max[var->varattno];
+	}
+
+	/*
+	 * Compute selectivity with the updated filters.
+	 */
+	set_baserel_size_estimates(root, rel);
+
+	/*
+	 * Replace the Vars back.
+	 */
+	foreach (lc, context.vars)
+	{
+		Var *var = castNode(Var, lfirst(lc));
+		var->varattno = context.max_to_min[var->varattno];
+	}
+
+	pfree(storage);
+}
+
 static CompressionInfo *
 build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chunk,
 					  RelOptInfo *chunk_rel)
@@ -743,6 +931,7 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 
 #define IS_UPDL_CMD(parse)                                                                         \
 	((parse)->commandType == CMD_UPDATE || (parse)->commandType == CMD_DELETE)
+
 void
 ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const Hypertable *ht,
 								   const Chunk *chunk)
@@ -814,7 +1003,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root, compression_info->settings, chunk_rel, compressed_rel, consider_partial);
-	set_baserel_size_estimates(root, compressed_rel);
+	set_compressed_baserel_size_estimates(root, compressed_rel, compression_info);
 	double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
 
 	if (!compression_info->single_chunk)

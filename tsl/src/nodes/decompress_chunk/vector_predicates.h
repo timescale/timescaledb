@@ -24,6 +24,8 @@ void vector_nulltest(const ArrowArray *arrow, int test_type, uint64 *restrict re
  */
 void vector_booleantest(const ArrowArray *arrow, int test_type, uint64 *restrict result);
 void vector_booleq(const ArrowArray *arrow, Datum arg, uint64 *restrict result);
+void vector_uuideq(const ArrowArray *arrow, Datum arg, uint64 *restrict result);
+void vector_uuidne(const ArrowArray *arrow, Datum arg, uint64 *restrict result);
 
 typedef enum BatchQualSummary
 {

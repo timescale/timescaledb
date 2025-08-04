@@ -185,7 +185,6 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 DROP INDEX sense_idx;
 -- recompress the partial chunk
 SELECT compress_chunk(:'CH_NAME');
-WARNING:  no index on "sensor_id" found for column range on chunk "_hyper_1_1_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -201,6 +200,12 @@ WHERE hypertable_name = 'sample_table' AND chunk_name = :'CH_NAME';
 (1 row)
 
 -- The chunk entry should become "valid" again
+SELECT min(sensor_id), max(sensor_id) FROM :CH_NAME;
+ min | max 
+-----+-----
+   1 |   8
+(1 row)
+
 SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_ID';
  id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
 ----+---------------+----------+-------------+-------------+-----------+-------
@@ -632,7 +637,6 @@ SELECT * from _timescaledb_catalog.chunk_column_stats;
 
 -- Compressing a chunk again should calculate proper ranges
 SELECT compress_chunk(:'CH_NAME');
-WARNING:  no index on "sensor_id" found for column range on chunk "_hyper_1_1_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -665,7 +669,6 @@ SELECT * from _timescaledb_catalog.chunk_column_stats;
 
 -- Check that truncate resets the entry in the catalog
 SELECT compress_chunk(:'CH_NAME');
-WARNING:  no index on "sensor_id" found for column range on chunk "_hyper_1_1_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -819,4 +822,40 @@ SELECT * FROM _timescaledb_catalog.chunk_column_stats;
  11 |             4 |          | temperature | -9223372036854775808 | 9223372036854775807 | t
  12 |             4 |        8 | temperature |                  366 |                 502 | t
 (2 rows)
+
+-- Check min/max ranges for partial chunks with segmentby columns get recalculated correctly by seementwise recompression
+CREATE TABLE chunk_skipping(time timestamptz,device text, updated_at timestamptz)
+WITH (tsdb.hypertable, tsdb.partition_column='time',tsdb.segmentby='device');
+NOTICE:  adding not-null constraint to column "time"
+SELECT enable_chunk_skipping('chunk_skipping', 'updated_at');
+ enable_chunk_skipping 
+-----------------------
+ (13,t)
+(1 row)
+
+INSERT INTO chunk_skipping SELECT '2025-01-01', 'd1', '2025-01-01';
+SELECT compress_chunk(show_chunks('chunk_skipping'));
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_6_10_chunk
+(1 row)
+
+SELECT * from chunk_skipping where updated_at < '2026-01-01';
+             time             | device |          updated_at          
+------------------------------+--------+------------------------------
+ Wed Jan 01 00:00:00 2025 PST | d1     | Wed Jan 01 00:00:00 2025 PST
+(1 row)
+
+INSERT INTO chunk_skipping SELECT '2025-01-01', 'd2', '2026-01-01';
+SELECT compress_chunk(show_chunks('chunk_skipping'));
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_6_10_chunk
+(1 row)
+
+SELECT * from chunk_skipping where updated_at < '2026-01-01';
+             time             | device |          updated_at          
+------------------------------+--------+------------------------------
+ Wed Jan 01 00:00:00 2025 PST | d1     | Wed Jan 01 00:00:00 2025 PST
+(1 row)
 

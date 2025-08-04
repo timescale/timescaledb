@@ -310,9 +310,9 @@ select count(*) from bloom where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
  Aggregate (actual rows=1 loops=1)
    Output: count(*)
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=1 loops=1)
-         Filter: (_hyper_1_1_chunk.u = '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+         Vectorized Filter: (_hyper_1_1_chunk.u = '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
          Rows Removed by Filter: 999
-         Bulk Decompression: false
+         Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=1 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
                Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
@@ -326,9 +326,9 @@ select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcab';
  Aggregate (actual rows=1 loops=1)
    Output: count(*)
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=9999 loops=1)
-         Filter: (_hyper_1_1_chunk.u = '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid)
+         Vectorized Filter: (_hyper_1_1_chunk.u = '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid)
          Rows Removed by Filter: 1
-         Bulk Decompression: false
+         Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
                Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid)
@@ -341,8 +341,8 @@ select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcac';
  Aggregate (actual rows=1 loops=1)
    Output: count(*)
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0 loops=1)
-         Filter: (_hyper_1_1_chunk.u = '6c1d0998-05f3-452c-abd3-45afe72bbcac'::uuid)
-         Bulk Decompression: false
+         Vectorized Filter: (_hyper_1_1_chunk.u = '6c1d0998-05f3-452c-abd3-45afe72bbcac'::uuid)
+         Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=0 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
                Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, '6c1d0998-05f3-452c-abd3-45afe72bbcac'::uuid)

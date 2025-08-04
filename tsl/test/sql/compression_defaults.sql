@@ -4,6 +4,10 @@
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
+CREATE VIEW chunk_settings AS
+SELECT hypertable, count(*) as chunks, segmentby, orderby
+FROM timescaledb_information.chunk_compression_settings cs group by hypertable,segmentby,orderby ORDER BY 1,2,3,4;
+
 -- statitics on
 CREATE TABLE "public"."metrics" (
     "time" timestamp with time zone NOT NULL,
@@ -32,13 +36,13 @@ SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['devi
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
-select * from timescaledb_information.chunk_compression_settings limit 1;
+select * from chunk_settings;
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
 ALTER TABLE metrics SET (timescaledb.compress = false);
 
 ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
 select count(compress_chunk(x)) from show_chunks('metrics') x;
-select * from timescaledb_information.chunk_compression_settings limit 1;
+select * from chunk_settings;
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
 ALTER TABLE metrics SET (timescaledb.compress = false);
 
@@ -53,7 +57,7 @@ SET timescaledb.compression_segmentby_default_function   = '';
 RESET timescaledb.compression_orderby_default_function;
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
-select * from timescaledb_information.chunk_compression_settings limit 1;
+select * from chunk_settings;
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
 ALTER TABLE metrics SET (timescaledb.compress = false);
 
@@ -61,7 +65,7 @@ RESET timescaledb.compression_segmentby_default_function;
 SET timescaledb.compression_orderby_default_function = '';
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
-select * from timescaledb_information.chunk_compression_settings limit 1;
+select * from chunk_settings;
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
 ALTER TABLE metrics SET (timescaledb.compress = false);
 
@@ -113,7 +117,7 @@ SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::te
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
-select * from timescaledb_information.chunk_compression_settings limit 1;
+select * from chunk_settings;
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
 ALTER TABLE metrics SET (timescaledb.compress = false);
 
@@ -283,13 +287,13 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
-select * from timescaledb_information.chunk_compression_settings limit 1;
+select * from chunk_settings;
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
 ALTER TABLE metrics SET (timescaledb.compress = false);
 
 ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
 select count(compress_chunk(x)) from show_chunks('metrics') x;
-select * from timescaledb_information.chunk_compression_settings limit 1;
+select * from chunk_settings;
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
 ALTER TABLE metrics SET (timescaledb.compress = false);
 DROP TABLE metrics;
@@ -405,6 +409,6 @@ ALTER TABLE test_table SET (
     timescaledb.compress_orderby = 'uuid'
 );
 SELECT count(compress_chunk(x)) FROM show_chunks('test_table') x;
-SELECT * FROM timescaledb_information.chunk_compression_settings limit 1;
+select * from chunk_settings;
 
 DROP TABLE test_table;

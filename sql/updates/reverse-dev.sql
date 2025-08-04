@@ -103,3 +103,20 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.uuid_version;
 
 DELETE FROM _timescaledb_catalog.compression_algorithm WHERE id = 7 AND version = 1 AND name = 'COMPRESSION_ALGORITHM_UUID';
 
+-- block downgrade if a table has NULL orderby setting (not allowed in 2.21)
+DO $$
+BEGIN
+  IF EXISTS (
+        SELECT 1
+        FROM _timescaledb_catalog.compression_settings
+        WHERE orderby IS NULL
+        ) THEN
+    RAISE EXCEPTION 'TimescaleDB 2.21 can not have NULL columnstore orderby settings. Use ALTER TABLE to configure them before downgrading.';
+  END IF;
+END
+$$;
+
+-- remove empty segmentby
+  UPDATE _timescaledb_catalog.compression_settings
+  SET segmentby = NULL
+  WHERE segmentby = '{}';

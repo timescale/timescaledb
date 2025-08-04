@@ -18,6 +18,7 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
+#include <utils/uuid.h>
 
 #include "array.h"
 #include "compression/arrow_c_data_interface.h"
@@ -441,7 +442,14 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 	Assert(array_decompression_iterator_try_next_forward(dictionary_iterator).is_done);
 }
 
-/* Pass through to the specialized functions below for BOOL and TEXT */
+static ArrowArray *tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type,
+													  MemoryContext dest_mctx);
+static ArrowArray *tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type,
+													  MemoryContext dest_mctx);
+static ArrowArray *tsl_uuid_dictionary_decompress_all(Datum compressed, Oid element_type,
+													  MemoryContext dest_mctx);
+
+/* Pass through to the specialized functions below for BOOL, TEXT and UUID */
 ArrowArray *
 tsl_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 {
@@ -451,14 +459,16 @@ tsl_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext 
 			return tsl_bool_dictionary_decompress_all(compressed, element_type, dest_mctx);
 		case TEXTOID:
 			return tsl_text_dictionary_decompress_all(compressed, element_type, dest_mctx);
+		case UUIDOID:
+			return tsl_uuid_dictionary_decompress_all(compressed, element_type, dest_mctx);
 		default:
-			elog(ERROR, "unsupported dictionary type %u", element_type);
+			elog(ERROR, "unsupported dictionary type %u for bulk decompression", element_type);
 			break;
 	}
 	return NULL;
 }
 
-ArrowArray *
+static ArrowArray *
 tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 {
 	Assert(element_type == BOOLOID);
@@ -492,6 +502,12 @@ tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 		simple8brle_bitarray_decompress(nulls_serialized, /* inverted*/ true);
 	validity_bitmap = validity_bits.data;
 	MemoryContextSwitchTo(old_context);
+
+	if (header->has_nulls)
+	{
+		CheckCompressedData(validity_bits.num_ones == n_notnull);
+		CheckCompressedData(validity_bits.num_elements == n_total);
+	}
 
 	/* Decompress the values using the iterator based decompressor */
 	{
@@ -530,7 +546,102 @@ tsl_bool_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 #include "simple8b_rle_decompress_all.h"
 #undef ELEMENT_TYPE
 
-ArrowArray *
+static ArrowArray *
+tsl_uuid_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+{
+	Assert(element_type == UUIDOID);
+
+	compressed = PointerGetDatum(PG_DETOAST_DATUM(compressed));
+	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
+	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+
+	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
+	CheckCompressedData(header->element_type == UUIDOID);
+
+	Simple8bRleSerialized *indices_serialized = bytes_deserialize_simple8b_and_advance(&si);
+
+	Simple8bRleSerialized *nulls_serialized = NULL;
+	if (header->has_nulls)
+	{
+		nulls_serialized = bytes_deserialize_simple8b_and_advance(&si);
+	}
+
+	const uint32 n_notnull = indices_serialized->num_elements;
+	const uint32 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	const uint32 n_bytes = n_total * 16;
+
+	uint64 *restrict validity_bitmap = NULL;
+	uint64 *restrict values = MemoryContextAllocZero(dest_mctx, n_bytes);
+
+	MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+	/* Decompress the nulls */
+	Simple8bRleBitArray validity_bits =
+		simple8brle_bitarray_decompress(nulls_serialized, /* inverted*/ true);
+	validity_bitmap = validity_bits.data;
+	MemoryContextSwitchTo(old_context);
+
+	if (header->has_nulls)
+	{
+		CheckCompressedData(validity_bits.num_ones == n_notnull);
+		CheckCompressedData(validity_bits.num_elements == n_total);
+	}
+
+	/* create a context so I can throw away all temp data in one step */
+	MemoryContext temp_context = AllocSetContextCreate(CurrentMemoryContext,
+													   "tsl_uuid_dictionary_decompress_all",
+													   ALLOCSET_DEFAULT_SIZES);
+
+	/* This is the padding requirement of simple8brle_decompress_all. */
+	const uint32 n_padded = n_total + 63;
+
+	int16 *restrict indices = MemoryContextAlloc(temp_context, sizeof(int16) * n_padded);
+
+	const uint32 n_decompressed =
+		simple8brle_decompress_all_buf_int16(indices_serialized, indices, n_padded);
+	CheckCompressedData(n_decompressed == n_notnull);
+
+	/* Don't care about the sizes stored in the Array, just skip over them. */
+	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(&si);
+	CheckCompressedData(sizes_serialized->num_elements == header->num_distinct);
+
+	/* Verify that the remaining size has enough space for the values */
+	CheckCompressedData((uint32) ((si.len - si.cursor) / 16) >= header->num_distinct);
+	uint64 *restrict dict_values = (uint64 *) (si.data + si.cursor);
+
+	{
+		int position = 0;
+		for (uint32 i = 0; i < n_total; ++i)
+		{
+			if (arrow_row_is_valid(validity_bitmap, i))
+			{
+				int16 idx = indices[position];
+				/* Check that the dictionary indices that we've just read are not out of bounds. */
+				CheckCompressedData(idx >= 0 && idx < (int16) header->num_distinct);
+
+				/* Use assignment as both sides are coming from palloc, so it is guaranteed to be
+				 * aligned */
+				values[i * 2] = dict_values[idx * 2];
+				values[i * 2 + 1] = dict_values[idx * 2 + 1];
+				position++;
+			}
+		}
+	}
+
+	MemoryContextDelete(temp_context);
+
+	ArrowArray *result =
+		MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + (sizeof(void *) * 2));
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = values;
+	result->n_buffers = 2;
+	result->buffers = buffers;
+	result->length = n_total;
+	result->null_count = n_total - n_notnull;
+	return result;
+}
+
+static ArrowArray *
 tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 {
 	Assert(element_type == TEXTOID);
