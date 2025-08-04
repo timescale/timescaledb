@@ -166,6 +166,7 @@ typedef struct CrossModuleFunctions
 	PGFunction uuid_compressor_append;
 	PGFunction uuid_compressor_finish;
 	PGFunction bloom1_contains;
+	PGFunction bloom1_contains_any;
 
 	PGFunction create_chunk;
 	PGFunction show_chunk;
