@@ -13,7 +13,6 @@ NOTICE:  adding not-null constraint to column "time"
 
 ALTER TABLE ht_with_fk ADD CONSTRAINT keys FOREIGN KEY (time) REFERENCES keys(time) ON DELETE CASCADE;
 ALTER TABLE ht_with_fk SET (timescaledb.compress,timescaledb.compress_segmentby='time');
-NOTICE:  default order by for hypertable "ht_with_fk" is set to ""
 -- no keys added yet so any insert into ht_with_fk should fail
 \set ON_ERROR_STOP 0
 INSERT INTO ht_with_fk SELECT '2000-01-01';

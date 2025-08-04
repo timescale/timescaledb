@@ -51,7 +51,7 @@ ALTER TABLE test1 REPLICA IDENTITY DEFAULT;
 --test adding boolean columns with default and not null
 CREATE TABLE records (time timestamp NOT NULL);
 SELECT create_hypertable('records', 'time');
-ALTER TABLE records SET (timescaledb.compress = true);
+ALTER TABLE records SET (timescaledb.compress = true, timescaledb.compress_orderby='"time" DESC');
 ALTER TABLE records ADD COLUMN col1 boolean DEFAULT false NOT NULL;
 -- NULL constraints are useless and it is safe allow adding this
 -- column with NULL constraint to a compressed hypertable (Issue #5151)
@@ -454,7 +454,7 @@ INSERT INTO i2844 SELECT generate_series('2000-01-01'::timestamptz, '2000-01-02'
 
 CREATE MATERIALIZED VIEW test_agg WITH (timescaledb.continuous) AS SELECT time_bucket('1 hour', created_at) AS bucket, AVG(c1) AS avg_c1 FROM i2844 GROUP BY bucket;
 
-ALTER TABLE i2844 SET (timescaledb.compress);
+ALTER TABLE i2844 SET (timescaledb.compress, timescaledb.compress_orderby = 'created_at DESC');
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='i2844'::regclass;
 
@@ -957,7 +957,7 @@ INSERT INTO space_part values
 ('2021-01-01 00:03', 1, 1, 1),
 ('2021-01-01 00:03', 2, 1, 1);
 -- compress them
-ALTER TABLE space_part SET (timescaledb.compress);
+ALTER TABLE space_part SET (timescaledb.compress, timescaledb.orderby='"time" desc');
 SELECT compress_chunk(show_chunks('space_part'));
 -- make first chunk partial
 INSERT INTO space_part VALUES

@@ -84,6 +84,16 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.bool_compressor_finish(internal
    AS :MODULE_PATHNAME, 'ts_bool_compressor_finish'
    LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
 
+CREATE OR REPLACE FUNCTION _timescaledb_internal.uuid_compressor_append(internal, uuid)
+   RETURNS internal
+   AS :MODULE_PATHNAME, 'ts_uuid_compressor_append'
+   LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_internal.uuid_compressor_finish(internal)
+   RETURNS _timescaledb_internal.compressed_data
+   AS :MODULE_PATHNAME, 'ts_uuid_compressor_finish'
+   LANGUAGE C IMMUTABLE PARALLEL SAFE STRICT;
+
 CREATE AGGREGATE _timescaledb_internal.compress_deltadelta(BIGINT) (
     STYPE = internal,
     SFUNC = _timescaledb_internal.deltadelta_compressor_append,
@@ -118,6 +128,12 @@ CREATE AGGREGATE _timescaledb_internal.compress_bool(boolean) (
     STYPE = internal,
     SFUNC = _timescaledb_internal.bool_compressor_append,
     FINALFUNC = _timescaledb_internal.bool_compressor_finish
+);
+
+CREATE AGGREGATE _timescaledb_internal.compress_uuid(uuid) (
+    STYPE = internal,
+    SFUNC = _timescaledb_internal.uuid_compressor_append,
+    FINALFUNC = _timescaledb_internal.uuid_compressor_finish
 );
 
 \set ECHO all

@@ -38,7 +38,6 @@ insert into mytab_oneseg values
 ('2023-01-01 21:56:20.048355+02'::timestamptz, 2, NULL, 2),
 ('2023-01-01 21:56:10.048355+02'::timestamptz, 2, NULL, 2); --same chunk same segment
 alter table mytab_oneseg set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
-NOTICE:  default order by for hypertable "mytab_oneseg" is set to ""time" DESC"
 select show_chunks as chunk_to_compress_1 from show_chunks('mytab_oneseg') limit 1 \gset
 select compress_chunk(:'chunk_to_compress_1');
 INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to columnstore
@@ -115,7 +114,6 @@ insert into mytab_twoseg values
 ('2023-01-01 21:56:20.048355+02'::timestamptz, 3, NULL, 3), --same chunk diff segment
 ('2023-01-01 21:57:20.048355+02'::timestamptz, 3, NULL, 3);
 alter table mytab_twoseg set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
-NOTICE:  default order by for hypertable "mytab_twoseg" is set to ""time" DESC"
 select show_chunks as chunk_to_compress_2 from show_chunks('mytab_twoseg') limit 1 \gset
 select compress_chunk(:'chunk_to_compress_2');
 INFO:  using tuplesort to scan rows from "_hyper_3_3_chunk" for converting to columnstore
@@ -195,7 +193,6 @@ select create_hypertable('mytab2', 'time', chunk_time_interval => interval '1 we
 insert into mytab2 (time, a, c) select t,s,s from
 generate_series('2023-01-01 00:00:00+00'::timestamptz, '2023-01-01 00:00:00+00'::timestamptz + interval '1 day', interval '30 sec') t cross join generate_series(0,2, 1) s;
 alter table mytab2 set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
-NOTICE:  default order by for hypertable "mytab2" is set to ""time" DESC"
 select compress_chunk(c) from show_chunks('mytab2') c;
 INFO:  using tuplesort to scan rows from "_hyper_5_5_chunk" for converting to columnstore
              compress_chunk             
@@ -267,7 +264,6 @@ SELECT create_hypertable('test_defaults','time');
 (1 row)
 
 ALTER TABLE test_defaults SET (timescaledb.compress,timescaledb.compress_segmentby='device_id');
-NOTICE:  default order by for hypertable "test_defaults" is set to ""time" DESC"
 -- create 2 chunks
 INSERT INTO test_defaults SELECT '2000-01-01', 1;
 INSERT INTO test_defaults SELECT '2001-01-01', 1;
@@ -340,7 +336,6 @@ NOTICE:  adding not-null constraint to column "time"
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, NULL, 2),
 ('2023-01-01'::timestamptz, 2, NULL, 2);
 alter table mytab_prep set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
-NOTICE:  default order by for hypertable "mytab_prep" is set to ""time" DESC"
 PREPARE p1 AS
 SELECT * FROM mytab_prep ORDER BY a, c, time DESC;
 select show_chunks as chunk_to_compress_prep from show_chunks('mytab_prep') limit 1 \gset
@@ -419,7 +414,6 @@ INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, NULL, 2),
 select show_chunks as chunk_to_compress_mytab from show_chunks('mytab') limit 1 \gset
 -- index exists, recompression should happen segment by segment so expect a  debug message
 alter table mytab set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
-NOTICE:  default order by for hypertable "mytab" is set to ""time" DESC"
 select compress_chunk(show_chunks('mytab'));
 INFO:  using tuplesort to scan rows from "_hyper_11_12_chunk" for converting to columnstore
               compress_chunk              
@@ -483,9 +477,6 @@ SELECT decompress_chunk(show_chunks('mytab'));
 
 alter table mytab set (timescaledb.compress = false);
 alter table mytab set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "mytab" is set to ""
-NOTICE:  default order by for hypertable "mytab" is set to ""time" DESC"
 select compress_chunk(show_chunks('mytab'));
 INFO:  using tuplesort to scan rows from "_hyper_11_12_chunk" for converting to columnstore
               compress_chunk              
@@ -522,7 +513,6 @@ NOTICE:  adding not-null constraint to column "time"
 
 insert into nullseg_one values (:'start_time', 1, 1), (:'start_time', 1, 2), (:'start_time', 2,2), (:'start_time', 2,3);
 alter table nullseg_one set (timescaledb.compress, timescaledb.compress_segmentby= 'a');
-NOTICE:  default order by for hypertable "nullseg_one" is set to ""time" DESC"
 select compress_chunk(show_chunks('nullseg_one'));
 INFO:  using tuplesort to scan rows from "_hyper_14_15_chunk" for converting to columnstore
               compress_chunk              
@@ -576,7 +566,6 @@ NOTICE:  adding not-null constraint to column "time"
 
 insert into nullseg_many values (:'start_time', 1, 1, 1), (:'start_time', 1, 2, 2), (:'start_time', 2,2, 2), (:'start_time', 2,3, 3), (:'start_time', 2, NULL, 3);
 alter table nullseg_many set (timescaledb.compress, timescaledb.compress_segmentby= 'a, c');
-NOTICE:  default order by for hypertable "nullseg_many" is set to ""time" DESC"
 select compress_chunk(show_chunks('nullseg_many'));
 INFO:  using tuplesort to scan rows from "_hyper_16_17_chunk" for converting to columnstore
               compress_chunk              
@@ -635,7 +624,6 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE noseg set (timescaledb.compress, timescaledb.compress_segmentby = '');
-NOTICE:  default order by for hypertable "noseg" is set to ""time" DESC"
 INSERT INTO noseg VALUES ('2025-01-24 09:54:27.323421-07'::timestamptz, 1, 1, 1);
 SELECT show_chunks as chunk_to_compress FROM show_chunks('noseg') LIMIT 1 \gset
 SELECT compress_chunk(:'chunk_to_compress');
@@ -665,8 +653,6 @@ NOTICE:  adding not-null constraint to column "ts"
 
 \set VERBOSITY default
 ALTER TABLE no_oby SET (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
-NOTICE:  default order by for hypertable "no_oby" is set to ""
-DETAIL:  Segmentwise recompression will be disabled
 \set VERBOSITY terse
 INSERT INTO no_oby (ts,c1) VALUES (6,6);
 SELECT show_chunks as chunk_to_compress FROM show_chunks('no_oby') LIMIT 1 \gset
@@ -702,7 +688,6 @@ SELECT create_hypertable('guc_test', by_range('time', INTERVAL '1 day'));
 (1 row)
 
 ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
-NOTICE:  default order by for hypertable "guc_test" is set to ""time" DESC"
 INSERT INTO guc_test VALUES ('2024-10-30 14:04:00.501519-06'::timestamptz, 1, 1, 1);
 SELECT show_chunks as chunk_to_compress FROM show_chunks('guc_test') LIMIT 1 \gset
 SELECT compress_chunk(:'chunk_to_compress');

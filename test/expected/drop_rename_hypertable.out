@@ -184,47 +184,36 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+-------------------+--------------------------+--------
 (0 rows)
 
-\dt  "public".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
-(0 rows)
-
-\dt  "_timescaledb_catalog".*
-                                      List of relations
-        Schema        |                       Name                       | Type  |   Owner    
-----------------------+--------------------------------------------------+-------+------------
- _timescaledb_catalog | chunk                                            | table | super_user
- _timescaledb_catalog | chunk_column_stats                               | table | super_user
- _timescaledb_catalog | chunk_constraint                                 | table | super_user
- _timescaledb_catalog | chunk_index                                      | table | super_user
- _timescaledb_catalog | compression_algorithm                            | table | super_user
- _timescaledb_catalog | compression_chunk_size                           | table | super_user
- _timescaledb_catalog | compression_settings                             | table | super_user
- _timescaledb_catalog | continuous_agg                                   | table | super_user
- _timescaledb_catalog | continuous_agg_migrate_plan                      | table | super_user
- _timescaledb_catalog | continuous_agg_migrate_plan_step                 | table | super_user
- _timescaledb_catalog | continuous_aggs_bucket_function                  | table | super_user
- _timescaledb_catalog | continuous_aggs_hypertable_invalidation_log      | table | super_user
- _timescaledb_catalog | continuous_aggs_invalidation_threshold           | table | super_user
- _timescaledb_catalog | continuous_aggs_materialization_invalidation_log | table | super_user
- _timescaledb_catalog | continuous_aggs_watermark                        | table | super_user
- _timescaledb_catalog | dimension                                        | table | super_user
- _timescaledb_catalog | dimension_slice                                  | table | super_user
- _timescaledb_catalog | hypertable                                       | table | super_user
- _timescaledb_catalog | metadata                                         | table | super_user
- _timescaledb_catalog | tablespace                                       | table | super_user
- _timescaledb_catalog | telemetry_event                                  | table | super_user
-(21 rows)
-
-\dt "_timescaledb_internal".*
-                          List of relations
-        Schema         |          Name          | Type  |   Owner    
------------------------+------------------------+-------+------------
- _timescaledb_internal | bgw_job_stat           | table | super_user
- _timescaledb_internal | bgw_job_stat_history   | table | super_user
- _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
-(3 rows)
+SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_catalog', '_timescaledb_internal');
+        schema         |                       name                       
+-----------------------+--------------------------------------------------
+ _timescaledb_catalog  | chunk
+ _timescaledb_catalog  | chunk_column_stats
+ _timescaledb_catalog  | chunk_constraint
+ _timescaledb_catalog  | chunk_index
+ _timescaledb_catalog  | compression_algorithm
+ _timescaledb_catalog  | compression_chunk_size
+ _timescaledb_catalog  | compression_settings
+ _timescaledb_catalog  | continuous_agg
+ _timescaledb_catalog  | continuous_agg_migrate_plan
+ _timescaledb_catalog  | continuous_agg_migrate_plan_step
+ _timescaledb_catalog  | continuous_aggs_bucket_function
+ _timescaledb_catalog  | continuous_aggs_hypertable_invalidation_log
+ _timescaledb_catalog  | continuous_aggs_invalidation_threshold
+ _timescaledb_catalog  | continuous_aggs_materialization_invalidation_log
+ _timescaledb_catalog  | continuous_aggs_watermark
+ _timescaledb_catalog  | dimension
+ _timescaledb_catalog  | dimension_slice
+ _timescaledb_catalog  | hypertable
+ _timescaledb_catalog  | metadata
+ _timescaledb_catalog  | tablespace
+ _timescaledb_catalog  | telemetry_event
+ _timescaledb_internal | bgw_job_stat
+ _timescaledb_internal | bgw_job_stat_history
+ _timescaledb_internal | bgw_policy_chunk_stats
+ _timescaledb_internal | compressed_chunk_stats
+ _timescaledb_internal | hypertable_chunk_local_size
+(26 rows)
 
 -- Test that renaming ordinary table works
 CREATE TABLE renametable (foo int);
