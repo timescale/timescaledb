@@ -29,7 +29,9 @@ SELECT maxtemp FROM mat_ignoreinval ORDER BY 1;
 SELECT materialization_id FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
 WHERE lowest_modified_value = -9223372036854775808 ORDER BY 1;
 
+BEGIN;
 SELECT count(*) FROM mat_inval;
 CALL refresh_continuous_aggregate('mat_inval',NULL,NULL);
-VACUUM (FULL, ANALYZE) mat_inval;
+COMMIT;
+
 SELECT count(*) FROM mat_inval;
