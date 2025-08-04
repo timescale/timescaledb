@@ -226,7 +226,7 @@ test_gorilla_int()
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
-	TestAssertInt64Eq(VARSIZE(compressed), 1312); // TODO dbeck : verify, was 1344
+	TestAssertInt64Eq(VARSIZE(compressed), 1312);
 
 	i = 0;
 	iter = gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), INT8OID);
@@ -291,7 +291,7 @@ test_gorilla_float()
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
-	TestAssertInt64Eq(VARSIZE(compressed), 1168); // TODO dbeck : verify, was 1200
+	TestAssertInt64Eq(VARSIZE(compressed), 1168);
 
 	float i = 0;
 	iter =
@@ -381,7 +381,7 @@ test_gorilla_double(bool have_nulls, bool have_random)
 	TestAssertTrue(compressed != NULL);
 	if (!have_nulls && !have_random)
 	{
-		TestAssertInt64Eq(VARSIZE(compressed), 1176); // TODO dbeck : verify, was 1200
+		TestAssertInt64Eq(VARSIZE(compressed), 1176);
 	}
 
 	/* Forward decompression. */
@@ -1111,7 +1111,7 @@ test_simple8b_rle()
 
 	/* test corner cases */
 	test_simple8b_rle_expected_size(elements_corner_case, 63, 24);
-	test_simple8b_rle_expected_size(elements_corner_case, 64, 280); // TODO dbeck : verify, was 48
+	test_simple8b_rle_expected_size(elements_corner_case, 64, 48);
 
 	/* set the last value to a two bit one, so the 1 bit values are only extended to 2 bits */
 	elements_corner_case[63] = 3;
@@ -1119,7 +1119,7 @@ test_simple8b_rle()
 
 	/* make this less favourable for the 1 bit values */
 	elements_corner_case[60] = 0xFFFFFFFFFFFFFFFFULL;
-	test_simple8b_rle_expected_size(elements_corner_case, 61, 528); // TODO dbeck : verify, was 56
+	test_simple8b_rle_expected_size(elements_corner_case, 61, 56);
 }
 
 static void

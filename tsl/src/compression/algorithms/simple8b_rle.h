@@ -424,19 +424,19 @@ simple8brle_compressor_partial_flush(Simple8bRleCompressor *compressor)
 		for (int32 j = 1; (i + j) < num_buffered_elements && num_packed < max_pack; ++j)
 		{
 			Assert(buffer_base[j].repcount > 0);
-
 			uint64 val = buffer_base[j].data;
-			/* Fast path: check if value fits in current mask (single bitwise op) */
-			if ((val & mask) != val)
+
+			while (val > mask)
 			{
-				/* Slow path: value doesn't fit, need to expand selector */
-				uint8 val_bit_width = simple8brle_bits_for_value(val);
-				selector = SIMPLE8B_SELECTOR_FOR_BIT_WIDTH[val_bit_width];
-				val_bit_width = SIMPLE8B_BIT_LENGTH[selector];
+				/* We bumped into a value that doesn't fit, need to expand selector,
+				 * but we need to make sure we don't leave gaps in the packed data */
+				++selector;
 				mask = simple8brle_selector_get_bitmask(selector);
-				max_pack = SIMPLE8B_NUM_ELEMENTS[selector];
+				if (num_packed >= SIMPLE8B_NUM_ELEMENTS[selector])
+					break;
 			}
 
+			max_pack = SIMPLE8B_NUM_ELEMENTS[selector];
 			num_packed += buffer_base[j].repcount;
 		}
 
@@ -580,17 +580,17 @@ simple8brle_compressor_full_flush(Simple8bRleCompressor *compressor)
 			Assert(buffer_base[j].repcount > 0);
 			uint64 val = buffer_base[j].data;
 
-			/* Fast path: check if value fits in current mask (single bitwise op) */
-			if ((val & mask) != val)
+			while (val > mask)
 			{
-				/* Slow path: value doesn't fit, need to expand selector */
-				uint8 val_bit_width = simple8brle_bits_for_value(val);
-				selector = SIMPLE8B_SELECTOR_FOR_BIT_WIDTH[val_bit_width];
-				val_bit_width = SIMPLE8B_BIT_LENGTH[selector];
+				/* We bumped into a value that doesn't fit, need to expand selector,
+				 * but we need to make sure we don't leave gaps in the packed data */
+				++selector;
 				mask = simple8brle_selector_get_bitmask(selector);
-				max_pack = SIMPLE8B_NUM_ELEMENTS[selector];
+				if (num_packed >= SIMPLE8B_NUM_ELEMENTS[selector])
+					break;
 			}
 
+			max_pack = SIMPLE8B_NUM_ELEMENTS[selector];
 			num_packed += buffer_base[j].repcount;
 		}
 

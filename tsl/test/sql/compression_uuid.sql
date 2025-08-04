@@ -152,7 +152,7 @@ FROM
 	INNER JOIN compressed_chunks ccs
 		ON (ci.compressed_chunk = ccs.compressed_chunk)
 ORDER BY
-	1,2,3; -- TODO dbeck: verify, was 976 bytes before
+	1,2,3;
 
 -- -------------------------------
 -- Test the new UUID v7 functions
