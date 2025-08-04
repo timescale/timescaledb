@@ -16,6 +16,7 @@
 #include <miscadmin.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <utils/hsearch.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
@@ -158,7 +159,11 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 
 	cache_entry->hypertable_id = hypertable_id;
 	cache_entry->hypertable_relid = ht->main_table_relid;
-	cache_entry->hypertable_open_dimension = *hyperspace_get_open_dimension(ht->space, 0);
+
+	const Dimension *open_dim = hyperspace_get_open_dimension(ht->space, 0);
+	Ensure(open_dim != NULL, "hypertable %d has no open partitioning dimension", hypertable_id);
+
+	cache_entry->hypertable_open_dimension = *open_dim;
 	if (cache_entry->hypertable_open_dimension.partitioning != NULL)
 	{
 		PartitioningInfo *open_dim_part_info =
@@ -170,7 +175,7 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	cache_entry->value_is_set = false;
 	cache_entry->lowest_modified_value = INVAL_POS_INFINITY;
 	cache_entry->greatest_modified_value = INVAL_NEG_INFINITY;
-	ts_cache_release(ht_cache);
+	ts_cache_release(&ht_cache);
 }
 
 static inline void
@@ -230,15 +235,22 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	int32 hypertable_id;
 
 	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
-		elog(ERROR, "must supply hypertable id");
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("must supply hypertable id"));
 
 	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
 	hypertable_id = atol(hypertable_id_str);
 
 	if (!CALLED_AS_TRIGGER(fcinfo))
-		elog(ERROR, "continuous agg trigger function must be called by trigger manager");
+		ereport(ERROR,
+				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				errmsg("function \"%s\" was not called by trigger manager",
+					   get_func_name(fcinfo->flinfo->fn_oid)));
 	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event) || !TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
-		elog(ERROR, "continuous agg trigger function must be called in per row after trigger");
+		ereport(ERROR,
+				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				errmsg("continuous agg trigger function must be called in per row after trigger"));
 	execute_cagg_trigger(hypertable_id,
 						 trigdata->tg_relation,
 						 trigdata->tg_trigtuple,

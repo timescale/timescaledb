@@ -26,6 +26,7 @@ select location , min(temperature)
 from conditions
 group by time_bucket('1d', timec), location WITH NO DATA;
 ERROR:  unrecognized parameter "timescaledb.myfill"
+HINT:  Valid timescaledb parameters are: continuous, create_group_indexes, materialized_only, columnstore, finalized, chunk_interval, segmentby, orderby, compress_chunk_interval, invalidate_using
 --valid PG option
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false, check_option = LOCAL )
 as
@@ -510,7 +511,7 @@ NOTICE:  continuous aggregate "i2980_cagg" is already up-to-date
 select add_continuous_aggregate_policy('i2980_cagg',NULL,NULL,'4h') AS job_id \gset
 \set ON_ERROR_STOP 0
 select alter_job(:job_id,config:='{"end_offset": null, "start_offset": null, "mat_hypertable_id": 1000}');
-ERROR:  configuration materialization hypertable id 1000 not found
+ERROR:  invalid materialized hypertable ID: 1000
 --test creating continuous aggregate with compression enabled --
 CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.compress)
 AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
@@ -526,13 +527,9 @@ NOTICE:  defaulting compress_orderby to bucket
 ERROR:  cannot use column "bucket" for both ordering and segmenting
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress,
 timescaledb.compress_orderby = 'bucket');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 --enable compression and test re-enabling compression
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress);
 NOTICE:  defaulting compress_orderby to bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 insert into i2980 select now();
 call refresh_continuous_aggregate('i2980_cagg2', NULL, NULL);
 SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
@@ -542,11 +539,9 @@ SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
 (1 row)
 
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
-ERROR:  cannot disable compression on hypertable with compressed chunks
+ERROR:  cannot disable columnstore on hypertable with columnstore chunks
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'true');
 NOTICE:  defaulting compress_orderby to bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, timescaledb.compress_segmentby = 'bucket');
 NOTICE:  defaulting compress_orderby to bucket
 ERROR:  cannot use column "bucket" for both ordering and segmenting
@@ -558,11 +553,9 @@ select add_continuous_aggregate_policy('i2980_cagg2', interval '10 day', interva
 (1 row)
 
 SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
-ERROR:  compression not enabled on continuous aggregate "i2980_cagg"
+ERROR:  columnstore not enabled on continuous aggregate "i2980_cagg"
 ALTER MATERIALIZED VIEW i2980_cagg SET ( timescaledb.compress );
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_13" is set to ""
 SELECT add_continuous_aggregate_policy('i2980_cagg2', '10 day'::interval, '6 day'::interval);
 ERROR:  function add_continuous_aggregate_policy(unknown, interval, interval) does not exist at character 8
 SELECT add_compression_policy('i2980_cagg2', '3'::integer);
@@ -584,7 +577,7 @@ SELECT count(*) FROM (select decompress_chunk(ch) FROM show_chunks('i2980_cagg2'
 
 ALTER MATERIALIZED VIEW i2980_cagg2 SET (timescaledb.compress = 'false');
 SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
-ERROR:  compression not enabled on "i2980_cagg2"
+ERROR:  columnstore not enabled on "i2980_cagg2"
 -- test error handling when trying to create cagg on internal hypertable
 CREATE TABLE comp_ht_test(time timestamptz NOT NULL);
 SELECT table_name FROM create_hypertable('comp_ht_test','time');
@@ -594,9 +587,6 @@ SELECT table_name FROM create_hypertable('comp_ht_test','time');
 (1 row)
 
 ALTER TABLE comp_ht_test SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "comp_ht_test" is set to ""
-NOTICE:  default order by for hypertable "comp_ht_test" is set to ""time" DESC"
 SELECT
   format('%I.%I', ht.schema_name, ht.table_name) AS "INTERNALTABLE"
 FROM
@@ -608,7 +598,7 @@ ERROR:  hypertable is an internal compressed hypertable
 --TEST ht + cagg, do not enable compression on ht and try to compress chunk on ht.
 --Check error handling for this case
 SELECT compress_chunk(ch) FROM show_chunks('i2980') ch;
-ERROR:  compression not enabled on "i2980"
+ERROR:  columnstore not enabled on "i2980"
 -- cagg on normal view should error out
 CREATE VIEW v1 AS SELECT now() AS time;
 CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',time) FROM v1 GROUP BY 1;

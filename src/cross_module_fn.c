@@ -30,6 +30,10 @@ CROSSMODULE_WRAPPER(policy_compression_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_add);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_proc);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_check);
+CROSSMODULE_WRAPPER(policy_process_hyper_inval_remove);
+CROSSMODULE_WRAPPER(policy_process_hyper_inval_add);
+CROSSMODULE_WRAPPER(policy_process_hyper_inval_proc);
+CROSSMODULE_WRAPPER(policy_process_hyper_inval_check);
 CROSSMODULE_WRAPPER(policy_refresh_cagg_remove);
 CROSSMODULE_WRAPPER(policy_reorder_add);
 CROSSMODULE_WRAPPER(policy_reorder_proc);
@@ -79,19 +83,22 @@ CROSSMODULE_WRAPPER(array_compressor_append);
 CROSSMODULE_WRAPPER(array_compressor_finish);
 CROSSMODULE_WRAPPER(bool_compressor_append);
 CROSSMODULE_WRAPPER(bool_compressor_finish);
+CROSSMODULE_WRAPPER(uuid_compressor_append);
+CROSSMODULE_WRAPPER(uuid_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
-CROSSMODULE_WRAPPER(hypercore_handler);
-CROSSMODULE_WRAPPER(hypercore_proxy_handler);
+CROSSMODULE_WRAPPER(bloom1_contains);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
+CROSSMODULE_WRAPPER(continuous_agg_process_hypertable_invalidations);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
 CROSSMODULE_WRAPPER(continuous_agg_migrate_to_time_bucket);
+CROSSMODULE_WRAPPER(continuous_agg_read_invalidation_record);
 CROSSMODULE_WRAPPER(cagg_try_repair);
 
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
@@ -100,9 +107,10 @@ CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 CROSSMODULE_WRAPPER(merge_chunks);
+CROSSMODULE_WRAPPER(split_chunk);
 
-/* hypercore */
-CROSSMODULE_WRAPPER(is_compressed_tid);
+CROSSMODULE_WRAPPER(detach_chunk);
+CROSSMODULE_WRAPPER(attach_chunk);
 
 /*
  * casting a function pointer to a pointer of another type is undefined
@@ -115,41 +123,10 @@ error_no_default_fn_community(void)
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("functionality not supported under the current \"%s\" license. Learn more at "
-					"https://timescale.com/.",
+					"https://tsdb.co/pdbir1r3",
 					ts_guc_license),
 			 errhint("To access all features and the best time-series experience, try out "
 					 "Timescale Cloud.")));
-}
-
-static bytea *
-error_hypercore_proxy_index_options(Datum reloptions, bool validate)
-{
-	error_no_default_fn_community();
-	return NULL;
-}
-
-/*
- * An index AM always needs to return a IndexAmRoutine because the handler
- * function is invoked when the default opclass for a type is defined in
- * SQL. Therefore, return this dummy under non-TSL license and error out when
- * parsing index options instead.
- */
-static Datum
-process_hypercore_proxy_handler(PG_FUNCTION_ARGS)
-{
-	ts_license_enable_module_loading();
-
-	if (ts_cm_functions->hypercore_proxy_handler != process_hypercore_proxy_handler)
-		return ts_cm_functions->hypercore_proxy_handler(fcinfo);
-
-	IndexAmRoutine *amroutine = makeNode(IndexAmRoutine);
-
-	amroutine->amstrategies = 0;
-	amroutine->amsupport = 1;
-	amroutine->amoptsprocnum = 0;
-	amroutine->amoptions = error_hypercore_proxy_index_options;
-
-	PG_RETURN_POINTER(amroutine);
 }
 
 static bool
@@ -178,6 +155,13 @@ process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_opt
 	pg_unreachable();
 }
 
+static void
+compression_enable_default(Hypertable *ht, WithClauseResult *with_clause_options)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 static Datum
 error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 {
@@ -188,6 +172,13 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 					ts_guc_license),
 			 errhint("Upgrade your license to 'timescale' to use this free community feature.")));
 
+	pg_unreachable();
+}
+
+static void
+error_no_default_fn_chunk_insert_state_community(ChunkInsertState *cis, TupleTableSlot *slot)
+{
+	error_no_default_fn_community();
 	pg_unreachable();
 }
 
@@ -247,24 +238,6 @@ process_cagg_try_repair(PG_FUNCTION_ARGS)
 
 	if (ts_cm_functions->cagg_try_repair != process_cagg_try_repair)
 		return ts_cm_functions->cagg_try_repair(fcinfo);
-
-	error_no_default_fn_pg_community(fcinfo);
-	pg_unreachable();
-}
-
-/*
- * Ensure that the TSL library is loaded before trying to use the handler.
- *
- * As for the functions above, the TSL library might not be loaded when this
- * function is called, so we try to load this function, but fall back on the
- * Apache error message if not possible.
- */
-static Datum
-process_hypercore_handler(PG_FUNCTION_ARGS)
-{
-	ts_license_enable_module_loading();
-	if (ts_cm_functions->hypercore_handler != process_hypercore_handler)
-		return ts_cm_functions->hypercore_handler(fcinfo);
 
 	error_no_default_fn_pg_community(fcinfo);
 	pg_unreachable();
@@ -331,8 +304,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,
-	.ddl_command_start = NULL,
-	.ddl_command_end = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
 	.process_explain_def = NULL,
@@ -356,6 +327,10 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policy_refresh_cagg_proc = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_check = error_no_default_fn_pg_community,
 	.policy_refresh_cagg_remove = error_no_default_fn_pg_community,
+	.policy_process_hyper_inval_add = error_no_default_fn_pg_community,
+	.policy_process_hyper_inval_proc = error_no_default_fn_pg_community,
+	.policy_process_hyper_inval_check = error_no_default_fn_pg_community,
+	.policy_process_hyper_inval_remove = error_no_default_fn_pg_community,
 	.policy_reorder_add = error_no_default_fn_pg_community,
 	.policy_reorder_proc = error_no_default_fn_pg_community,
 	.policy_reorder_check = error_no_default_fn_pg_community,
@@ -390,6 +365,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
 	.continuous_agg_call_invalidation_trigger = continuous_agg_call_invalidation_trigger_default,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
+	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
@@ -397,6 +373,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
 	.continuous_agg_migrate_to_time_bucket = error_no_default_fn_pg_community,
+	.continuous_agg_read_invalidation_record = error_no_default_fn_pg_community,
 	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */
@@ -420,9 +397,14 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.array_compressor_finish = error_no_default_fn_pg_community,
 	.bool_compressor_append = error_no_default_fn_pg_community,
 	.bool_compressor_finish = error_no_default_fn_pg_community,
-	.hypercore_handler = process_hypercore_handler,
-	.hypercore_proxy_handler = process_hypercore_proxy_handler,
-	.is_compressed_tid = error_no_default_fn_pg_community,
+	.uuid_compressor_append = error_no_default_fn_pg_community,
+	.uuid_compressor_finish = error_no_default_fn_pg_community,
+	.bloom1_contains = error_no_default_fn_pg_community,
+
+	.decompress_batches_for_insert = error_no_default_fn_chunk_insert_state_community,
+	.init_decompress_state_for_insert = error_no_default_fn_chunk_insert_state_community,
+
+	.compression_enable = compression_enable_default,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
@@ -430,8 +412,13 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
+
 	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
 	.merge_chunks = error_no_default_fn_pg_community,
+	.split_chunk = error_no_default_fn_pg_community,
+
+	.detach_chunk = error_no_default_fn_pg_community,
+	.attach_chunk = error_no_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

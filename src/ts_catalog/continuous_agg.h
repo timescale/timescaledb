@@ -16,6 +16,7 @@
 #include "with_clause/with_clause_parser.h"
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
+#define TS_INVALIDATION_SLOT_NAME_MAX (32)
 
 /*switch to ts user for _timescaledb_internal access */
 #define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
@@ -46,20 +47,6 @@
 	((funcinfo->origin == ORIGIN_TIMESCALE_EXPERIMENTAL) &&                                        \
 	 (strcmp("time_bucket_ng", funcinfo->funcname) == 0))
 
-typedef enum ContinuousAggViewOption
-{
-	ContinuousEnabled = 0,
-	ContinuousViewOptionCreateGroupIndex,
-	ContinuousViewOptionMaterializedOnly,
-	ContinuousViewOptionCompress,
-	ContinuousViewOptionFinalized,
-	ContinuousViewOptionChunkTimeInterval,
-	ContinuousViewOptionCompressSegmentBy,
-	ContinuousViewOptionCompressOrderBy,
-	ContinuousViewOptionCompressChunkTimeInterval,
-	ContinuousViewOptionMax
-} ContinuousAggViewOption;
-
 typedef enum ContinuousAggViewType
 {
 	ContinuousAggUserView = 0,
@@ -68,10 +55,12 @@ typedef enum ContinuousAggViewType
 	ContinuousAggAnyView
 } ContinuousAggViewType;
 
-extern TSDLLEXPORT WithClauseResult *ts_continuous_agg_with_clause_parse(const List *defelems);
-
-extern TSDLLEXPORT List *
-ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses);
+typedef enum ContinuousAggInvalidateUsing
+{
+	ContinuousAggInvalidateUsingDefault = 0,
+	ContinuousAggInvalidateUsingTrigger,
+	ContinuousAggInvalidateUsingWal,
+} ContinuousAggInvalidateUsing;
 
 /*
  * Information about the bucketing function.
@@ -165,6 +154,12 @@ typedef struct CaggPolicyOffset
 	const char *name;
 } CaggPolicyOffset;
 
+static inline bool
+has_invalidation_trigger(Oid relid)
+{
+	return OidIsValid(get_trigger_oid(relid, CAGGINVAL_TRIGGER_NAME, true));
+}
+
 extern TSDLLEXPORT Oid ts_cagg_permissions_check(Oid cagg_oid, Oid userid);
 
 extern TSDLLEXPORT CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
@@ -218,3 +213,4 @@ extern TSDLLEXPORT int64
 ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
 extern TSDLLEXPORT int64
 ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
+extern TSDLLEXPORT void ts_get_invalidation_replication_slot_name(char *slotname, Size szslot);

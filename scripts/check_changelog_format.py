@@ -16,7 +16,7 @@ def run_query(query):
     request = requests.post(
         "https://api.github.com/graphql",
         json={"query": query},
-        headers={"Authorization": f'Bearer {os.environ.get("GITHUB_TOKEN")}'},
+        headers={"Authorization": f'Bearer {os.environ.get("GH_TOKEN")}'},
         timeout=20,
     )
     response = request.json()
@@ -77,10 +77,10 @@ def is_valid_line(line):
 
 
 def main():
-    github_token = os.environ.get("GITHUB_TOKEN")
+    github_token = os.environ.get("GH_TOKEN")
 
     if not github_token:
-        print("Please populate the GITHUB_TOKEN environment variable.")
+        print("Please populate the GH_TOKEN environment variable.")
         sys.exit(1)
 
     github_obj = github.Github(github_token)

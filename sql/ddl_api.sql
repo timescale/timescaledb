@@ -213,6 +213,7 @@ CREATE OR REPLACE PROCEDURE @extschema@.refresh_continuous_aggregate(
     continuous_aggregate     REGCLASS,
     window_start             "any",
     window_end               "any",
-    force                    BOOLEAN = FALSE
+    force                    BOOLEAN = FALSE,
+    options                  JSONB = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
 

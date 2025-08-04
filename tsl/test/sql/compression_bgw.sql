@@ -279,6 +279,137 @@ WHERE h.table_name = 'test_table_frozen'
 ORDER BY c.id
 LIMIT 1;
 
+--TEST 8
+--reindexing in recompression policy
+CREATE TABLE metrics2(time DATE NOT NULL);
+CREATE INDEX metrics2_index ON metrics2(time DESC);
+SELECT hypertable_id AS "HYPERTABLE_ID", schema_name, table_name, created FROM create_hypertable('metrics2','time') \gset
+ALTER TABLE metrics2 SET (timescaledb.compress);
+INSERT INTO metrics2 SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval);
+
+SELECT add_job('_timescaledb_functions.policy_compression','1w',('{"hypertable_id": '||:'HYPERTABLE_ID'||', "compress_after": "@ 7 days"}')::jsonb, initial_start => '2000-01-01 00:00:00+00'::timestamptz) AS "JOB_COMPRESS" \gset
+
+-- first call should compress
+CALL run_job(:JOB_COMPRESS);
+
+-- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics2';
+
+-- disable reindex in compress job
+SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','false'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
+
+-- do an INSERT so recompress has something to do
+INSERT INTO metrics2 SELECT '2000-01-01' FROM generate_series(1,3000);
+
+SELECT chunk_schema, chunk_name FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics2' AND chunk_status = 9 LIMIT 1; \gset
+SELECT format('%I.%I', :'chunk_schema', :'chunk_name') AS "RECOMPRESS_CHUNK_NAME"; \gset
+
+-- get size of the chunk that needs recompression
+VACUUM ANALYZE metrics2;
+
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') AS "SIZE_BEFORE_REINDEX"; \gset
+
+CALL run_job(:JOB_COMPRESS);
+
+-- status should be 1
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+
+-- index size should not have decreased
+VACUUM ANALYZE metrics2;
+SELECT
+pg_size_pretty(pg_table_size(:'RECOMPRESS_CHUNK_NAME')) AS table_only,
+pg_size_pretty(pg_indexes_size(:'RECOMPRESS_CHUNK_NAME')) AS indexes,
+pg_size_pretty(pg_total_relation_size(:'RECOMPRESS_CHUNK_NAME')) AS total;
+
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') = :SIZE_BEFORE_REINDEX as size_unchanged;
+
+-- enable reindex in compress job
+SELECT alter_job(id,config:=jsonb_set(config,'{reindex}','true'), next_start => '2000-01-01 00:00:00+00'::timestamptz) FROM _timescaledb_config.bgw_job WHERE id = :JOB_COMPRESS;
+
+-- do an INSERT so recompress has something to do
+INSERT INTO metrics2 SELECT '2000-01-01';
+
+---- status should be 3
+SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
+
+-- should recompress
+CALL run_job(:JOB_COMPRESS);
+
+-- index size should decrease due to reindexing (8kB or 16kB)
+VACUUM ANALYZE metrics2;
+SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') <= 16384 as size_empty;
+DROP TABLE metrics2;
+
+--TEST 8
+--compression policy errors
+CREATE TABLE test_compression_policy_errors(time TIMESTAMPTZ, val SMALLINT);
+SELECT create_hypertable('test_compression_policy_errors', 'time', chunk_time_interval => '1 day'::interval);
+ALTER TABLE test_compression_policy_errors SET (timescaledb.compress, timescaledb.compress_segmentby = 'val', timescaledb.compress_orderby = 'time');
+
+INSERT INTO test_compression_policy_errors SELECT time, (random()*10)::smallint
+FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '10 min') AS time;
+
+SELECT
+  add_compression_policy(
+    'test_compression_policy_errors',
+    compress_after=> '1 day'::interval,
+    initial_start => now() - interval '1 day'
+  ) as compressjob_id \gset
+
+SELECT config AS compressjob_config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id \gset
+SELECT FROM alter_job(:compressjob_id, config => jsonb_set(:'compressjob_config'::jsonb, '{recompress}', 'true'));
+
+-- 31 uncompressed chunks (0 - uncompressed, 1 - compressed)
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_compression_policy_errors'
+GROUP BY c.status
+ORDER BY 2 DESC;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- Let's mess with the chunk status to for an error when executing the job
+WITH chunks AS (
+  SELECT c.id, c.status
+  FROM _timescaledb_catalog.chunk c
+  INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+  WHERE h.table_name = 'test_compression_policy_errors'
+  ORDER BY c.id LIMIT 20
+)
+UPDATE _timescaledb_catalog.chunk
+SET status = 3
+FROM chunks
+WHERE chunk.id = chunks.id
+  AND chunk.status = 0;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- After the mess 20 = status 3 and 11 = status 0
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_compression_policy_errors'
+GROUP BY c.status
+ORDER BY 2 DESC;
+
+\set ON_ERROR_STOP 0
+SET client_min_messages TO ERROR;
+\set VERBOSITY default
+-- This should fail with
+-- 20 chunks failed to compress and 11 chunks compressed successfully
+CALL run_job(:compressjob_id);
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1
+
+-- 31 uncompressed chunks (0 - uncompressed, 1 - compressed)
+SELECT c.status, count(*)
+FROM _timescaledb_catalog.chunk c
+INNER JOIN _timescaledb_catalog.hypertable h on (h.id = c.hypertable_id)
+WHERE h.table_name = 'test_compression_policy_errors'
+GROUP BY c.status
+ORDER BY 2 DESC;
+
 -- Teardown test
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REVOKE CREATE ON SCHEMA public FROM NOLOGIN_ROLE;

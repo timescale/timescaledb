@@ -51,7 +51,6 @@ select create_hypertable('default_skipped', 'a', chunk_time_interval=> 10);
 (1 row)
 
 alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
-NOTICE:  default order by for hypertable "default_skipped" is set to "a DESC"
 alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
 create table with_rls (a integer, b integer);
 ALTER TABLE with_rls ENABLE ROW LEVEL SECURITY;
@@ -64,22 +63,18 @@ DETAIL:  Dimensions cannot have NULL values.
 (1 row)
 
 ALTER TABLE with_rls set (timescaledb.compress, timescaledb.compress_orderby='a');
-ERROR:  compression cannot be used on table with row security
+ERROR:  columnstore cannot be used on table with row security
 --note that the time column "a" should be added to the end of the orderby list
 SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text;
       relid      | compress_relid |   segmentby    | orderby | orderby_desc | orderby_nullsfirst 
 -----------------+----------------+----------------+---------+--------------+--------------------
- default_skipped |                | {c}            | {a}     | {t}          | {t}
+ default_skipped |                | {c}            |         |              | 
  foo2            |                | {"bacB toD",c} | {d,a}   | {f,t}        | {f,t}
 (2 rows)
 
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d DeSc NullS lAsT');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo3" is set to ""
 --shold allow alter since segment by was empty
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d Asc NullS lAsT');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo3" is set to ""
 --this is ok too
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c', timescaledb.compress_orderby = 'd DeSc NullS lAsT');
 -- Negative test cases ---
@@ -96,7 +91,7 @@ DETAIL:  Dimensions cannot have NULL values.
 (1 row)
 
 ALTER TABLE reserved_column_prefix set (timescaledb.compress);
-ERROR:  cannot compress tables with reserved column prefix '_ts_meta_'
+ERROR:  cannot convert tables with reserved column prefix '_ts_meta_' to columnstore
 --basic test with count
 create table foo (a integer, b integer, c integer, t text, p point);
 ALTER TABLE foo ADD CONSTRAINT chk_existing CHECK(b > 0);
@@ -122,79 +117,52 @@ select attname, attnotnull from pg_attribute where attrelid = (select oid from p
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
 ERROR:  column "d" does not exist
 HINT:  The timescaledb.compress_segmentby option must reference a valid column.
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = '');
+ERROR:  ordering column can not be empty
+HINT:  timescaledb.compress_orderby option must reference a valid column or be removed to use default settings.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'd');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  column "d" does not exist
 HINT:  The timescaledb.compress_orderby option must reference a valid column.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c desc nulls"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls thirsty');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c desc nulls thirsty"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c climb nulls first');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c climb nulls first"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c nulls first asC');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c nulls first asC"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls first asc');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c desc nulls first asc"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc hurry');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c desc hurry"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c descend');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c descend"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c; SELECT 1');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c; SELECT 1"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = '1,2');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "1,2"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c + 1');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c + 1"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'random()');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "random()"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c LIMIT 1');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c LIMIT 1"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c USING <');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "c USING <"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 't COLLATE "en_US"');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  unable to parse ordering option "t COLLATE "en_US""
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c asc' , timescaledb.compress_orderby = 'c');
@@ -216,32 +184,74 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c +
 ERROR:  unable to parse segmenting option "c + b"
 HINT:  The option timescaledb.compress_segmentby must be a set of columns separated by commas.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, p');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  invalid ordering column type point
 DETAIL:  Could not identify a less-than operator for the type.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'b, b');
 ERROR:  duplicate column name "b"
 HINT:  The timescaledb.compress_segmentby option must reference distinct column.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'b, b');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
 ERROR:  duplicate column name "b"
 HINT:  The timescaledb.compress_orderby option must reference distinct column.
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "foo" is set to ""
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='c');
+-- test alter reset
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                | {c}       | {a,b}   | {f,f}        | {f,f}
+(1 row)
+
+ALTER TABLE foo RESET (timescaledb.compress_orderby);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                | {c}       |         |              | 
+(1 row)
+
+ALTER TABLE foo RESET (timescaledb.compress_segmentby);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                |           |         |              | 
+(1 row)
+
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='c');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                | {c}       | {a,b}   | {f,f}        | {f,f}
+(1 row)
+
+-- should fail
+ALTER TABLE foo RESET (timescaledb.compress);
+ERROR:  only columnstore options segmentby and orderby can be reset
+ALTER TABLE foo RESET (timescaledb.compress, timescaledb.compress_segmentby, timescaledb.compress_orderby);
+ALTER TABLE foo RESET (timescaledb.compress_segmentby = 'a', timescaledb.compress_orderby);
+ERROR:  RESET must not include values for parameters
+ALTER TABLE foo RESET (timescaledb.compress_segmentby = '');
+ERROR:  RESET must not include values for parameters
+-- should succeed
+ALTER TABLE foo RESET (timescaledb.compress_segmentby, timescaledb.compress_orderby);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+----------------+-----------+---------+--------------+--------------------
+ foo   |                |           |         |              | 
+(1 row)
+
+ALTER TABLE foo SET (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='');
+create table foo_fake (a integer, b integer, c integer, t text, p point);
+ALTER TABLE foo_fake RESET (timescaledb.compress_segmentby);
+DROP TABLE foo_fake;
 --ddl on ht with compression
 ALTER TABLE foo DROP COLUMN a;
 ERROR:  cannot drop column named in partition key
 DETAIL:  Cannot drop column that is a hypertable partitioning (space or time) dimension.
 ALTER TABLE foo DROP COLUMN b;
-ERROR:  cannot drop orderby or segmentby column from a hypertable with compression enabled
+ERROR:  cannot drop orderby or segmentby column from a hypertable with columnstore enabled
 ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
 ERROR:  column "t" of relation "_hyper_10_2_chunk" contains null values
-ALTER TABLE foo RESET (timescaledb.compress);
-ERROR:  compression options cannot be reset
 --can add constraints as long as no data is compressed
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
 ALTER TABLE foo ADD CONSTRAINT unq UNIQUE(a);
@@ -256,11 +266,11 @@ ROLLBACK;
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
 -------+----------------+-----------+---------+--------------+--------------------
- foo   |                |           | {a,b}   | {f,f}        | {f,f}
+ foo   |                | {}        | {a,b}   | {f,f}        | {f,f}
 (1 row)
 
 SELECT decompress_chunk(ch, false) FROM show_chunks('foo') ch limit 1;
-ERROR:  chunk "_hyper_10_2_chunk" is not compressed
+ERROR:  chunk "_hyper_10_2_chunk" is not converted to columnstore
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
 SELECT format('%I.%I',chunk_schema,chunk_name) AS "CHUNK_NAME"
@@ -268,9 +278,9 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'foo'
 ORDER BY chunk_name LIMIT 1\gset
 select decompress_chunk(:'CHUNK_NAME', if_compressed=>false);
-ERROR:  chunk "_hyper_10_2_chunk" is not compressed
+ERROR:  chunk "_hyper_10_2_chunk" is not converted to columnstore
 select decompress_chunk(:'CHUNK_NAME');
-NOTICE:  chunk "_hyper_10_2_chunk" is not compressed
+NOTICE:  chunk "_hyper_10_2_chunk" is not converted to columnstore
  decompress_chunk 
 ------------------
  
@@ -284,30 +294,30 @@ select compress_chunk(:'CHUNK_NAME');
 (1 row)
 
 select compress_chunk(:'CHUNK_NAME', if_not_compressed=>false);
-ERROR:  chunk "_hyper_10_2_chunk" is already compressed
+ERROR:  chunk "_hyper_10_2_chunk" is already converted to columnstore
 select compress_chunk(:'CHUNK_NAME');
-NOTICE:  chunk "_hyper_10_2_chunk" is already compressed
+NOTICE:  chunk "_hyper_10_2_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_10_2_chunk
 (1 row)
 
 SELECT compress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
-ERROR:  compression not enabled on "non_compressed"
-DETAIL:  It is not possible to compress chunks on a hypertable or continuous aggregate that does not have compression enabled.
-HINT:  Enable compression using ALTER TABLE/MATERIALIZED VIEW with the timescaledb.compress option.
+ERROR:  columnstore not enabled on "non_compressed"
+DETAIL:  It is not possible to convert chunks to columnstore on a hypertable or continuous aggregate that does not have columnstore enabled.
+HINT:  Enable columnstore using ALTER TABLE/MATERIALIZED VIEW with the timescaledb.enable_columnstore option.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'c');
 ALTER TABLE foo set (timescaledb.compress='f');
-ERROR:  cannot disable compression on hypertable with compressed chunks
+ERROR:  cannot disable columnstore on hypertable with columnstore chunks
 ALTER TABLE foo reset (timescaledb.compress);
-ERROR:  compression options cannot be reset
+ERROR:  only columnstore options segmentby and orderby can be reset
 SELECT decompress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
-ERROR:  missing compressed hypertable
+ERROR:  missing columnstore-enabled hypertable
 --should succeed
 SELECT decompress_chunk(ch, true) FROM show_chunks('foo') ch;
-NOTICE:  chunk "_hyper_10_3_chunk" is not compressed
-NOTICE:  chunk "_hyper_10_4_chunk" is not compressed
-NOTICE:  chunk "_hyper_10_5_chunk" is not compressed
+NOTICE:  chunk "_hyper_10_3_chunk" is not converted to columnstore
+NOTICE:  chunk "_hyper_10_4_chunk" is not converted to columnstore
+NOTICE:  chunk "_hyper_10_5_chunk" is not converted to columnstore
             decompress_chunk             
 -----------------------------------------
  _timescaledb_internal._hyper_10_2_chunk
@@ -349,7 +359,6 @@ select table_name from create_hypertable('table_constr', 'timec', chunk_time_int
 
 BEGIN;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
-NOTICE:  default order by for hypertable "table_constr" is set to "device_id, timec DESC"
 ROLLBACK;
 alter table table_constr add constraint table_constr_uk unique (location, timec, device_id);
 BEGIN;
@@ -359,8 +368,8 @@ ROLLBACK;
 --exclusion constraints not allowed
 alter table table_constr add constraint table_constr_exclu exclude using btree (timec with = );
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
-ERROR:  constraint table_constr_exclu is not supported for compression
-HINT:  Exclusion constraints are not supported on hypertables that are compressed.
+ERROR:  constraint table_constr_exclu is not supported for converting to columnstore
+HINT:  Exclusion constraints are not supported on hypertables that are converted to columnstore.
 alter table table_constr drop constraint table_constr_exclu ;
 --now it works
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
@@ -372,15 +381,15 @@ ALTER TABLE table_constr ADD COLUMN newcol integer PRIMARY KEY;
 ERROR:  cannot create a unique index without the column "timec" (used in partitioning)
 HINT:  If you're creating a hypertable on a table with a primary key, ensure the partitioning column is part of the primary or composite key.
 ALTER TABLE table_constr ADD COLUMN newcol integer NOT NULL;
-ERROR:  cannot add column with NOT NULL constraint without default to a hypertable that has compression enabled
+ERROR:  cannot add column with NOT NULL constraint without default to a hypertable that has columnstore enabled
 ALTER TABLE table_constr ADD COLUMN newcol integer DEFAULT random() + random();
-ERROR:  cannot add column with non-constant default expression to a hypertable that has compression enabled
+ERROR:  cannot add column with non-constant default expression to a hypertable that has columnstore enabled
 ALTER TABLE table_constr ADD COLUMN IF NOT EXISTS newcol integer REFERENCES fortable(col);
-ERROR:  cannot add column with constraints to a hypertable that has compression enabled
+ERROR:  cannot add column with constraints to a hypertable that has columnstore enabled
 ALTER TABLE table_constr ADD COLUMN IF NOT EXISTS newcol integer GENERATED ALWAYS AS IDENTITY;
-ERROR:  cannot add column with constraints to a hypertable that has compression enabled
+ERROR:  cannot add column with constraints to a hypertable that has columnstore enabled
 ALTER TABLE table_constr ADD COLUMN IF NOT EXISTS newcol integer GENERATED BY DEFAULT AS IDENTITY;
-ERROR:  cannot add column with constraints to a hypertable that has compression enabled
+ERROR:  cannot add column with constraints to a hypertable that has columnstore enabled
 ALTER TABLE table_constr ADD COLUMN newcol nonexistent_type;
 ERROR:  type "nonexistent_type" does not exist
 LINE 1: ALTER TABLE table_constr ADD COLUMN newcol nonexistent_type;
@@ -402,7 +411,6 @@ SELECT create_hypertable('table_fk', 'time');
 
 ALTER TABLE table_fk DROP COLUMN id1;
 ALTER TABLE table_fk SET (timescaledb.compress,timescaledb.compress_segmentby = 'id2');
-NOTICE:  default order by for hypertable "table_fk" is set to ""time" DESC"
 -- TEST fk cascade delete behavior on compressed chunk --
 insert into fortable values(10);
 --we want 2 chunks here --
@@ -443,7 +451,6 @@ SELECT table_name from create_hypertable('table_constr2', 'timec', chunk_time_in
 INSERT INTO fortable VALUES( 99 );
 INSERT INTO table_constr2 VALUES( 1000, 10, 5, 99);
 ALTER TABLE table_constr2 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');
-NOTICE:  default order by for hypertable "table_constr2" is set to "timec DESC"
  ALTER TABLE table_constr2 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id, d');
 --compress a chunk and try to disable compression, it should fail --
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
@@ -456,7 +463,7 @@ SELECT compress_chunk(:'CHUNK_NAME');
 (1 row)
 
 ALTER TABLE table_constr2 set (timescaledb.compress=false);
-ERROR:  cannot disable compression on hypertable with compressed chunks
+ERROR:  cannot disable columnstore on hypertable with columnstore chunks
 --decompress all chunks and disable compression.
 SELECT decompress_chunk(:'CHUNK_NAME');
              decompress_chunk             
@@ -485,9 +492,6 @@ SELECT set_integer_now_func('test_table_int', 'dummy_now');
 
 INSERT INTO test_table_int SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_int set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_table_int" is set to ""
-NOTICE:  default order by for hypertable "test_table_int" is set to ""time" DESC"
 SELECT add_compression_policy('test_table_int', 2::int) AS compressjob_id
 \gset
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -503,7 +507,7 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 --should fail
 CALL run_job(:compressjob_id);
 ERROR:  job 1000 config must have compress_after or compress_created_before
-CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 49 at RAISE
+CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 50 at RAISE
 SELECT remove_compression_policy('test_table_int');
  remove_compression_policy 
 ---------------------------
@@ -670,7 +674,6 @@ NOTICE:  migrating data to chunks
 
 create unique index readings_uniq_idx on readings("time",battery_temperature);
 ALTER TABLE readings SET (timescaledb.compress,timescaledb.compress_segmentby = 'battery_temperature');
-NOTICE:  default order by for hypertable "readings" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('readings'));
               compress_chunk              
 ------------------------------------------
@@ -688,7 +691,7 @@ SELECT readings FROM readings;
 
 -- #5577 On-insert decompression after schema changes may not work properly
 SELECT decompress_chunk(show_chunks('readings'),true);
-NOTICE:  chunk "_hyper_28_24_chunk" is not compressed
+NOTICE:  chunk "_hyper_28_24_chunk" is not converted to columnstore
              decompress_chunk             
 ------------------------------------------
  _timescaledb_internal._hyper_28_22_chunk
@@ -743,8 +746,7 @@ NOTICE:  migrating data to chunks
 
 ALTER TABLE main_table SET (
     timescaledb.compress,
-    timescaledb.compress_segmentby = 'device_id',
-    timescaledb.compress_orderby = '');
+    timescaledb.compress_segmentby = 'device_id');
 SELECT compress_chunk(show_chunks('main_table'));
               compress_chunk              
 ------------------------------------------
@@ -791,7 +793,6 @@ SELECT create_hypertable('readings', 'time', chunk_time_interval => interval '12
 
 CREATE UNIQUE INDEX readings_uniq_idx ON readings("time", battery_temperature);
 ALTER TABLE readings SET (timescaledb.compress, timescaledb.compress_segmentby = 'battery_temperature');
-NOTICE:  default order by for hypertable "readings" is set to ""time" DESC"
 ALTER TABLE readings DROP COLUMN battery_status;
 ALTER TABLE readings DROP COLUMN battery_status2;
 INSERT INTO readings("time", candy, battery_temperature)
@@ -825,29 +826,22 @@ SELECT table_name FROM create_hypertable('table_unique_index', 'time');
 
 -- Will warn because the lack of segmentby/orderby compression options
 ALTER TABLE table_unique_index SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure location is not a unique column and appropriate for a segment by
-NOTICE:  default segment by for hypertable "table_unique_index" is set to "location"
-NOTICE:  default order by for hypertable "table_unique_index" is set to "device_id, "time" DESC"
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'location');
-NOTICE:  default order by for hypertable "table_unique_index" is set to "device_id, "time" DESC"
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
-ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_orderby = 'device_id');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure location is not a unique column and appropriate for a segment by
-NOTICE:  default segment by for hypertable "table_unique_index" is set to "location"
+ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_orderby = 'device_id', timescaledb.compress_segmentby = '');
+WARNING:  column "location" should be used for segmenting or ordering
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 -- Will enable compression without warnings
 ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'location', timescaledb.compress_orderby = 'device_id');
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id,location');
-NOTICE:  default order by for hypertable "table_unique_index" is set to ""time" DESC"
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby='', timescaledb.compress_orderby = 'device_id,location');
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'time,location', timescaledb.compress_orderby = 'device_id');
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'time,location,device_id');
-NOTICE:  default order by for hypertable "table_unique_index" is set to ""
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 -- try compressing osm chunk
 CREATE TABLE osm_table (time timestamptz NOT NULL, device_id text, value float);
@@ -858,9 +852,6 @@ SELECT table_name FROM create_hypertable('osm_table', 'time');
 (1 row)
 
 ALTER TABLE osm_table SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "osm_table" is set to ""
-NOTICE:  default order by for hypertable "osm_table" is set to ""time" DESC"
 INSERT INTO osm_table VALUES ('2022-11-11 11:11:11', 'foo', 1.0);
 SELECT format('%I.%I',chunk_schema,chunk_name) AS "CHUNK_NAME"
 FROM timescaledb_information.chunks

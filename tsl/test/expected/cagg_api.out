@@ -1,0 +1,409 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SET timezone TO CET;
+SET datestyle TO ISO;
+CREATE VIEW continuous_aggregates AS
+SELECT mat_hypertable_id AS materialization_id,
+       format('%I.%I', user_view_schema, user_view_name)::regclass AS continuous_aggregate
+  FROM _timescaledb_catalog.hypertable
+  JOIN _timescaledb_catalog.continuous_agg
+    ON hypertable.id = continuous_agg.mat_hypertable_id;
+CREATE TABLE hyper_ts (time timestamp NOT NULL, value float);
+CREATE TABLE hyper_tstz (time timestamptz NOT NULL, value float);
+CREATE TABLE hyper_multi (time timestamptz NOT NULL, device int, value float);
+CREATE TABLE hyper_no_cagg (time timestamptz NOT NULL, device int, value float);
+CREATE TABLE normal_ts(time timestamp NOT NULL, value float);
+SELECT * FROM create_hypertable('hyper_ts', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             1 | public      | hyper_ts   | t
+(1 row)
+
+SELECT * FROM create_hypertable('hyper_tstz', 'time');
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+             2 | public      | hyper_tstz | t
+(1 row)
+
+SELECT * FROM create_hypertable('hyper_no_cagg', 'time');
+ hypertable_id | schema_name |  table_name   | created 
+---------------+-------------+---------------+---------
+             3 | public      | hyper_no_cagg | t
+(1 row)
+
+SELECT * FROM create_hypertable('hyper_multi', 'time', 'device', 4);
+ hypertable_id | schema_name | table_name  | created 
+---------------+-------------+-------------+---------
+             4 | public      | hyper_multi | t
+(1 row)
+
+INSERT INTO hyper_ts
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2025-01-01'::timestamp,
+                         '2025-01-06', '1m') time;
+INSERT INTO hyper_tstz
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2025-01-01'::timestamptz,
+                         '2025-01-06', '1m') time;
+CREATE MATERIALIZED VIEW ts_temperature_1h
+  WITH  (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time), avg(value)
+  FROM hyper_ts
+GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "ts_temperature_1h"
+CREATE MATERIALIZED VIEW ts_temperature_15m
+  WITH  (timescaledb.continuous) AS
+SELECT time_bucket('15 minutes', time), avg(value)
+  FROM hyper_ts
+GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "ts_temperature_15m"
+CREATE MATERIALIZED VIEW tstz_temperature_1h
+  WITH  (timescaledb.continuous) AS
+SELECT time_bucket('1 hour', time), avg(value)
+  FROM hyper_tstz
+GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "tstz_temperature_1h"
+CREATE MATERIALIZED VIEW tstz_temperature_15m
+  WITH  (timescaledb.continuous) AS
+SELECT time_bucket('15 minutes', time), avg(value)
+  FROM hyper_tstz
+GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "tstz_temperature_15m"
+CREATE MATERIALIZED VIEW multi_temperature_15m
+  WITH  (timescaledb.continuous) AS
+SELECT time_bucket('15 minutes', time), avg(value)
+  FROM hyper_multi
+GROUP BY 1;
+NOTICE:  continuous aggregate "multi_temperature_15m" is already up-to-date
+SET search_path TO _timescaledb_functions, public;
+-- These are not part of the API, but we test them here just to make
+-- sure they work as expected.
+SELECT table_name, get_materialization_info(table_name)
+  FROM (
+      VALUES ('tstz_temperature_15m'), ('multi_temperature_15m')
+  ) t(table_name);
+      table_name       | get_materialization_info 
+-----------------------+--------------------------
+ tstz_temperature_15m  | (8,"@ 15 mins")
+ multi_temperature_15m | (9,"@ 15 mins")
+(2 rows)
+
+\set ON_ERROR_STOP 0
+SELECT get_materialization_info('hyper_no_cagg');
+ERROR:  "public.hyper_no_cagg" is not a continuous aggregate
+\set ON_ERROR_STOP 1
+-- This is not part of the API either, but added a test here to make
+-- sure that it works as expected.
+SELECT materialization_id,
+       to_timestamp(lowest_modified_value),
+       to_timestamp(greatest_modified_value)
+  FROM get_raw_materialization_ranges('timestamptz');
+ materialization_id | to_timestamp | to_timestamp 
+--------------------+--------------+--------------
+(0 rows)
+
+-- Here are tests of the API
+SELECT *
+  INTO before
+  FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log;
+CALL _timescaledb_functions.add_materialization_invalidations(
+     'tstz_temperature_15m'::regclass,
+     '["2025-04-25 11:10:00+02","2025-04-26 11:14:00+02"]'::tstzrange
+);
+CALL _timescaledb_functions.add_materialization_invalidations(
+     'ts_temperature_15m'::regclass,
+     '["2025-04-25 11:10:00+02","2025-04-26 11:14:00+02"]'::tsrange
+);
+-- Custom refresh function that iterate over the ranges inside the
+-- restriction and refresh them. This is to check that the refresh
+-- function does the right thing with the ranges returned by the API
+-- function.
+CREATE PROCEDURE custom_refresh(cagg REGCLASS, restriction ANYRANGE) AS
+$body$
+DECLARE
+  inval restriction%TYPE;
+BEGIN
+   FOR inval IN
+   SELECT UNNEST(invalidations)
+     FROM _timescaledb_functions.get_materialization_invalidations(cagg, restriction)
+   LOOP
+       RAISE NOTICE 'Updating range %', inval;
+       CALL refresh_continuous_aggregate(cagg, lower(inval), upper(inval));
+       COMMIT;
+   END LOOP;
+END
+$body$
+LANGUAGE plpgsql;
+SELECT continuous_aggregate,
+       to_timestamp(lhs.lowest_modified_value),
+       to_timestamp(lhs.greatest_modified_value)
+  FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log lhs
+  JOIN continuous_aggregates USING (materialization_id)
+LEFT JOIN before rhs ON row(lhs.*) = row(rhs.*)
+ WHERE lhs.materialization_id IS NULL OR rhs.materialization_id IS NULL;
+ continuous_aggregate |      to_timestamp      |      to_timestamp      
+----------------------+------------------------+------------------------
+ ts_temperature_15m   | 2025-04-25 11:00:00+02 | 2025-04-26 11:15:00+02
+ tstz_temperature_15m | 2025-04-25 11:00:00+02 | 2025-04-26 11:15:00+02
+(2 rows)
+
+SELECT materialization_id,
+       to_timestamp(lowest_modified_value),
+       to_timestamp(greatest_modified_value)
+  FROM get_raw_materialization_ranges('timestamptz');
+ materialization_id |      to_timestamp      |      to_timestamp      
+--------------------+------------------------+------------------------
+                  6 | 2025-04-25 11:00:00+02 | 2025-04-26 11:15:00+02
+                  8 | 2025-04-25 11:00:00+02 | 2025-04-26 11:15:00+02
+(2 rows)
+
+SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
+       'ts_temperature_15m'::regclass,
+       '["2025-04-25","2025-04-26"]'::tsrange
+);
+                  invalidations                  
+-------------------------------------------------
+ {["2025-04-25 09:00:00","2025-04-26 00:00:00")}
+(1 row)
+
+CALL custom_refresh('ts_temperature_15m', '["2025-04-25","2025-04-26"]'::tsrange);
+NOTICE:  Updating range ["2025-04-25 09:00:00","2025-04-26 00:00:00")
+SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
+       'ts_temperature_15m'::regclass,
+       '["2025-04-25","2025-04-26"]'::tsrange
+);
+                     invalidations                      
+--------------------------------------------------------
+ {["2025-04-25 00:00:00","2025-04-25 08:59:59.999999")}
+(1 row)
+
+SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
+       'tstz_temperature_15m'::regclass,
+       '["2025-04-25","2025-04-26"]'::tstzrange
+);
+                     invalidations                     
+-------------------------------------------------------
+ {["2025-04-25 11:00:00+02","2025-04-26 00:00:00+02")}
+(1 row)
+
+CALL custom_refresh('tstz_temperature_15m', '["2025-04-25","2025-04-26"]'::tsrange);
+NOTICE:  Updating range ["2025-04-25 09:00:00","2025-04-26 00:00:00")
+SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
+       'tstz_temperature_15m'::regclass,
+       '["2025-04-25","2025-04-26"]'::tstzrange
+);
+                        invalidations                         
+--------------------------------------------------------------
+ {["2025-04-25 00:00:00+02","2025-04-25 10:59:59.999999+02")}
+(1 row)
+
+-- Generate some invalidations. These new values need to be before the
+-- invalidation threshold, which is set to end time of the insertion
+-- above.
+INSERT INTO hyper_ts
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2025-01-04 10:00:00'::timestamp,
+                         '2025-01-04 11:12:00', '9 minutes') time;
+INSERT INTO hyper_tstz
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2025-01-04 12:00:00'::timestamptz,
+                         '2025-01-04 13:12:00', '8 minutes') time;
+-- Check the invalidation threshold. If that is not after the
+-- insertions above, nothing will show up in the invalidation log.
+SELECT hypertable_id,
+       _timescaledb_functions.to_timestamp_without_timezone(watermark) AS watermark
+  FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
+  ORDER BY 1;
+ hypertable_id |       watermark        
+---------------+------------------------
+             1 | 2025-04-26 00:00:00
+             2 | 2025-04-26 00:00:00
+             4 | 4714-11-24 00:00:00 BC
+(3 rows)
+
+-- Check that there indeed is something in the hypertable invalidation
+-- log. If not, this will fail anyway. We show the "raw" timestamps,
+-- which is in UTC if it was originally a timestamp with timezone.
+--
+-- We ignore duplicates since those will be merged when moving
+-- invalidations and hence does not affect correctness and can cause
+-- test flakiness otherwise.
+SELECT DISTINCT
+       hypertable_id,
+       _timescaledb_functions.to_timestamp_without_timezone(lowest_modified_value) AS start,
+       _timescaledb_functions.to_timestamp_without_timezone(greatest_modified_value) AS finish
+  FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
+  ORDER BY 1;
+ hypertable_id |        start        |       finish        
+---------------+---------------------+---------------------
+             1 | 2025-01-04 10:00:00 | 2025-01-04 11:12:00
+             2 | 2025-01-04 11:00:00 | 2025-01-04 12:12:00
+(2 rows)
+
+\set VERBOSITY default
+-- Check that we can handle hypertables with single and multiple
+-- dimensions. This function is not part of the official API but we
+-- add tests for it here.
+SELECT _timescaledb_functions.get_hypertable_id('hyper_ts', 'timestamp');
+ get_hypertable_id 
+-------------------
+                 1
+(1 row)
+
+SELECT _timescaledb_functions.get_hypertable_id('hyper_tstz', 'timestamptz');
+ get_hypertable_id 
+-------------------
+                 2
+(1 row)
+
+SELECT _timescaledb_functions.get_hypertable_id('hyper_multi', 'timestamptz');
+ get_hypertable_id 
+-------------------
+                 4
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- Not a hypertable
+SELECT _timescaledb_functions.get_hypertable_id('normal_ts', 'timestamp');
+ERROR:  table "public.normal_ts" is not a hypertable
+CONTEXT:  PL/pgSQL function _timescaledb_functions.get_hypertable_id(regclass,regtype) line 15 at RAISE
+SELECT _timescaledb_functions.get_hypertable_invalidations('normal_ts', null::timestamp, array['15 minutes', '1 hour']::interval[]);
+ERROR:  table "public.normal_ts" is not a hypertable
+CONTEXT:  PL/pgSQL function _timescaledb_functions.get_hypertable_id(regclass,regtype) line 15 at RAISE
+PL/pgSQL function _timescaledb_functions.get_hypertable_invalidations(regclass,timestamp without time zone,interval[]) line 3 during statement block local variable initialization
+-- No continuous aggregate connected
+SELECT _timescaledb_functions.get_hypertable_id('hyper_no_cagg', 'timestamp');
+ERROR:  hypertable "public.hyper_no_cagg" has no continuous aggregate
+HINT:  Define a continuous aggregate for the hypertable to read invalidations.
+CONTEXT:  PL/pgSQL function _timescaledb_functions.get_hypertable_id(regclass,regtype) line 20 at RAISE
+SELECT _timescaledb_functions.get_hypertable_invalidations('hyper_no_cagg', null::timestamp, array['15 minutes', '1 hour']::interval[]);
+ERROR:  hypertable "public.hyper_no_cagg" has no continuous aggregate
+HINT:  Define a continuous aggregate for the hypertable to read invalidations.
+CONTEXT:  PL/pgSQL function _timescaledb_functions.get_hypertable_id(regclass,regtype) line 20 at RAISE
+PL/pgSQL function _timescaledb_functions.get_hypertable_invalidations(regclass,timestamp without time zone,interval[]) line 3 during statement block local variable initialization
+-- Wrong type used
+SELECT _timescaledb_functions.get_hypertable_id('hyper_ts', 'timestamptz');
+ERROR:  wrong column type for hypertable public.hyper_ts
+HINT:  hypertable type was "timestamp without time zone", but caller expected "timestamp with time zone"
+CONTEXT:  PL/pgSQL function _timescaledb_functions.get_hypertable_id(regclass,regtype) line 26 at RAISE
+SELECT _timescaledb_functions.get_hypertable_invalidations('hyper_ts', null::timestamptz, array['15 minutes', '1 hour']::interval[]);
+ERROR:  wrong column type for hypertable public.hyper_ts
+HINT:  hypertable type was "timestamp without time zone", but caller expected "timestamp with time zone"
+CONTEXT:  PL/pgSQL function _timescaledb_functions.get_hypertable_id(regclass,regtype) line 26 at RAISE
+PL/pgSQL function _timescaledb_functions.get_hypertable_invalidations(regclass,timestamp with time zone,interval[]) line 3 during statement block local variable initialization
+\set ON_ERROR_STOP 1
+SELECT * INTO saved_invalidations_1
+  FROM _timescaledb_functions.get_hypertable_invalidations('hyper_ts', null::timestamp, array['15 minutes', '1 hour']::interval[]);
+SELECT bucket_width, invalidations FROM saved_invalidations_1;
+ bucket_width |                  invalidations                  
+--------------+-------------------------------------------------
+ @ 15 mins    | {["2025-01-04 10:00:00","2025-01-04 11:15:00")}
+ @ 1 hour     | {["2025-01-04 10:00:00","2025-01-04 12:00:00")}
+(2 rows)
+
+-- Calling it twice should return same invalidations since we haven't
+-- inserted anything between.
+SELECT * INTO saved_invalidations_2
+  FROM _timescaledb_functions.get_hypertable_invalidations('hyper_ts', null::timestamp, array['15 minutes', '1 hour']::interval[]);
+SELECT * FROM saved_invalidations_2 s1
+    FULL JOIN saved_invalidations_2 s2 ON row(s1.*) = row(s2.*)
+        WHERE s1.token IS NULL OR s2.token IS NULL;
+ bucket_width | token | invalidations | bucket_width | token | invalidations 
+--------------+-------+---------------+--------------+-------+---------------
+(0 rows)
+
+SELECT token FROM saved_invalidations_1 LIMIT 1 \gset
+-- Test some error cases
+\set ON_ERROR_STOP 0
+CALL _timescaledb_functions.accept_hypertable_invalidations('normal_ts', :'token');
+ERROR:  table "public.normal_ts" is not a hypertable
+CONTEXT:  PL/pgSQL function _timescaledb_functions.accept_hypertable_invalidations(regclass,text) line 14 at RAISE
+CALL _timescaledb_functions.accept_hypertable_invalidations('hyper_no_cagg', :'token');
+ERROR:  hypertable "public.hyper_no_cagg" has no continuous aggregate
+HINT:  Define a continuous aggregate for the hypertable to handle invalidations.
+CONTEXT:  PL/pgSQL function _timescaledb_functions.accept_hypertable_invalidations(regclass,text) line 19 at RAISE
+CALL _timescaledb_functions.accept_hypertable_invalidations('hyper_ts', 'garbage');
+ERROR:  invalid input syntax for type pg_snapshot: "garbage"
+HINT:  Use the token from the get_hypertable_invalidations() call.
+CONTEXT:  PL/pgSQL function _timescaledb_functions.accept_hypertable_invalidations(regclass,text) line 29 at RAISE
+\set ON_ERROR_STOP 1
+-- Accept the invalidations as processed by passing in the token.
+CALL _timescaledb_functions.accept_hypertable_invalidations('hyper_ts', :'token');
+-- This should now show no validations.
+SELECT bucket_width, invalidations
+  FROM _timescaledb_functions.get_hypertable_invalidations(
+       'hyper_ts',
+       null::timestamp,
+       array['15 minutes', '1 hour']::interval[]
+  );
+ bucket_width | invalidations 
+--------------+---------------
+(0 rows)
+
+-- Check that the invalidations associated with the token are removed
+-- when there are inserts in between.
+-- First insert some rows. All invalidations were removed above, so we
+-- should only see these.
+INSERT INTO hyper_ts
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2025-01-03 10:00:00'::timestamp,
+                         '2025-01-03 11:12:00', '10 minutes') time;
+-- Get invalidations from the hypertable, with a token.
+SELECT * INTO saved_3
+  FROM _timescaledb_functions.get_hypertable_invalidations(
+	'hyper_ts',
+	null::timestamp,
+	array['15 minutes', '1 hour']::interval[]
+  );
+SELECT token FROM saved_3 LIMIT 1 \gset
+-- Insert some more rows into the hypertable that are disjoint with
+-- the invalidations associated with the token above. These should be
+-- fully removed.
+INSERT INTO hyper_ts
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2025-01-02 10:00:00'::timestamp,
+                         '2025-01-02 11:12:00', '10 minutes') time;
+-- Insert some more rows into the hypertable that are inside the range
+-- associated with the token above. These should remain after
+-- accepting the token.
+INSERT INTO hyper_ts
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2025-01-03 10:30:00'::timestamp,
+                         '2025-01-03 10:50:00', '5 minutes') time;
+-- Check that we have them in the invalidation log
+SELECT bucket_width, unnest(invalidations) AS inval
+  FROM _timescaledb_functions.get_hypertable_invalidations(
+	'hyper_ts',
+	null::timestamp,
+	array['15 minutes', '1 hour']::interval[]
+  )
+ORDER BY 1, 2;
+ bucket_width |                     inval                     
+--------------+-----------------------------------------------
+ @ 15 mins    | ["2025-01-02 10:00:00","2025-01-02 11:15:00")
+ @ 15 mins    | ["2025-01-03 10:00:00","2025-01-03 11:15:00")
+ @ 1 hour     | ["2025-01-02 10:00:00","2025-01-02 12:00:00")
+ @ 1 hour     | ["2025-01-03 10:00:00","2025-01-03 12:00:00")
+(4 rows)
+
+-- Accept the original invalidations
+CALL _timescaledb_functions.accept_hypertable_invalidations('hyper_ts', :'token');
+-- Check that we only removed the ones associated with the token.
+SELECT bucket_width, unnest(invalidations) AS inval
+  FROM _timescaledb_functions.get_hypertable_invalidations(
+	'hyper_ts',
+	null::timestamp,
+	array['15 minutes', '1 hour']::interval[]
+  )
+ORDER BY 1, 2;
+ bucket_width |                     inval                     
+--------------+-----------------------------------------------
+ @ 15 mins    | ["2025-01-02 10:00:00","2025-01-02 11:15:00")
+ @ 15 mins    | ["2025-01-03 10:30:00","2025-01-03 11:00:00")
+ @ 1 hour     | ["2025-01-02 10:00:00","2025-01-02 12:00:00")
+ @ 1 hour     | ["2025-01-03 10:00:00","2025-01-03 11:00:00")
+(4 rows)
+

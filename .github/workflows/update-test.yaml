@@ -3,7 +3,7 @@ name: Test Update and Downgrade
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
   pull_request:
   workflow_dispatch:
 
@@ -50,6 +50,11 @@ jobs:
       run: |
         find update_test -name "*.diff" | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
 
+    - name: Postgres Errors
+      if: failure()
+      run: |
+        find update_test -name postgres.log -exec grep ERROR {} \;
+
     - name: Check for coredumps
       if: always()
       id: collectlogs
@@ -84,7 +89,7 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
+        name: Coredumps update-test ${{ matrix.os }} PG${{ matrix.pg }}
         path: coredumps
 
     - name: Upload Artifacts

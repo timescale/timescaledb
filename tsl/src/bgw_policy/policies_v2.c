@@ -96,11 +96,11 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	BgwJob *orig_ht_reten_job = NULL;
 
 	char *err_gap_refresh = "there are gaps in refresh policy";
-	char *err_refresh_compress_overlap = "refresh and compression policies overlap";
+	char *err_refresh_compress_overlap = "refresh and columnstore policies overlap";
 	char *err_refresh_reten_overlap = "refresh and retention policies overlap";
 	char *err_refresh_reten_ht_overlap = "refresh policy of continuous aggregate and retention "
 										 "policy of underlying hypertable overlap";
-	char *err_compress_reten_overlap = "compression and retention policies overlap";
+	char *err_compress_reten_overlap = "columnstore and retention policies overlap";
 
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,
 													 FUNCTIONS_SCHEMA_NAME,
@@ -242,8 +242,7 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 											if_exists,
 											false,
 											DT_NOBEGIN,
-											NULL,
-											all_policies.compress->use_access_method);
+											NULL);
 	}
 
 	if (all_policies.retention && all_policies.retention->create_policy)
@@ -320,7 +319,6 @@ policies_add(PG_FUNCTION_ARGS)
 			.create_policy = true,
 			.compress_after = PG_GETARG_DATUM(4),
 			.compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4),
-			.use_access_method = PG_ARGISNULL(6) ? USE_AM_NULL : PG_GETARG_BOOL(6),
 		};
 		comp = tmp;
 		all_policies.compress = &comp;

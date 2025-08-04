@@ -47,76 +47,25 @@ static const struct config_enum_entry telemetry_level_options[] = {
 };
 #endif
 
-bool
-ts_is_whitelisted_indexam(const char *amname)
-{
-	ListCell *cell;
-	char *rawname = pstrdup(ts_guc_hypercore_indexam_whitelist);
-
-	List *namelist;
-	if (!SplitIdentifierString(rawname, ',', &namelist))
-	{
-		pfree(rawname);
-		list_free(namelist);
-		elog(ERROR, "List syntax is invalid");
-	}
-	foreach (cell, namelist)
-	{
-		const char *curname = (char *) lfirst(cell);
-		if (strcmp(curname, amname) == 0)
-		{
-			pfree(rawname);
-			list_free(namelist);
-			return true;
-		}
-	}
-	pfree(rawname);
-	list_free(namelist);
-	return false;
-}
-
 /* Copied from contrib/auto_explain/auto_explain.c */
 static const struct config_enum_entry loglevel_options[] = {
 	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
 	{ "debug2", DEBUG2, false }, { "debug1", DEBUG1, false }, { "debug", DEBUG2, true },
 	{ "info", INFO, false },	 { "notice", NOTICE, false }, { "warning", WARNING, false },
-	{ "log", LOG, false },		 { NULL, 0, false }
-};
-
-/*
- * Setting to enable or disable transparent decompression plans.
- *
- * The setting is an integer instead of boolean because it is possible to
- * enable transparent decompression plans also when using the Hypercore table
- * access method. But this is not enabled by default. The options are as
- * follows:
- *
- * (0) = off, disabled completely.
- *
- * (1) = on, enabled for compressed tables but not tables using Hypercore
- *       TAM. This is the default setting.
- *
- * (2) = hypercore, enabled for compressed tables and those using Hypercore
- *       TAM. This is useful mostly for debugging/testing and as a fallback.
- *       Only available in debug builds.
- */
-static const struct config_enum_entry transparent_decompression_options[] = {
-	{ "on", 1, false },
-	{ "true", 1, false },
-	{ "off", 0, false },
-	{ "false", 0, false },
-#ifdef TS_DEBUG
-	{ TS_HYPERCORE_TAM_NAME, 2, false },
-#endif
+	{ "log", LOG, false },		 { "error", ERROR, false },	  { "fatal", FATAL, false },
 	{ NULL, 0, false }
 };
 
-static const struct config_enum_entry hypercore_copy_to_options[] = {
-	{ "all_data", HYPERCORE_COPY_ALL_DATA, false },
-	{ "no_compressed_data", HYPERCORE_COPY_NO_COMPRESSED_DATA, false },
+static const struct config_enum_entry compress_truncate_behaviour_options[] = {
+	{ "truncate_only", COMPRESS_TRUNCATE_ONLY, false },
+	{ "truncate_or_delete", COMPRESS_TRUNCATE_OR_DELETE, false },
+	{ "truncate_disabled", COMPRESS_TRUNCATE_DISABLED, false },
 	{ NULL, 0, false }
 };
 
+bool ts_guc_enable_direct_compress_copy = false;
+bool ts_guc_enable_direct_compress_copy_sort_batches = true;
+bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -141,7 +90,7 @@ TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
-TSDLLEXPORT int ts_guc_enable_transparent_decompression = 1;
+TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
@@ -150,15 +99,20 @@ bool ts_guc_enable_custom_hashagg = false;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
-TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method = false;
+TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom = true;
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
-TSDLLEXPORT bool ts_guc_enable_bool_compression = false;
+TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
+TSDLLEXPORT bool ts_guc_enable_uuid_compression = false;
 TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
+TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
+TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
+bool ts_guc_enable_event_triggers = false;
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
+TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
 
 /* Enable of disable columnar scans for columnar-oriented storage engines. If
  * disabled, regular sequence scans will be used instead. */
@@ -168,17 +122,14 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
 TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 #endif
+TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
+TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier = 1.0;
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 bool ts_guc_enable_tss_callbacks = true;
 TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
-TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
-TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior =
-	HYPERCORE_COPY_NO_COMPRESSED_DATA;
-TSDLLEXPORT bool ts_guc_enable_hypercore_scankey_pushdown = true;
-TSDLLEXPORT int ts_guc_hypercore_arrow_cache_max_entries;
 
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
@@ -193,8 +144,6 @@ char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
-
-bool ts_guc_debug_require_batch_sorted_merge = false;
 
 bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
@@ -219,19 +168,22 @@ char *ts_current_timestamp_mock = NULL;
 
 int ts_guc_debug_toast_tuple_target = 128;
 
-#ifdef TS_DEBUG
-
-bool ts_guc_debug_have_int128;
-
 static const struct config_enum_entry debug_require_options[] = { { "allow", DRO_Allow, false },
 																  { "forbid", DRO_Forbid, false },
 																  { "require", DRO_Require, false },
+																  { "force", DRO_Force, false },
 																  { NULL, 0, false } };
+
+#ifdef TS_DEBUG
+
+bool ts_guc_debug_have_int128;
 
 DebugRequireOption ts_guc_debug_require_vector_qual = DRO_Allow;
 
 DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 #endif
+
+DebugRequireOption ts_guc_debug_require_batch_sorted_merge = false;
 
 bool ts_guc_debug_compression_path_info = false;
 bool ts_guc_enable_rowlevel_compression_locking = false;
@@ -294,8 +246,9 @@ ts_feature_flag_check(FeatureFlagType type)
 		return;
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("You are using a Dynamic PostgreSQL service. This feature is only available on "
-					"Time-series services. https://tsdb.co/dynamic-postgresql")));
+			 errmsg("You are using a PostgreSQL service. This feature is only available on "
+					"Time-series and analytics services. "
+					"https://docs.timescale.com/use-timescale/latest/services/")));
 }
 
 /*
@@ -361,34 +314,6 @@ get_segmentby_func(char *input_name)
 #endif
 	Oid argtyp[] = { REGCLASSOID };
 	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
-}
-
-static bool
-check_indexam_whitelist(char **newval, void **extra, GucSource source)
-{
-	char *rawname;
-	List *namelist;
-
-	/* Need a modifiable copy of string */
-	rawname = pstrdup(*newval);
-
-	/* Parse string into list of identifiers */
-	if (!SplitIdentifierString(rawname, ',', &namelist))
-	{
-		/* syntax error in name list */
-		GUC_check_errdetail("List syntax is invalid.");
-		pfree(rawname);
-		list_free(namelist);
-		return false;
-	}
-
-	/* We might not be in a transaction when setting this so cannot consult
-	 * the systems catalog. We just require the list of index access methods
-	 * to be syntactically correct. */
-
-	pfree(rawname);
-	list_free(namelist);
-	return true;
 }
 
 static bool
@@ -464,6 +389,40 @@ _guc_init(void)
 							 NULL,
 							 &ts_guc_enable_deprecation_warnings,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy"),
+							 "Enable direct compression during COPY",
+							 "Enable experimental support for direct compression during COPY",
+							 &ts_guc_enable_direct_compress_copy,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_sort_batches"),
+							 "Enable batch sorting during direct compress COPY",
+							 NULL,
+							 &ts_guc_enable_direct_compress_copy_sort_batches,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_copy_client_sorted"),
+							 "Enable direct compress COPY with presorted data",
+							 "Correct handling of data sorting by the user is required for this "
+							 "option.",
+							 &ts_guc_enable_direct_compress_copy_client_sorted,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -634,12 +593,11 @@ _guc_init(void)
 							NULL,
 							NULL);
 
-	DefineCustomEnumVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
 							 "Enable transparent decompression",
 							 "Enable transparent decompression when querying hypertable",
 							 &ts_guc_enable_transparent_decompression,
-							 1,
-							 transparent_decompression_options,
+							 true,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -668,6 +626,33 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressed_skipscan"),
+							 "Enable SkipScan for compressed chunks",
+							 "Enable SkipScan for distinct inputs over compressed chunks",
+							 &ts_guc_enable_compressed_skip_scan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomRealVariable(MAKE_EXTOPTION("skip_scan_run_cost_multiplier"),
+							 "Multiplier for SkipScan run cost as an option to make the cost "
+							 "smaller so that SkipScan can be chosen",
+							 "Default is 1.0 i.e. regularly estimated SkipScan run cost, 0.0 will "
+							 "make SkipScan to have run cost = 0",
+							 &ts_guc_skip_scan_run_cost_multiplier,
+							 1.0,
+							 0.0,
+							 1.0,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "
@@ -795,15 +780,27 @@ _guc_init(void)
 							 NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_bool_compression"),
-							 "Enable experimental bool compression functionality",
+							 "Enable bool compression functionality",
 							 "Enable bool compression",
 							 &ts_guc_enable_bool_compression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_uuid_compression"),
+							 "Enable uuid compression functionality",
+							 "Enable uuid compression",
+							 &ts_guc_enable_uuid_compression,
 							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
 							 NULL,
 							 NULL);
+
 	DefineCustomIntVariable(MAKE_EXTOPTION("compression_batch_size_limit"),
 							"The max number of tuples that can be batched together during "
 							"compression",
@@ -821,6 +818,29 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressor_batch_limit"),
+							 "Enable compressor batch limit",
+							 "Enable compressor batch limit for compressors which "
+							 "can go over the allocation limit (1 GB). This feature will"
+							 "limit those compressors by reducing the size of the batch and thus "
+							 "avoid hitting the limit.",
+							 &ts_guc_compression_enable_compressor_batch_limit,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_event_triggers"),
+							 "Enable event triggers for chunks creation",
+							 "Enable event triggers for chunks creation",
+							 &ts_guc_enable_event_triggers,
+							 false,
+							 PGC_SUSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_null_compression"),
@@ -835,6 +855,16 @@ _guc_init(void)
 							 NULL);
 #endif
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_ratio_warnings"),
+							 "Enable warnings for poor compression ratio",
+							 "Enable warnings for poor compression ratio",
+							 &ts_guc_enable_compression_ratio_warnings,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	/*
 	 * Define the limit on number of invalidation-based refreshes we allow per
 	 * refresh call. If this limit is exceeded, fall back to a single refresh that
@@ -937,6 +967,17 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_sparse_index_bloom"),
+							 "Enable creation of the bloom1 sparse index on compressed chunks",
+							 "This sparse index speeds up the equality queries on compressed "
+							 "columns, and can be disabled when not desired.",
+							 &ts_guc_enable_sparse_index_bloom,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
 							 "Enable columnar-optimized scans for supported access methods",
 							 "A columnar scan replaces sequence scans for columnar-oriented "
@@ -1005,6 +1046,21 @@ _guc_init(void)
 							 "Delete all rows after compression instead of truncate",
 							 &ts_guc_enable_delete_after_compression,
 							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomEnumVariable(MAKE_EXTOPTION("compress_truncate_behaviour"),
+							 "Define behaviour of truncate after compression",
+							 "Defines how truncate behaves at the end of compression. "
+							 "'truncate_only' forces truncation. 'truncate_disabled' deletes rows "
+							 "instead of truncate. 'truncate_or_delete' allows falling back to "
+							 "deletion.",
+							 (int *) &ts_guc_compress_truncate_behaviour,
+							 COMPRESS_TRUNCATE_ONLY,
+							 compress_truncate_behaviour_options,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -1133,64 +1189,6 @@ _guc_init(void)
 							   /* show_hook= */ NULL);
 #endif
 
-	DefineCustomStringVariable(MAKE_EXTOPTION("hypercore_indexam_whitelist"),
-							   gettext_noop(
-								   "Whitelist for index access methods supported by hypercore."),
-							   gettext_noop(
-								   "List of index access method names supported by hypercore."),
-							   /* valueAddr= */ &ts_guc_hypercore_indexam_whitelist,
-							   /* Value= */ "btree,hash",
-							   /* context= */ PGC_SIGHUP,
-							   /* flags= */ GUC_LIST_INPUT | GUC_SUPERUSER_ONLY,
-							   /* check_hook= */ check_indexam_whitelist,
-							   /* assign_hook= */ NULL,
-							   /* show_hook= */ NULL);
-
-	DefineCustomEnumVariable(MAKE_EXTOPTION("hypercore_copy_to_behavior"),
-							 "The behavior of COPY TO on a hypercore table",
-							 "Set to 'all_data' to return both compressed and uncompressed data "
-							 "via the Hypercore table when using COPY TO. Set to "
-							 "'no_compressed_data' to skip compressed data.",
-							 /* valueAddr= */ (int *) &ts_guc_hypercore_copy_to_behavior,
-							 /* bootValue= */ HYPERCORE_COPY_NO_COMPRESSED_DATA,
-							 /* options= */ hypercore_copy_to_options,
-							 /* context= */ PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("enable_hypercore_scankey_pushdown"),
-							 /* short_desc= */
-							 "Push down qualifiers as scankeys when using Hypercore TAM",
-							 /* long_desc= */
-							 "Enabling this setting might lead to faster scans when "
-							 "query qualifiers match Hypercore segmentby and orderby columns.",
-							 /* valueAddr= */ &ts_guc_enable_hypercore_scankey_pushdown,
-							 /* bootValue= */ true,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
-
-	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("hypercore_arrow_cache_max_entries"),
-							/* short_desc= */ "max number of entries in arrow data cache",
-							/* long_desc= */
-							"The max number of decompressed arrow segments that can be "
-							"cached before entries are evicted. This mainly affects the "
-							"performance of index scans on the Hypercore TAM "
-							"when segments are accessed in non-sequential order.",
-							/* valueAddr= */ &ts_guc_hypercore_arrow_cache_max_entries,
-							/* bootValue= */ 25000,
-							/* minValue= */ 1,
-							/* maxValue= */ INT_MAX,
-							/* context= */ PGC_USERSET,
-							/* flags= */ 0,
-							/* check_hook= */ NULL,
-							/* assign_hook= */ NULL,
-							/* show_hook= */ NULL);
-
 	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("debug_bgw_scheduler_exit_status"),
 							/* short_desc= */ "exit status to use when shutting down the scheduler",
 							/* long_desc= */ "this is for debugging purposes",
@@ -1203,6 +1201,18 @@ _guc_init(void)
 							/* check_hook= */ NULL,
 							/* assign_hook= */ NULL,
 							/* show_hook= */ NULL);
+
+	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
+							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
+							 /* long_desc= */ "this is for debugging purposes",
+							 /* valueAddr= */ (int *) &ts_guc_debug_require_batch_sorted_merge,
+							 /* bootValue= */ DRO_Allow,
+							 /* options = */ debug_require_options,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
 
 #ifdef TS_DEBUG
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),
@@ -1286,17 +1296,6 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
-	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
-							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
-							 /* long_desc= */ "this is for debugging purposes",
-							 /* valueAddr= */ &ts_guc_debug_require_batch_sorted_merge,
-							 /* bootValue= */ false,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
-
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_allow_cagg_with_deprecated_funcs"),
 							 /* short_desc= */ "allow new caggs using time_bucket_ng",
 							 /* long_desc= */ "this is for debugging/testing purposes",
@@ -1308,18 +1307,6 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 #endif
-
-	DefineCustomBoolVariable(MAKE_EXTOPTION("default_hypercore_use_access_method"),
-							 gettext_noop("Enable to always use Hypercore TAM when compressing."),
-							 gettext_noop("Sets the global default for using Hypercore TAM when "
-										  "compressing chunks."),
-							 &ts_guc_default_hypercore_use_access_method,
-							 false,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
 
 	/* register feature flags */
 	ts_feature_flag_add(FEATURE_HYPERTABLE);

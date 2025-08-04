@@ -321,17 +321,19 @@ WHERE hypertable_id = :ht_id;
 -- Make sure the catalog is cleaned up when the cagg is dropped
 DROP MATERIALIZED VIEW conditions_summary;
 NOTICE:  drop cascades to 3 other objects
-SELECT * FROM _timescaledb_catalog.continuous_agg
+SELECT count(*) FROM _timescaledb_catalog.continuous_agg
 WHERE mat_hypertable_id = :cagg_id;
- mat_hypertable_id | raw_hypertable_id | parent_mat_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | direct_view_schema | direct_view_name | materialized_only | finalized 
--------------------+-------------------+--------------------------+------------------+----------------+---------------------+-------------------+--------------------+------------------+-------------------+-----------
-(0 rows)
+ count 
+-------
+     0
+(1 row)
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT count(*) FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
- mat_hypertable_id | bucket_func | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
--------------------+-------------+--------------+---------------+---------------+-----------------+--------------------
-(0 rows)
+ count 
+-------
+     0
+(1 row)
 
 -- Re-create cagg, this time WITH DATA
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
@@ -515,7 +517,6 @@ ALTER TABLE conditions SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'city'
 );
-NOTICE:  default order by for hypertable "conditions" is set to "day DESC"
 SELECT compress_chunk(ch) FROM show_chunks('conditions') AS ch;
               compress_chunk              
 ------------------------------------------

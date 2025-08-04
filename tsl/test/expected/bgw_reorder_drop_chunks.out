@@ -406,9 +406,9 @@ SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescale
 (1 row)
 
 SELECT alter_job(:drop_chunks_job_id, schedule_interval => INTERVAL '1 second');
-                                                                           alter_job                                                                            
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1001,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""hypertable_id"": 2}",-infinity,_timescaledb_functions.policy_retention_check,f,,)
+                                                                                        alter_job                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1001,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""hypertable_id"": 2}",-infinity,_timescaledb_functions.policy_retention_check,f,,,"Retention Policy [1001]")
 (1 row)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id=:drop_chunks_job_id;
@@ -619,16 +619,16 @@ SELECT add_retention_policy('test_drop_chunks_table_tsntz', INTERVAL '4 months')
 -- Test that retention policy is being logged
 SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
  FROM _timescaledb_config.bgw_job WHERE id = :drop_chunks_date_job_id;
-                                                                                       alter_job                                                                                       
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1002,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 3}",-infinity,_timescaledb_functions.policy_retention_check,f,,)
+                                                                                                    alter_job                                                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1002,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 3}",-infinity,_timescaledb_functions.policy_retention_check,f,,,"Retention Policy [1002]")
 (1 row)
 
 SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
  FROM _timescaledb_config.bgw_job WHERE id = :drop_chunks_tsntz_job_id;
-                                                                                       alter_job                                                                                       
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1003,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 4}",-infinity,_timescaledb_functions.policy_retention_check,f,,)
+                                                                                                    alter_job                                                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1003,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 4}",-infinity,_timescaledb_functions.policy_retention_check,f,,,"Retention Policy [1003]")
 (1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
@@ -699,9 +699,6 @@ select total_runs, total_successes, total_failures from timescaledb_information.
 
 -- test the compression policy
 alter table test_schedint set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_schedint" is set to ""
-NOTICE:  default order by for hypertable "test_schedint" is set to ""time" DESC"
 select add_compression_policy('test_schedint', interval '3 weeks', schedule_interval => '40 seconds') as polcomp_schedint \gset
 select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 

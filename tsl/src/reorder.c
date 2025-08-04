@@ -87,8 +87,7 @@ static void finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oi
 static void swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal,
 								TransactionId frozenXid, MultiXactId cutoffMulti);
 
-static bool chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid,
-									ChunkIndexMapping *cim_out);
+static Oid chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid);
 
 Datum
 tsl_reorder_chunk(PG_FUNCTION_ARGS)
@@ -159,12 +158,12 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot directly move internal compression data"),
-				 errdetail("Chunk \"%s\" contains compressed data for chunk \"%s\" and cannot be "
+				 errmsg("cannot directly move internal columnstore data"),
+				 errdetail("Chunk \"%s\" contains columnstore data for chunk \"%s\" and cannot be "
 						   "moved directly.",
 						   get_rel_name(chunk_id),
 						   get_rel_name(chunk_parent->table_id)),
-				 errhint("Moving chunk \"%s\" will also move the compressed data.",
+				 errhint("Moving chunk \"%s\" will also move the columnstore data.",
 						 get_rel_name(chunk_parent->table_id))));
 	}
 
@@ -180,7 +179,7 @@ tsl_move_chunk(PG_FUNCTION_ARGS)
 			ereport(NOTICE,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("ignoring index parameter"),
-					 errdetail("Chunk will not be reordered as it has compressed data.")));
+					 errdetail("Chunk will not be reordered as it has columnstore data.")));
 
 		ts_alter_table_with_event_trigger(chunk_id, fcinfo->context, list_make1(&cmd), false);
 		ts_alter_table_with_event_trigger(compressed_chunk->table_id,
@@ -211,7 +210,6 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	Chunk *chunk;
 	Cache *hcache;
 	Hypertable *ht;
-	ChunkIndexMapping cim;
 
 	if (!OidIsValid(chunk_id))
 		ereport(ERROR,
@@ -234,13 +232,14 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 	{
 		Oid main_table_relid = ht->main_table_relid;
 
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_TABLE, get_rel_name(main_table_relid));
 	}
 
-	if (!chunk_get_reorder_index(ht, chunk, index_id, &cim))
+	Oid index_relid = chunk_get_reorder_index(ht, chunk, index_id);
+	if (!OidIsValid(index_relid))
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		if (OidIsValid(index_id))
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -281,51 +280,85 @@ reorder_chunk(Oid chunk_id, Oid index_id, bool verbose, Oid wait_id, Oid destina
 							get_tablespace_name(index_tablespace))));
 	}
 
-	Assert(cim.chunkoid == chunk_id);
-
 	/*
 	 * We must mark each chunk index as clustered before calling reorder_rel()
 	 * because it expects indexes that need to be rechecked (due to new
 	 * transaction) to already have that mark set
 	 */
-	ts_chunk_index_mark_clustered(cim.chunkoid, cim.indexoid);
-	reorder_rel(cim.chunkoid,
-				cim.indexoid,
+	ts_chunk_index_mark_clustered(chunk->table_id, index_relid);
+	reorder_rel(chunk->table_id,
+				index_relid,
 				verbose,
 				wait_id,
 				destination_tablespace,
 				index_tablespace);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
+}
+
+static bool
+index_belongs_to_relation(Oid relid, Oid index_oid)
+{
+	HeapTuple tuple;
+	Form_pg_index rd_index;
+	bool result;
+
+	tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(index_oid));
+	if (!HeapTupleIsValid(tuple))
+		return false;
+
+	rd_index = (Form_pg_index) GETSTRUCT(tuple);
+	result = rd_index->indrelid == relid;
+	ReleaseSysCache(tuple);
+
+	return result;
 }
 
 /*
  * Find the index to reorder a chunk on based on a possibly NULL indexname
- * returns NULL if no such index is found
+ * returns InvalidOid if no such index is found
  */
-static bool
-chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid, ChunkIndexMapping *cim_out)
+static Oid
+chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid)
 {
 	/*
 	 * Index search order: 1. Explicitly named index 2. Chunk cluster index 3.
-	 * Hypertable cluster index
+	 * - index belongs to the chunk
+	 * - index belongs to the hypertable
+	 * - any clustered index on the chunk
+	 * - any clustered index on the hypertable
 	 */
+
 	if (OidIsValid(index_relid))
 	{
-		if (ts_chunk_index_get_by_indexrelid(chunk, index_relid, cim_out))
-			return true;
+		if (index_belongs_to_relation(chunk->table_id, index_relid))
+			return index_relid;
 
-		return ts_chunk_index_get_by_hypertable_indexrelid(chunk, index_relid, cim_out);
+		if (index_belongs_to_relation(ht->main_table_relid, index_relid))
+		{
+			Relation chunk_rel = table_open(chunk->table_id, AccessShareLock);
+			Oid chunk_index_oid =
+				ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, index_relid);
+			table_close(chunk_rel, NoLock);
+			return chunk_index_oid;
+		}
+
+		return InvalidOid;
 	}
 
 	index_relid = ts_indexing_find_clustered_index(chunk->table_id);
 	if (OidIsValid(index_relid))
-		return ts_chunk_index_get_by_indexrelid(chunk, index_relid, cim_out);
+		return index_relid;
 
 	index_relid = ts_indexing_find_clustered_index(ht->main_table_relid);
 	if (OidIsValid(index_relid))
-		return ts_chunk_index_get_by_hypertable_indexrelid(chunk, index_relid, cim_out);
+	{
+		Relation chunk_rel = table_open(chunk->table_id, AccessShareLock);
+		Oid chunk_index_oid = ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, index_relid);
+		table_close(chunk_rel, NoLock);
+		return chunk_index_oid;
+	}
 
-	return false;
+	return InvalidOid;
 }
 
 /* The following functions are based on their equivalents in postgres's cluster.c */

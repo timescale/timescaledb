@@ -318,7 +318,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig)
 				newec->ec_collation = orig->ec_collation;
 				newec->ec_members = NIL;
 				newec->ec_sources = list_copy(orig->ec_sources);
-				newec->ec_derives = list_copy(orig->ec_derives);
+				newec->ec_derives_list = list_copy(orig->ec_derives_list);
 				newec->ec_relids = bms_copy(orig->ec_relids);
 				newec->ec_has_const = orig->ec_has_const;
 
@@ -418,6 +418,34 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	 * Using it for other ORDER BY clauses will result in wrong ordering.
 	 */
 	last_pk = llast(root->query_pathkeys);
+
+	/*
+	 * We can only transform the original pathkey if it references our hypertable.
+	 * If it references another one, we might be able to successfully transform
+	 * it to a join EC that references both hypertables, but when we replace it
+	 * back, we'll get into an incorrect state where the pathkey for the scan
+	 * references only a different hypertable and doesn't have an EC member for
+	 * ours.
+	 */
+	int desired_ec_relid = rel->relid;
+	if (rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
+	{
+		/*
+		 * The EC relids contain only inheritance parents, not individual
+		 * children.
+		 */
+		AppendRelInfo *appinfo = root->append_rel_array[rel->relid];
+		desired_ec_relid = appinfo->parent_relid;
+	}
+
+	if (!bms_is_member(desired_ec_relid, last_pk->pk_eclass->ec_relids))
+	{
+		return NIL;
+	}
+
+	/*
+	 * Try to apply the transformation.
+	 */
 	transformed = sort_transform_ec(root, last_pk->pk_eclass);
 
 	if (transformed == NULL)
@@ -426,7 +454,7 @@ ts_sort_transform_get_pathkeys(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry
 	new_pk = make_canonical_pathkey(root,
 									transformed,
 									last_pk->pk_opfamily,
-									last_pk->pk_strategy,
+									last_pk->pk_cmptype,
 									last_pk->pk_nulls_first);
 
 	/*

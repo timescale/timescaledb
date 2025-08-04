@@ -319,7 +319,7 @@ SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
 -------------------------------------------------------------------------
  Result (actual rows=1 loops=1)
    CTE insert_cte
-     ->  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+     ->  Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
            ->  Insert on one_space_test (actual rows=0 loops=1)
                  ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                        ->  Result (actual rows=1 loops=1)
@@ -329,7 +329,7 @@ SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
 EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on chunk_assert_fail
          ->  Custom Scan (ChunkDispatch)
                ->  Append
@@ -341,7 +341,7 @@ EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_
 EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
                  QUERY PLAN                 
 --------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on chunk_assert_fail
          ->  Custom Scan (ChunkDispatch)
                ->  Result
@@ -351,7 +351,7 @@ EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_
 EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on chunk_assert_fail
          ->  Custom Scan (ChunkDispatch)
                ->  Append
@@ -364,7 +364,7 @@ EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_
 EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on chunk_assert_fail
          ->  Custom Scan (ChunkDispatch)
                ->  Index Scan using _hyper_5_13_chunk_chunk_assert_fail_i_idx on _hyper_5_13_chunk
@@ -375,7 +375,7 @@ INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
 EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on one_space_test
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -389,7 +389,7 @@ EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHER
 EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on one_space_test
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -400,7 +400,7 @@ EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHER
 EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on one_space_test
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -411,7 +411,7 @@ EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHER
 EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on one_space_test
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -440,7 +440,7 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time < 'infinity' LIMIT 1;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on timestamp_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -455,7 +455,7 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time >= 'infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on timestamp_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -467,7 +467,7 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time <= '-infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on timestamp_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -479,7 +479,7 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time > '-infinity' LIMIT 1;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on timestamp_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -503,7 +503,7 @@ EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time < 'infinity' LIMIT 1;
                                                   QUERY PLAN                                                  
 --------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on date_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -518,7 +518,7 @@ EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time >= 'infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on date_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -530,7 +530,7 @@ EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time <= '-infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on date_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -542,7 +542,7 @@ EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time > '-infinity' LIMIT 1;
                                                   QUERY PLAN                                                  
 --------------------------------------------------------------------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    ->  Insert on date_inf
          ->  Custom Scan (ChunkDispatch)
                ->  Limit
@@ -619,7 +619,7 @@ WHERE NOT EXISTS (
 );
                      QUERY PLAN                      
 -----------------------------------------------------
- Custom Scan (HypertableModify)
+ Custom Scan (ModifyHypertable)
    InitPlan 1 (returns $0)
      ->  Result
            One-Time Filter: false

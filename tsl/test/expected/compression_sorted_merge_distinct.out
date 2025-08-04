@@ -3,6 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Test that the compressed batch sorted merge plan is chosen based on the
 -- cardinality of the segmentby columns.
+set max_parallel_workers_per_gather = 0;
 -- helper function: float -> pseudorandom float [0..1].
 create or replace function mix(x float4) returns float4 as $$ select ((hashfloat4(x) / (pow(2., 31) - 1) + 1) / 2)::float4 $$ language sql;
 create table t(ts timestamp, low_card int, high_card int, value float);
@@ -22,7 +23,6 @@ insert into t select
     100 * mix(low_card + high_card) * sin(x / mix(low_card + high_card + 1))
 from generate_series(1, 400) x, generate_series(1, 3) low_card, generate_series(1, 700) high_card;
 alter table t set (timescaledb.compress = true, timescaledb.compress_segmentby = 'low_card,high_card');
-NOTICE:  default order by for hypertable "t" is set to "ts DESC"
 select count(compress_chunk(x, true)) from show_chunks('t') x;
  count 
 -------
@@ -31,11 +31,11 @@ select count(compress_chunk(x, true)) from show_chunks('t') x;
 
 analyze t;
 explain (costs off) select * from t order by ts;
-                       QUERY PLAN                        
----------------------------------------------------------
+                      QUERY PLAN                      
+------------------------------------------------------
  Sort
    Sort Key: _hyper_1_1_chunk.ts
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          ->  Seq Scan on compress_hyper_2_2_chunk
 (4 rows)
 
@@ -44,7 +44,7 @@ explain (costs off) select * from t where low_card = 1 order by ts;
 --------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_1_1_chunk.ts
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
                Index Cond: (low_card = 1)
 (5 rows)
@@ -52,7 +52,7 @@ explain (costs off) select * from t where low_card = 1 order by ts;
 explain (costs off) select * from t where high_card = 1 order by ts;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
@@ -62,7 +62,7 @@ explain (costs off) select * from t where high_card = 1 order by ts;
 explain (costs off) select * from t where low_card = 1 and high_card = 1 order by ts;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
@@ -75,7 +75,7 @@ set enable_sort to off;
 explain (costs off) select * from t where high_card = 1 order by ts;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
@@ -87,7 +87,7 @@ reset enable_sort;
 explain (costs off) select * from t where high_card < 10 order by ts;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
@@ -95,11 +95,11 @@ explain (costs off) select * from t where high_card < 10 order by ts;
 (5 rows)
 
 explain (costs off) select * from t where high_card < 500 order by ts;
-                       QUERY PLAN                        
----------------------------------------------------------
+                      QUERY PLAN                      
+------------------------------------------------------
  Sort
    Sort Key: _hyper_1_1_chunk.ts
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          ->  Seq Scan on compress_hyper_2_2_chunk
                Filter: (high_card < 500)
 (5 rows)
@@ -111,7 +111,7 @@ explain (costs off) select * from t where high_card < 10 order by ts;
 --------------------------------------------------------------------------------------------------------------------------
  Sort
    Sort Key: _hyper_1_1_chunk.ts
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
                Index Cond: (high_card < 10)
 (5 rows)
@@ -126,7 +126,7 @@ set work_mem to :large_work_mem;
 explain (costs off) select * from t where high_card < 10 order by ts;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
@@ -134,3 +134,4 @@ explain (costs off) select * from t where high_card < 10 order by ts;
 (5 rows)
 
 reset work_mem;
+reset max_parallel_workers_per_gather;

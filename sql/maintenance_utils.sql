@@ -35,16 +35,14 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.create_compressed_chunk(
 CREATE OR REPLACE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
     if_not_compressed BOOLEAN = true,
-    recompress BOOLEAN = false,
-    hypercore_use_access_method BOOL = NULL
+    recompress BOOLEAN = false
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C VOLATILE;
 
 -- Alias for compress_chunk above.
 CREATE OR REPLACE PROCEDURE @extschema@.convert_to_columnstore(
     chunk REGCLASS,
     if_not_columnstore BOOLEAN = true,
-    recompress BOOLEAN = false,
-    hypercore_use_access_method BOOL = NULL
+    recompress BOOLEAN = false
 ) AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION @extschema@.decompress_chunk(
@@ -64,6 +62,11 @@ CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
 CREATE OR REPLACE PROCEDURE @extschema@.merge_chunks(
     chunks REGCLASS[]
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_merge_chunks';
+
+CREATE OR REPLACE PROCEDURE @extschema@.split_chunk(
+    chunk REGCLASS,
+    split_at "any" = NULL
+) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_split_chunk';
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
     uncompressed_chunk REGCLASS,

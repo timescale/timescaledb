@@ -6,6 +6,11 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE ACCESS METHOD testam TYPE TABLE HANDLER heap_tableam_handler;
 set role :ROLE_DEFAULT_PERM_USER;
+-- A limitation in the tuple routing cache can lead to routing errors
+-- when multi-dimensional time partitions are not aligned. Therefore,
+-- multi-dimensional merges are disabled by default until the routing
+-- is fixed. However, allow it in this test.
+set timescaledb.enable_merge_multidim_chunks = true;
 
 ------------------
 -- Helper views --
@@ -167,14 +172,17 @@ select compress_chunk('_timescaledb_internal._hyper_1_3_chunk');
 -- Test merging compressed chunks
 begin;
 select * from chunk_info;
+
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
+
 call merge_chunks('{_timescaledb_internal._hyper_1_1_chunk, _timescaledb_internal._hyper_1_2_chunk, _timescaledb_internal._hyper_1_3_chunk}');
+select * from _timescaledb_catalog.compression_chunk_size order by chunk_id;
 select * from chunk_info;
 select count(*) as num_orphaned_slices from orphaned_slices;
 select * from mergeme;
 rollback;
 
 -- Test mixing hypercore TAM with compression without TAM
-alter table _timescaledb_internal._hyper_1_1_chunk set access method hypercore;
 select * from chunk_info;
 
 begin;
@@ -189,7 +197,6 @@ rollback;
 select * from chunk_info;
 
 -- Only Hypercore TAM and non-compressed chunks
-alter table _timescaledb_internal._hyper_1_3_chunk set access method hypercore;
 
 begin;
 select sum(temp) from mergeme;
@@ -286,23 +293,85 @@ from generate_series('2024-01-01'::timestamptz, '2024-01-04', '0.5s') t;
 
 -- Compress two chunks, one using access method
 select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-alter table _timescaledb_internal._hyper_1_2_chunk set access method hypercore;
 
 -- Show partitions before merge
 select * from partitions;
 
--- Merge all chunks until only 1 remains
+-- Show which chunks are compressed. Their compression_chunk_size
+-- metadata should be merged.
+select chunk_name from timescaledb_information.chunks
+where is_compressed=true order by chunk_name;
+
+--
+-- Check that compression_chunk_size stats are also merged when we
+-- merge compressed chunks.
+--
+-- Use a view to compare merged stats against the total sum of that
+-- stats for all chunks. There are only two compressed chunks, 1 and
+-- 2. Show each chunks stats as the fraction of the total size. This
+-- is to make the test work across different architectures that show
+-- slightly different absolute disk sizes.
+---
+select
+    sum(ccs.uncompressed_heap_size) as total_uncompressed_heap_size,
+    sum(ccs.uncompressed_toast_size) as total_uncompressed_toast_size,
+    sum(ccs.uncompressed_index_size) as total_uncompressed_index_size,
+    sum(ccs.compressed_heap_size) as total_compressed_heap_size,
+    sum(ccs.compressed_toast_size) as total_compressed_toast_size,
+    sum(ccs.compressed_index_size) as total_compressed_index_size,
+    sum(ccs.numrows_pre_compression) as total_numrows_pre_compression,
+    sum(ccs.numrows_post_compression) as total_numrows_post_compression,
+    sum(ccs.numrows_frozen_immediately) as total_numrows_frozen_immediately
+from _timescaledb_catalog.compression_chunk_size ccs \gset
+
+-- View to show current chunk compression size stats as a fraction of
+-- the totals.
+create view compression_size_fraction as
+select
+    ccs.chunk_id,
+    ccs.compressed_chunk_id,
+    round(ccs.uncompressed_heap_size::numeric / :total_uncompressed_heap_size, 1) as uncompressed_heap_size_fraction,
+    ccs.uncompressed_toast_size::numeric as uncompressed_toast_size_fraction,
+    round(ccs.uncompressed_index_size::numeric / :total_uncompressed_index_size, 1) as uncompressed_index_size_fraction,
+    round(ccs.compressed_heap_size::numeric / :total_compressed_heap_size, 1) as compressed_heap_size_fraction,
+    round(ccs.compressed_toast_size::numeric / :total_compressed_toast_size, 1) as compressed_toast_size_fraction,
+    round(ccs.compressed_index_size::numeric / :total_compressed_index_size, 1) as compressed_index_size_fraction,
+    round(ccs.numrows_pre_compression ::numeric/ :total_numrows_pre_compression, 1) as numrows_pre_compression_fraction,
+    round(ccs.numrows_post_compression::numeric / :total_numrows_post_compression, 1) as numrows_post_compression_fraction,
+    round(ccs.numrows_frozen_immediately::numeric / :total_numrows_frozen_immediately, 1) as numrows_frozen_immediately_fraction
+from _timescaledb_catalog.compression_chunk_size ccs
+order by chunk_id;
+
+\set ON_ERROR_STOP 0
+-- Test blocked multi-dimensional merges
+set timescaledb.enable_merge_multidim_chunks = false;
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+set timescaledb.enable_merge_multidim_chunks = true;
+\set ON_ERROR_STOP 1
+
+--
+-- Merge all chunks until only 1 remains.  Also check that metadata is
+-- merged.
+---
+select * from compression_size_fraction;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_2_chunk', '_timescaledb_internal._hyper_1_10_chunk','_timescaledb_internal._hyper_1_13_chunk', '_timescaledb_internal._hyper_1_15_chunk']);
+
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_11_chunk','_timescaledb_internal._hyper_1_14_chunk', '_timescaledb_internal._hyper_1_16_chunk']);
+
+-- Final merge, involving the two compressed chunks 1 and 2. The stats
+-- should also be merged.
+select * from compression_size_fraction;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_3_chunk', '_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_2_chunk']);
+select * from compression_size_fraction;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 select * from chunk_info;

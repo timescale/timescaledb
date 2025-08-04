@@ -494,7 +494,7 @@ INSERT INTO bigint_tab VALUES(5);
 INSERT INTO bigint_tab VALUES(10);
 INSERT INTO bigint_tab VALUES(20);
 CALL run_job(:job_mid);
-SELECT * FROM mat_bigint;
+SELECT * FROM mat_bigint ORDER BY 1;
 
 -- test NULL for end
 SELECT remove_continuous_aggregate_policy('mat_bigint');
@@ -555,6 +555,7 @@ WITH NO DATA;
 
 -- this was previously crashing
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, NULL, '1 h'::interval, if_not_exists => true);
+\set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval, if_not_exists => true);
 SELECT remove_continuous_aggregate_policy('metrics_cagg');
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true);
@@ -562,7 +563,6 @@ SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, 
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
 SELECT remove_continuous_aggregate_policy('metrics_cagg');
 --can set compression policy only after setting up refresh policy --
-\set ON_ERROR_STOP 0
 SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
 
 --can set compression policy only after enabling compression --
@@ -580,14 +580,13 @@ SELECT remove_compression_policy('metrics_cagg');
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" \gset
 
 --verify that jobs were added for the policies ---
-SELECT materialization_hypertable_schema AS "MAT_SCHEMA_NAME",
-       materialization_hypertable_name AS "MAT_TABLE_NAME",
-       materialization_hypertable_schema || '.' || materialization_hypertable_name AS "MAT_NAME"
+SELECT materialization_hypertable_name AS "MAT_TABLE_NAME",
+       view_name AS "VIEW_NAME"
 FROM timescaledb_information.continuous_aggregates
 WHERE view_name = 'metrics_cagg' \gset
 
 SELECT count(*) FROM timescaledb_information.jobs
-WHERE hypertable_name = :'MAT_TABLE_NAME';
+WHERE hypertable_name = :'VIEW_NAME';
 
 --exec the cagg compression job --
 CALL refresh_continuous_aggregate('metrics_cagg', NULL, '2001-02-01 00:00:00+0');
@@ -609,7 +608,7 @@ WHERE hypertable_name = :'MAT_TABLE_NAME' ORDER BY 1;
 DROP MATERIALIZED VIEW metrics_cagg;
 
 SELECT count(*) FROM timescaledb_information.jobs
-WHERE hypertable_name = :'MAT_TABLE_NAME';
+WHERE hypertable_name = :'VIEW_NAME';
 
 -- add test case for issue 4252
 CREATE TABLE IF NOT EXISTS sensor_data(
@@ -655,12 +654,12 @@ ALTER materialized view deals_best_daily set (timescaledb.materialized_only=true
 
 -- we have data from 6 weeks before to May 5 2022 (Thu)
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-03');
-SELECT * FROM deals_best_weekly;
+SELECT * FROM deals_best_weekly ORDER BY bucket;
 CALL refresh_continuous_aggregate('deals_best_daily', '2022-04-20', '2022-05-04');
 SELECT * FROM deals_best_daily ORDER BY bucket LIMIT 2;
 -- expect to get an up-to-date notice
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-05');
-SELECT * FROM deals_best_weekly;
+SELECT * FROM deals_best_weekly ORDER BY bucket;
 
 -- github issue 5907: segfault when creating 1-step policies on cagg
 -- whose underlying hypertable has a retention policy setup

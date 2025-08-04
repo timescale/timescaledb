@@ -54,7 +54,8 @@ extern int ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs,
 extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs,
 																		int32 chunk_id,
 																		const char chunk_relkind,
-																		Oid hypertable_oid);
+																		Oid hypertable_oid,
+																		Oid table_id);
 extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_check_constraints(
 	ChunkConstraints *ccs, int32 chunk_id, const char chunk_relkind, Oid hypertable_oid);
 extern TSDLLEXPORT void ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs);
@@ -67,7 +68,8 @@ extern void ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chun
 extern int ts_chunk_constraint_delete_by_hypertable_constraint_name(
 	int32 chunk_id, const char *hypertable_constraint_name, bool delete_metadata,
 	bool drop_constraint);
-extern int ts_chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs);
+extern int ts_chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs,
+												  bool delete_metadata, bool drop_constraint);
 extern int ts_chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id);
 extern int ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id,
 														 const char *constraint_name,
@@ -91,3 +93,9 @@ extern ChunkConstraint *ts_chunk_constraints_add_from_tuple(ChunkConstraints *cc
 extern ScanIterator ts_chunk_constraint_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_constraint_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id);
 extern void ts_chunk_constraint_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
+extern int ts_chunk_constraint_delete_dimensional_constraints(int32 chunk_id, ChunkConstraints *ccs,
+															  bool delete_metadata,
+															  bool drop_constraint);
+extern TSDLLEXPORT void ts_chunk_constraint_drop_from_tuple(HeapTuple constraint_tuple);
+extern TSDLLEXPORT void ts_chunk_constraint_check_violated(const Chunk *chunk,
+														   const Hyperspace *hs);

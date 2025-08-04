@@ -155,8 +155,6 @@ ORDER BY time,
 LIMIT 10;
 
 -- test function calls
--- not yet pushed down
-
 :PREFIX
 SELECT *
 FROM :TEST_TABLE
@@ -280,7 +278,7 @@ ORDER BY time,
     device_id
 LIMIT 10;
 
---functions not yet optimized
+--functions are pushed down as well
 :PREFIX
 SELECT *
 FROM :TEST_TABLE

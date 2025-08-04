@@ -52,8 +52,7 @@ SELECT chunk FROM show_chunks('test1') tbl(chunk) LIMIT 1 \gset
 CALL convert_to_rowstore(:'chunk', if_columnstore => true);
 CALL convert_to_columnstore(:'chunk',
      if_not_columnstore => true,
-     recompress => false,
-     hypercore_use_access_method => false);
+     recompress => false);
 
 CALL add_columnstore_policy('test1', interval '1 day');
 CALL remove_columnstore_policy('test1');
@@ -67,3 +66,16 @@ VACUUM FULL test1;
 -- the same as for the original function.
 SELECT * FROM chunk_columnstore_stats('test1') where 1 = 2 order by chunk_name;
 SELECT * FROM hypertable_columnstore_stats('test1') where 1 = 2;
+
+CREATE TABLE test2 (ts timestamptz, i integer, b bigint, t text);
+SELECT * FROM create_hypertable('test2', 'ts');
+INSERT INTO test2 SELECT t,  random(), random(), random()::text
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') t;
+ALTER TABLE test2 set (
+      timescaledb.columnstore,
+      timescaledb.segmentby = 'b',
+      timescaledb.orderby = 'ts desc'
+);
+SELECT * FROM timescaledb_information.hypertables WHERE hypertable_name = 'test2';
+
+

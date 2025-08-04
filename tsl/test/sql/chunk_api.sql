@@ -34,12 +34,16 @@ SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}');
 -- Same dimension twice
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}');
--- Bad bounds format
+-- Bad bounds value
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+-- Bad bounds value
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["badtimestamp", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 -- Bad slices format
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 -- Bad slices json
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}');
+-- Bad bound type
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [true, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 \set ON_ERROR_STOP 1
 
 -- Test that granting insert on tables allow create_chunk to be
@@ -114,5 +118,99 @@ SELECT * FROM chunkapi ORDER BY 1,2,3;
 -- are specific to the chunk.  Currently, foreign key, unique, and
 -- primary key constraints are not inherited or auto-created.
 SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
+
+TRUNCATE chunkapi;
+
+-- Create a table with extra columns
+CREATE TABLE extra_col_chunk (time timestamptz NOT NULL, device int, temp float, extra int, CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+
+-- Adding a new chunk with extra column should fail
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1514419200000000, 1515024000000000]}', NULL, NULL, 'extra_col_chunk');
+\set ON_ERROR_STOP 1
+
+-- It should succeed after dropping the extra column
+ALTER TABLE extra_col_chunk DROP COLUMN extra;
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1514419200000000, 1515024000000000]}', NULL, NULL, 'extra_col_chunk');
+
+-- Test creating a chunk with columns in different order
+CREATE TABLE reordered_chunk (device int, temp float, time timestamptz NOT NULL, CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515024000000000, 1515628800000000]}', NULL, NULL, 'reordered_chunk');
+
+-- Test creating a chunk with initially missing a column
+CREATE TABLE missing_col_chunk (time timestamptz NOT NULL, device int);
+INSERT INTO missing_col_chunk (time, device) VALUES ('2018-01-11 05:00:00-8', 1);
+ALTER TABLE missing_col_chunk ADD COLUMN temp float CONSTRAINT chunkapi_temp_check CHECK (temp > 0);
+INSERT INTO missing_col_chunk (time, device, temp) VALUES ('2018-01-12 05:00:00-8', 1, 19.5);
+
+-- This should succeed since all required columns are now present
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515628800000000, 1516233600000000]}', NULL, NULL, 'missing_col_chunk');
+
+-- Test creating a chunk with mismatched column types
+CREATE TABLE wrong_type_chunk (time timestamptz NOT NULL, device text, temp float CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+
+-- This should fail due to type mismatch
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1516233600000000, 1516838400000000]}', NULL, NULL, 'wrong_type_chunk');
+\set ON_ERROR_STOP 1
+
+-- Test creating a chunk with binary coercible types
+ALTER TABLE chunkapi ADD COLUMN name varchar(10);
+CREATE TABLE coercible_type_chunk (time timestamptz NOT NULL, device int, temp float CONSTRAINT chunkapi_temp_check CHECK (temp > 0), name text);
+INSERT INTO coercible_type_chunk (time, device, temp, name) VALUES ('2018-01-20 06:00:00-8', 1, 25.1, 'device1');
+
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1516233600000000, 1516838400000000]}', NULL, NULL, 'coercible_type_chunk');
+\set ON_ERROR_STOP 1
+
+ALTER TABLE chunkapi DROP COLUMN name;
+
+-- Test data routing to the successfully created chunks. Each row should go to a different chunks
+INSERT INTO chunkapi VALUES
+    ('2018-01-01 05:00:00-8', 1, 23.4),
+    ('2018-01-08 05:00:00-8', 1, 24.5),
+    ('2018-01-15 05:00:00-8', 1, 25.6);
+
+-- Verify data was routed correctly
+SELECT
+    'SELECT * FROM ' || chunk_schema || '.' || chunk_name
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'chunkapi'; \gexec
+
+TRUNCATE chunkapi;
+
+-- Test generated columns
+-- This should fail since generated column is not allowed in chunks if parent does not have the column as generated.
+CREATE TABLE generated_col_chunk (time timestamptz NOT NULL, device int, temp float GENERATED ALWAYS AS (device::float) STORED, CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+\set ON_ERROR_STOP 0
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1516838400000000, 1517443200000000]}', NULL, NULL, 'generated_col_chunk');
+\set ON_ERROR_STOP 1
+
+-- When parent has a generated column while the chunk does not have the same column as generated, it should fail too.
+CREATE TABLE non_generated_chunk (time timestamptz NOT NULL, device int, temp float, CONSTRAINT chunkapi_temp_check CHECK (temp > 0));
+\set ON_ERROR_STOP 0
+ALTER TABLE chunkapi DROP COLUMN temp;
+ALTER TABLE chunkapi ADD COLUMN temp float GENERATED ALWAYS AS (device::float) STORED;
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1517443200000000, 1518048000000000]}', NULL, NULL, 'non_generated_chunk');
+\set ON_ERROR_STOP 1
+
+-- Generation expression cannot be different from the parent
+\set ON_ERROR_STOP 0
+ALTER TABLE generated_col_chunk DROP COLUMN temp;
+ALTER TABLE generated_col_chunk ADD COLUMN temp float GENERATED ALWAYS AS ((device::float)+1) STORED;
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1518048000000000, 1518652800000000]}', NULL, NULL, 'generated_col_chunk');
+\set ON_ERROR_STOP 1
+
+-- This should succeed since the generated column is now the same as in the parent
+ALTER TABLE generated_col_chunk DROP COLUMN temp;
+ALTER TABLE generated_col_chunk ADD COLUMN temp float GENERATED ALWAYS AS ((device::float)) STORED;
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1518652800000000, 1519257600000000]}', NULL, NULL, 'generated_col_chunk');
+
+INSERT INTO chunkapi VALUES ('2018-02-20 05:00:00-8', 1);
+SELECT
+    'SELECT * FROM ' || chunk_schema || '.' || chunk_name
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'chunkapi'; \gexec
 
 DROP TABLE chunkapi;

@@ -276,17 +276,14 @@ select set_integer_now_func('test_table_int', 'dummy_now');
 (1 row)
 
 ALTER TABLE test_table_int SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_table_int" is set to ""
-NOTICE:  default order by for hypertable "test_table_int" is set to ""time" DESC"
 INSERT INTO test_table_int VALUES (0, 1), (10,10);
 SELECT add_compression_policy('test_table_int', '1'::integer) as comp_job_id \gset
 SELECT config as comp_job_config
 FROM _timescaledb_config.bgw_job WHERE id = :comp_job_id \gset
 SET default_transaction_read_only TO on;
 CALL _timescaledb_functions.policy_compression(:comp_job_id, :'comp_job_config');
-WARNING:  compressing chunk "_timescaledb_internal._hyper_4_2_chunk" failed when compression policy is executed
-ERROR:  compression policy failure
+WARNING:  converting chunk "_timescaledb_internal._hyper_4_2_chunk" to columnstore failed when recompress columnstore policy is executed
+ERROR:  columnstore policy failure
 SET default_transaction_read_only TO off;
 --verify chunks are not compressed
 SELECT count(*) , count(*) FILTER ( WHERE is_compressed is true)

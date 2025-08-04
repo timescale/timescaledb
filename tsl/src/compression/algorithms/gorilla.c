@@ -202,27 +202,32 @@ gorilla_compressor_finish_and_reset(Compressor *compressor)
 const Compressor gorilla_float_compressor = {
 	.append_val = gorilla_compressor_append_float,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 
 const Compressor gorilla_double_compressor = {
 	.append_val = gorilla_compressor_append_double,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 const Compressor gorilla_uint16_compressor = {
 	.append_val = gorilla_compressor_append_int16,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 const Compressor gorilla_uint32_compressor = {
 	.append_val = gorilla_compressor_append_int32,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 const Compressor gorilla_uint64_compressor = {
 	.append_val = gorilla_compressor_append_int64,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 

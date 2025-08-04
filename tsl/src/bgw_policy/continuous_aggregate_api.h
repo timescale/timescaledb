@@ -6,9 +6,17 @@
 #pragma once
 
 #include <postgres.h>
+#include "bgw_policy/job.h"
 #include "dimension.h"
 #include <continuous_aggs/materialize.h>
 #include <utils/jsonb.h>
+
+typedef enum PolicyRefreshOffsetOverlapResult
+{
+	POLICY_REFRESH_OFFSET_OVERLAP,		 /* overlap but not exact */
+	POLICY_REFRESH_OFFSET_OVERLAP_EQUAL, /* exact match */
+	POLICY_REFRESH_OFFSET_OVERLAP_NONE,	 /* no overlap */
+} PolicyRefreshOffsetOverlapResult;
 
 extern Datum policy_refresh_cagg_add(PG_FUNCTION_ARGS);
 extern Datum policy_refresh_cagg_proc(PG_FUNCTION_ARGS);
@@ -24,8 +32,6 @@ bool policy_refresh_cagg_get_include_tiered_data(const Jsonb *config, bool *isnu
 int32 policy_refresh_cagg_get_buckets_per_batch(const Jsonb *config);
 int32 policy_refresh_cagg_get_max_batches_per_execution(const Jsonb *config);
 bool policy_refresh_cagg_get_refresh_newest_first(const Jsonb *config);
-bool policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type,
-										  Datum cmp_interval);
 bool policy_refresh_cagg_exists(int32 materialization_id);
 
 Datum policy_refresh_cagg_add_internal(
@@ -35,3 +41,9 @@ Datum policy_refresh_cagg_add_internal(
 	NullableDatum buckets_per_batch, NullableDatum max_batches_per_execution,
 	NullableDatum refresh_newest_first);
 Datum policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists);
+
+PolicyRefreshOffsetOverlapResult policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg,
+																		Jsonb *policy_config,
+																		int32 existing_job_id);
+
+bool policy_refresh_cagg_check_if_last_policy(PolicyContinuousAggData *policy_data);

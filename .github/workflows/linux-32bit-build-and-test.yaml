@@ -10,7 +10,7 @@ name: Regression Linux i386
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
@@ -50,12 +50,17 @@ jobs:
         # reference and currently it cannot be used for vectorized hash grouping.
         # vector_agg_text and vector_agg_groupagg use the UMASH hashing library
         # that we can't compile on i386.
+        # For the same reason of different hashing, we ignore the results of
+        # several bloom filter tests as well.
         IGNORES: >-
           append-*
           bgw_db_scheduler*
-          hypercore_parallel
-          hypercore_vacuum
-          hypercore_vectoragg
+          columnar_scan_cost
+          compress_bloom_sparse_compat
+          compress_bloom_sparse_debug
+          compress_qualpushdown_saop
+          compression_allocation
+          net
           pg_dump
           telemetry
           transparent_decompress_chunk-*
@@ -63,10 +68,10 @@ jobs:
           vector_agg_groupagg
           vector_agg_grouping
           vector_agg_text
-          vector_agg_uuid_segmentby
+          vector_agg_uuid
           vectorized_aggregation
         SKIPS: chunk_adaptive histogram_test-*
-        EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
+        EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
@@ -79,7 +84,7 @@ jobs:
     - name: Install 64-bit libraries for GitHub actions
       run: |
         apt-get update
-        apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64
+        apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64 jq
 
     - name: Install build dependencies
       run: |

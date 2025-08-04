@@ -87,12 +87,17 @@ if [ -n "${VERSIONS}" ]; then
   for version in ${VERSIONS}; do
     ts_minor_version=$(echo "${version}" | awk -F. '{print $2}')
 
-    TEST_VERSION=v8
-
     if [ "${ts_minor_version}" -ge 10 ]; then
       TEST_REPAIR=true
     else
       TEST_REPAIR=false
+    fi
+
+
+    if [ "${ts_minor_version}" -ge 16 ]; then
+        TEST_VERSION=v9
+    else
+        TEST_VERSION=v8
     fi
 
     export TEST_VERSION TEST_REPAIR
@@ -110,9 +115,10 @@ echo -e "\nUpdate test finished for ${VERSIONS}\n"
 
 if [ $FAIL_COUNT -gt 0 ]; then
   echo -e "Failed versions: ${FAILED_VERSIONS}\n"
+  echo -e "Postgres errors:\n"
+  find update_test -name postgres.log -exec grep ERROR {} \;
 else
   echo -e "All tests succeeded.\n"
 fi
 
 exit $FAIL_COUNT
-

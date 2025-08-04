@@ -2,6 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_compression_algorithms
+  FROM pg_extension
+ WHERE extname = 'timescaledb' \gset
+
 \d+ _timescaledb_catalog.hypertable
 \d+ _timescaledb_catalog.chunk
 \d+ _timescaledb_catalog.dimension
@@ -9,6 +13,12 @@
 \d+ _timescaledb_catalog.chunk_constraint
 \d+ _timescaledb_catalog.chunk_index
 \d+ _timescaledb_catalog.tablespace
+
+-- since we forgot to add bool and null compression with 2.19.0 to the preinstall
+-- script fresh installations of 2.19+ won't have these compression algorithms
+\if :has_fixed_compression_algorithms
+SELECT * from _timescaledb_catalog.compression_algorithm algo ORDER BY algo;
+\endif
 
 SELECT nspname AS Schema,
        relname AS Name,
@@ -30,10 +40,43 @@ ORDER BY schema, name, initpriv;
 
 \di _timescaledb_catalog.*
 \ds+ _timescaledb_catalog.*
-\df _timescaledb_internal.*
-\df+ _timescaledb_internal.*
-\df public.*;
-\df+ public.*;
+
+-- Functions in schemas:
+--   * _timescaledb_internal
+--   * _timescaledb_functions
+--   * public
+SELECT n.nspname as "Schema",
+  p.proname as "Name",
+  pg_catalog.pg_get_function_result(p.oid) as "Result data type",
+  pg_catalog.pg_get_function_arguments(p.oid) as "Argument data types",
+ CASE p.prokind
+  WHEN 'a' THEN 'agg'
+  WHEN 'w' THEN 'window'
+  WHEN 'p' THEN 'proc'
+  ELSE 'func'
+ END as "Type",
+ CASE
+  WHEN p.provolatile = 'i' THEN 'immutable'
+  WHEN p.provolatile = 's' THEN 'stable'
+  WHEN p.provolatile = 'v' THEN 'volatile'
+ END as "Volatility",
+ CASE
+  WHEN p.proparallel = 'r' THEN 'restricted'
+  WHEN p.proparallel = 's' THEN 'safe'
+  WHEN p.proparallel = 'u' THEN 'unsafe'
+ END as "Parallel",
+ pg_catalog.pg_get_userbyid(p.proowner) as "Owner",
+ CASE WHEN prosecdef THEN 'definer' ELSE 'invoker' END AS "Security",
+ CASE WHEN pg_catalog.array_length(p.proacl, 1) = 0 THEN '(none)' ELSE pg_catalog.array_to_string(p.proacl, E'\n') END AS "Access privileges",
+ l.lanname as "Language",
+ p.prosrc as "Source code",
+ CASE WHEN l.lanname IN ('internal', 'c') THEN p.prosrc END as "Internal name",
+ pg_catalog.obj_description(p.oid, 'pg_proc') as "Description"
+FROM pg_catalog.pg_proc p
+     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+     LEFT JOIN pg_catalog.pg_language l ON l.oid = p.prolang
+WHERE n.nspname OPERATOR(pg_catalog.~) '^(_timescaledb_internal|_timescaledb_functions|public)$' COLLATE pg_catalog.default
+ORDER BY 1, 2, 4;
 
 \dy
 \d public.*
@@ -102,3 +145,5 @@ SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
 FROM pg_constraint
 WHERE conrelid::regclass::text ~ '^_timescaledb_'
 ORDER BY 1, 2, 3;
+
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;

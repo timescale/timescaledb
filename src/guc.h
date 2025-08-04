@@ -11,21 +11,6 @@
 #include "config.h"
 #include "export.h"
 
-/*
- * Decide if the access method should be used for compression, or if it is
- * undefined. Used for parameter values to PostgreSQL functions and is a
- * nullable boolean.
- *
- * Using explicit values of TRUE = 1 and FALSE = 0 since this enum is cast to
- * boolean value in the code.
- */
-typedef enum UseAccessMethod
-{
-	USE_AM_FALSE = 0,
-	USE_AM_TRUE = 1,
-	USE_AM_NULL = 2,
-} UseAccessMethod;
-
 #ifdef USE_TELEMETRY
 extern bool ts_telemetry_on(void);
 extern bool ts_function_telemetry_on(void);
@@ -52,9 +37,12 @@ extern TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
+extern bool ts_guc_enable_direct_compress_copy;
+extern bool ts_guc_enable_direct_compress_copy_sort_batches;
+extern bool ts_guc_enable_direct_compress_copy_client_sorted;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
-extern TSDLLEXPORT int ts_guc_enable_transparent_decompression;
+extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_compression_wal_markers;
 extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
@@ -72,13 +60,27 @@ extern bool ts_guc_enable_chunk_skipping;
 extern TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression;
 extern TSDLLEXPORT bool ts_guc_enable_bool_compression;
+extern TSDLLEXPORT bool ts_guc_enable_uuid_compression;
 extern TSDLLEXPORT int ts_guc_compression_batch_size_limit;
+extern TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit;
 #if PG16_GE
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
 #endif
+extern bool ts_guc_enable_event_triggers;
+extern TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan;
+extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;
+extern TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings;
+
+typedef enum CompressTruncateBehaviour
+{
+	COMPRESS_TRUNCATE_ONLY,
+	COMPRESS_TRUNCATE_OR_DELETE,
+	COMPRESS_TRUNCATE_DISABLED,
+} CompressTruncateBehaviour;
+extern TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour;
 
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel
@@ -99,6 +101,7 @@ extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
+extern TSDLLEXPORT bool ts_guc_enable_sparse_index_bloom;
 extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
@@ -117,14 +120,15 @@ extern char *ts_current_timestamp_mock;
 
 extern TSDLLEXPORT int ts_guc_debug_toast_tuple_target;
 
-#ifdef TS_DEBUG
 typedef enum DebugRequireOption
 {
 	DRO_Allow = 0,
 	DRO_Forbid,
-	DRO_Require
+	DRO_Require,
+	DRO_Force,
 } DebugRequireOption;
 
+#ifdef TS_DEBUG
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_qual;
 
 extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
@@ -133,33 +137,10 @@ extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_vector_agg;
 
 extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
 extern TSDLLEXPORT bool ts_guc_enable_rowlevel_compression_locking;
-extern TSDLLEXPORT bool ts_guc_default_hypercore_use_access_method;
 
-extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
+extern TSDLLEXPORT DebugRequireOption ts_guc_debug_require_batch_sorted_merge;
 
 extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
-extern TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
-
-/*
- * Defines the behavior of COPY TO when used on a Hypercore table.
- *
- * If set to COPY_ALL_DATA, all data is copied from a Hypercore table,
- * including compressed data (but in uncompressed form) from the internal
- * compressed relation. When doing a COPY TO on the internal compressed
- * relation, no data is returned.
- *
- * If set to COPY_NO_COMPRESSED_DATA, then only uncompressed data is copied
- * (if any). This behavior is compatible with compression without hypercore.
- */
-typedef enum HypercoreCopyToBehavior
-{
-	HYPERCORE_COPY_NO_COMPRESSED_DATA,
-	HYPERCORE_COPY_ALL_DATA,
-} HypercoreCopyToBehavior;
-
-extern TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior;
-extern TSDLLEXPORT bool ts_guc_enable_hypercore_scankey_pushdown;
-extern TSDLLEXPORT int ts_guc_hypercore_arrow_cache_max_entries;
 
 void _guc_init(void);
 

@@ -24,7 +24,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
-NOTICE:  default order by for hypertable "t" is set to ""
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
              compress_chunk             
@@ -40,7 +39,7 @@ select * from t;
 (1 row)
 
 select compress_chunk(show_chunks('t'));
-NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -84,8 +83,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 alter table t add column a double precision default 7.1;
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
@@ -139,7 +136,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
-NOTICE:  default order by for hypertable "t" is set to ""
 alter table t add column a double precision default 7.1;
 insert into t (ts,c1) values (4,4);
 insert into t (ts,c1) values (5,5);
@@ -191,8 +187,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 alter table t add column a double precision default 7.1;
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
@@ -241,7 +235,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set(timescaledb.compress, timescaledb.compress_segmentby = 'ts');
-NOTICE:  default order by for hypertable "t" is set to ""
 insert into t (ts) values (1);
 alter table t add column c1 double precision default 42.99;
 update t set c1 = null;
@@ -282,8 +275,6 @@ NOTICE:  adding not-null constraint to column "ts"
 
 insert into t values (1);
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 select compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
@@ -330,7 +321,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
-NOTICE:  default order by for hypertable "t" is set to ""
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
@@ -346,7 +336,7 @@ select * from t;
 (1 row)
 
 select compress_chunk(show_chunks('t'));
-NOTICE:  chunk "_hyper_13_15_chunk" is already compressed
+NOTICE:  chunk "_hyper_13_15_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_15_chunk
@@ -392,8 +382,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
@@ -471,8 +459,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
@@ -482,7 +468,7 @@ select compress_chunk(show_chunks('t'));
 
 alter table t add column a double precision default 7.1;
 select compress_chunk(show_chunks('t'));
-NOTICE:  chunk "_hyper_17_20_chunk" is already compressed
+NOTICE:  chunk "_hyper_17_20_chunk" is already converted to columnstore
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_17_20_chunk
@@ -546,8 +532,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
 insert into t (ts,c1) values (1,1);
 select compress_chunk(show_chunks('t'));
               compress_chunk              
@@ -681,8 +665,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table codecov set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "codecov" is set to ""
 insert into codecov (ts,c1) values (1,NULL);
 select compress_chunk(show_chunks('codecov'));
               compress_chunk              

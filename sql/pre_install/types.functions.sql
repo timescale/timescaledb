@@ -54,3 +54,12 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.dimension_info_out(_timescaled
     LANGUAGE C STRICT IMMUTABLE
     AS '@MODULE_PATHNAME@', 'ts_dimension_info_out';
 
+
+-- Type for bloom filters used by the sparse indexes on compressed hypertables.
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1in(cstring) RETURNS _timescaledb_internal.bloom1 AS 'byteain' LANGUAGE INTERNAL STRICT IMMUTABLE PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1out(_timescaledb_internal.bloom1) RETURNS cstring AS 'byteaout' LANGUAGE INTERNAL STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.has_invalidation_trigger(regclass)
+   RETURNS bool
+   LANGUAGE C STRICT PARALLEL SAFE
+   AS '@MODULE_PATHNAME@', 'ts_has_invalidation_trigger';

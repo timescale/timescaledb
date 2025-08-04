@@ -76,6 +76,20 @@ row based iterators then walk through the bitmap. The bool compressor differs fr
 the other compressors in that it stores the last non-value as a place holder for
 the null values. This is done to make vectorization easier.
 
+### UUID Compressor
+
+The uuid compressor is a compression algorithm that aims at storing UUID v7 values
+compressed as much as possible by taking advantage of the timestamp values being
+present in the UUID.
+
+The first part of the UUID where the timestamp resides is stored using the delta-delta
+algorithm. The second part of the UUID is stored without compression, as a sequence of
+uint64 values.
+
+The algorithm checks the cardinality of the values in the compressed batch and based on
+the cardinality it decides wether it is worth to recompress the batch using the dictionary
+compression algorithm. In that case it recompresses and stores the UUIDs as a dictionary.
+
 # Merging chunks while compressing #
 
 ## Setup ##
@@ -115,9 +129,10 @@ This function determines a segment-by column to use. It returns a JSONB with the
 
 The intuition is as follows:
 
-we use 2 criterias:
-- We want to pick an "important" column for querying. We measure "importance", in terms of how early the column comes in an index (i.e. leading columns are very important, others less so).
+we use 3 criterias:
+- We want to pick an "important" column for querying. We measure "importance", in terms of how early the column comes in an index (i.e. leading columns are very important, others less so). If there are no indexes, all columns will be considered if statistics are populated
 - The column has many rows for the same column value so that the segments will have many rows. We establish that a column will have many values if (i) it is not a dimension and (ii) either statistics tell us so (via `stadistinct` > 1) or, if statistics aren't populated, we check whether the column is a generated identity or serial column.
+- When we have multiple qualifying rows, we select the column where rows are spread most evenly across the distinct values. 
 
 Naturally, statistics give us more confidence that the column has enough rows per segment. In this case we break ties by preferring columns from unique indexes. Otherwise, we prefer columns from non-unique indexes (we are less likely to run into a unique column there).
 

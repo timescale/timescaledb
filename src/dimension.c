@@ -1245,7 +1245,7 @@ ts_dimension_set_num_slices(PG_FUNCTION_ARGS)
 	 */
 	num_slices = num_slices_arg & 0xffff;
 	ts_dimension_update(ht, colname, DIMENSION_TYPE_CLOSED, NULL, NULL, &num_slices, NULL);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();
 }
@@ -1289,7 +1289,7 @@ ts_dimension_set_interval(PG_FUNCTION_ARGS)
 
 	intervaltype = get_fn_expr_argtype(fcinfo->flinfo, 1);
 	ts_dimension_update(ht, colname, DIMENSION_TYPE_OPEN, &interval, &intervaltype, NULL, NULL);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_VOID();
 }
@@ -1644,7 +1644,7 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 	}
 
 	retval = dimension_create_datum(fcinfo, info, is_generic);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	PG_RETURN_DATUM(retval);
 }
@@ -1714,11 +1714,7 @@ ts_dimension_info_out(PG_FUNCTION_ARGS)
 
 			if (OidIsValid(info->interval_type))
 			{
-				bool isvarlena;
-				Oid outfuncid;
-				getTypeOutputInfo(info->interval_type, &outfuncid, &isvarlena);
-				Assert(OidIsValid(outfuncid));
-				argvalstr = OidOutputFunctionCall(outfuncid, info->interval_datum);
+				argvalstr = ts_datum_to_string(info->interval_datum, info->interval_type);
 			}
 
 			appendStringInfo(&str,

@@ -4,9 +4,6 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
--- Uncomment to run this test with hypercore TAM
---set timescaledb.default_hypercore_use_access_method=true;
-
 -- helper function: float -> pseudorandom float [-0.5..0.5]
 CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
     SELECT hashfloat8(x::float8) / pow(2, 32)
@@ -111,6 +108,7 @@ limit 1
 \gset
 
 set timescaledb.debug_require_vector_agg = :'guc_value';
+
 ---- Uncomment to generate reference. Note that there are minor discrepancies
 ---- on float4 due to different numeric stability in our and PG implementations.
 --set timescaledb.enable_chunkwise_aggregation to off; set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'forbid';

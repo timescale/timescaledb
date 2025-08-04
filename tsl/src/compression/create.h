@@ -32,3 +32,5 @@ typedef struct CompressionSettings CompressionSettings;
 int compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,
 									 AttrNumber chunk_attno, Oid compressed_reloid,
 									 char *metadata_type);
+
+void tsl_compression_enable(Hypertable *ht, WithClauseResult *with_clause_options);

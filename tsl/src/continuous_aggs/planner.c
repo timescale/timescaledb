@@ -425,18 +425,19 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 
 		TargetEntry *mat_tle = list_nth(mat_rte->subquery->targetList, time_col - 1);
 		TargetEntry *rt_tle = list_nth(rt_rte->subquery->targetList, time_col - 1);
-		linitial_node(SortGroupClause, mat_rte->subquery->sortClause)->tleSortGroupRef =
-			mat_tle->ressortgroupref;
-		linitial_node(SortGroupClause, rt_rte->subquery->sortClause)->tleSortGroupRef =
-			rt_tle->ressortgroupref;
 
 		SortGroupClause *cagg_group = linitial(rt_rte->subquery->groupClause);
 		cagg_group = list_nth(rt_rte->subquery->groupClause, rt_tle->ressortgroupref - 1);
 		cagg_group->sortop = sort->sortop;
 		cagg_group->nulls_first = sort->nulls_first;
 
+		linitial_node(SortGroupClause, rt_rte->subquery->sortClause)->tleSortGroupRef =
+			rt_tle->ressortgroupref;
+		mat_tle->ressortgroupref =
+			linitial_node(SortGroupClause, mat_rte->subquery->sortClause)->tleSortGroupRef;
+
 		Oid placeholder;
-		int16 strategy;
+		CompareType strategy;
 		get_ordering_op_properties(sort->sortop, &placeholder, &placeholder, &strategy);
 
 		/*
@@ -458,5 +459,5 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 		parse->sortClause = NIL;
 		rte->subquery->sortClause = NIL;
 	}
-	ts_cache_release(cache);
+	ts_cache_release(&cache);
 }

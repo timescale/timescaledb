@@ -24,7 +24,6 @@ insert into test values
 create table test_copy as select * from test;
 -- compress the chunk
 alter table test set (timescaledb.compress, timescaledb.compress_segmentby='a, b');
-NOTICE:  default order by for hypertable "test" is set to ""time" DESC"
 select compress_chunk(show_chunks('test'));
              compress_chunk             
 ----------------------------------------
@@ -60,7 +59,7 @@ order by test.time;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
    Join Filter: (((_hyper_1_1_chunk.a)::text = (test_copy.a)::text) AND (_hyper_1_1_chunk.b = test_copy.b))
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          Filter: (("time" >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND ("time" <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
          ->  Sort
                Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
@@ -126,7 +125,7 @@ full join query_params q2
                        Filter: ((a)::text = ANY ('{lat,lon}'::text[]))
    ->  Hash Full Join
          Hash Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                ->  Seq Scan on compress_hyper_2_2_chunk
          ->  Hash
                ->  CTE Scan on query_params q

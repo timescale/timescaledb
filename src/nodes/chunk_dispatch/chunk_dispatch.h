@@ -31,7 +31,6 @@ typedef struct ChunkDispatch
 	Hypertable *hypertable;
 	SubspaceStore *cache;
 	EState *estate;
-	int eflags;
 
 	/*
 	 * Keep a pointer to the original (hypertable's) ResultRelInfo since we
@@ -40,13 +39,14 @@ typedef struct ChunkDispatch
 	ResultRelInfo *hypertable_result_rel_info;
 	ChunkInsertState *prev_cis;
 	Oid prev_cis_oid;
+	bool create_compressed_chunk;
+	SharedCounters *counters; /* shared counters for the current statement */
 } ChunkDispatch;
 
 typedef struct ChunkDispatchPath
 {
 	CustomPath cpath;
 	ModifyTablePath *mtpath;
-	Index hypertable_rti;
 	Oid hypertable_relid;
 } ChunkDispatchPath;
 
@@ -59,7 +59,7 @@ typedef struct ChunkDispatchState
 	Plan *subplan;
 	Cache *hypertable_cache;
 	Oid hypertable_relid;
-	List *arbiter_indexes;
+
 	/*
 	 * Keep a pointer to the parent ModifyTableState executor node since we need
 	 * to manipulate the current result relation on-the-fly for chunk routing
@@ -82,13 +82,6 @@ typedef struct ChunkDispatchState
 
 	/* flag to represent dropped attributes */
 	bool is_dropped_attr_exists;
-	int64 batches_deleted;
-	int64 batches_filtered;
-	int64 batches_decompressed;
-	int64 tuples_decompressed;
-
-	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
-	bool skip_current_tuple;
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
@@ -98,16 +91,13 @@ typedef struct Point Point;
 
 typedef void (*on_chunk_changed_func)(ChunkInsertState *state, void *data);
 
-extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags);
+extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);
 extern void ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch);
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
 										 const on_chunk_changed_func on_chunk_changed, void *data);
-extern void ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch,
-															ChunkInsertState *cis,
-															TupleTableSlot *slot);
-extern TupleTableSlot *ts_chunk_dispatch_prepare_tuple_routing(ChunkDispatchState *state,
-															   TupleTableSlot *slot);
+extern void ts_chunk_dispatch_decompress_batches_for_insert(ChunkInsertState *cis,
+															TupleTableSlot *slot, EState *estate,
+															bool update_counter);
 
-extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
-													   Index hypertable_rti, int subpath_index);
+extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath);

@@ -32,12 +32,10 @@
  * that was reverted in the following release.
  */
 
-#define is_supported_pg_version_15(version)                                                        \
-	((version >= 150000) && (version < 160000) && (version != 150009))
-#define is_supported_pg_version_16(version)                                                        \
-	((version >= 160000) && (version < 170000) && (version != 160005))
-#define is_supported_pg_version_17(version)                                                        \
-	((version >= 170000) && (version < 180000) && (version != 170001))
+#define is_supported_pg_version_15(version) ((version >= 150010) && (version < 160000))
+#define is_supported_pg_version_16(version) ((version >= 160006) && (version < 170000))
+#define is_supported_pg_version_17(version) ((version >= 170002) && (version < 180000))
+#define is_supported_pg_version_18(version) ((version >= 180000) && (version < 190000))
 
 /*
  * PG16 support is a WIP and not complete yet.
@@ -45,11 +43,12 @@
  */
 #define is_supported_pg_version(version)                                                           \
 	(is_supported_pg_version_15(version) || is_supported_pg_version_16(version) ||                 \
-	 is_supported_pg_version_17(version))
+	 is_supported_pg_version_17(version) || is_supported_pg_version_18(version))
 
 #define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 #define PG16 is_supported_pg_version_16(PG_VERSION_NUM)
 #define PG17 is_supported_pg_version_17(PG_VERSION_NUM)
+#define PG18 is_supported_pg_version_18(PG_VERSION_NUM)
 
 #define PG15_LT (PG_VERSION_NUM < 150000)
 #define PG15_GE (PG_VERSION_NUM >= 150000)
@@ -57,6 +56,8 @@
 #define PG16_GE (PG_VERSION_NUM >= 160000)
 #define PG17_LT (PG_VERSION_NUM < 170000)
 #define PG17_GE (PG_VERSION_NUM >= 170000)
+#define PG18_LT (PG_VERSION_NUM < 180000)
+#define PG18_GE (PG_VERSION_NUM >= 180000)
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
@@ -341,53 +342,44 @@ vacuum_get_cutoffs(Relation rel, const VacuumParams *params, struct VacuumCutoff
 /*
  * PG16 adds TMResult argument to ExecBRUpdateTriggers
  * https://github.com/postgres/postgres/commit/7103ebb7
+ * this was backported to PG15 in
+ * https://github.com/postgres/postgres/commit/7d9a75713ab9
  */
-#if PG16_LT
-#define ExecBRUpdateTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   slot,                                                           \
-								   result,                                                         \
-								   tmfdp)                                                          \
-	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, tmfdp)
-#else
-#define ExecBRUpdateTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   resultRelInfo,                                                  \
-								   tupleid,                                                        \
-								   oldtuple,                                                       \
-								   slot,                                                           \
-								   result,                                                         \
-								   tmfdp)                                                          \
-	ExecBRUpdateTriggers(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, result, tmfdp)
+#if PG15
+#define ExecBRUpdateTriggers(estate,                                                               \
+							 epqstate,                                                             \
+							 resultRelInfo,                                                        \
+							 tupleid,                                                              \
+							 oldtuple,                                                             \
+							 slot,                                                                 \
+							 result,                                                               \
+							 tmfdp)                                                                \
+	ExecBRUpdateTriggersNew(estate, epqstate, resultRelInfo, tupleid, oldtuple, slot, result, tmfdp)
 #endif
 
 /*
  * PG16 adds TMResult argument to ExecBRDeleteTriggers
  * https://github.com/postgres/postgres/commit/9321c79c
+ * this was backported to PG15 in
+ * https://github.com/postgres/postgres/commit/7d9a75713ab9
  */
-#if PG16_LT
-#define ExecBRDeleteTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   relinfo,                                                        \
-								   tupleid,                                                        \
-								   fdw_trigtuple,                                                  \
-								   epqslot,                                                        \
-								   tmresult,                                                       \
-								   tmfd)                                                           \
-	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot)
-#else
-#define ExecBRDeleteTriggersCompat(estate,                                                         \
-								   epqstate,                                                       \
-								   relinfo,                                                        \
-								   tupleid,                                                        \
-								   fdw_trigtuple,                                                  \
-								   epqslot,                                                        \
-								   tmresult,                                                       \
-								   tmfd)                                                           \
-	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot, tmresult, tmfd)
+#if PG15
+#define ExecBRDeleteTriggers(estate,                                                               \
+							 epqstate,                                                             \
+							 relinfo,                                                              \
+							 tupleid,                                                              \
+							 fdw_trigtuple,                                                        \
+							 epqslot,                                                              \
+							 tmresult,                                                             \
+							 tmfd)                                                                 \
+	ExecBRDeleteTriggersNew(estate,                                                                \
+							epqstate,                                                              \
+							relinfo,                                                               \
+							tupleid,                                                               \
+							fdw_trigtuple,                                                         \
+							epqslot,                                                               \
+							tmresult,                                                              \
+							tmfd)
 #endif
 
 #if PG16_GE
@@ -676,4 +668,75 @@ pg_cmp_u32(uint32 a, uint32 b)
 #else
 #define i64abs(i) llabs(i)
 #endif
+#endif
+
+/*
+ * PG18 adds IndexScanInstrumentation parameter to index_beginscan
+ * https://github.com/postgres/postgres/commit/0fbceae8
+ */
+#if PG18_LT
+#define index_beginscan_compat(heapRelation,                                                       \
+							   indexRelation,                                                      \
+							   snapshot,                                                           \
+							   instrument,                                                         \
+							   nkeys,                                                              \
+							   norderbys)                                                          \
+	index_beginscan(heapRelation, indexRelation, snapshot, nkeys, norderbys)
+#else
+#define index_beginscan_compat(heapRelation,                                                       \
+							   indexRelation,                                                      \
+							   snapshot,                                                           \
+							   instrument,                                                         \
+							   nkeys,                                                              \
+							   norderbys)                                                          \
+	index_beginscan(heapRelation, indexRelation, snapshot, instrument, nkeys, norderbys)
+#endif
+
+#if PG16_LT
+#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
+	make_range(typcache, lower, upper, empty)
+#else
+#define make_range_compat(typcache, lower, upper, empty, escontext)                                \
+	make_range(typcache, lower, upper, empty, escontext)
+#endif
+
+/* Copied from PG17. We can remove it once we deprecate older versions. */
+#if PG17_LT
+static inline void
+initReadOnlyStringInfo(StringInfo str, char *data, int len)
+{
+	str->data = data;
+	str->len = len;
+	str->maxlen = 0; /* read-only */
+	str->cursor = 0;
+}
+#endif
+
+/*
+ * PG18 renames ri_ConstraintExprs to ri_CheckConstraintExprs
+ * Add macros so we can use the new naming for older versions.
+ * https://github.com/postgres/postgres/commit/9a9ead11
+ */
+#if PG18_LT
+#define ri_CheckConstraintExprs ri_ConstraintExprs
+#endif
+
+/*
+ * PG18 renames ec_derives to ec_derives_list
+ * Add macros so we can use the new naming for older versions.
+ * https://github.com/postgres/postgres/commit/88f55bc9
+ */
+#if PG18_LT
+#define ec_derives_list ec_derives
+#endif
+
+/* PG18 introduces new CompareType for ordering operations
+ * Add macros so we can use the new naming for older versions.
+ * https://github.com/postgres/postgres/commit/8123e91f
+ */
+#if PG18_LT
+#define CompareType int16
+#define COMPARE_LT BTLessStrategyNumber
+#define COMPARE_GT BTGreaterStrategyNumber
+#define pk_cmptype pk_strategy
 #endif

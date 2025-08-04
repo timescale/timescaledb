@@ -19,7 +19,6 @@
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
-#include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/rel.h>
@@ -58,26 +57,6 @@ get_modifytable(const ChunkDispatch *dispatch)
 	return castNode(ModifyTable, get_modifytable_state(dispatch)->ps.plan);
 }
 
-static List *
-chunk_dispatch_get_arbiter_indexes(const ChunkDispatch *dispatch)
-{
-	return dispatch->dispatch_state->arbiter_indexes;
-}
-
-static bool
-chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
-{
-	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
-		return false;
-	return get_modifytable(dispatch)->returningLists != NIL;
-}
-
-static List *
-chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
-{
-	return linitial(get_modifytable(dispatch)->returningLists);
-}
-
 OnConflictAction
 ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 {
@@ -108,17 +87,17 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 	int ncheck, i;
 	ConstrCheck *check;
 
-	Assert(rel->rd_att->constr != NULL && rri->ri_ConstraintExprs == NULL);
+	Assert(rel->rd_att->constr != NULL && rri->ri_CheckConstraintExprs == NULL);
 
 	ncheck = rel->rd_att->constr->num_check;
 	check = rel->rd_att->constr->check;
-	rri->ri_ConstraintExprs = (ExprState **) palloc(ncheck * sizeof(ExprState *));
+	rri->ri_CheckConstraintExprs = (ExprState **) palloc(ncheck * sizeof(ExprState *));
 
 	for (i = 0; i < ncheck; i++)
 	{
 		Expr *checkconstr = stringToNode(check[i].ccbin);
 
-		rri->ri_ConstraintExprs[i] = prepare_constr_expr(checkconstr);
+		rri->ri_CheckConstraintExprs[i] = prepare_constr_expr(checkconstr);
 	}
 }
 
@@ -130,23 +109,21 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
  *
  * The Hypertable ResultRelInfo is used as a template for the chunk's new ResultRelInfo.
  */
-static inline ResultRelInfo *
-create_chunk_result_relation_info(const ChunkDispatch *dispatch, Relation rel)
+ResultRelInfo *
+create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel, EState *estate)
 {
 	ResultRelInfo *rri;
-	ResultRelInfo *rri_orig = dispatch->hypertable_result_rel_info;
-	Index hyper_rti = rri_orig->ri_RangeTableIndex;
 	rri = makeNode(ResultRelInfo);
 
-	InitResultRelInfo(rri, rel, hyper_rti, NULL, dispatch->estate->es_instrument);
+	InitResultRelInfo(rri, rel, ht_rri->ri_RangeTableIndex, NULL, estate->es_instrument);
 
 	/* Copy options from the main table's (hypertable's) result relation info */
-	rri->ri_WithCheckOptions = rri_orig->ri_WithCheckOptions;
-	rri->ri_WithCheckOptionExprs = rri_orig->ri_WithCheckOptionExprs;
-	rri->ri_projectReturning = rri_orig->ri_projectReturning;
+	rri->ri_WithCheckOptions = ht_rri->ri_WithCheckOptions;
+	rri->ri_WithCheckOptionExprs = ht_rri->ri_WithCheckOptionExprs;
+	rri->ri_projectReturning = ht_rri->ri_projectReturning;
 
 	rri->ri_FdwState = NULL;
-	rri->ri_usesFdwDirectModify = rri_orig->ri_usesFdwDirectModify;
+	rri->ri_usesFdwDirectModify = ht_rri->ri_usesFdwDirectModify;
 
 	if (RelationGetForm(rel)->relkind == RELKIND_FOREIGN_TABLE)
 		rri->ri_FdwRoutine = GetFdwRoutineForRelation(rel, true);
@@ -253,21 +230,17 @@ adjust_chunk_colnos(List *colnos, ResultRelInfo *chunk_rri)
  * columns, etc.
  */
 static void
-setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
+setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsertState *state,
 						TupleConversionMap *chunk_map)
 {
 	TupleConversionMap *map = state->hyper_to_chunk_map;
 	ResultRelInfo *chunk_rri = state->result_relation_info;
-	ResultRelInfo *hyper_rri = dispatch->hypertable_result_rel_info;
 	Relation chunk_rel = state->result_relation_info->ri_RelationDesc;
-	Relation hyper_rel = hyper_rri->ri_RelationDesc;
-	ModifyTableState *mtstate = castNode(ModifyTableState, dispatch->dispatch_state->mtstate);
+	Relation hyper_rel = ht_rri->ri_RelationDesc;
 	ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
 
-	Assert(ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE);
-
 	OnConflictSetState *onconfl = makeNode(OnConflictSetState);
-	memcpy(onconfl, hyper_rri->ri_onConflict, sizeof(OnConflictSetState));
+	memcpy(onconfl, ht_rri->ri_onConflict, sizeof(OnConflictSetState));
 	chunk_rri->ri_onConflict = onconfl;
 
 #if PG16_LT
@@ -278,7 +251,7 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 #endif
 
 	Assert(mt->onConflictSet);
-	Assert(hyper_rri->ri_onConflict != NULL);
+	Assert(ht_rri->ri_onConflict != NULL);
 
 	/*
 	 * Need a separate existing slot for each partition, as the
@@ -304,9 +277,9 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 		 * Projections and where clauses themselves don't store state
 		 * / are independent of the underlying storage.
 		 */
-		onconfl->oc_ProjSlot = hyper_rri->ri_onConflict->oc_ProjSlot;
-		onconfl->oc_ProjInfo = hyper_rri->ri_onConflict->oc_ProjInfo;
-		onconfl->oc_WhereClause = hyper_rri->ri_onConflict->oc_WhereClause;
+		onconfl->oc_ProjSlot = ht_rri->ri_onConflict->oc_ProjSlot;
+		onconfl->oc_ProjInfo = ht_rri->ri_onConflict->oc_ProjInfo;
+		onconfl->oc_WhereClause = ht_rri->ri_onConflict->oc_WhereClause;
 		state->conflproj_slot = onconfl->oc_ProjSlot;
 	}
 	else
@@ -331,7 +304,7 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 
 		onconflset = translate_clause(onconflset,
 									  chunk_map,
-									  hyper_rri->ri_RangeTableIndex,
+									  ht_rri->ri_RangeTableIndex,
 									  hyper_rel,
 									  chunk_rel);
 
@@ -366,7 +339,7 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 		{
 			List *clause = translate_clause(castNode(List, onconflict_where),
 											chunk_map,
-											hyper_rri->ri_RangeTableIndex,
+											ht_rri->ri_RangeTableIndex,
 											hyper_rel,
 											chunk_rel);
 
@@ -392,20 +365,17 @@ destroy_on_conflict_state(ChunkInsertState *state)
 
 /* Translate hypertable indexes to chunk indexes in the arbiter clause */
 static void
-set_arbiter_indexes(ChunkInsertState *state, const ChunkDispatch *dispatch)
+set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
 {
-	List *arbiter_indexes = chunk_dispatch_get_arbiter_indexes(dispatch);
+	List *chunk_arbiter_indexes = NIL;
 	ListCell *lc;
 
-	state->arbiter_indexes = NIL;
-
-	foreach (lc, arbiter_indexes)
+	foreach (lc, ht_arbiter_indexes)
 	{
 		Oid hypertable_index = lfirst_oid(lc);
-		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(state->rel), true);
-		ChunkIndexMapping cim;
-
-		if (ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index, &cim) < 1)
+		Oid chunk_index_oid =
+			ts_chunk_index_get_by_hypertable_indexrelid(state->rel, hypertable_index);
+		if (!OidIsValid(chunk_index_oid))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -415,22 +385,31 @@ set_arbiter_indexes(ChunkInsertState *state, const ChunkDispatch *dispatch)
 							get_rel_name(RelationGetRelid(state->rel)))));
 		}
 
-		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim.indexoid);
+		chunk_arbiter_indexes = lappend_oid(chunk_arbiter_indexes, chunk_index_oid);
 	}
-	state->result_relation_info->ri_onConflictArbiterIndexes = state->arbiter_indexes;
+	state->result_relation_info->ri_onConflictArbiterIndexes = chunk_arbiter_indexes;
 }
 
 /* Change the projections to work with chunks instead of hypertables */
 static void
-adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid rowtype)
+adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsertState *cis,
+				   Oid rowtype)
 {
 	ResultRelInfo *chunk_rri = cis->result_relation_info;
-	Relation hyper_rel = dispatch->hypertable_result_rel_info->ri_RelationDesc;
+	Relation hyper_rel = ht_rri->ri_RelationDesc;
 	Relation chunk_rel = cis->rel;
 	TupleConversionMap *chunk_map = NULL;
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+	OnConflictAction onConflictAction = ONCONFLICT_NONE;
+	List *returningLists = NIL;
 
-	if (chunk_dispatch_has_returning(dispatch))
+	if (mtstate)
+	{
+		ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
+		onConflictAction = mt->onConflictAction;
+		returningLists = mt->returningLists;
+	}
+
+	if (returningLists)
 	{
 		/*
 		 * We need the opposite map from cis->hyper_to_chunk_map. The map needs
@@ -442,21 +421,20 @@ adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid row
 
 		chunk_rri->ri_projectReturning =
 			get_adjusted_projection_info_returning(chunk_rri->ri_projectReturning,
-												   chunk_dispatch_get_returning_clauses(dispatch),
+												   linitial(returningLists),
 												   chunk_map,
-												   dispatch->hypertable_result_rel_info
-													   ->ri_RangeTableIndex,
+												   ht_rri->ri_RangeTableIndex,
 												   rowtype,
 												   RelationGetDescr(chunk_rel));
 	}
 
 	/* Set the chunk's arbiter indexes for ON CONFLICT statements */
-	if (onconflict_action != ONCONFLICT_NONE)
+	if (onConflictAction != ONCONFLICT_NONE)
 	{
-		set_arbiter_indexes(cis, dispatch);
+		set_arbiter_indexes(cis, ht_rri->ri_onConflictArbiterIndexes);
 
-		if (onconflict_action == ONCONFLICT_UPDATE)
-			setup_on_conflict_state(cis, dispatch, chunk_map);
+		if (onConflictAction == ONCONFLICT_UPDATE)
+			setup_on_conflict_state(ht_rri, mtstate, cis, chunk_map);
 	}
 }
 
@@ -501,20 +479,22 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	 * always read from latest snapshot.
 	 */
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Assert(chunk->relkind == RELKIND_RELATION || chunk->relkind == RELKIND_FOREIGN_TABLE);
+	Assert(chunk->relkind == RELKIND_RELATION);
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
-	relinfo = create_chunk_result_relation_info(dispatch, rel);
+	relinfo = create_chunk_result_relation_info(dispatch->hypertable_result_rel_info,
+												rel,
+												dispatch->estate);
 	CheckValidResultRelCompat(relinfo, chunk_dispatch_get_cmd_type(dispatch), NIL);
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->cds = dispatch->dispatch_state;
+	state->counters = dispatch->counters;
 	state->mctx = cis_context;
 	state->rel = rel;
 	state->result_relation_info = relinfo;
 	state->estate = dispatch->estate;
-	state->use_tam = ts_is_hypercore_am(chunk->amoid);
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
@@ -549,7 +529,10 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 		state->hyper_to_chunk_map =
 			convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
 
-	adjust_projections(state, dispatch, RelationGetForm(rel)->reltype);
+	adjust_projections(dispatch->hypertable_result_rel_info,
+					   dispatch->dispatch_state->mtstate,
+					   state,
+					   RelationGetForm(rel)->reltype);
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
 	 * want this slot tied to the executor's tuple table, since that would tie
@@ -579,46 +562,6 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 #endif
 	}
 
-	if (dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify)
-	{
-		/* If the hypertable is setup for direct modify, we do not really use
-		 * the FDW. Instead exploit the FdwPrivate pointer to pass on the
-		 * chunk insert state to DataNodeDispatch so that it knows which data nodes
-		 * to insert into. */
-		relinfo->ri_FdwState = state;
-	}
-	else if (relinfo->ri_FdwRoutine && !relinfo->ri_usesFdwDirectModify &&
-			 relinfo->ri_FdwRoutine->BeginForeignModify)
-	{
-		/*
-		 * If this is a chunk located one or more data nodes, setup the
-		 * foreign data wrapper state for the chunk. The private fdw data was
-		 * created at the planning stage and contains, among other things, a
-		 * deparsed insert statement for the hypertable.
-		 */
-		ModifyTableState *mtstate = dispatch->dispatch_state->mtstate;
-		ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
-		List *fdwprivate = linitial_node(List, mt->fdwPrivLists);
-
-		Assert(NIL != fdwprivate);
-		/*
-		 * Since the fdwprivate data is part of the plan it must only
-		 * consist of Node objects that can be copied. Therefore, we
-		 * cannot directly append the non-Node ChunkInsertState to the
-		 * private data. Instead, we make a copy of the private data
-		 * before passing it on to the FDW handler function. In the
-		 * FDW, the ChunkInsertState will be at the offset defined by
-		 * the FdwModifyPrivateChunkInsertState (see
-		 * tsl/src/fdw/timescaledb_fdw.c).
-		 */
-		fdwprivate = lappend(list_copy(fdwprivate), state);
-		relinfo->ri_FdwRoutine->BeginForeignModify(mtstate,
-												   relinfo,
-												   fdwprivate,
-												   0,
-												   dispatch->eflags);
-	}
-
 	MemoryContextSwitchTo(old_mcxt);
 
 	return state;
@@ -644,8 +587,6 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 		ts_chunk_set_partial(chunk);
-		/* changed chunk status, so invalidate any plans involving this chunk */
-		CacheInvalidateRelcacheByRelid(chunk_relid);
 	}
 
 	if (rri->ri_FdwRoutine && !rri->ri_usesFdwDirectModify && rri->ri_FdwRoutine->EndForeignModify)

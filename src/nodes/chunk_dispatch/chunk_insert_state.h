@@ -15,13 +15,57 @@
 
 typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
 typedef struct ChunkDispatchState ChunkDispatchState;
+typedef struct CompressionSettings CompressionSettings;
+typedef struct tuple_filtering_constraints tuple_filtering_constraints;
+
+/*
+ * Bundle the ScanKey and the attribute numbers together
+ * to be able to update the scankey by replacing the
+ * `sk_argument` field with the value from the actual slot.
+ */
+typedef struct ScanKeyWithAttnos
+{
+	int num_scankeys;
+	ScanKeyData *scankeys;
+	AttrNumber *attnos;
+} ScanKeyWithAttnos;
+
+/*
+ * Holds information to cache scan keys and other
+ * information needed for repeated calls of
+ * `decompress_batches_for_insert` on the same chunk.
+ */
+typedef struct CachedDecompressionState
+{
+	bool has_primary_or_unique_index;
+	CompressionSettings *compression_settings;
+	tuple_filtering_constraints *constraints;
+	/* Columns that needs to be checked manually because
+	 * heap scan doesn't support SK_SEARCHNULL:
+	 */
+	Bitmapset *columns_with_null_check;
+	ScanKeyWithAttnos heap_scankeys;
+	ScanKeyWithAttnos index_scankeys;
+	ScanKeyWithAttnos mem_scankeys;
+	Oid index_relid;
+} CachedDecompressionState;
+
+typedef struct SharedCounters
+{
+	/* Number of batches deleted */
+	int64 batches_deleted;
+	/* Number of batches filtered */
+	int64 batches_filtered;
+	/* Number of batches decompressed */
+	int64 batches_decompressed;
+	/* Number of tuples decompressed */
+	int64 tuples_decompressed;
+} SharedCounters;
 
 typedef struct ChunkInsertState
 {
 	Relation rel;
 	ResultRelInfo *result_relation_info;
-	/* Per-chunk arbiter indexes for ON CONFLICT handling */
-	List *arbiter_indexes;
 	ChunkDispatchState *cds;
 
 	/* When the tuple descriptors for the main hypertable (root) and a chunk
@@ -55,8 +99,13 @@ typedef struct ChunkInsertState
 	bool chunk_compressed;
 	bool chunk_partial;
 
-	/* Chunk uses our own table access method */
-	bool use_tam;
+	/* To speedup repeated calls of `decompress_batches_for_insert` */
+	CachedDecompressionState *cached_decompression_state;
+
+	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
+	bool skip_current_tuple;
+	SharedCounters *counters;
+
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
@@ -64,6 +113,8 @@ typedef struct ChunkDispatch ChunkDispatch;
 extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,
 													  const ChunkDispatch *dispatch);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
+ResultRelInfo *create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel,
+												 EState *estate);
 
 TSDLLEXPORT OnConflictAction
 ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);

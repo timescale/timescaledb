@@ -155,11 +155,12 @@ SELECT DISTINCT attname, attstattarget
 (7 rows)
 
 -- Test that the GUC to disable bulk decompression works.
+vacuum analyze test1;
 explain (analyze, verbose, timing off, costs off, summary off)
 select * from _timescaledb_internal._hyper_1_10_chunk;
                                                                                                                               QUERY PLAN                                                                                                                               
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: true
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
@@ -171,7 +172,7 @@ explain (analyze, verbose, timing off, costs off, summary off)
 select * from _timescaledb_internal._hyper_1_10_chunk;
                                                                                                                               QUERY PLAN                                                                                                                               
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: false
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
@@ -282,11 +283,11 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = ''
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_82_chunk" is already compressed
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_83_chunk" is already compressed
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_84_chunk" is already compressed
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_85_chunk" is already compressed
-psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_86_chunk" is already compressed
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_82_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_83_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_84_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_85_chunk" is already converted to columnstore
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_86_chunk" is already converted to columnstore
  count 
 -------
      5
@@ -431,8 +432,6 @@ select create_hypertable( 'test5', 'time', chunk_time_interval=> '1 day'::interv
 (1 row)
 
 alter table test5 set (timescaledb.compress, timescaledb.compress_orderby = 'device_id, time');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test5" is set to ""
 insert into test5
 select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), 'device_1', gen_rand_minstd();
 insert into test5
@@ -588,8 +587,6 @@ NOTICE:  adding not-null constraint to column "time"
 
 ALTER TABLE test7 SET
   (timescaledb.compress, timescaledb.compress_orderby = 'time DESC, c1 DESC');
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test7" is set to ""
 INSERT INTO test7
   SELECT t, d, '2019/07/07 01:00', gen_rand_minstd(), 'a'
   FROM generate_series(1, 10) t,

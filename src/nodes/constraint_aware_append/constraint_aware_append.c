@@ -22,6 +22,7 @@
 #include <optimizer/plancat.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
+#include <storage/lockdefs.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/syscache.h>
@@ -32,6 +33,10 @@
 #include "guc.h"
 #include "nodes/chunk_append/transform.h"
 #include "utils.h"
+
+#if PG18_GE
+#include <commands/explain_format.h>
+#endif
 
 /*
  * Exclude child relations (chunks) at execution time based on constraints.
@@ -74,10 +79,8 @@ get_plans_for_exclusion(Plan *plan)
 }
 
 static bool
-can_exclude_chunk(PlannerInfo *root, EState *estate, Index rt_index, List *restrictinfos)
+can_exclude_chunk(PlannerInfo *root, RangeTblEntry *rte, Index rt_index, List *restrictinfos)
 {
-	RangeTblEntry *rte = rt_fetch(rt_index, estate->es_range_table);
-
 	return rte->rtekind == RTE_RELATION && rte->relkind == RELKIND_RELATION && !rte->inh &&
 		   excluded_by_constraint(root, rte, rt_index, restrictinfos);
 }
@@ -234,6 +237,7 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 				List *restrictinfos = NIL;
 				List *ri_clauses = lfirst(lc_clauses);
 				ListCell *lc;
+				RangeTblEntry *rte;
 
 				Assert(scanrelid);
 
@@ -252,9 +256,19 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 
 					restrictinfos = lappend(restrictinfos, ri);
 				}
+
+				/*
+				 * The function excluded_by_constraint(), which is called when
+				 * excluding chunks, assumes that a relation is already locked
+				 * when called. In most cases the relation is already locked
+				 * when getting here, but not in case of some parallel scans
+				 * where the parallel worker hasn't locked it yet.
+				 */
+				rte = rt_fetch(scanrelid, estate->es_range_table);
+				LockRelationOid(rte->relid, AccessShareLock);
 				restrictinfos = constify_restrictinfos(&root, restrictinfos);
 
-				if (can_exclude_chunk(&root, estate, scanrelid, restrictinfos))
+				if (can_exclude_chunk(&root, rte, scanrelid, restrictinfos))
 					continue;
 
 				*appendplans = lappend(*appendplans, lfirst(lc_plan));

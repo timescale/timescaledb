@@ -78,6 +78,8 @@ CREATE TABLE nodetime (
 INSERT INTO nodetime
     VALUES (4, '2018-01-06 00:00'::timestamp, '2018-12-02 12:00'::timestamp);
 
+VACUUM FULL ANALYZE metrics_ordered_idx;
+
 -- run queries on uncompressed hypertable and store result
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
@@ -108,6 +110,8 @@ BEGIN
     hyper_id);
 END;
 $$;
+
+VACUUM FULL ANALYZE metrics_ordered_idx;
 
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
@@ -188,6 +192,8 @@ timescaledb.compress_orderby = 'type, timec');
 
 SELECT compress_chunk(c) FROM show_chunks('entity_m2') c;
 
+VACUUM FULL ANALYZE entity_m2;
+
 CREATE TABLE entity_m1
 (
 timec         timestamp with time zone  ,
@@ -225,6 +231,8 @@ UNION ALL
     NULL::double precision AS peak
    FROM entity_m1 m1;
 
+VACUUM FULL ANALYZE entity_m1;
+
 SET enable_bitmapscan = false;
 SET enable_hashjoin = false;
 SET enable_mergejoin = false;
@@ -240,6 +248,8 @@ ALTER TABLE entity_m1 SET (timescaledb.compress,
 timescaledb.compress_segmentby = 'entity_oid',
 timescaledb.compress_orderby = 'type, timec');
 SELECT compress_chunk(c) FROM show_chunks('entity_m1') c;
+VACUUM FULL ANALYZE entity_m1;
+
 SELECT m.timec, avg(m.utilization) AS avg_util
    FROM  metric_view m, entity e
    WHERE m.type = 'VMEM'

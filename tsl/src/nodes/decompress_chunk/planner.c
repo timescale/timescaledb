@@ -40,9 +40,17 @@
 #include "vector_predicates.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
-	.CustomName = "DecompressChunk",
+	.CustomName = "ColumnarScan",
 	.CreateCustomScanState = decompress_chunk_state_create,
 };
+
+/* Check if the provided plan is a DecompressChunkPlan */
+bool
+ts_is_decompress_chunk_plan(Plan *plan)
+{
+	return IsA(plan, CustomScan) &&
+		   castNode(CustomScan, plan)->methods == &decompress_chunk_plan_methods;
+}
 
 void
 _decompress_chunk_init(void)
@@ -272,7 +280,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 	}
 #endif
 	/*
-	 * FIXME this way to determine which columns are used is actually wrong, see
+	 * TODO this way to determine which columns are used is actually wrong, see
 	 * https://github.com/timescale/timescaledb/issues/4195#issuecomment-1104238863
 	 * Left as is for now, because changing it uncovers a whole new story with
 	 * ctid.
@@ -653,6 +661,8 @@ is_not_runtime_constant_walker(Node *node, void *context)
  * Note that we do the same evaluation when doing run time chunk exclusion, but
  * there is no good way to pass the evaluated clauses to the underlying nodes
  * like this DecompressChunk node.
+ *
+ * Similar checks are performed for sparse index pushdown.
  */
 static bool
 is_not_runtime_constant(Node *node)
@@ -679,9 +689,23 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		{
 			/*
 			 * NOT should be removed by Postgres for all operators we can
-			 * vectorize (see prepqual.c), so we don't support it.
+			 * vectorize (see prepqual.c) except when the where clause is
+			 * something like 'COL = false' for bool columns. In this case, we
+			 * have to check if it was transformed to BoolExpr(NOT_EXPR, Var) so
+			 * we can vectorize it, provided that the column supports bulk
+			 * decompression.
 			 */
-			return NULL;
+			if (list_length(boolexpr->args) == 1 && IsA(linitial(boolexpr->args), Var))
+			{
+				if (!vqinfo->vector_attrs[castNode(Var, linitial(boolexpr->args))->varattno])
+				{
+					return NULL;
+				}
+			}
+			else
+			{
+				return NULL;
+			}
 		}
 
 		bool need_copy = false;
@@ -716,7 +740,8 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 
 	/*
 	 * Among the simple predicates, we vectorize some "Var op Const" binary
-	 * predicates, scalar array operations with these predicates, and null test.
+	 * predicates, scalar array operations with these predicates, boolean variables
+	 * and null test.
 	 */
 	NullTest *nulltest = NULL;
 	OpExpr *opexpr = NULL;
@@ -724,6 +749,7 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	Node *arg1 = NULL;
 	Node *arg2 = NULL;
 	Oid opno = InvalidOid;
+	Var *var = NULL;
 	if (IsA(qual, OpExpr))
 	{
 		opexpr = castNode(OpExpr, qual);
@@ -747,6 +773,33 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	{
 		nulltest = castNode(NullTest, qual);
 		arg1 = (Node *) nulltest->arg;
+	}
+	else if (IsA(qual, BooleanTest))
+	{
+		BooleanTest *booltest = castNode(BooleanTest, qual);
+		if (IsA(booltest->arg, Var))
+		{
+			var = castNode(Var, booltest->arg);
+			if (!vqinfo->vector_attrs[var->varattno])
+			{
+				return NULL;
+			}
+			return (Node *) booltest;
+		}
+		else
+		{
+			return NULL;
+		}
+	}
+	else if (IsA(qual, Var) && (castNode(Var, qual))->vartype == BOOLOID)
+	{
+		/* We can vectorize boolean variables if bulk decompression is possible. */
+		var = castNode(Var, qual);
+		if (!vqinfo->vector_attrs[var->varattno])
+		{
+			return NULL;
+		}
+		return (Node *) var;
 	}
 	else
 	{
@@ -785,7 +838,7 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 		return NULL;
 	}
 
-	Var *var = castNode(Var, arg1);
+	var = castNode(Var, arg1);
 	if ((Index) var->varno != vqinfo->rti)
 	{
 		/*
@@ -864,12 +917,37 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 	 */
 	Assert(saop != NULL);
 
+	/*
+	 * The planner can decide to build a hash table. It's still somewhat slower
+	 * than our vectorized lookups for array lengths <= 32.
+	 */
 	if (saop->hashfuncid)
 	{
-		/*
-		 * Don't vectorize if the planner decided to build a hash table.
-		 */
-		return NULL;
+		if (!IsA(arg2, Const))
+		{
+			/*
+			 * The planner as of PG 17 only uses hashing for plan-time constants,
+			 * but double-check.
+			 */
+			return NULL;
+		}
+
+		Const *c = castNode(Const, arg2);
+		if (c->constisnull)
+		{
+			/*
+			 * Shouldn't happen, but not controlled by us.
+			 */
+			return NULL;
+		}
+
+		Datum arrdatum = c->constvalue;
+		ArrayType *arr = (ArrayType *) DatumGetPointer(arrdatum);
+		const int nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
+		if (nitems > 32)
+		{
+			return NULL;
+		}
 	}
 
 	return (Node *) saop;
@@ -942,6 +1020,9 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 	cost_sort(&sort_path,
 			  root,
 			  NIL,
+#if PG18_GE
+			  lefttree->disabled_nodes,
+#endif
 			  lefttree->total_cost,
 			  lefttree->plan_rows,
 			  lefttree->plan_width,
@@ -965,36 +1046,16 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 static Var *
 find_var_subexpression(void *expr, Index varno)
 {
-	if (IsA(expr, Var))
+	List *varlist = pull_var_clause((Node *) expr, 0);
+	if (list_length(varlist) == 1)
 	{
-		Var *var = castNode(Var, expr);
+		Var *var = (Var *) linitial(varlist);
 		if ((Index) var->varno == (Index) varno)
 		{
 			return var;
 		}
 
 		return NULL;
-	}
-
-	if (IsA(expr, List))
-	{
-		List *list = castNode(List, expr);
-		ListCell *lc;
-		foreach (lc, list)
-		{
-			Var *var = find_var_subexpression(lfirst(lc), varno);
-			if (var != NULL)
-			{
-				return var;
-			}
-		}
-
-		return NULL;
-	}
-
-	if (IsA(expr, FuncExpr))
-	{
-		return find_var_subexpression(castNode(FuncExpr, expr)->args, varno);
 	}
 
 	return NULL;
@@ -1202,11 +1263,11 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				Oid sortop = get_opfamily_member(pk->pk_opfamily,
 												 var->vartype,
 												 var->vartype,
-												 pk->pk_strategy);
+												 pk->pk_cmptype);
 				if (!OidIsValid(sortop)) /* should not happen */
 					elog(ERROR,
 						 "missing operator %d(%u,%u) in opfamily %u",
-						 pk->pk_strategy,
+						 pk->pk_cmptype,
 						 var->vartype,
 						 var->vartype,
 						 pk->pk_opfamily);
@@ -1243,7 +1304,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 			/* Find the operator in pg_amop --- failure shouldn't happen */
 			Oid opfamily, opcintype;
-			int16 strategy;
+			CompareType strategy;
 			if (!get_ordering_op_properties(list_nth_oid(sort_ops, i),
 											&opfamily,
 											&opcintype,
@@ -1343,17 +1404,23 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 #ifdef TS_DEBUG
 	if (ts_guc_debug_require_vector_qual == DRO_Forbid && list_length(vectorized_quals) > 0)
 	{
-		elog(ERROR, "debug: encountered vector quals when they are disabled");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("debug: encountered vector quals when they are disabled")));
 	}
 	else if (ts_guc_debug_require_vector_qual == DRO_Require)
 	{
 		if (list_length(decompress_plan->scan.plan.qual) > 0)
 		{
-			elog(ERROR, "debug: encountered non-vector quals when they are disabled");
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("debug: encountered non-vector quals when they are disabled")));
 		}
 		if (list_length(vectorized_quals) == 0)
 		{
-			elog(ERROR, "debug: did not encounter vector quals when they are required");
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("debug: did not encounter vector quals when they are required")));
 		}
 	}
 #endif

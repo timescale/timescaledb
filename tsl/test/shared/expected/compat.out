@@ -36,12 +36,6 @@ WARNING:  function _timescaledb_internal.chunk_id_from_relid(oid) is deprecated 
                    0
 (1 row)
 
-SELECT _timescaledb_internal.chunk_index_clone(0);
-WARNING:  function _timescaledb_internal.chunk_index_clone(oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  invalid chunk index
-SELECT _timescaledb_internal.chunk_index_replace(0,0);
-WARNING:  function _timescaledb_internal.chunk_index_replace(oid,oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  invalid chunk index
 SELECT _timescaledb_internal.chunk_status(0);
 WARNING:  function _timescaledb_internal.chunk_status(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
@@ -252,9 +246,6 @@ ERROR:  null value in column "mat_hypertable_id" of relation "continuous_aggs_wa
 CALL _timescaledb_internal.policy_compression(0,NULL);
 WARNING:  procedure _timescaledb_internal.policy_compression(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  job 0 has null config
-CALL _timescaledb_internal.policy_compression_execute(0,0,NULL::interval,0,true,true,true);
-WARNING:  procedure _timescaledb_internal.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  invalid hypertable or continuous aggregate
 CALL _timescaledb_internal.policy_recompression(0,NULL);
 WARNING:  procedure _timescaledb_internal.policy_recompression(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 CALL _timescaledb_internal.policy_refresh_continuous_aggregate(0,NULL);

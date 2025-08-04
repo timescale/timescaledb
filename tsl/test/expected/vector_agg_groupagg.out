@@ -111,9 +111,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table text_table set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "text_table" is set to ""
-NOTICE:  default order by for hypertable "text_table" is set to "ts DESC"
 insert into text_table select 0 /*, default */ from generate_series(1, 1000) x;
 select count(compress_chunk(x)) from show_chunks('text_table') x;
  count 

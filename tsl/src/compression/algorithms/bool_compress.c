@@ -8,6 +8,7 @@
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "simple8b_rle.h"
+#include "simple8b_rle_bitarray.h"
 #include "simple8b_rle_bitmap.h"
 
 typedef struct BoolCompressed
@@ -32,6 +33,7 @@ typedef struct BoolCompressor
 	Simple8bRleCompressor validity_bitmap;
 	bool has_nulls;
 	bool last_value;
+	uint32 num_nulls;
 } BoolCompressor;
 
 typedef struct ExtendedCompressor
@@ -52,6 +54,7 @@ static void *bool_compressor_finish_and_reset(Compressor *compressor);
 const Compressor bool_compressor_initializer = {
 	.append_val = bool_compressor_append_bool,
 	.append_null = bool_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = bool_compressor_finish_and_reset,
 };
 
@@ -86,6 +89,7 @@ bool_compressor_append_null(BoolCompressor *compressor)
 	compressor->has_nulls = true;
 	simple8brle_compressor_append(&compressor->values, compressor->last_value);
 	simple8brle_compressor_append(&compressor->validity_bitmap, 0);
+	compressor->num_nulls++;
 }
 
 extern void
@@ -104,6 +108,9 @@ bool_compressor_finish(BoolCompressor *compressor)
 
 	Simple8bRleSerialized *values = simple8brle_compressor_finish(&compressor->values);
 	if (values == NULL)
+		return NULL;
+
+	if (compressor->num_nulls == compressor->values.num_elements)
 		return NULL;
 
 	Simple8bRleSerialized *validity_bitmap =
@@ -315,6 +322,55 @@ tsl_bool_compressor_finish(PG_FUNCTION_ARGS)
 	if (compressed == NULL)
 		PG_RETURN_NULL();
 	PG_RETURN_POINTER(compressed);
+}
+
+extern ArrowArray *
+bool_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+{
+	MemoryContext old_context;
+	Simple8bRleBitArray value_bits;
+	Simple8bRleBitArray validity_bits;
+
+	Simple8bRleSerialized *serialized_values = NULL;
+	Simple8bRleSerialized *serialized_validity_bitmap = NULL;
+
+	ArrowArray *result = NULL;
+	uint64 *validity_bitmap = NULL;
+	uint64 *decompressed_values = NULL;
+
+	void *detoasted = PG_DETOAST_DATUM(compressed);
+	StringInfoData si = { .data = detoasted, .len = VARSIZE(compressed) };
+	BoolCompressed *header = consumeCompressedData(&si, sizeof(BoolCompressed));
+
+	Assert(header->has_nulls == 0 || header->has_nulls == 1);
+	Assert(element_type == BOOLOID);
+
+	serialized_values = bytes_deserialize_simple8b_and_advance(&si);
+	const bool has_nulls = header->has_nulls == 1;
+
+	if (has_nulls)
+	{
+		serialized_validity_bitmap = bytes_deserialize_simple8b_and_advance(&si);
+	}
+
+	/* Decompress the values directly to bit arrays */
+	old_context = MemoryContextSwitchTo(dest_mctx);
+	value_bits = simple8brle_bitarray_decompress(serialized_values, /* inverted*/ false);
+	decompressed_values = value_bits.data;
+	validity_bits =
+		simple8brle_bitarray_decompress(serialized_validity_bitmap, /* inverted*/ false);
+	validity_bitmap = validity_bits.data;
+	MemoryContextSwitchTo(old_context);
+
+	result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = decompressed_values;
+	result->n_buffers = 2;
+	result->buffers = buffers;
+	result->length = value_bits.num_elements;
+	result->null_count = has_nulls ? (result->length - validity_bits.num_ones) : 0;
+	return result;
 }
 
 /*

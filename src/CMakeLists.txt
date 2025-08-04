@@ -9,6 +9,7 @@ set(SOURCES
     chunk_constraint.c
     chunk_index.c
     chunk_scan.c
+    chunk_tuple_routing.c
     constraint.c
     cross_module_fn.c
     copy.c
@@ -106,6 +107,10 @@ if(USE_OPENSSL)
     target_link_libraries(${PROJECT_NAME} ${OPENSSL_LIBRARIES})
   endif(MSVC)
 endif(USE_OPENSSL)
+
+set(TSL_CAGG_INVALIDATION_PLUGIN_NAME
+    "${PROJECT_NAME}-invalidations"
+    CACHE STRING "Continuous aggregates invalidation plugin name")
 
 configure_file(config.h.in config.h)
 add_dependencies(${PROJECT_NAME} gitcheck)

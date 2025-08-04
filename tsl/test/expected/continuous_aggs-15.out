@@ -855,9 +855,9 @@ SELECT add_continuous_aggregate_policy('mat_with_test', NULL, '5 h'::interval, '
 (1 row)
 
 SELECT alter_job(id, schedule_interval => '1h') FROM _timescaledb_config.bgw_job;
-                                                                                                   alter_job                                                                                                   
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1001,"@ 1 hour","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,)
+                                                                                                                         alter_job                                                                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1001,"@ 1 hour","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1001]")
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
@@ -867,9 +867,9 @@ SELECT schedule_interval FROM _timescaledb_config.bgw_job;
 (1 row)
 
 SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
-                                                                                                   alter_job                                                                                                    
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1001,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,)
+                                                                                                                          alter_job                                                                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1001,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": ""@ 5 hours"", ""start_offset"": null, ""mat_hypertable_id"": 20}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1001]")
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
@@ -948,9 +948,9 @@ SELECT add_continuous_aggregate_policy('mat_with_test', NULL, 500::integer, '12 
 (1 row)
 
 SELECT alter_job(id, schedule_interval => '2h') FROM _timescaledb_config.bgw_job;
-                                                                                              alter_job                                                                                               
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- (1002,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": 500, ""start_offset"": null, ""mat_hypertable_id"": 23}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,)
+                                                                                                                     alter_job                                                                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ (1002,"@ 2 hours","@ 0",-1,"@ 12 hours",t,"{""end_offset"": 500, ""start_offset"": null, ""mat_hypertable_id"": 23}",-infinity,_timescaledb_functions.policy_refresh_continuous_aggregate_check,f,,,"Refresh Continuous Aggregate Policy [1002]")
 (1 row)
 
 SELECT schedule_interval FROM _timescaledb_config.bgw_job;
@@ -1599,7 +1599,7 @@ ORDER BY 1, 2, 3;
 --now disable compression , will error out --
 \set ON_ERROR_STOP 0
 ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'false');
-ERROR:  cannot disable compression on hypertable with compressed chunks
+ERROR:  cannot disable columnstore on hypertable with columnstore chunks
 \set ON_ERROR_STOP 1
 SELECT decompress_chunk(format('%I.%I', schema_name, table_name))
 FROM _timescaledb_catalog.chunk
@@ -1644,8 +1644,6 @@ AS SELECT time_bucket('30 days',time), avg(val1),  count(val2)
 NOTICE:  refreshing continuous aggregate "test_morecols_cagg"
 ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "_materialized_hypertable_44" is set to ""
 SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
               compress_chunk              
 ------------------------------------------
@@ -2237,6 +2235,7 @@ view_definition                   |  SELECT time_bucket('@ 1 day'::interval, con
                                   |    FROM conditions                                                  +
                                   |   GROUP BY (time_bucket('@ 1 day'::interval, conditions.timec));
 finalized                         | t
+invalidate_using                  | trigger
 
 \x OFF
 CALL refresh_continuous_aggregate('conditions_summary_new', NULL, NULL);

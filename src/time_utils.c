@@ -10,13 +10,16 @@
 #include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
+#include <utils/rangetypes.h>
 #include <utils/timestamp.h>
 
-#include "dimension.h"
 #include "guc.h"
-#include "time_bucket.h"
 #include "time_utils.h"
 #include "utils.h"
+
+TS_FUNCTION_INFO_V1(ts_make_range_from_internal_time);
+TS_FUNCTION_INFO_V1(ts_get_internal_time_min);
+TS_FUNCTION_INFO_V1(ts_get_internal_time_max);
 
 static Datum
 subtract_interval_from_now(Oid timetype, const Interval *interval)
@@ -563,7 +566,7 @@ ts_get_mock_time_or_current_time(void)
 								  Int32GetDatum(-1));
 		return res;
 	}
-	res = TimestampTzGetDatum(GetCurrentTimestamp());
+	res = TimestampTzGetDatum(GetCurrentTransactionStartTimestamp());
 	return res;
 }
 #endif
@@ -587,4 +590,42 @@ ts_now_mock(PG_FUNCTION_ARGS)
 #endif
 	res = TimestampTzGetDatum(GetCurrentTimestamp());
 	return res;
+}
+
+Datum
+ts_make_range_from_internal_time(PG_FUNCTION_ARGS)
+{
+	Oid rngtypid = get_fn_expr_rettype(fcinfo->flinfo);
+	TypeCacheEntry *typcache = range_get_typcache(fcinfo, rngtypid);
+#if PG16_GE
+	Node *escontext = fcinfo->context;
+#endif
+	RangeBound lower = {
+		.val = PG_ARGISNULL(1) ? 0 : PG_GETARG_DATUM(1),
+		.infinite = PG_ARGISNULL(1),
+		.inclusive = true,
+		.lower = true,
+	};
+	RangeBound upper = {
+		.val = PG_ARGISNULL(2) ? 0 : PG_GETARG_DATUM(2),
+		.infinite = PG_ARGISNULL(2),
+		.inclusive = false,
+		.lower = false,
+	};
+
+	/* Need to check the types of the lower and upper values. They should
+	 * match the returned range. */
+	PG_RETURN_RANGE_P(make_range_compat(typcache, &lower, &upper, false, escontext));
+}
+
+Datum
+ts_get_internal_time_min(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT64(ts_time_get_min(PG_GETARG_OID(0)));
+}
+
+Datum
+ts_get_internal_time_max(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_INT64(ts_time_get_max(PG_GETARG_OID(0)));
 }

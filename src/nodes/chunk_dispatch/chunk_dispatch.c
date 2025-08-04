@@ -20,28 +20,29 @@
 #include "compat/compat.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
+#include "chunk_tuple_routing.h"
 #include "dimension.h"
 #include "errors.h"
 #include "guc.h"
 #include "hypercube.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
 
 ChunkDispatch *
-ts_chunk_dispatch_create(Hypertable *ht, EState *estate, int eflags)
+ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 {
 	ChunkDispatch *cd = palloc0(sizeof(ChunkDispatch));
 
 	cd->hypertable = ht;
 	cd->estate = estate;
-	cd->eflags = eflags;
 	cd->hypertable_result_rel_info = NULL;
 	cd->cache =
 		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
 	cd->prev_cis = NULL;
 	cd->prev_cis_oid = InvalidOid;
+	cd->counters = palloc0(sizeof(SharedCounters));
 
 	return cd;
 }
@@ -68,18 +69,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 {
 	ChunkInsertState *cis;
 	bool cis_changed = true;
-	bool found = true;
 	Chunk *chunk = NULL;
-
-	/* Direct inserts into internal compressed hypertable is not supported.
-	 * For compression chunks are created explicitly by compress_chunk and
-	 * inserted into directly so we should never end up in this code path
-	 * for a compressed hypertable.
-	 */
-	if (dispatch->hypertable->fd.compression_state == HypertableInternalCompressionTable)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("direct insert into internal compressed hypertable is not supported")));
 
 	cis = ts_subspace_store_get(dispatch->cache, point);
 
@@ -115,14 +105,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 				hyperspace_get_open_dimension(dispatch->hypertable->space, 0);
 			Assert(time_dim != NULL);
 
-			Oid outfuncid = InvalidOid;
-			bool isvarlena;
-			getTypeOutputInfo(time_dim->fd.column_type, &outfuncid, &isvarlena);
-			Assert(!isvarlena);
-			Datum start_ts = ts_internal_to_time_value(chunk->cube->slices[0]->fd.range_start,
-													   time_dim->fd.column_type);
-			Datum end_ts = ts_internal_to_time_value(chunk->cube->slices[0]->fd.range_end,
-													 time_dim->fd.column_type);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
@@ -130,19 +112,41 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 							"with range  [%s %s] failed",
 							NameStr(dispatch->hypertable->fd.schema_name),
 							NameStr(dispatch->hypertable->fd.table_name),
-							DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
-							DatumGetCString(OidFunctionCall1(outfuncid, end_ts))),
+							ts_internal_to_time_string(chunk->cube->slices[0]->fd.range_start,
+													   time_dim->fd.column_type),
+							ts_internal_to_time_string(chunk->cube->slices[0]->fd.range_end,
+													   time_dim->fd.column_type)),
 					 errhint(
 						 "Hypertable has tiered data with time range that overlaps the insert")));
 		}
 
 		if (!chunk)
 		{
-			chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point, &found);
+			chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point);
 		}
 
 		if (!chunk)
 			elog(ERROR, "no chunk found or created");
+
+		if (dispatch->create_compressed_chunk && !chunk->fd.compressed_chunk_id)
+		{
+			/*
+			 * When we try to create a compressed chunk, we need to grab a lock on the
+			 * chunk to synchronize with other concurrent insert operations trying to
+			 * create the same compressed chunk.
+			 */
+			LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
+			chunk = ts_chunk_get_by_id(chunk->fd.id, CACHE_FLAG_NONE);
+			/* recheck whether compressed chunk exists after acquiring the lock */
+			if (!chunk->fd.compressed_chunk_id)
+			{
+				Hypertable *compressed_ht =
+					ts_hypertable_get_by_id(dispatch->hypertable->fd.compressed_hypertable_id);
+				Chunk *compressed_chunk =
+					ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
+				ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
+			}
+		}
 
 		cis = ts_chunk_insert_state_create(chunk->table_id, dispatch);
 		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
@@ -162,56 +166,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	dispatch->prev_cis = cis;
 	dispatch->prev_cis_oid = cis->rel->rd_id;
 	return cis;
-}
-
-extern void
-ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkInsertState *cis,
-												TupleTableSlot *slot)
-{
-	if (cis->chunk_compressed)
-	{
-		/*
-		 * If this is an INSERT into a compressed chunk with UNIQUE or
-		 * PRIMARY KEY constraints we need to make sure any batches that could
-		 * potentially lead to a conflict are in the decompressed chunk so
-		 * postgres can do proper constraint checking.
-		 */
-		if (ts_cm_functions->decompress_batches_for_insert)
-		{
-			OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
-
-			ts_cm_functions->decompress_batches_for_insert(cis, slot);
-
-			/* mark rows visible */
-			if (onconflict_action == ONCONFLICT_UPDATE)
-				dispatch->estate->es_output_cid = GetCurrentCommandId(true);
-
-			if (ts_guc_max_tuples_decompressed_per_dml > 0)
-			{
-				if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-							 errmsg("tuple decompression limit exceeded by operation"),
-							 errdetail("current limit: %d, tuples decompressed: %lld",
-									   ts_guc_max_tuples_decompressed_per_dml,
-									   (long long int) cis->cds->tuples_decompressed),
-							 errhint(
-								 "Consider increasing "
-								 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
-								 "to 0 (unlimited).")));
-				}
-			}
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("functionality not supported under the current \"%s\" license. "
-							"Learn more at https://timescale.com/.",
-							ts_guc_license),
-					 errhint("To access all features and the best time-series "
-							 "experience, try out Timescale Cloud")));
-	}
 }
 
 static CustomScanMethods chunk_dispatch_plan_methods = {
@@ -276,12 +230,11 @@ static CustomPathMethods chunk_dispatch_path_methods = {
 };
 
 Path *
-ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index hypertable_rti,
-							  int subpath_index)
+ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 {
 	ChunkDispatchPath *path = (ChunkDispatchPath *) palloc0(sizeof(ChunkDispatchPath));
 	Path *subpath = mtpath->subpath;
-	RangeTblEntry *rte = planner_rt_fetch(hypertable_rti, root);
+	RangeTblEntry *rte = planner_rt_fetch(mtpath->nominalRelation, root);
 
 	memcpy(&path->cpath.path, subpath, sizeof(Path));
 	path->cpath.path.type = T_CustomPath;
@@ -289,7 +242,6 @@ ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Index 
 	path->cpath.methods = &chunk_dispatch_path_methods;
 	path->cpath.custom_paths = list_make1(subpath);
 	path->mtpath = mtpath;
-	path->hypertable_rti = hypertable_rti;
 	path->hypertable_relid = rte->relid;
 
 	return &path->cpath.path;
@@ -308,7 +260,7 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 												 &hypertable_cache);
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->hypertable_cache = hypertable_cache;
-	state->dispatch = ts_chunk_dispatch_create(ht, estate, eflags);
+	state->dispatch = ts_chunk_dispatch_create(ht, estate);
 	state->dispatch->dispatch_state = state;
 	node->custom_ps = list_make1(ps);
 }
@@ -432,8 +384,9 @@ chunk_dispatch_exec(CustomScanState *node)
 												   on_chunk_insert_state_changed,
 												   state);
 
-	if (!cis->use_tam)
-		ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
+	bool update_counter = ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE;
+
+	ts_chunk_tuple_routing_decompress_for_insert(cis, slot, dispatch->estate, update_counter);
 
 	MemoryContextSwitchTo(old);
 
@@ -458,18 +411,6 @@ chunk_dispatch_exec(CustomScanState *node)
 	return slot;
 }
 
-TupleTableSlot *
-ts_chunk_dispatch_prepare_tuple_routing(ChunkDispatchState *state, TupleTableSlot *slot)
-{
-	ChunkInsertState *cis = state->cis;
-
-	/* Convert the tuple to the chunk's rowtype, if necessary */
-	if (cis->hyper_to_chunk_map != NULL && state->is_dropped_attr_exists == false)
-		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
-
-	return slot;
-}
-
 static void
 chunk_dispatch_end(CustomScanState *node)
 {
@@ -478,7 +419,7 @@ chunk_dispatch_end(CustomScanState *node)
 
 	ExecEndNode(substate);
 	ts_chunk_dispatch_destroy(state->dispatch);
-	ts_cache_release(state->hypertable_cache);
+	ts_cache_release(&state->hypertable_cache);
 }
 
 static void
@@ -542,9 +483,6 @@ ts_is_chunk_dispatch_state(PlanState *state)
 void
 ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *mtstate)
 {
-	ModifyTable *mt_plan = castNode(ModifyTable, mtstate->ps.plan);
-
 	/* Inserts on hypertables should always have one subplan */
 	state->mtstate = mtstate;
-	state->arbiter_indexes = mt_plan->arbiterIndexes;
 }

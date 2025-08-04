@@ -37,17 +37,16 @@ SELECT * FROM t ORDER BY 1;
 (2 rows)
 
 SELECT * FROM timescaledb_information.hypertables;
- hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | tablespaces 
--------------------+-----------------+-------------+----------------+------------+---------------------+-------------
- public            | t               | test_role_1 |              1 |          2 | f                   | 
+ hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | tablespaces | primary_dimension |  primary_dimension_type  
+-------------------+-----------------+-------------+----------------+------------+---------------------+-------------+-------------------+--------------------------
+ public            | t               | test_role_1 |              1 |          2 | f                   |             | time              | timestamp with time zone
 (1 row)
 
-\dt+ _timescaledb_internal._hyper_*
-                                            List of relations
-        Schema         |       Name       | Type  |    Owner    | Persistence |    Size    | Description 
------------------------+------------------+-------+-------------+-------------+------------+-------------
- _timescaledb_internal | _hyper_1_1_chunk | table | test_role_1 | permanent   | 8192 bytes | 
- _timescaledb_internal | _hyper_1_2_chunk | table | test_role_1 | permanent   | 8192 bytes | 
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
+        schema         |       name       | type  |    owner    
+-----------------------+------------------+-------+-------------
+ _timescaledb_internal | _hyper_1_1_chunk | table | test_role_1
+ _timescaledb_internal | _hyper_1_2_chunk | table | test_role_1
 (2 rows)
 
 DROP EXTENSION timescaledb CASCADE;

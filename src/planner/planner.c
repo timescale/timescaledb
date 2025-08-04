@@ -23,6 +23,7 @@
 #include <optimizer/planner.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
+#include <parser/parse_param.h>
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <utils/elog.h>
@@ -50,9 +51,8 @@
 #include "import/allpaths.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "nodes/hypertable_modify.h"
+#include "nodes/modify_hypertable.h"
 #include "partitioning.h"
 #include "planner/partialize.h"
 #include "planner/planner.h"
@@ -227,7 +227,7 @@ planner_hcache_pop(bool release)
 
 	if (release)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		/* If we pop a stack and discover a new hypertable cache, the basrel
 		 * cache can contain invalid entries, so we reset it. */
 		if (planner_hcaches != NIL && hcache != linitial(planner_hcaches))
@@ -496,8 +496,8 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 	 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
 	 */
 	if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
-		context->root->glob->boundParams && query->jointree->quals &&
-		IsA(query->jointree->quals, OpExpr))
+		query->jointree->quals && IsA(query->jointree->quals, OpExpr) &&
+		(context->root->glob->boundParams || query_contains_extern_params(query)))
 	{
 		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
 		if (!rte->inh && rte->rtekind == RTE_RELATION)
@@ -518,8 +518,8 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 	 *      WHERE $n = fkatt1 [AND ...]
 	 */
 	if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
-		context->root->glob->boundParams && query->jointree->quals &&
-		IsA(query->jointree->quals, OpExpr))
+		query->jointree->quals && IsA(query->jointree->quals, OpExpr) &&
+		(context->root->glob->boundParams || query_contains_extern_params(query)))
 	{
 		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
 		if (!rte->inh && rte->rtekind == RTE_RELATION)
@@ -541,7 +541,8 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 	 *       FOR KEY SHARE OF x
 	 */
 	if (query->commandType == CMD_SELECT && query->hasForUpdate &&
-		list_length(query->rtable) == 1 && context->root->glob->boundParams)
+		list_length(query->rtable) == 1 &&
+		(context->root->glob->boundParams || query_contains_extern_params(query)))
 	{
 		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
 		if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
@@ -682,14 +683,14 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			 * standard_planner. Therefore, we fixup the final target list for
 			 * HypertableInsert here.
 			 */
-			ts_hypertable_modify_fixup_tlist(stmt->planTree);
+			ts_modify_hypertable_fixup_tlist(stmt->planTree);
 
 			foreach (lc, stmt->subplans)
 			{
 				Plan *subplan = (Plan *) lfirst(lc);
 
 				if (subplan)
-					ts_hypertable_modify_fixup_tlist(subplan);
+					ts_modify_hypertable_fixup_tlist(subplan);
 			}
 
 			if (IsA(stmt->planTree, Agg))
@@ -1474,8 +1475,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			{
 				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
 
-				if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk) &&
-					!ts_is_hypercore_am(chunk->amoid))
+				if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk))
 				{
 					rel->indexlist = NIL;
 				}
@@ -1544,10 +1544,6 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  * the chunk, sets the executor's resultRelation to the chunk table and finally
  * returns the tuple to the ModifyTable node.
  *
- * We also need to wrap the ModifyTable plan node with a HypertableInsert node
- * to give the ChunkDispatchState node access to the ModifyTableState node in
- * the execution phase.
- *
  * Conceptually, the plan modification looks like this:
  *
  * Original plan:
@@ -1563,7 +1559,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *
  * Modified plan:
  *
- *	[ HypertableModify ]
+ *	[ ModifyHypertable ]
  *		  ^
  *		  |
  *	[ ModifyTable ] -> resultRelation
@@ -1576,12 +1572,9 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *		  |
  *	  [ subplan ]
  *
- * For PG < 14, the modifytable plan is modified for INSERTs only.
- * For PG14+, we modify the plan for DELETEs as well.
- *
  */
 static List *
-replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *input_rel)
+replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *input_rel)
 {
 	List *new_pathlist = NIL;
 	ListCell *lc;
@@ -1595,33 +1588,49 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			ModifyTablePath *mt = castNode(ModifyTablePath, path);
 			RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 			Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
-			if (
-				/* We only route UPDATE/DELETE through our CustomNode for PG 14+ because
-				 * the codepath for earlier versions is different. */
-				mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE ||
-				mt->operation == CMD_INSERT)
+			if (ht)
 			{
-				if (ht)
-				{
-					path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
-				}
-			}
-			if (ht && mt->operation == CMD_MERGE)
-			{
-				List *firstMergeActionList = linitial(mt->mergeActionLists);
-				ListCell *l;
-				/*
-				 * Iterate over merge action to check if there is an INSERT sql.
-				 * If so, then add ChunkDispatch node.
+				/* Direct INSERT into internal compressed hypertable is not supported.
+				 * Compressed chunks have no dimensions so we could not do tuple routing.
+				 * Additionally internal compressed hypertable has no columns so you
+				 * coulnt even insert any actual data.
 				 */
-				foreach (l, firstMergeActionList)
+				if (ht->fd.compression_state == HypertableInternalCompressionTable)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("direct insert into internal compressed hypertable is not "
+									"supported")));
+
+				switch (mt->operation)
 				{
-					MergeAction *action = (MergeAction *) lfirst(l);
-					if (action->commandType == CMD_INSERT)
+					case CMD_INSERT:
+					case CMD_UPDATE:
+					case CMD_DELETE:
 					{
-						path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
+						path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
 						break;
 					}
+					case CMD_MERGE:
+					{
+						List *firstMergeActionList = linitial(mt->mergeActionLists);
+						ListCell *l;
+						/*
+						 * Iterate over merge action to check if there is an INSERT sql.
+						 * If so, then add ModifyHypertable node.
+						 */
+						foreach (l, firstMergeActionList)
+						{
+							MergeAction *action = (MergeAction *) lfirst(l);
+							if (action->commandType == CMD_INSERT)
+							{
+								path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
+								break;
+							}
+						}
+						break;
+					}
+					default:
+						break;
 				}
 			}
 		}
@@ -1655,7 +1664,7 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 		/* Modify for INSERTs on a hypertable */
 		if (output_rel->pathlist != NIL)
 			output_rel->pathlist =
-				replace_hypertable_modify_paths(root, output_rel->pathlist, input_rel);
+				replace_modify_hypertable_paths(root, output_rel->pathlist, input_rel);
 
 		if (parse->hasAggs && stage == UPPERREL_GROUP_AGG)
 		{

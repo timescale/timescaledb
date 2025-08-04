@@ -381,16 +381,23 @@ ts_internal_to_time_int64(int64 value, Oid type)
 }
 
 TSDLLEXPORT char *
-ts_internal_to_time_string(int64 value, Oid type)
+ts_datum_to_string(Datum value, Oid type)
 {
-	Datum time_datum = ts_internal_to_time_value(value, type);
 	Oid typoutputfunc;
 	bool typIsVarlena;
 	FmgrInfo typoutputinfo;
 
 	getTypeOutputInfo(type, &typoutputfunc, &typIsVarlena);
 	fmgr_info(typoutputfunc, &typoutputinfo);
-	return OutputFunctionCall(&typoutputinfo, time_datum);
+	return OutputFunctionCall(&typoutputinfo, value);
+}
+
+TSDLLEXPORT char *
+ts_internal_to_time_string(int64 value, Oid type)
+{
+	Datum time_datum = ts_internal_to_time_value(value, type);
+
+	return ts_datum_to_string(time_datum, type);
 }
 
 TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_interval);
@@ -938,7 +945,7 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 		elog(ERROR, "could not find valid integer_now function for hypertable");
 
 	int64 res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 	return Int64GetDatum(res);
 }
 
@@ -1212,7 +1219,7 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
 	if (ht == NULL)
 	{
-		ts_cache_release(hcache);
+		ts_cache_release(&hcache);
 		PG_RETURN_NULL();
 	}
 
@@ -1274,7 +1281,7 @@ ts_hypertable_approximate_size(PG_FUNCTION_ARGS)
 	values[3] = Int64GetDatum(total_relsize.total_size);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
-	ts_cache_release(hcache);
+	ts_cache_release(&hcache);
 
 	return HeapTupleGetDatum(tuple);
 }
@@ -1822,20 +1829,6 @@ ts_get_rel_am(Oid relid)
 	return amoid;
 }
 
-static Oid hypercore_amoid = InvalidOid;
-
-bool
-ts_is_hypercore_am(Oid amoid)
-{
-	if (!OidIsValid(hypercore_amoid))
-		hypercore_amoid = get_table_am_oid(TS_HYPERCORE_TAM_NAME, true);
-
-	if (!OidIsValid(amoid) || !OidIsValid(hypercore_amoid))
-		return false;
-
-	return amoid == hypercore_amoid;
-}
-
 /*
  * Set reloption for relation.
  *
@@ -1971,4 +1964,25 @@ ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name)
 	/* we add the schema qualified name here as well*/
 	JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 	return JsonbValueToJsonb(result);
+}
+
+char *
+ts_get_attr_expr(Relation rel, AttrNumber attno)
+{
+	TupleConstr *constr = rel->rd_att->constr;
+	char *expr = NULL;
+
+	for (int i = 0; i < constr->num_defval; i++)
+	{
+		if (constr->defval[i].adnum == attno)
+		{
+			expr = TextDatumGetCString(
+				DirectFunctionCall2(pg_get_expr,
+									CStringGetTextDatum(constr->defval[i].adbin),
+									ObjectIdGetDatum(RelationGetRelid(rel))));
+			break;
+		}
+	}
+
+	return expr;
 }

@@ -15,12 +15,12 @@
 # In particular, we cannot create new roles and we cannot create new
 # databases.
 #
-# The following environment variables can be set:
-# - CURRENT_VERSION is the version to update from (required).
+# Info on the parameters:
+# - current_version is the version to update from
 #
-# - NEXT_VERSION is the version to update to (required).
+# - next_version is the version to update to 
 #
-# - CONNECTION_STRING is the URL to use for the connection (required).
+# - connection_string is the URL to use for the connection
 #
 
 if [ "$#" -ne 3 ]; then
@@ -32,9 +32,11 @@ CURRENT_VERSION=$1
 NEXT_VERSION=$2
 CONNECTION_STRING=$3
 
+echo "testing upgrade path from v${CURRENT_VERSION} to ${NEXT_VERSION} .."
+
 SCRIPT_DIR=$(dirname $0)
 BASE_DIR=${PWD}/${SCRIPT_DIR}/..
-SCRATCHDIR=$(mktemp -d -t 'smoketest-XXXX')
+SCRATCHDIR=$(mktemp -d -t "smoketest-${CURRENT_VERSION}-${NEXT_VERSION}-XXXX")
 LOGFILE="$SCRATCHDIR/update-test.log"
 DUMPFILE="$SCRATCHDIR/smoke.dump"
 UPGRADE_OUT="$SCRATCHDIR/upgrade.out"
@@ -118,6 +120,8 @@ echo "**** Update files in directory ${BASE_DIR}/test/sql/updates"
 cd ${BASE_DIR}/test/sql/updates
 
 $PSQL -c '\conninfo'
+$PSQL -c "ALTER DATABASE tsdb SET timescaledb.enable_compression_ratio_warnings = 'off'";
+
 
 # shellcheck disable=SC2207 # Prefer mapfile or read -a to split command output (or quote to avoid splitting).
 missing=($(missing_versions $CURRENT_VERSION $NEXT_VERSION))

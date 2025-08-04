@@ -659,9 +659,6 @@ select add_retention_policy('test_strict', interval '2 days', schedule_interval 
 
 -- test compression with null arguments
 alter table test_strict set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_strict" is set to ""
-NOTICE:  default order by for hypertable "test_strict" is set to ""time" DESC"
 select add_compression_policy(NULL, compress_after => NULL);
  add_compression_policy 
 ------------------------
@@ -692,9 +689,6 @@ select create_hypertable('test_missing_schedint', 'time', chunk_time_interval=> 
 select add_retention_policy('test_missing_schedint', interval '2 weeks') as retenion_id_missing_schedint \gset
 -- we expect schedule_interval to be chunk_time_interval/2 for timestamptz time
 alter table test_missing_schedint set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_missing_schedint" is set to ""
-NOTICE:  default order by for hypertable "test_missing_schedint" is set to ""time" DESC"
 select add_compression_policy('test_missing_schedint', interval '60 days') as compression_id_missing_schedint \gset
 -- we expect schedule_interval to be 1 day for int time
 create table test_missing_schedint_integer (time int not null, a int, b int);
@@ -706,16 +700,13 @@ select create_hypertable('test_missing_schedint_integer', 'time', chunk_time_int
 (1 row)
 
 alter table test_missing_schedint_integer set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_missing_schedint_integer" is set to ""
-NOTICE:  default order by for hypertable "test_missing_schedint_integer" is set to ""time" DESC"
 select add_compression_policy('test_missing_schedint_integer', BIGINT '600000') as compression_id_integer \gset
 select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_schedint, :compression_id_missing_schedint, :compression_id_integer);
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |     proc_name      |        owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                       config                        |      check_schema      |        check_name        | timezone 
 ------+---------------------------+-------------------+-------------+-------------+--------------+------------------------+--------------------+---------------------+-----------+----------------+---------------+---------------+-----------------------------------------------------+------------------------+--------------------------+----------
  1008 | Retention Policy [1008]   | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention   | default_perm_user_2 | t         | f              |               |             8 | {"drop_after": "@ 14 days", "hypertable_id": 8}     | _timescaledb_functions | policy_retention_check   | 
- 1009 | Compression Policy [1009] | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user_2 | t         | f              |               |             8 | {"hypertable_id": 8, "compress_after": "@ 60 days"} | _timescaledb_functions | policy_compression_check | 
- 1010 | Compression Policy [1010] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user_2 | t         | f              |               |            10 | {"hypertable_id": 10, "compress_after": 600000}     | _timescaledb_functions | policy_compression_check | 
+ 1009 | Columnstore Policy [1009] | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user_2 | t         | f              |               |             8 | {"hypertable_id": 8, "compress_after": "@ 60 days"} | _timescaledb_functions | policy_compression_check | 
+ 1010 | Columnstore Policy [1010] | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression | default_perm_user_2 | t         | f              |               |            10 | {"hypertable_id": 10, "compress_after": 600000}     | _timescaledb_functions | policy_compression_check | 
 (3 rows)
 
 -- test policy check functions with NULL args

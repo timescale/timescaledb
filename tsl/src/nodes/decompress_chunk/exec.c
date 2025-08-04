@@ -14,11 +14,10 @@
 #include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
+#include <tcop/tcopprot.h>
 #include <utils/datum.h>
 #include <utils/memutils.h>
 #include <utils/typcache.h>
-
-#include <tcop/tcopprot.h>
 
 #include "compat/compat.h"
 #include "compression/arrow_c_data_interface.h"
@@ -31,6 +30,11 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+
+#if PG18_GE
+#include <commands/explain_format.h>
+#include <commands/explain_state.h>
+#endif
 
 static void decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags);
 static void decompress_chunk_end(CustomScanState *node);
@@ -379,9 +383,20 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_fifo;
 	}
 
-	if (ts_guc_debug_require_batch_sorted_merge && !dcontext->batch_sorted_merge)
+	if ((ts_guc_debug_require_batch_sorted_merge == DRO_Require ||
+		 ts_guc_debug_require_batch_sorted_merge == DRO_Force) &&
+		!dcontext->batch_sorted_merge)
 	{
-		elog(ERROR, "debug: batch sorted merge is required but not used");
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("debug: batch sorted merge is required but not used")));
+	}
+
+	if (ts_guc_debug_require_batch_sorted_merge == DRO_Forbid && dcontext->batch_sorted_merge)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("debug: batch sorted merge is used when it is forbidden")));
 	}
 
 	/* Constify stable expressions in vectorized predicates. */
@@ -522,7 +537,12 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 			ExplainPropertyBool("Batch Sorted Merge", dcontext->batch_sorted_merge, es);
 		}
 
-		if (es->analyze && (es->verbose || es->format != EXPLAIN_FORMAT_TEXT))
+		if (dcontext->reverse)
+		{
+			ExplainPropertyBool("Reverse", dcontext->reverse, es);
+		}
+
+		if (es->analyze)
 		{
 			ExplainPropertyBool("Bulk Decompression",
 								chunk_state->decompress_context.enable_bulk_decompression,

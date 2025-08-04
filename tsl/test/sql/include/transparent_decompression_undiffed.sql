@@ -16,6 +16,8 @@ INSERT into readings select g, 1, 1.3 from generate_series('2001-03-01 01:01:01'
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('readings') ch;
 
+VACUUM ANALYZE readings;
+
 EXPLAIN (costs off) SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
 FROM tags t
 INNER JOIN LATERAL(SELECT tags_id, fuel_consumption FROM readings r WHERE r.tags_id = t.id ) r ON true
