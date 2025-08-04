@@ -1,0 +1,1387 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+\set TEST_BASE_NAME foreign_keys
+SELECT format('include/%s.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
+    format('%s/results/%s_results_generic.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_GENERIC",
+    format('%s/results/%s_results_custom.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_CUSTOM" \gset
+SELECT format('\! diff -u --label "Generic plan results" --label "Custom plan results" %s %s', :'TEST_RESULTS_GENERIC', :'TEST_RESULTS_CUSTOM') AS "DIFF_CMD" \gset
+set plan_cache_mode to force_generic_plan;
+\o :TEST_RESULTS_GENERIC
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- test single column fk constraint from plain table to hypertable during hypertable creation
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time), info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:16: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:23: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- should fail
+DELETE FROM metrics WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:33: ERROR:  update or delete on table "_hyper_1_1_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+-- should fail
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:35: ERROR:  update or delete on table "_hyper_1_1_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+\set ON_ERROR_STOP 1
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+-- create new chunk and repeat the test
+INSERT INTO metrics(time, device, value) VALUES ('2021-01-01', 'd1', 1.0);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2021-01-02', 'info1');
+psql:include/foreign_keys.sql:46: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2021-01-01', 'info2');
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+-- chunks referenced in fk constraints must not be dropped or truncated
+\set ON_ERROR_STOP 0
+TRUNCATE metrics;
+psql:include/foreign_keys.sql:56: ERROR:  cannot truncate a table referenced in a foreign key constraint
+TRUNCATE _timescaledb_internal._hyper_1_1_chunk;
+psql:include/foreign_keys.sql:57: ERROR:  cannot truncate a table referenced in a foreign key constraint
+TRUNCATE _timescaledb_internal._hyper_1_2_chunk;
+psql:include/foreign_keys.sql:58: ERROR:  cannot truncate a table referenced in a foreign key constraint
+DROP TABLE _timescaledb_internal._hyper_1_1_chunk;
+psql:include/foreign_keys.sql:59: ERROR:  cannot drop table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+DROP TABLE _timescaledb_internal._hyper_1_2_chunk;
+psql:include/foreign_keys.sql:60: ERROR:  cannot drop table _timescaledb_internal._hyper_1_2_chunk because other objects depend on it
+SELECT drop_chunks('metrics', '1 month'::interval);
+psql:include/foreign_keys.sql:61: ERROR:  cannot drop constraint 1_1_metrics_pkey on table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+\set ON_ERROR_STOP 1
+-- after removing constraint dropping should succeed
+ALTER TABLE event DROP CONSTRAINT event_time_fkey;
+SELECT drop_chunks('metrics', '1 month'::interval);
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with RESTRICT
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE RESTRICT ON UPDATE RESTRICT, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:82: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:89: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- should fail
+DELETE FROM metrics WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:99: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+-- should fail
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:101: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+\set ON_ERROR_STOP 1
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+-- create new chunk and repeat the test
+INSERT INTO metrics(time, device, value) VALUES ('2021-01-01', 'd1', 1.0);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2021-01-02', 'info1');
+psql:include/foreign_keys.sql:112: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2021-01-01', 'info2');
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with CASCADE
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE ON UPDATE CASCADE, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:134: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:141: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with SET NULL
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE SET NULL ON UPDATE SET NULL, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:177: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:184: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with SET DEFAULT
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz default null references metrics(time) ON DELETE SET DEFAULT ON UPDATE SET DEFAULT, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:220: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:227: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable with constraint being added separately
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01', 'd1', 1.0);
+CREATE TABLE event(time timestamptz, info text);
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE RESTRICT;
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:264: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+-- should fail
+\set ON_ERROR_STOP 0
+DELETE FROM metrics WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:271: ERROR:  update or delete on table "_hyper_6_8_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+\set ON_ERROR_STOP 1
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test multi column fk constraint from plain table to hypertable
+CREATE TABLE metrics(time timestamptz , device text, value float, primary key (time, device));
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01', 'd1', 1.0);
+CREATE TABLE event(time timestamptz, device text, info text);
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time,device) REFERENCES metrics(time,device) ON DELETE RESTRICT;
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, device, info) VALUES ('2020-01-02', 'd1', 'info1');
+psql:include/foreign_keys.sql:292: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd2', 'info2');
+psql:include/foreign_keys.sql:293: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd1', 'info2');
+-- should fail
+\set ON_ERROR_STOP 0
+DELETE FROM metrics WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:300: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+DELETE FROM metrics WHERE device = 'd1';
+psql:include/foreign_keys.sql:301: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+\set ON_ERROR_STOP 1
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable with constraint being added separately while data is present
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01', 'd1', 1.0);
+CREATE TABLE event(time timestamptz, info text);
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+INSERT INTO event(time, info) VALUES ('2020-02-01', 'info1');
+-- should fail
+\set ON_ERROR_STOP 0
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE SET NULL;
+psql:include/foreign_keys.sql:319: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+INSERT INTO metrics(time, device, value) VALUES ('2020-02-01', 'd1', 1.0);
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE CASCADE;
+-- delete should cascade
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to compressed hypertable
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+ALTER TABLE metrics SET(timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE ON UPDATE CASCADE, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:347: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:354: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from hypertable to hypertable
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+CREATE TABLE event(time timestamptz, info text);
+SELECT table_name FROM create_hypertable('event', 'time');
+psql:include/foreign_keys.sql:384: NOTICE:  adding not-null constraint to column "time"
+\set ON_ERROR_STOP 0
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time);
+psql:include/foreign_keys.sql:387: ERROR:  hypertables cannot be used as foreign key references of hypertables
+\set ON_ERROR_STOP 1
+CREATE TABLE event2(time timestamptz REFERENCES metrics(time), info text);
+\set ON_ERROR_STOP 0
+SELECT table_name FROM create_hypertable('event2', 'time');
+psql:include/foreign_keys.sql:392: ERROR:  hypertables cannot be used as foreign key references of hypertables
+\set ON_ERROR_STOP 1
+DROP TABLE event;
+DROP TABLE event2;
+DROP TABLE metrics;
+-- test FK behavior with different cascading configurations
+CREATE TABLE fk_no_action(fk_no_action text primary key);
+CREATE TABLE fk_restrict(fk_restrict text primary key);
+CREATE TABLE fk_cascade(fk_cascade text primary key);
+CREATE TABLE fk_set_null(fk_set_null text primary key);
+CREATE TABLE fk_set_default(fk_set_default text primary key);
+CREATE TABLE ht(
+  time timestamptz not null,
+  fk_no_action text references fk_no_action(fk_no_action) ON DELETE NO ACTION ON UPDATE NO ACTION,
+  fk_restrict text references fk_restrict(fk_restrict) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  fk_cascade text references fk_cascade(fk_cascade) ON DELETE CASCADE ON UPDATE CASCADE,
+  fk_set_null text references fk_set_null(fk_set_null) ON DELETE SET NULL ON UPDATE SET NULL,
+  fk_set_default text default 'default' references fk_set_default(fk_set_default) ON DELETE SET DEFAULT ON UPDATE SET DEFAULT
+);
+SELECT table_name FROM create_hypertable('ht', 'time');
+ALTER TABLE ht SET(timescaledb.compress, timescaledb.compress_segmentby='fk_no_action,fk_restrict,fk_cascade,fk_set_null,fk_set_default');
+\set ON_ERROR_STOP 0
+INSERT INTO fk_set_default(fk_set_default) VALUES ('default');
+INSERT INTO ht(time) VALUES ('2020-01-01');
+-- NO ACTION
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+psql:include/foreign_keys.sql:426: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_14_ht_fk_no_action_fkey"
+-- ON UPDATE NO ACTION
+BEGIN;
+INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+-- should error
+UPDATE fk_no_action SET fk_no_action = 'fk_no_action_updated';
+psql:include/foreign_keys.sql:433: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+ROLLBACK;
+-- ON UPDATE NO ACTION with compression
+BEGIN;
+INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should error
+UPDATE fk_no_action SET fk_no_action = 'fk_no_action_updated';
+psql:include/foreign_keys.sql:442: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+ROLLBACK;
+-- ON DELETE NO ACTION
+BEGIN;
+INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+-- should error
+DELETE FROM fk_no_action;
+psql:include/foreign_keys.sql:450: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+ROLLBACK;
+-- ON DELETE NO ACTION with compression
+BEGIN;
+INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should error
+DELETE FROM fk_no_action;
+psql:include/foreign_keys.sql:459: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+ROLLBACK;
+-- RESTRICT
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+psql:include/foreign_keys.sql:464: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_15_ht_fk_restrict_fkey"
+-- ON UPDATE RESTRICT
+BEGIN;
+INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+-- should error
+UPDATE fk_restrict SET fk_restrict = 'fk_restrict_updated';
+psql:include/foreign_keys.sql:471: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+ROLLBACK;
+-- ON UPDATE RESTRICT with compression
+BEGIN;
+INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should error
+UPDATE fk_restrict SET fk_restrict = 'fk_restrict_updated';
+psql:include/foreign_keys.sql:480: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+ROLLBACK;
+-- ON DELETE RESTRICT
+BEGIN;
+INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+-- should error
+DELETE FROM fk_restrict;
+psql:include/foreign_keys.sql:488: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+ROLLBACK;
+-- ON DELETE RESTRICT with compression
+BEGIN;
+INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should error
+DELETE FROM fk_restrict;
+psql:include/foreign_keys.sql:497: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+ROLLBACK;
+-- CASCADE
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+psql:include/foreign_keys.sql:503: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_13_ht_fk_cascade_fkey"
+-- ON UPDATE CASCADE
+BEGIN;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+-- should cascade
+UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
+SELECT * FROM ht;
+ROLLBACK;
+-- Run EXPLAIN setups for both generic and custom plans so that DIFF_CMD won't differ
+-- as custom plans for FK UPD/DEL cascades with constified params
+-- are legitimately different from generic plans with run-time params,
+-- with the resulting "ht" partial chunk composition being different.
+-- ON UPDATE CASCADE with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE CASCADE
+BEGIN;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE CASCADE with compression without direct batch delete
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+RESET timescaledb.enable_compressed_direct_batch_delete;
+-- ON DELETE CASCADE with compression and direct batch delete
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- SET NULL
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+psql:include/foreign_keys.sql:603: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_17_ht_fk_set_null_fkey"
+-- ON UPDATE SET NULL
+BEGIN;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+-- should set column to null
+UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
+SELECT * FROM ht;
+ROLLBACK;
+-- ON UPDATE SET NULL with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE SET NULL
+BEGIN;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+-- should set column to null
+DELETE FROM fk_set_null;
+SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE SET NULL with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+DELETE FROM fk_set_null;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+DELETE FROM fk_set_null;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- SET DEFAULT
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+psql:include/foreign_keys.sql:671: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_16_ht_fk_set_default_fkey"
+-- ON UPDATE SET DEFAULT
+BEGIN;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT * FROM ht;
+UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+ROLLBACK;
+-- ON UPDATE SET DEFAULT with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE SET DEFAULT
+BEGIN;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT * FROM ht;
+DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+ROLLBACK;
+-- ON DELETE SET DEFAULT with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- #7226
+-- test multi-column fk constraint where constraint column order is different from index column order
+CREATE TABLE i7226(time timestamptz, device_id int, PRIMARY KEY (device_id, time));
+SELECT create_hypertable('i7226', 'time');
+CREATE TABLE i7226_valid(time timestamptz NOT NULL,device_id int NOT NULL, FOREIGN KEY(time, device_id) REFERENCES i7226(time, device_id));
+INSERT INTO i7226 VALUES ('2024-08-29 12:00:00+00', 1);
+-- test foreign key constraints that have been created before hypertable conversion
+create table converted_pk(time timestamptz, id int, unique(time, id));
+create table converted_fk(time timestamptz, id int, foreign key (time, id) references converted_pk(time, id));
+select table_name FROM create_hypertable ('converted_pk', 'time');
+psql:include/foreign_keys.sql:748: NOTICE:  adding not-null constraint to column "time"
+\set ON_ERROR_STOP 0
+-- should fail
+INSERT INTO converted_fk SELECT '2020-01-01', 1;
+psql:include/foreign_keys.sql:752: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
+\set ON_ERROR_STOP 1
+INSERT INTO converted_pk SELECT '2020-01-01 0:01', 1;
+\set ON_ERROR_STOP 0
+-- should still fail
+INSERT INTO converted_fk SELECT '2020-01-01', 1;
+psql:include/foreign_keys.sql:759: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
+\set ON_ERROR_STOP 1
+INSERT INTO converted_fk SELECT '2020-01-01 0:01', 1;
+\set ON_ERROR_STOP 0
+-- should fail
+DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
+psql:include/foreign_keys.sql:765: ERROR:  update or delete on table "_hyper_16_34_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
+TRUNCATE converted_pk;
+psql:include/foreign_keys.sql:766: ERROR:  cannot truncate a table referenced in a foreign key constraint
+\set ON_ERROR_STOP 1
+DELETE FROM converted_fk;
+DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
+\o
+reset plan_cache_mode;
+\set TEST_DBNAME_2 :TEST_DBNAME _2
+CREATE DATABASE :TEST_DBNAME_2;
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+RESET client_min_messages;
+set plan_cache_mode to force_custom_plan;
+\o :TEST_RESULTS_CUSTOM
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- test single column fk constraint from plain table to hypertable during hypertable creation
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time), info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:16: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:23: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- should fail
+DELETE FROM metrics WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:33: ERROR:  update or delete on table "_hyper_1_1_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+-- should fail
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:35: ERROR:  update or delete on table "_hyper_1_1_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+\set ON_ERROR_STOP 1
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+-- create new chunk and repeat the test
+INSERT INTO metrics(time, device, value) VALUES ('2021-01-01', 'd1', 1.0);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2021-01-02', 'info1');
+psql:include/foreign_keys.sql:46: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2021-01-01', 'info2');
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+-- chunks referenced in fk constraints must not be dropped or truncated
+\set ON_ERROR_STOP 0
+TRUNCATE metrics;
+psql:include/foreign_keys.sql:56: ERROR:  cannot truncate a table referenced in a foreign key constraint
+TRUNCATE _timescaledb_internal._hyper_1_1_chunk;
+psql:include/foreign_keys.sql:57: ERROR:  cannot truncate a table referenced in a foreign key constraint
+TRUNCATE _timescaledb_internal._hyper_1_2_chunk;
+psql:include/foreign_keys.sql:58: ERROR:  cannot truncate a table referenced in a foreign key constraint
+DROP TABLE _timescaledb_internal._hyper_1_1_chunk;
+psql:include/foreign_keys.sql:59: ERROR:  cannot drop table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+DROP TABLE _timescaledb_internal._hyper_1_2_chunk;
+psql:include/foreign_keys.sql:60: ERROR:  cannot drop table _timescaledb_internal._hyper_1_2_chunk because other objects depend on it
+SELECT drop_chunks('metrics', '1 month'::interval);
+psql:include/foreign_keys.sql:61: ERROR:  cannot drop constraint 1_1_metrics_pkey on table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+\set ON_ERROR_STOP 1
+-- after removing constraint dropping should succeed
+ALTER TABLE event DROP CONSTRAINT event_time_fkey;
+SELECT drop_chunks('metrics', '1 month'::interval);
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with RESTRICT
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE RESTRICT ON UPDATE RESTRICT, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:82: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:89: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- should fail
+DELETE FROM metrics WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:99: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+-- should fail
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:101: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+\set ON_ERROR_STOP 1
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+-- create new chunk and repeat the test
+INSERT INTO metrics(time, device, value) VALUES ('2021-01-01', 'd1', 1.0);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2021-01-02', 'info1');
+psql:include/foreign_keys.sql:112: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2021-01-01', 'info2');
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with CASCADE
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE ON UPDATE CASCADE, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:134: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:141: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with SET NULL
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE SET NULL ON UPDATE SET NULL, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:177: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:184: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with SET DEFAULT
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz default null references metrics(time) ON DELETE SET DEFAULT ON UPDATE SET DEFAULT, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:220: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:227: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable with constraint being added separately
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01', 'd1', 1.0);
+CREATE TABLE event(time timestamptz, info text);
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE RESTRICT;
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:264: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+-- should fail
+\set ON_ERROR_STOP 0
+DELETE FROM metrics WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:271: ERROR:  update or delete on table "_hyper_6_8_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+\set ON_ERROR_STOP 1
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test multi column fk constraint from plain table to hypertable
+CREATE TABLE metrics(time timestamptz , device text, value float, primary key (time, device));
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01', 'd1', 1.0);
+CREATE TABLE event(time timestamptz, device text, info text);
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time,device) REFERENCES metrics(time,device) ON DELETE RESTRICT;
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, device, info) VALUES ('2020-01-02', 'd1', 'info1');
+psql:include/foreign_keys.sql:292: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd2', 'info2');
+psql:include/foreign_keys.sql:293: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd1', 'info2');
+-- should fail
+\set ON_ERROR_STOP 0
+DELETE FROM metrics WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:300: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+DELETE FROM metrics WHERE device = 'd1';
+psql:include/foreign_keys.sql:301: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+\set ON_ERROR_STOP 1
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable with constraint being added separately while data is present
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01', 'd1', 1.0);
+CREATE TABLE event(time timestamptz, info text);
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+INSERT INTO event(time, info) VALUES ('2020-02-01', 'info1');
+-- should fail
+\set ON_ERROR_STOP 0
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE SET NULL;
+psql:include/foreign_keys.sql:319: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+INSERT INTO metrics(time, device, value) VALUES ('2020-02-01', 'd1', 1.0);
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE CASCADE;
+-- delete should cascade
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to compressed hypertable
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+ALTER TABLE metrics SET(timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE ON UPDATE CASCADE, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+psql:include/foreign_keys.sql:347: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+psql:include/foreign_keys.sql:354: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from hypertable to hypertable
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+CREATE TABLE event(time timestamptz, info text);
+SELECT table_name FROM create_hypertable('event', 'time');
+psql:include/foreign_keys.sql:384: NOTICE:  adding not-null constraint to column "time"
+\set ON_ERROR_STOP 0
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time);
+psql:include/foreign_keys.sql:387: ERROR:  hypertables cannot be used as foreign key references of hypertables
+\set ON_ERROR_STOP 1
+CREATE TABLE event2(time timestamptz REFERENCES metrics(time), info text);
+\set ON_ERROR_STOP 0
+SELECT table_name FROM create_hypertable('event2', 'time');
+psql:include/foreign_keys.sql:392: ERROR:  hypertables cannot be used as foreign key references of hypertables
+\set ON_ERROR_STOP 1
+DROP TABLE event;
+DROP TABLE event2;
+DROP TABLE metrics;
+-- test FK behavior with different cascading configurations
+CREATE TABLE fk_no_action(fk_no_action text primary key);
+CREATE TABLE fk_restrict(fk_restrict text primary key);
+CREATE TABLE fk_cascade(fk_cascade text primary key);
+CREATE TABLE fk_set_null(fk_set_null text primary key);
+CREATE TABLE fk_set_default(fk_set_default text primary key);
+CREATE TABLE ht(
+  time timestamptz not null,
+  fk_no_action text references fk_no_action(fk_no_action) ON DELETE NO ACTION ON UPDATE NO ACTION,
+  fk_restrict text references fk_restrict(fk_restrict) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  fk_cascade text references fk_cascade(fk_cascade) ON DELETE CASCADE ON UPDATE CASCADE,
+  fk_set_null text references fk_set_null(fk_set_null) ON DELETE SET NULL ON UPDATE SET NULL,
+  fk_set_default text default 'default' references fk_set_default(fk_set_default) ON DELETE SET DEFAULT ON UPDATE SET DEFAULT
+);
+SELECT table_name FROM create_hypertable('ht', 'time');
+ALTER TABLE ht SET(timescaledb.compress, timescaledb.compress_segmentby='fk_no_action,fk_restrict,fk_cascade,fk_set_null,fk_set_default');
+\set ON_ERROR_STOP 0
+INSERT INTO fk_set_default(fk_set_default) VALUES ('default');
+INSERT INTO ht(time) VALUES ('2020-01-01');
+-- NO ACTION
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+psql:include/foreign_keys.sql:426: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_14_ht_fk_no_action_fkey"
+-- ON UPDATE NO ACTION
+BEGIN;
+INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+-- should error
+UPDATE fk_no_action SET fk_no_action = 'fk_no_action_updated';
+psql:include/foreign_keys.sql:433: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+ROLLBACK;
+-- ON UPDATE NO ACTION with compression
+BEGIN;
+INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should error
+UPDATE fk_no_action SET fk_no_action = 'fk_no_action_updated';
+psql:include/foreign_keys.sql:442: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+ROLLBACK;
+-- ON DELETE NO ACTION
+BEGIN;
+INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+-- should error
+DELETE FROM fk_no_action;
+psql:include/foreign_keys.sql:450: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+ROLLBACK;
+-- ON DELETE NO ACTION with compression
+BEGIN;
+INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
+INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should error
+DELETE FROM fk_no_action;
+psql:include/foreign_keys.sql:459: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+ROLLBACK;
+-- RESTRICT
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+psql:include/foreign_keys.sql:464: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_15_ht_fk_restrict_fkey"
+-- ON UPDATE RESTRICT
+BEGIN;
+INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+-- should error
+UPDATE fk_restrict SET fk_restrict = 'fk_restrict_updated';
+psql:include/foreign_keys.sql:471: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+ROLLBACK;
+-- ON UPDATE RESTRICT with compression
+BEGIN;
+INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should error
+UPDATE fk_restrict SET fk_restrict = 'fk_restrict_updated';
+psql:include/foreign_keys.sql:480: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+ROLLBACK;
+-- ON DELETE RESTRICT
+BEGIN;
+INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+-- should error
+DELETE FROM fk_restrict;
+psql:include/foreign_keys.sql:488: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+ROLLBACK;
+-- ON DELETE RESTRICT with compression
+BEGIN;
+INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
+INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should error
+DELETE FROM fk_restrict;
+psql:include/foreign_keys.sql:497: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+ROLLBACK;
+-- CASCADE
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+psql:include/foreign_keys.sql:503: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_13_ht_fk_cascade_fkey"
+-- ON UPDATE CASCADE
+BEGIN;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+-- should cascade
+UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
+SELECT * FROM ht;
+ROLLBACK;
+-- Run EXPLAIN setups for both generic and custom plans so that DIFF_CMD won't differ
+-- as custom plans for FK UPD/DEL cascades with constified params
+-- are legitimately different from generic plans with run-time params,
+-- with the resulting "ht" partial chunk composition being different.
+-- ON UPDATE CASCADE with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE CASCADE
+BEGIN;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE CASCADE with compression without direct batch delete
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+RESET timescaledb.enable_compressed_direct_batch_delete;
+-- ON DELETE CASCADE with compression and direct batch delete
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
+INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should cascade
+DELETE FROM fk_cascade;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- SET NULL
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+psql:include/foreign_keys.sql:603: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_17_ht_fk_set_null_fkey"
+-- ON UPDATE SET NULL
+BEGIN;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+-- should set column to null
+UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
+SELECT * FROM ht;
+ROLLBACK;
+-- ON UPDATE SET NULL with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE SET NULL
+BEGIN;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+-- should set column to null
+DELETE FROM fk_set_null;
+SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE SET NULL with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+DELETE FROM fk_set_null;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
+INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+-- should set column to null
+DELETE FROM fk_set_null;
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- SET DEFAULT
+-- should fail with foreign key violation
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+psql:include/foreign_keys.sql:671: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_16_ht_fk_set_default_fkey"
+-- ON UPDATE SET DEFAULT
+BEGIN;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT * FROM ht;
+UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+ROLLBACK;
+-- ON UPDATE SET DEFAULT with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- ON DELETE SET DEFAULT
+BEGIN;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT * FROM ht;
+DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+ROLLBACK;
+-- ON DELETE SET DEFAULT with compression
+BEGIN;
+SET plan_cache_mode TO force_custom_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+BEGIN;
+SET plan_cache_mode TO force_generic_plan;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+-- #7226
+-- test multi-column fk constraint where constraint column order is different from index column order
+CREATE TABLE i7226(time timestamptz, device_id int, PRIMARY KEY (device_id, time));
+SELECT create_hypertable('i7226', 'time');
+CREATE TABLE i7226_valid(time timestamptz NOT NULL,device_id int NOT NULL, FOREIGN KEY(time, device_id) REFERENCES i7226(time, device_id));
+INSERT INTO i7226 VALUES ('2024-08-29 12:00:00+00', 1);
+-- test foreign key constraints that have been created before hypertable conversion
+create table converted_pk(time timestamptz, id int, unique(time, id));
+create table converted_fk(time timestamptz, id int, foreign key (time, id) references converted_pk(time, id));
+select table_name FROM create_hypertable ('converted_pk', 'time');
+psql:include/foreign_keys.sql:748: NOTICE:  adding not-null constraint to column "time"
+\set ON_ERROR_STOP 0
+-- should fail
+INSERT INTO converted_fk SELECT '2020-01-01', 1;
+psql:include/foreign_keys.sql:752: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
+\set ON_ERROR_STOP 1
+INSERT INTO converted_pk SELECT '2020-01-01 0:01', 1;
+\set ON_ERROR_STOP 0
+-- should still fail
+INSERT INTO converted_fk SELECT '2020-01-01', 1;
+psql:include/foreign_keys.sql:759: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
+\set ON_ERROR_STOP 1
+INSERT INTO converted_fk SELECT '2020-01-01 0:01', 1;
+\set ON_ERROR_STOP 0
+-- should fail
+DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
+psql:include/foreign_keys.sql:765: ERROR:  update or delete on table "_hyper_16_34_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
+TRUNCATE converted_pk;
+psql:include/foreign_keys.sql:766: ERROR:  cannot truncate a table referenced in a foreign key constraint
+\set ON_ERROR_STOP 1
+DELETE FROM converted_fk;
+DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
+\o
+\c :TEST_DBNAME :ROLE_SUPERUSER
+reset plan_cache_mode;
+DROP DATABASE :TEST_DBNAME_2 WITH (force);
+-- compare outputs for generic vs. custom plans for FK check prepared statements
+:DIFF_CMD

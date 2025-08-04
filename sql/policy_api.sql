@@ -52,8 +52,7 @@ CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(
     schedule_interval INTERVAL = NULL,
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT = NULL,
-    compress_created_before INTERVAL = NULL,
-    hypercore_use_access_method BOOL = NULL
+    compress_created_before INTERVAL = NULL
 )
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
@@ -66,8 +65,7 @@ CREATE OR REPLACE PROCEDURE @extschema@.add_columnstore_policy(
     schedule_interval INTERVAL = NULL,
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT = NULL,
-    created_before INTERVAL = NULL,
-    hypercore_use_access_method BOOL = NULL
+    created_before INTERVAL = NULL
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_policy_compression_add';
 
 CREATE OR REPLACE FUNCTION @extschema@.remove_compression_policy(hypertable REGCLASS, if_exists BOOL = false) RETURNS BOOL
@@ -129,11 +127,8 @@ CREATE OR REPLACE FUNCTION timescaledb_experimental.add_policies(
     refresh_start_offset "any" = NULL,
     refresh_end_offset "any" = NULL,
     compress_after "any" = NULL,
-    drop_after "any" = NULL,
-    hypercore_use_access_method BOOL = NULL)
-RETURNS BOOL
-AS '@MODULE_PATHNAME@', 'ts_policies_add'
-LANGUAGE C VOLATILE;
+    drop_after "any" = NULL
+) RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_policies_add' LANGUAGE C VOLATILE;
 
 /* Remove policies */
 CREATE OR REPLACE FUNCTION timescaledb_experimental.remove_policies(

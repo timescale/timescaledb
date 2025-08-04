@@ -304,7 +304,7 @@ CREATE TABLE datatype_test(
 );
 
 SELECT create_hypertable('datatype_test','time');
-ALTER TABLE datatype_test SET (timescaledb.compress);
+ALTER TABLE datatype_test SET (timescaledb.compress, timescaledb.compress_orderby='"time" desc');
 INSERT INTO datatype_test VALUES ('2000-01-01',2,4,8,4.0,8.0,'2000-01-01','2001-01-01 12:00','2001-01-01 6:00','1 week', 3.41, 4.2, 'text', 'x');
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
@@ -337,14 +337,14 @@ GROUP BY 1 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
-ALTER TABLE metrics set(timescaledb.compress);
+ALTER TABLE metrics set(timescaledb.compress, timescaledb.compress_orderby='"time" desc');
 
 -- test rescan in compress chunk dml blocker
 CREATE TABLE rescan_test(id integer NOT NULL, t timestamptz NOT NULL, val double precision, PRIMARY KEY(id, t));
 SELECT create_hypertable('rescan_test', 't', chunk_time_interval => interval '1 day');
 
 -- compression
-ALTER TABLE rescan_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'id');
+ALTER TABLE rescan_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby='t desc');
 
 -- INSERT dummy data
 INSERT INTO rescan_test SELECT 1, time, random() FROM generate_series('2000-01-01'::timestamptz, '2000-01-05'::timestamptz, '1h'::interval) g(time);
@@ -438,7 +438,7 @@ INSERT INTO ht5 SELECT '2000-01-01'::TIMESTAMPTZ;
 INSERT INTO ht5 SELECT '2001-01-01'::TIMESTAMPTZ;
 
 -- compressed chunk stats should not show dropped chunks
-ALTER TABLE ht5 SET (timescaledb.compress);
+ALTER TABLE ht5 SET (timescaledb.compress, timescaledb.orderby = '"time" desc');
 SELECT compress_chunk(i) FROM show_chunks('ht5') i;
 SELECT drop_chunks('ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
 select chunk_name from chunk_compression_stats('ht5')

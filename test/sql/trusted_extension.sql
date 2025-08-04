@@ -26,7 +26,7 @@ INSERT INTO t VALUES ('2000-01-01'), ('2001-01-01');
 
 SELECT * FROM t ORDER BY 1;
 SELECT * FROM timescaledb_information.hypertables;
-\dt+ _timescaledb_internal._hyper_*
+SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
 
 DROP EXTENSION timescaledb CASCADE;
 

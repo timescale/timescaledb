@@ -19,7 +19,6 @@
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
-#include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/rel.h>
@@ -88,17 +87,17 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
 	int ncheck, i;
 	ConstrCheck *check;
 
-	Assert(rel->rd_att->constr != NULL && rri->ri_ConstraintExprs == NULL);
+	Assert(rel->rd_att->constr != NULL && rri->ri_CheckConstraintExprs == NULL);
 
 	ncheck = rel->rd_att->constr->num_check;
 	check = rel->rd_att->constr->check;
-	rri->ri_ConstraintExprs = (ExprState **) palloc(ncheck * sizeof(ExprState *));
+	rri->ri_CheckConstraintExprs = (ExprState **) palloc(ncheck * sizeof(ExprState *));
 
 	for (i = 0; i < ncheck; i++)
 	{
 		Expr *checkconstr = stringToNode(check[i].ccbin);
 
-		rri->ri_ConstraintExprs[i] = prepare_constr_expr(checkconstr);
+		rri->ri_CheckConstraintExprs[i] = prepare_constr_expr(checkconstr);
 	}
 }
 
@@ -374,10 +373,9 @@ set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
 	foreach (lc, ht_arbiter_indexes)
 	{
 		Oid hypertable_index = lfirst_oid(lc);
-		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(state->rel), true);
-		ChunkIndexMapping cim;
-
-		if (ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index, &cim) < 1)
+		Oid chunk_index_oid =
+			ts_chunk_index_get_by_hypertable_indexrelid(state->rel, hypertable_index);
+		if (!OidIsValid(chunk_index_oid))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -387,7 +385,7 @@ set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
 							get_rel_name(RelationGetRelid(state->rel)))));
 		}
 
-		chunk_arbiter_indexes = lappend_oid(chunk_arbiter_indexes, cim.indexoid);
+		chunk_arbiter_indexes = lappend_oid(chunk_arbiter_indexes, chunk_index_oid);
 	}
 	state->result_relation_info->ri_onConflictArbiterIndexes = chunk_arbiter_indexes;
 }
@@ -497,7 +495,6 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	state->rel = rel;
 	state->result_relation_info = relinfo;
 	state->estate = dispatch->estate;
-	state->use_tam = ts_is_hypercore_am(chunk->amoid);
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
@@ -590,8 +587,6 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 		ts_chunk_set_partial(chunk);
-		/* changed chunk status, so invalidate any plans involving this chunk */
-		CacheInvalidateRelcacheByRelid(chunk_relid);
 	}
 
 	if (rri->ri_FdwRoutine && !rri->ri_usesFdwDirectModify && rri->ri_FdwRoutine->EndForeignModify)

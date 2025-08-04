@@ -42,10 +42,20 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 	const Oid valueid = toast_pointer->va_valueid;
 
 	/*
-	 * Open the toast relation and its indexes
+	 * Open the toast relation and its indexes.
+	 *
+	 * When used for decompression, we only see one underlying toast relation
+	 * because we work on one table. But the detoaster is also used in some
+	 * functions that can technically be called on values from different
+	 * compressed tables, so we have to handle the toast relid change here.
 	 */
-	if (detoaster->toastrel == NULL)
+	if (detoaster->toastrel == NULL || detoaster->toastrel->rd_id != toast_pointer->va_toastrelid)
 	{
+		if (detoaster->toastrel != NULL)
+		{
+			detoaster_close(detoaster);
+		}
+
 		MemoryContext old_mctx = MemoryContextSwitchTo(detoaster->mctx);
 		detoaster->toastrel = table_open(toast_pointer->va_toastrelid, AccessShareLock);
 
@@ -71,7 +81,11 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 					ObjectIdGetDatum(valueid));
 
 		/* Prepare for scan */
+#if PG18_GE
+		detoaster->SnapshotToast = *get_toast_snapshot();
+#else
 		init_toast_snapshot(&detoaster->SnapshotToast);
+#endif
 		detoaster->toastscan = systable_beginscan_ordered(detoaster->toastrel,
 														  detoaster->index,
 														  &detoaster->SnapshotToast,

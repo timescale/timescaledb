@@ -353,3 +353,40 @@ BEGIN
     RETURN false;
 END
 $BODY$;
+
+CREATE OR REPLACE VIEW test.extension AS
+SELECT e.extname AS "Name",
+       e.extversion AS "Version",
+       n.nspname AS "Schema",
+       c.description AS "Description"
+FROM pg_extension e
+LEFT JOIN pg_namespace n ON n.oid = e.extnamespace
+LEFT JOIN pg_description c ON c.objoid = e.oid AND c.classoid = 'pg_extension'::regclass
+ORDER BY 1;
+
+GRANT SELECT ON test.extension TO PUBLIC;
+
+-- View to replace \dt commands in tests for consistent output across PostgreSQL versions
+CREATE OR REPLACE VIEW test.relation AS
+SELECT
+    n.nspname AS schema,
+    c.relname AS name,
+    CASE c.relkind
+        WHEN 'r' THEN 'table'
+        WHEN 'v' THEN 'view'
+        WHEN 'm' THEN 'materialized view'
+        WHEN 'f' THEN 'foreign table'
+        WHEN 'p' THEN 'partitioned table'
+        ELSE c.relkind::text
+    END AS type,
+    pg_catalog.pg_get_userbyid(c.relowner) AS owner
+FROM pg_catalog.pg_class c
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('r','p','v','m','f','')
+  AND n.nspname <> 'information_schema'
+  AND n.nspname <> 'pg_catalog'
+  AND n.nspname !~ '^pg_toast'
+ORDER BY 1, 2;
+
+GRANT SELECT ON test.relation TO PUBLIC;
+

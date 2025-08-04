@@ -17,6 +17,15 @@ ALTER TABLE alter_before ALTER COLUMN notes SET STORAGE EXTERNAL;
 
 SELECT create_hypertable('alter_before', 'time', chunk_time_interval => 2628000000000);
 
+-- Test error hint for invalid timescaledb options on ALTER TABLE
+\set ON_ERROR_STOP 0
+-- Invalid timescaledb option should show hint with valid options
+\set VERBOSITY default
+ALTER TABLE alter_before SET (tsdb.invalid_option = true);
+ALTER TABLE alter_before SET (timescaledb.nonexistent = false);
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
+
 INSERT INTO alter_before VALUES ('2017-03-22T09:18:22', 23.5, 1);
 
 SELECT * FROM alter_before;
@@ -354,7 +363,7 @@ INSERT INTO original_name.my_table2 (date, quantity) VALUES ('2018-07-04T21:00:0
 ALTER SCHEMA original_name RENAME TO new_name;
 
 DROP SCHEMA new_name CASCADE;
-\dt new_name.*;
+SELECT * FROM test.relation WHERE schema = 'new_name';
 
 -- Make sure we can't rename internal schemas
 \set ON_ERROR_STOP 0

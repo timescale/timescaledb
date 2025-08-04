@@ -920,15 +920,14 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 	/* Force refresh within the entire window */
 	if (force)
 	{
-		Invalidation logentry;
+		mergedentry.hyper_id = cagg_hyper_id;
+		mergedentry.lowest_modified_value = refresh_window->start;
+		mergedentry.greatest_modified_value = refresh_window->end;
+		mergedentry.is_modified = false;
+		ItemPointerSet(&mergedentry.tid, InvalidBlockNumber, 0);
 
-		logentry.hyper_id = cagg_hyper_id;
-		logentry.lowest_modified_value = refresh_window->start;
-		logentry.greatest_modified_value = refresh_window->end;
-		logentry.is_modified = false;
-		ItemPointerSet(&logentry.tid, InvalidBlockNumber, 0);
-
-		save_invalidation_for_refresh(state, &logentry);
+		/* Jump to process remainder to properly cut the invalidation */
+		goto process_remainder;
 	}
 
 	DEBUG_WAITPOINT("clear_cagg_invalidations_for_refresh_lock");
@@ -999,6 +998,7 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 
 	ts_scan_iterator_close(&iterator);
 
+process_remainder:
 	/* Handle the last (merged) invalidation */
 	if (IS_VALID_INVALIDATION(&mergedentry))
 		remainder = cut_cagg_invalidation_and_compute_remainder(state,

@@ -437,7 +437,7 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 			linitial_node(SortGroupClause, mat_rte->subquery->sortClause)->tleSortGroupRef;
 
 		Oid placeholder;
-		int16 strategy;
+		CompareType strategy;
 		get_ordering_op_properties(sort->sortop, &placeholder, &placeholder, &strategy);
 
 		/*

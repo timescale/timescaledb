@@ -381,16 +381,23 @@ ts_internal_to_time_int64(int64 value, Oid type)
 }
 
 TSDLLEXPORT char *
-ts_internal_to_time_string(int64 value, Oid type)
+ts_datum_to_string(Datum value, Oid type)
 {
-	Datum time_datum = ts_internal_to_time_value(value, type);
 	Oid typoutputfunc;
 	bool typIsVarlena;
 	FmgrInfo typoutputinfo;
 
 	getTypeOutputInfo(type, &typoutputfunc, &typIsVarlena);
 	fmgr_info(typoutputfunc, &typoutputinfo);
-	return OutputFunctionCall(&typoutputinfo, time_datum);
+	return OutputFunctionCall(&typoutputinfo, value);
+}
+
+TSDLLEXPORT char *
+ts_internal_to_time_string(int64 value, Oid type)
+{
+	Datum time_datum = ts_internal_to_time_value(value, type);
+
+	return ts_datum_to_string(time_datum, type);
 }
 
 TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_interval);
@@ -1820,20 +1827,6 @@ ts_get_rel_am(Oid relid)
 	ReleaseSysCache(tuple);
 
 	return amoid;
-}
-
-static Oid hypercore_amoid = InvalidOid;
-
-bool
-ts_is_hypercore_am(Oid amoid)
-{
-	if (!OidIsValid(hypercore_amoid))
-		hypercore_amoid = get_table_am_oid(TS_HYPERCORE_TAM_NAME, true);
-
-	if (!OidIsValid(amoid) || !OidIsValid(hypercore_amoid))
-		return false;
-
-	return amoid == hypercore_amoid;
 }
 
 /*

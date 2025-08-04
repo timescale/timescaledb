@@ -4,6 +4,81 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.21.1 (2025-07-22)
+
+This release contains one bug fix since the 2.21.0 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#8336](https://github.com/timescale/timescaledb/pull/8336) Fix generic plans for foreign key checks and prepared statements
+
+**Thanks**
+* @CodeTherapist for reporting the issue with foreign key checks not working after several `INSERT` statements
+
+## 2.21.0 (2025-07-08)
+
+This release contains performance improvements and bug fixes since the 2.20.3 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.21.0**
+* The attach & detach chunks feature allows manually adding or removing chunks from a hypertable with uncompressed chunks, similar to PostgreSQL’s partition management.
+* Continued improvement of backfilling into the columnstore, achieving up to 2.5x speedup for constrained tables, by introducing caching logic that boosts throughput for writes to compressed chunks, bringing `INSERT` performance close to that of uncompressed chunks.
+* Optimized `DELETE` operations on the columstore through batch-level deletions of non-segmentby keys in the filter condition, greatly improving performance to up to 42x faster in some cases, as well as reducing bloat, and lowering resource usage.
+* The heavy lock taken in Continuous Aggregate refresh was relaxed, enabling concurrent refreshes for non-overlapping ranges and eliminating the need for complex customer workarounds.
+* [tech preview] Direct Compress is an innovative TimescaleDB feature that improves high-volume data ingestion by compressing data in memory and writing it directly to disk, reducing I/O overhead, eliminating dependency on background compression jobs, and significantly boosting insert performance.
+
+**Sunsetting of the hypercore access method**
+We made the decision to deprecate hypercore access method (TAM) with the 2.21.0 release. It was an experiment, which did not show the signals we hoped for and will be sunsetted in TimescaleDB 2.22.0, scheduled for September 2025. Upgrading to 2.22.0 and higher will be blocked if TAM is still in use. Since TAM’s inception in [2.18.0](https://github.com/timescale/timescaledb/releases/tag/2.18.0), we learned that btrees were not the right architecture. The recent advancements in the columnstore—such as more performant backfilling, SkipScan, adding check constraints, and faster point queries—put the [columnstore](https://www.timescale.com/blog/hypercore-a-hybrid-row-storage-engine-for-real-time-analytics) close to or on par with TAM without the storage from the additional index. We apologize for the inconvenience this action potentially causes and are here to assist you during the migration process.
+
+Migration path
+
+```
+do $$
+declare   
+   relid regclass;
+begin
+   for relid in
+       select cl.oid from pg_class cl
+       join pg_am am on (am.oid = cl.relam)
+       where am.amname = 'hypercore'
+   loop
+       raise notice 'converting % to heap', relid::regclass;
+       execute format('alter table %s set access method heap', relid);
+   end loop;
+end
+$$;
+```
+
+**Features**
+* [#8081](https://github.com/timescale/timescaledb/pull/8081) Use JSON error code for job configuration parsing
+* [#8100](https://github.com/timescale/timescaledb/pull/8100) Support splitting compressed chunks
+* [#8131](https://github.com/timescale/timescaledb/pull/8131) Add policy to process hypertable invalidations
+* [#8141](https://github.com/timescale/timescaledb/pull/8141) Add function to process hypertable invalidations
+* [#8165](https://github.com/timescale/timescaledb/pull/8165) Reindex recompressed chunks in compression policy
+* [#8178](https://github.com/timescale/timescaledb/pull/8178) Add columnstore option to `CREATE TABLE WITH`
+* [#8179](https://github.com/timescale/timescaledb/pull/8179) Implement direct `DELETE` on non-segmentby columns
+* [#8182](https://github.com/timescale/timescaledb/pull/8182) Cache information for repeated upserts into the same compressed chunk
+* [#8187](https://github.com/timescale/timescaledb/pull/8187) Allow concurrent Continuous Aggregate refreshes
+* [#8191](https://github.com/timescale/timescaledb/pull/8191) Add option to not process hypertable invalidations
+* [#8196](https://github.com/timescale/timescaledb/pull/8196) Show deprecation warning for TAM
+* [#8208](https://github.com/timescale/timescaledb/pull/8208) Use `NULL` compression for bool batches with all null values like the other compression algorithms
+* [#8223](https://github.com/timescale/timescaledb/pull/8223) Support for attach/detach chunk 
+* [#8265](https://github.com/timescale/timescaledb/pull/8265) Set incremental Continous Aggregate refresh policy on by default
+* [#8274](https://github.com/timescale/timescaledb/pull/8274) Allow creating concurrent continuous aggregate refresh policies
+* [#8314](https://github.com/timescale/timescaledb/pull/8314) Add support for timescaledb_lake in loader
+* [#8209](https://github.com/timescale/timescaledb/pull/8209) Add experimental support for Direct Compress of `COPY`
+* [#8341](https://github.com/timescale/timescaledb/pull/8341) Allow quick migration from hypercore TAM to (columnstore) heap
+
+**Bugfixes**
+* [#8153](https://github.com/timescale/timescaledb/pull/8153) Restoring a database having NULL compressed data
+* [#8164](https://github.com/timescale/timescaledb/pull/8164) Check columns when creating new chunk from table
+* [#8294](https://github.com/timescale/timescaledb/pull/8294) The "vectorized predicate called for a null value" error for WHERE conditions like `x = any(null::int[])`.
+* [#8307](https://github.com/timescale/timescaledb/pull/8307) Fix missing catalog entries for bool and null compression in fresh installations
+* [#8323](https://github.com/timescale/timescaledb/pull/8323) Fix DML issue with expression indexes and BHS
+
+**GUCs**
+* `enable_direct_compress_copy`: Enable experimental support for direct compression during `COPY`, default: off
+* `enable_direct_compress_copy_sort_batches`: Enable batch sorting during direct compress `COPY`, default: on
+* `enable_direct_compress_copy_client_sorted`: Correct handling of data sorting by the user is required for this option, default: off
+
 ## 2.20.3 (2025-06-11)
 
 This release contains bug fixes since the 2.20.2 release. We recommend that you upgrade at the next available opportunity.

@@ -79,19 +79,18 @@ jobs:
         compress_qualpushdown_saop
         compressed_copy
         compression_algos
+        compression_uuid
         bgw_launcher
         chunk_adaptive
         metadata
         telemetry
-        net
       SKIPS: >-
         bgw_db_scheduler
         bgw_db_scheduler_fixed
-        hypercore_vectoragg
         vector_agg_groupagg
         vector_agg_grouping
         vector_agg_text
-        vector_agg_uuid_segmentby
+        vector_agg_uuid
         vectorized_aggregation
     steps:
     - name: Setup WSL
@@ -106,10 +105,13 @@ jobs:
         echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
         echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
 
+    # The apt-update is allowed to fail because of a known issue in WSL
+    # where the apt spec for the debian backports repo is messed up
+    # https://github.com/Vampire/setup-wsl/issues/76
     - name: Install additional packages in WSL
       shell: wsl-bash {0}
       run: |
-        apt-get update
+        apt-get update || true
         apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
 
     - name: Configure git

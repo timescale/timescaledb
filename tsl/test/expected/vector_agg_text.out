@@ -159,9 +159,6 @@ insert into long select n, x, x, x, x from (
 ;
 insert into long values (-1, 'a', 'b', 'c', 'd');
 alter table long set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "long" is set to ""
-NOTICE:  default order by for hypertable "long" is set to "t DESC"
 select count(compress_chunk(x)) from show_chunks('long') x;
  count 
 -------

@@ -195,6 +195,7 @@ typedef enum CompressionAlgorithm
 	COMPRESSION_ALGORITHM_DELTADELTA,
 	COMPRESSION_ALGORITHM_BOOL,
 	COMPRESSION_ALGORITHM_NULL,
+	COMPRESSION_ALGORITHM_UUID,
 
 	/* When adding an algorithm also add a static assert statement below */
 	/* end of real values */
@@ -319,13 +320,14 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 	StaticAssertStmt(COMPRESSION_ALGORITHM_DELTADELTA == 4, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_BOOL == 5, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_NULL == 6, "algorithm index has changed");
+	StaticAssertStmt(COMPRESSION_ALGORITHM_UUID == 7, "algorithm index has changed");
 
 	/*
 	 * This should change when adding a new algorithm after adding the new
 	 * algorithm to the assert list above. This statement prevents adding a
 	 * new algorithm without updating the asserts above
 	 */
-	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 7,
+	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 8,
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
@@ -383,6 +385,7 @@ extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern HeapTuple row_compressor_build_tuple(RowCompressor *row_compressor);
 extern void row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups);
+extern void row_compressor_append_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, Relation in_rel,
 											  BulkWriter *writer);
