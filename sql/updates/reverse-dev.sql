@@ -25,6 +25,8 @@ DEFAULT FOR TYPE int4 USING hypercore_proxy AS
 CREATE FUNCTION _timescaledb_debug.is_compressed_tid(tid) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C STRICT;
 
+DROP FUNCTION _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.bloom1, anyarray);
+
 DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute;
 DROP FUNCTION IF EXISTS @extschema@.add_compression_policy;
 DROP PROCEDURE IF EXISTS @extschema@.add_columnstore_policy;

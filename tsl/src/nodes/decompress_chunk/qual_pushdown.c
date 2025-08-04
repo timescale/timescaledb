@@ -984,7 +984,7 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			}
 
 			/*
-			 * We can have no pushed down arguments if we had an AND bool
+			 * We might have no pushed down arguments if we had an AND bool
 			 * operation, but failed to push down every individual argument.
 			 */
 			if (pushed_down_args == NIL)
