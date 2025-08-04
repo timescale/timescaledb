@@ -45,16 +45,13 @@ extern int ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexreli
 										const char *new_name);
 extern int ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name,
 									  const char *old_name, const char *new_name);
-extern int ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid,
-										 const char *tablespace);
+extern void ts_chunk_index_set_tablespace(Hypertable *ht, Oid hypertable_indexrelid,
+										  char *tablespace);
 extern void ts_chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constraint,
 												  int32 chunk_id, Oid chunk_constraint);
 extern List *ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid);
-extern TSDLLEXPORT bool ts_chunk_index_get_by_hypertable_indexrelid(const Chunk *chunk,
-																	Oid hypertable_indexrelid,
-																	ChunkIndexMapping *cim_out);
-extern TSDLLEXPORT bool ts_chunk_index_get_by_indexrelid(const Chunk *chunk, Oid chunk_indexrelid,
-														 ChunkIndexMapping *cim_out);
+extern TSDLLEXPORT Oid ts_chunk_index_get_by_hypertable_indexrelid(Relation chunk_rel,
+																   Oid ht_indexoid);
 
 extern TSDLLEXPORT void ts_chunk_index_mark_clustered(Oid chunkrelid, Oid indexrelid);
 
