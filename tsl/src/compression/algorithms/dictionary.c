@@ -552,7 +552,7 @@ tsl_uuid_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	Assert(element_type == UUIDOID);
 
 	compressed = PointerGetDatum(PG_DETOAST_DATUM(compressed));
-	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
+	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE_ANY(compressed) };
 	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
