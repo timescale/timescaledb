@@ -145,3 +145,5 @@ SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
 FROM pg_constraint
 WHERE conrelid::regclass::text ~ '^_timescaledb_'
 ORDER BY 1, 2, 3;
+
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;

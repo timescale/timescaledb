@@ -373,10 +373,9 @@ set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
 	foreach (lc, ht_arbiter_indexes)
 	{
 		Oid hypertable_index = lfirst_oid(lc);
-		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(state->rel), true);
-		ChunkIndexMapping cim;
-
-		if (ts_chunk_index_get_by_hypertable_indexrelid(chunk, hypertable_index, &cim) < 1)
+		Oid chunk_index_oid =
+			ts_chunk_index_get_by_hypertable_indexrelid(state->rel, hypertable_index);
+		if (!OidIsValid(chunk_index_oid))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -386,7 +385,7 @@ set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
 							get_rel_name(RelationGetRelid(state->rel)))));
 		}
 
-		chunk_arbiter_indexes = lappend_oid(chunk_arbiter_indexes, cim.indexoid);
+		chunk_arbiter_indexes = lappend_oid(chunk_arbiter_indexes, chunk_index_oid);
 	}
 	state->result_relation_info->ri_onConflictArbiterIndexes = chunk_arbiter_indexes;
 }

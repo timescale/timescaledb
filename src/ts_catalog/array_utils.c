@@ -26,7 +26,7 @@
 extern TSDLLEXPORT int
 ts_array_length(ArrayType *arr)
 {
-	if (!arr)
+	if (!arr || ARR_NDIM(arr) == 0)
 		return 0;
 
 	Assert(ARR_NDIM(arr) == 1);
@@ -44,6 +44,14 @@ ts_array_equal(ArrayType *left, ArrayType *right)
 	if (left == NULL || right == NULL)
 		return false;
 
+	if (ARR_NDIM(left) == 0 || ARR_NDIM(right) == 0)
+	{
+		if (ARR_NDIM(left) == 0 && ARR_NDIM(right) == 0)
+			return true;
+		else
+			return false;
+	}
+
 	Assert(left != NULL && right != NULL && ARR_NDIM(left) == 1 && ARR_NDIM(right) == 1);
 
 	Datum result = OidFunctionCall2Coll(F_ARRAY_EQ,
@@ -60,7 +68,7 @@ ts_array_is_member(ArrayType *arr, const char *name)
 	bool ret = false;
 	Datum datum;
 	bool null;
-	if (!arr)
+	if (!arr || ARR_NDIM(arr) == 0)
 		return ret;
 
 	Assert(ARR_NDIM(arr) == 1);
@@ -133,7 +141,7 @@ ts_array_position(ArrayType *arr, const char *name)
 	Datum datum;
 	bool found = false;
 	bool null;
-	if (!arr)
+	if (!arr || ARR_NDIM(arr) == 0)
 		return pos;
 
 	Assert(ARR_NDIM(arr) == 1);
@@ -165,7 +173,7 @@ ts_array_position(ArrayType *arr, const char *name)
 extern TSDLLEXPORT ArrayType *
 ts_array_replace_text(ArrayType *arr, const char *old, const char *new)
 {
-	if (!arr)
+	if (!arr || ARR_NDIM(arr) == 0)
 		return NULL;
 
 	Assert(ARR_NDIM(arr) == 1);
@@ -238,6 +246,12 @@ ts_array_get_element_text(ArrayType *arr, int position)
 extern TSDLLEXPORT ArrayType *
 ts_array_add_element_text(ArrayType *arr, const char *value)
 {
+	if (!arr && value == NULL)
+	{
+		/* return empty array */
+		return construct_array(NULL, 0, TEXTOID, -1, false, TYPALIGN_INT);
+	}
+
 	Datum val = CStringGetTextDatum(value);
 	if (!arr)
 	{

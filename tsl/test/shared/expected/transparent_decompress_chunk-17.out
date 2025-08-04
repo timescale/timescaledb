@@ -1069,7 +1069,6 @@ SELECT table_name FROM create_hypertable('i6925_t1', 'observed');
 (1 row)
 
 ALTER TABLE i6925_t1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'queryid');
-NOTICE:  default order by for hypertable "i6925_t1" is set to "observed DESC"
 INSERT INTO i6925_t1 SELECT '2020-01-01', 1, 1;
 SELECT count(compress_chunk(chunk_name)) FROM show_chunks('i6925_t1') chunk_name;
  count 

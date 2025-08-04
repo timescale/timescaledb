@@ -139,7 +139,6 @@ NOTICE:  adding not-null constraint to column "t"
 (1 row)
 
 alter table edges set (timescaledb.compress, timescaledb.compress_segmentby='s');
-NOTICE:  default order by for hypertable "edges" is set to "t DESC"
 insert into edges select
     s * 1000 + f1 as t,
     s,

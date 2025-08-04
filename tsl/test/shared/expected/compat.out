@@ -36,12 +36,6 @@ WARNING:  function _timescaledb_internal.chunk_id_from_relid(oid) is deprecated 
                    0
 (1 row)
 
-SELECT _timescaledb_internal.chunk_index_clone(0);
-WARNING:  function _timescaledb_internal.chunk_index_clone(oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  invalid chunk index
-SELECT _timescaledb_internal.chunk_index_replace(0,0);
-WARNING:  function _timescaledb_internal.chunk_index_replace(oid,oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  invalid chunk index
 SELECT _timescaledb_internal.chunk_status(0);
 WARNING:  function _timescaledb_internal.chunk_status(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid

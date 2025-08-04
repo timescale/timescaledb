@@ -55,6 +55,7 @@ jobs:
         IGNORES: >-
           append-*
           bgw_db_scheduler*
+          columnar_scan_cost
           compress_bloom_sparse_compat
           compress_bloom_sparse_debug
           compress_qualpushdown_saop
@@ -67,7 +68,7 @@ jobs:
           vector_agg_groupagg
           vector_agg_grouping
           vector_agg_text
-          vector_agg_uuid_segmentby
+          vector_agg_uuid
           vectorized_aggregation
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"

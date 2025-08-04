@@ -546,7 +546,7 @@ for index, pr_info in enumerate(
     original_description = re.sub(
         r"((fix|clos|resolv)[esd]+)(\s+#[0-9]+)",
         r"`\1`\3",
-        original_pr.body,
+        original_pr.body or "",  # Match "" if pr_body is None
         flags=re.IGNORECASE,
     )
     backport_description += (
