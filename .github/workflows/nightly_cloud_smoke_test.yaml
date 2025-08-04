@@ -12,6 +12,7 @@ name: Nightly - Update smoke test on release branch
   pull_request:
     paths:
       - .github/workflows/nightly_cloud_smoke_test.yaml
+      - scripts/test_update_smoke.sh
 
 jobs:
   get-next-version:

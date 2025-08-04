@@ -55,6 +55,14 @@ ts_alter_table_with_clause_parse(const List *defelems)
 								 TS_ARRAY_LEN(alter_table_with_clause_def));
 }
 
+WithClauseResult *
+ts_alter_table_reset_with_clause_parse(const List *defelems)
+{
+	return ts_with_clauses_parse_reset(defelems,
+									   alter_table_with_clause_def,
+									   TS_ARRAY_LEN(alter_table_with_clause_def));
+}
+
 static inline void
 throw_segment_by_error(char *segment_by)
 {

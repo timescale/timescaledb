@@ -99,26 +99,6 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_clone(chunk_index_oid oid) RETURNS oid LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.chunk_index_clone(oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.chunk_index_clone($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_index_replace(chunk_index_oid_old oid,chunk_index_oid_new oid) RETURNS void LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.chunk_index_replace(oid,oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  PERFORM _timescaledb_functions.chunk_index_replace($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_status(regclass) RETURNS integer LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
