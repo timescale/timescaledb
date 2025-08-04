@@ -13,6 +13,7 @@ name: Nightly - Update smoke test on release branch
     paths:
       - .github/workflows/nightly_cloud_smoke_test.yaml
       - scripts/test_update_smoke.sh
+      - test/sql/updates/*.sql
 
 jobs:
   get-next-version:
