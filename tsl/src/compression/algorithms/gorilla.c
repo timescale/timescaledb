@@ -426,6 +426,7 @@ compressed_gorilla_data_serialize(CompressedGorillaData *input)
 	data = palloc0(compressed_size);
 	compressed = (GorillaCompressed *) data;
 	SET_VARSIZE(&compressed->vl_len_, compressed_size);
+	Assert(compressed_size % 4 == 0);
 
 	compressed->last_value = input->header->last_value;
 	compressed->compression_algorithm = COMPRESSION_ALGORITHM_GORILLA;

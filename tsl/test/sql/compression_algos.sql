@@ -52,7 +52,7 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (S
 \ir include/compression_test.sql
 DROP TABLE base_ints;
 
--- really big deltas
+-- really big deltas -- TODO dbeck: verify, was 184 before
 SELECT  9223372036854775807 as big_int_max \gset
 SELECT -9223372036854775808	 as big_int_min \gset
 CREATE TABLE base_ints AS SELECT row_number() over () as rn, item FROM
@@ -140,6 +140,7 @@ SELECT '_timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compre
 
 CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM
     (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY mix(item)) sub;
+-- TODO dbeck: verify, was 1808 before
 \ir include/compression_test.sql
 SELECT c gorilla_text FROM compressed;
 DROP TABLE  base_floats;
@@ -162,10 +163,11 @@ CREATE TABLE base_floats AS SELECT row_number() over () as rn, item FROM
            --big delta_deltas
             (0), ('Infinity'), ('Infinity'), ('-Infinity'), ('-Infinity'), ('Infinity'), ('Infinity')
     ) as t(item);
+-- TODO dbeck: verify, was 152 before
 \ir include/compression_test.sql
 DROP TABLE  base_floats;
 
--- all 0s
+-- all 0s -- TODO dbeck: verify, was 160 before
 CREATE TABLE base_floats AS SELECT row_number() over () as rn, 0::float4 as item FROM (SELECT generate_series(1, 1000) ) j;
 \ir include/compression_test.sql
 DROP TABLE  base_floats;
@@ -204,6 +206,7 @@ SELECT '_timescaledb_internal.decompress_reverse(c::_timescaledb_internal.compre
 
 CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double precision FROM
     (select sub.item from (SELECT generate_series(1, 1000) item) as sub ORDER BY mix(item)) sub;
+-- TODO dbeck: verify, was 1808 before
 \ir include/compression_test.sql
 SELECT c gorilla_text FROM compressed;
 DROP TABLE  base_doubles;
@@ -226,10 +229,11 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, item FROM
            --big delta_deltas
             (0), ('Infinity'), ('Infinity'), ('-Infinity'), ('-Infinity'), ('Infinity'), ('Infinity')
     ) as t(item);
+-- TODO dbeck: verify, was 152 before
 \ir include/compression_test.sql
 DROP TABLE  base_doubles;
 
--- all 0s
+-- all 0s -- TODO dbeck: verify, was 160 before
 CREATE TABLE base_doubles AS SELECT row_number() over () as rn, 0::FLOAT(50) as item FROM (SELECT generate_series(1, 1000) ) j;
 \ir include/compression_test.sql
 DROP TABLE  base_doubles;
@@ -487,7 +491,7 @@ UPDATE base_uuids SET item = '0197a7a9-b48b-7c74-a2a4-dcdbce635d12' WHERE rn % 3
 \ir include/compression_test.sql
 DROP TABLE base_uuids;
 
--- test with a set of UUID v7s
+-- test with a set of UUID v7s -- TODO dbeck: verify, was 944 before
 CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, u as item FROM uuid_set ORDER BY i;
 \ir include/compression_test.sql
 DROP TABLE base_uuids;

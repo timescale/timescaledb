@@ -323,8 +323,7 @@ delta_delta_compressor_compressed_size(DeltaDeltaCompressor *compressor, size_t 
 	size_t nulls_size_actual;
 
 	/* If there are no elements, the compressed size is 0 even if there are nulls */
-	if ((compressor->delta_delta.num_elements +
-		 compressor->delta_delta.num_uncompressed_elements) == 0)
+	if (compressor->delta_delta.num_elements == 0)
 	{
 		if (nulls_size_out != NULL)
 			*nulls_size_out = 0;
