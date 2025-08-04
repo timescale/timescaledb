@@ -17,18 +17,22 @@
 
 #include "nodes/vector_agg/exec.h"
 
+#include "compat/compat.h"
 #include "compression/arrow_c_data_interface.h"
-#include "hypercore/arrow_tts.h"
-#include "hypercore/vector_quals.h"
-#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "nodes/vector_agg/plan.h"
 
+#if PG18_GE
+#include "commands/explain_format.h"
+#include "commands/explain_state.h"
+#endif
+
 static int
-get_input_offset_decompress_chunk(const DecompressChunkState *decompress_state, const Var *var)
+get_input_offset(const DecompressChunkState *decompress_state, const Var *var)
 {
 	const DecompressContext *dcontext = &decompress_state->decompress_context;
 
@@ -62,55 +66,13 @@ get_input_offset_decompress_chunk(const DecompressChunkState *decompress_state, 
 }
 
 static void
-get_column_storage_properties_decompress_chunk(const DecompressChunkState *state, int input_offset,
-											   GroupingColumn *result)
+get_column_storage_properties(const DecompressChunkState *state, int input_offset,
+							  GroupingColumn *result)
 {
 	const DecompressContext *dcontext = &state->decompress_context;
 	const CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[input_offset];
 	result->value_bytes = desc->value_bytes;
 	result->by_value = desc->by_value;
-}
-
-/*
- * Given a Var reference, get the offset of the corresponding attribute in the
- * input tuple.
- *
- * For a node returning arrow slots, this is just the attribute number in the
- * Var. But if the node is DecompressChunk, it is necessary to translate
- * between the compressed and non-compressed columns.
- */
-static int
-get_input_offset(const CustomScanState *state, const Var *var)
-{
-	if (TTS_IS_ARROWTUPLE(state->ss.ss_ScanTupleSlot))
-		return AttrNumberGetAttrOffset(var->varattno);
-
-	return get_input_offset_decompress_chunk((const DecompressChunkState *) state, var);
-}
-
-/*
- * Get the type length and "byval" properties for the grouping column given by
- * the input offset.
- *
- * For a node returning arrow slots, the properties can be read directly from
- * the scanned relation's tuple descriptor. For DecompressChunk, the input
- * offset references the compressed relation.
- */
-static void
-get_column_storage_properties(const CustomScanState *state, int input_offset,
-							  GroupingColumn *result)
-{
-	if (TTS_IS_ARROWTUPLE(state->ss.ss_ScanTupleSlot))
-	{
-		const TupleDesc tupdesc = RelationGetDescr(state->ss.ss_currentRelation);
-		result->by_value = TupleDescAttr(tupdesc, input_offset)->attbyval;
-		result->value_bytes = TupleDescAttr(tupdesc, input_offset)->attlen;
-		return;
-	}
-
-	get_column_storage_properties_decompress_chunk((const DecompressChunkState *) state,
-												   input_offset,
-												   result);
 }
 
 static void
@@ -211,7 +173,8 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
 				Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
-				def->input_offset = get_input_offset(childstate, var);
+				def->input_offset =
+					get_input_offset((const DecompressChunkState *) childstate, var);
 			}
 			else
 			{
@@ -233,8 +196,10 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			col->output_offset = i;
 
 			Var *var = castNode(Var, tlentry->expr);
-			col->input_offset = get_input_offset(childstate, var);
-			get_column_storage_properties(childstate, col->input_offset, col);
+			col->input_offset = get_input_offset((const DecompressChunkState *) childstate, var);
+			get_column_storage_properties((const DecompressChunkState *) childstate,
+										  col->input_offset,
+										  col);
 		}
 	}
 
@@ -376,49 +341,6 @@ compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 }
 
 /*
- * Get the next slot to aggregate for a arrow tuple table slot.
- *
- * Implements "get next slot" on top of ColumnarScan (or any node producing
- * ArrowTupleTableSlots). It just reads the slot from the child node.
- */
-static TupleTableSlot *
-arrow_get_next_slot(VectorAggState *vector_agg_state)
-{
-	TupleTableSlot *slot = vector_agg_state->custom.ss.ss_ScanTupleSlot;
-
-	if (!TTS_EMPTY(slot))
-	{
-		Assert(TTS_IS_ARROWTUPLE(slot));
-
-		/* If we read an arrow slot previously, the entire arrow array should
-		 * have been aggregated so we should mark it is consumed so that we
-		 * get the next array (or end) when we read the next slot. */
-
-		arrow_slot_mark_consumed(slot);
-	}
-
-	slot = ExecProcNode(linitial(vector_agg_state->custom.custom_ps));
-
-	if (TupIsNull(slot))
-	{
-		/* The input has ended. */
-		vector_agg_state->input_ended = true;
-		return NULL;
-	}
-
-	Assert(TTS_IS_ARROWTUPLE(slot));
-
-	/* Filtering should have happened in the scan node below so the slot
-	 * should not be consumed here. */
-	Assert(!arrow_slot_is_consumed(slot));
-
-	/* Remember the slot until we're called next time */
-	vector_agg_state->custom.ss.ss_ScanTupleSlot = slot;
-
-	return slot;
-}
-
-/*
  * Initialize vector quals for a compressed batch.
  *
  * Used to implement vectorized aggregate function filter clause.
@@ -444,18 +366,6 @@ compressed_batch_init_vector_quals(VectorAggState *agg_state, VectorAggDef *agg_
 				.dcontext = dcontext,
 			};
 
-	return &agg_state->vqual_state.vqstate;
-}
-
-/*
- * Initialize FILTER vector quals for an arrow tuple slot.
- *
- * Used to implement vectorized aggregate function filter clause.
- */
-static VectorQualState *
-arrow_init_vector_quals(VectorAggState *agg_state, VectorAggDef *agg_def, TupleTableSlot *slot)
-{
-	vector_qual_state_init(&agg_state->vqual_state.vqstate, agg_def->filter_clauses, slot);
 	return &agg_state->vqual_state.vqstate;
 }
 
@@ -599,20 +509,13 @@ Node *
 vector_agg_state_create(CustomScan *cscan)
 {
 	VectorAggState *state = (VectorAggState *) newNode(sizeof(VectorAggState), T_CustomScanState);
-	CustomScan *childscan = castNode(CustomScan, linitial(cscan->custom_plans));
+	Assert(ts_is_decompress_chunk_plan((Plan *) linitial(cscan->custom_plans)));
 
 	state->custom.methods = &exec_methods;
 
 	/*
 	 * Initialize VectorAggState to process vector slots from different
 	 * subnodes.
-	 *
-	 * VectorAgg supports two child nodes: ColumnarScan (producing arrow tuple
-	 * table slots) and DecompressChunk (producing compressed batches).
-	 *
-	 * When the child is ColumnarScan, VectorAgg expects Arrow slots that
-	 * carry arrow arrays. ColumnarScan performs standard qual filtering and
-	 * vectorized qual filtering prior to handing the slot up to VectorAgg.
 	 *
 	 * When the child is DecompressChunk, VectorAgg doesn't read the slot from
 	 * the child node. Instead, it bypasses DecompressChunk and reads
@@ -624,17 +527,8 @@ vector_agg_state_create(CustomScan *cscan)
 	 * aggregate function FILTER clauses for arrow tuple table slots and
 	 * compressed batches, respectively.
 	 */
-	if (is_columnar_scan(&childscan->scan.plan))
-	{
-		state->get_next_slot = arrow_get_next_slot;
-		state->init_vector_quals = arrow_init_vector_quals;
-	}
-	else
-	{
-		Assert(strcmp(childscan->methods->CustomName, "DecompressChunk") == 0);
-		state->get_next_slot = compressed_batch_get_next_slot;
-		state->init_vector_quals = compressed_batch_init_vector_quals;
-	}
+	state->get_next_slot = compressed_batch_get_next_slot;
+	state->init_vector_quals = compressed_batch_init_vector_quals;
 
 	return (Node *) state;
 }

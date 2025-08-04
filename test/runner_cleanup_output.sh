@@ -26,7 +26,9 @@ else \
 fi | \
 if [ "${RUNNER}" = "isolation" ]; then \
     sed -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' \
-        -e 's!hypertable_[0-9]\{1,\}!hypertable_X!g'; \
+        -e 's!hypertable_[0-9]\{1,\}!hypertable_X!g' \
+        -e 's!constraint_[0-9]\{1,\}!constraint_X!g' \
+        -e 's!with OID [0-9]\{1,\}!with OID X!g'; \
 else \
     cat; \
 fi

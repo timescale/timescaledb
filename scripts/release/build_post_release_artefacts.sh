@@ -47,10 +47,9 @@ curl --silent --fail -o CHANGELOG.md $URL_CHANGELOG
 
 # .unreleased files
 echo "remove .unreleased files"
-echo "TODO"
+#git diff ${PUBLISHED_VERSION}..main .unreleased/* | xargs rm -v
 
 # Set new previous version
 echo "Set new previous version version.config to ${PUBLISHED_VERSION}"
-sed -i.bak "s/${PREVIOUS_VERSION}/${PUBLISHED_VERSION}/g" version.config
-rm version.config.bak
+sed -i '' -e "s/^previous_version = .*/previous_version = $PUBLISHED_VERSION/" version.config
 tail -n 1 version.config

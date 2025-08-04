@@ -1,0 +1,1 @@
+Implements: #8376 Change DecompressChunk custom node name to ColumnarScan

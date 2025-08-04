@@ -4,8 +4,6 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
--- Uncomment to run this test with hypercore TAM
---set timescaledb.default_hypercore_use_access_method=true;
 --set enable_indexscan=false;
 
 -- Helper function that returns the amount of memory currently allocated in a

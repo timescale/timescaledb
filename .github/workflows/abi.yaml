@@ -44,6 +44,8 @@ jobs:
       fail-fast: false
       matrix:
         pg: [ 15, 16, 17 ]
+        ignores:
+          - 'net telemetry'
         include:
           - pg: 15
             builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
@@ -100,7 +102,7 @@ jobs:
           set -o pipefail
           [ -f /usr/bin/gmake ] || ln -s /usr/bin/make /usr/bin/gmake
           sudo -u postgres make -C build_abi -k regresscheck regresscheck-t \
-            regresscheck-shared IGNORES="${{matrix.ignores}}" | tee installcheck.log
+            regresscheck-shared IGNORES="${{ matrix.ignores }}" | tee installcheck.log
         EOF
 
     - name: Show regression diffs

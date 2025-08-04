@@ -81,8 +81,8 @@ TupleDescGetAttrNumber(TupleDesc desc, const char *name)
 {
 	for (int i = 0; i < desc->natts; i++)
 	{
-		if (strcmp(name, NameStr(desc->attrs[i].attname)) == 0)
-			return desc->attrs[i].attnum;
+		if (strcmp(name, NameStr(TupleDescAttr(desc, i)->attname)) == 0)
+			return TupleDescAttr(desc, i)->attnum;
 	}
 
 	return InvalidAttrNumber;
@@ -464,7 +464,8 @@ decompress_batch_beginscan(Relation in_rel, Relation index_rel, Snapshot snapsho
 
 	if (index_rel)
 	{
-		scan->index_scan = index_beginscan(in_rel, index_rel, snapshot, num_scankeys, 0);
+		scan->index_scan =
+			index_beginscan_compat(in_rel, index_rel, snapshot, NULL, num_scankeys, 0);
 		index_rescan(scan->index_scan, scankeys, num_scankeys, NULL, 0);
 		scan->scan = NULL;
 	}
@@ -1059,6 +1060,9 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 				 * data. To circumvent this issue, we change the internal scan state to use the
 				 * transaction snapshot and execute a rescan so the scan state is set correctly and
 				 * includes the new data.
+				 *
+				 * From PG17 this has changed since the scan state is not initialized with
+				 * the node.
 				 */
 				if (should_rescan)
 				{
@@ -1066,7 +1070,7 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 					if (ss && ss->ss_currentScanDesc)
 					{
 						ss->ss_currentScanDesc->rs_snapshot = GetTransactionSnapshot();
-						ExecReScan(ps);
+						table_rescan(ss->ss_currentScanDesc, NULL);
 					}
 				}
 			}

@@ -76,6 +76,20 @@ row based iterators then walk through the bitmap. The bool compressor differs fr
 the other compressors in that it stores the last non-value as a place holder for
 the null values. This is done to make vectorization easier.
 
+### UUID Compressor
+
+The uuid compressor is a compression algorithm that aims at storing UUID v7 values
+compressed as much as possible by taking advantage of the timestamp values being
+present in the UUID.
+
+The first part of the UUID where the timestamp resides is stored using the delta-delta
+algorithm. The second part of the UUID is stored without compression, as a sequence of
+uint64 values.
+
+The algorithm checks the cardinality of the values in the compressed batch and based on
+the cardinality it decides wether it is worth to recompress the batch using the dictionary
+compression algorithm. In that case it recompresses and stores the UUIDs as a dictionary.
+
 # Merging chunks while compressing #
 
 ## Setup ##

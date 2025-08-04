@@ -95,7 +95,7 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 		Datum value = slot_getattr(slot, ht_attno, &isnull);
 		(*slot_attnos)[key_index] = ht_attno;
 
-		Oid atttypid = out_desc->attrs[AttrNumberGetAttrOffset(attno)].atttypid;
+		Oid atttypid = TupleDescAttr(out_desc, AttrNumberGetAttrOffset(attno))->atttypid;
 		TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
 
 		/*
@@ -169,7 +169,8 @@ build_heap_scankeys(Oid hypertable_relid, Relation in_rel, Relation out_rel,
 			 */
 			PG_USED_FOR_ASSERTS_ONLY Oid ht_atttype = get_atttype(hypertable_relid, ht_attno);
 			PG_USED_FOR_ASSERTS_ONLY Oid slot_atttype =
-				slot->tts_tupleDescriptor->attrs[AttrNumberGetAttrOffset(ht_attno)].atttypid;
+				TupleDescAttr(slot->tts_tupleDescriptor, AttrNumberGetAttrOffset(ht_attno))
+					->atttypid;
 			Assert(ht_atttype == slot_atttype);
 
 			Datum value = slot_getattr(slot, ht_attno, &isnull);
@@ -532,7 +533,7 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 	}
 	else
 	{
-		Oid atttypid = in_rel->rd_att->attrs[AttrNumberGetAttrOffset(cmp_attno)].atttypid;
+		Oid atttypid = TupleDescAttr(in_rel->rd_att, AttrNumberGetAttrOffset(cmp_attno))->atttypid;
 
 		TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
 		if (!OidIsValid(tce->btree_opf))
@@ -568,7 +569,8 @@ create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 						   cmp_attno,
 						   strategy,
 						   subtype,
-						   in_rel->rd_att->attrs[AttrNumberGetAttrOffset(cmp_attno)].attcollation,
+						   TupleDescAttr(in_rel->rd_att, AttrNumberGetAttrOffset(cmp_attno))
+							   ->attcollation,
 						   opr,
 						   value);
 

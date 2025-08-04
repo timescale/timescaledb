@@ -51,10 +51,13 @@ DETAIL:  dimension "dev" does not exist in hypertable
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
--- Bad bounds format
+-- Bad bounds value
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
-ERROR:  invalid hypercube for hypertable "chunkapi"
-DETAIL:  constraint for dimension "time" is not numeric
+ERROR:  date/time field value out of range: "1514419200000000"
+HINT:  Perhaps you need a different "datestyle" setting.
+-- Bad bounds value
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["badtimestamp", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+ERROR:  invalid input syntax for type timestamp with time zone: "badtimestamp"
 -- Bad slices format
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
@@ -66,6 +69,10 @@ LINE 1: ...OM _timescaledb_functions.create_chunk('chunkapi',' {"time: ...
                                                              ^
 DETAIL:  Token "device" is invalid.
 CONTEXT:  JSON data, line 1:  {"time: [1515024000000000] "device...
+-- Bad bound type
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [true, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+ERROR:  invalid hypercube for hypertable "chunkapi"
+DETAIL:  constraint for dimension "time" should be either numeric or string
 \set ON_ERROR_STOP 1
 -- Test that granting insert on tables allow create_chunk to be
 -- called. This will also create a chunk that does not collide and has

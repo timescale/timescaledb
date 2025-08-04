@@ -33,6 +33,10 @@ FUNCTION_NAME(PREDICATE_NAME, VECTOR_CTYPE,
 
 	for (size_t outer = 0; outer < n / 64; outer++)
 	{
+		/* no need to check the values if the result is already invalid */
+		if (result[outer] == 0)
+			continue;
+
 		uint64 word = 0;
 		for (size_t inner = 0; inner < 64; inner++)
 		{

@@ -82,7 +82,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
 ----------------------------------------------------------
  {                                                       +
      "views": {                                          +
-         "num_relations": 2                              +
+         "num_relations": 4                              +
      },                                                  +
      "tables": {                                         +
          "heap_size": 0,                                 +
@@ -188,7 +188,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
 ----------------------------------------------------------
  {                                                       +
      "views": {                                          +
-         "num_relations": 2                              +
+         "num_relations": 4                              +
      },                                                  +
      "tables": {                                         +
          "heap_size": 73728,                             +
@@ -271,8 +271,6 @@ SELECT (SELECT count(*) FROM normal) num_inserted_rows,
 
 -- Add compression
 ALTER TABLE hyper SET (timescaledb.compress);
-NOTICE:  default segment by for hypertable "hyper" is set to "device"
-NOTICE:  default order by for hypertable "hyper" is set to ""time" DESC"
 SELECT compress_chunk(c)
 FROM show_chunks('hyper') c ORDER BY c LIMIT 4;
              compress_chunk             
@@ -308,7 +306,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
 -----------------------------------------------------------
  {                                                        +
      "views": {                                           +
-         "num_relations": 2                               +
+         "num_relations": 4                               +
      },                                                   +
      "tables": {                                          +
          "heap_size": 73728,                              +

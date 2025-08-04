@@ -18,7 +18,13 @@
 #include <nodes/execnodes.h>
 #include <nodes/pg_list.h>
 
+#include <compat/compat.h>
 #include "export.h"
+
+#if PG18_GE
+#include <commands/explain_format.h>
+#include <commands/explain_state.h>
+#endif
 
 extern TSDLLEXPORT void ts_show_scan_qual(List *qual, const char *qlabel, PlanState *planstate,
 										  List *ancestors, ExplainState *es);

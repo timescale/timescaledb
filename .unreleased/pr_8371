@@ -1,0 +1,1 @@
+Implements: #8371 Show available timescaledb ALTER options when encountering unsupported options

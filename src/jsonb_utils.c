@@ -14,6 +14,7 @@
 #include "compat/compat.h"
 #include "export.h"
 #include "jsonb_utils.h"
+#include "utils.h"
 
 static void ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value);
 
@@ -75,27 +76,24 @@ ts_jsonb_set_value_by_type(JsonbValue *value, Oid typeid, Datum datum)
 {
 	switch (typeid)
 	{
-		Oid typeOut;
-		bool isvarlena;
-		char *str;
-		PGFunction func;
-
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
 		case NUMERICOID:
-			func = get_convert_func(typeid);
+		{
+			PGFunction func = get_convert_func(typeid);
 			value->type = jbvNumeric;
 			value->val.numeric = DatumGetNumeric(func ? DirectFunctionCall1(func, datum) : datum);
 			break;
-
+		}
 		default:
-			getTypeOutputInfo(typeid, &typeOut, &isvarlena);
-			str = OidOutputFunctionCall(typeOut, datum);
+		{
+			char *str = ts_datum_to_string(datum, typeid);
 			value->type = jbvString;
 			value->val.string.val = str;
 			value->val.string.len = strlen(str);
 			break;
+		}
 	}
 }
 

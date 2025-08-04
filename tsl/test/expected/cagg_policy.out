@@ -232,19 +232,13 @@ DETAIL:  The start and end offsets must cover at least two buckets in the valid 
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval) as job_id \gset
 --adding again should warn/error
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>false);
-ERROR:  continuous aggregate policy already exists for "mat_m1"
-DETAIL:  Only one continuous aggregate policy can be created per continuous aggregate and a policy with job id 1009 already exists for "mat_m1".
+ERROR:  continuous aggregate refresh policy already exists for "mat_m1"
+DETAIL:  A refresh policy with the same start and end offset already exists for continuous aggregate "mat_m1".
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 15, '1h'::interval, if_not_exists=>true);
-WARNING:  continuous aggregate policy already exists for "mat_m1"
-DETAIL:  A policy already exists with different arguments.
-HINT:  Remove the existing policy before adding a new one.
- add_continuous_aggregate_policy 
----------------------------------
-                              -1
-(1 row)
-
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
-NOTICE:  continuous aggregate policy already exists for "mat_m1", skipping
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1", skipping
+DETAIL:  A refresh policy with the same start and end offset already exists for continuous aggregate "mat_m1".
  add_continuous_aggregate_policy 
 ---------------------------------
                               -1
@@ -275,14 +269,7 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
-WARNING:  continuous aggregate policy already exists for "mat_m1"
-DETAIL:  A policy already exists with different arguments.
-HINT:  Remove the existing policy before adding a new one.
- add_continuous_aggregate_policy 
----------------------------------
-                              -1
-(1 row)
-
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
 SELECT remove_continuous_aggregate_policy('int_tab');
 ERROR:  "int_tab" is not a continuous aggregate
 SELECT remove_continuous_aggregate_policy('mat_m1');
@@ -299,21 +286,15 @@ SELECT add_continuous_aggregate_policy('mat_m1', 20, NULL, '1h'::interval, if_no
 (1 row)
 
 SELECT add_continuous_aggregate_policy('mat_m1', 20, NULL, '1h'::interval, if_not_exists=>true); -- same param values, so we get a NOTICE
-NOTICE:  continuous aggregate policy already exists for "mat_m1", skipping
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1", skipping
+DETAIL:  A refresh policy with the same start and end offset already exists for continuous aggregate "mat_m1".
  add_continuous_aggregate_policy 
 ---------------------------------
                               -1
 (1 row)
 
 SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
-WARNING:  continuous aggregate policy already exists for "mat_m1"
-DETAIL:  A policy already exists with different arguments.
-HINT:  Remove the existing policy before adding a new one.
- add_continuous_aggregate_policy 
----------------------------------
-                              -1
-(1 row)
-
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
 SELECT remove_continuous_aggregate_policy('mat_m1');
  remove_continuous_aggregate_policy 
 ------------------------------------
@@ -327,21 +308,15 @@ SELECT add_continuous_aggregate_policy('mat_m1', NULL, 20, '1h'::interval, if_no
 (1 row)
 
 SELECT add_continuous_aggregate_policy('mat_m1', NULL, 20, '1h'::interval, if_not_exists=>true);
-NOTICE:  continuous aggregate policy already exists for "mat_m1", skipping
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1", skipping
+DETAIL:  A refresh policy with the same start and end offset already exists for continuous aggregate "mat_m1".
  add_continuous_aggregate_policy 
 ---------------------------------
                               -1
 (1 row)
 
 SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '1h'::interval, if_not_exists=>true);
-WARNING:  continuous aggregate policy already exists for "mat_m1"
-DETAIL:  A policy already exists with different arguments.
-HINT:  Remove the existing policy before adding a new one.
- add_continuous_aggregate_policy 
----------------------------------
-                              -1
-(1 row)
-
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
 SELECT remove_continuous_aggregate_policy('mat_m1');
  remove_continuous_aggregate_policy 
 ------------------------------------
@@ -835,12 +810,7 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 day', '1 day', '1h'::interval, if_not_exists=>true);
-WARNING:  continuous aggregate policy already exists for "max_mat_view_timestamp"
- add_continuous_aggregate_policy 
----------------------------------
-                              -1
-(1 row)
-
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "max_mat_view_timestamp"
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', 'xyz', '1 day', '1h'::interval, if_not_exists=>true);
 ERROR:  invalid input syntax for type interval: "xyz"
 \set ON_ERROR_STOP 1
@@ -1043,10 +1013,9 @@ ERROR:  invalid parameter value for start_offset
 SELECT add_continuous_aggregate_policy('mat_smallint', '15', 10, '1h'::interval, if_not_exists=>true);
 ERROR:  invalid parameter value for end_offset
 SELECT add_continuous_aggregate_policy('mat_smallint', '15', '10', '1h'::interval, if_not_exists=>true);
-WARNING:  continuous aggregate policy already exists for "mat_smallint"
  add_continuous_aggregate_policy 
 ---------------------------------
-                              -1
+                            1045
 (1 row)
 
 \set ON_ERROR_STOP 1
@@ -1121,7 +1090,7 @@ INSERT INTO bigint_tab VALUES(5);
 INSERT INTO bigint_tab VALUES(10);
 INSERT INTO bigint_tab VALUES(20);
 CALL run_job(:job_mid);
-SELECT * FROM mat_bigint;
+SELECT * FROM mat_bigint ORDER BY 1;
  a  | countb 
 ----+--------
   5 |      1
@@ -1152,7 +1121,7 @@ NOTICE:  defaulting compress_orderby to a
 SELECT add_compression_policy('mat_smallint', -4::smallint);
  add_compression_policy 
 ------------------------
-                   1053
+                   1054
 (1 row)
 
 SELECT remove_compression_policy('mat_smallint');
@@ -1164,7 +1133,7 @@ SELECT remove_compression_policy('mat_smallint');
 SELECT add_compression_policy('mat_bigint', 0::bigint);
  add_compression_policy 
 ------------------------
-                   1054
+                   1055
 (1 row)
 
 SELECT remove_compression_policy('mat_bigint');
@@ -1177,13 +1146,13 @@ SELECT remove_compression_policy('mat_bigint');
 SELECT add_compression_policy('mat_smallint', 5::smallint);
  add_compression_policy 
 ------------------------
-                   1055
+                   1056
 (1 row)
 
 SELECT add_compression_policy('mat_bigint', 20::bigint);
  add_compression_policy 
 ------------------------
-                   1056
+                   1057
 (1 row)
 
 -- end of coverage tests
@@ -1214,9 +1183,6 @@ SELECT time,
 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-02 23:55:00+0', '20m') gtime (time),
     generate_series(1, 2, 1) gdevice (device_id);
 ALTER TABLE metrics SET ( timescaledb.compress );
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "metrics" is set to ""
-NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
               compress_chunk              
 ------------------------------------------
@@ -1235,16 +1201,12 @@ WITH NO DATA;
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, NULL, '1 h'::interval, if_not_exists => true);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1057
+                            1058
 (1 row)
 
+\set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval, if_not_exists => true);
-WARNING:  continuous aggregate policy already exists for "metrics_cagg"
- add_continuous_aggregate_policy 
----------------------------------
-                              -1
-(1 row)
-
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "metrics_cagg"
 SELECT remove_continuous_aggregate_policy('metrics_cagg');
  remove_continuous_aggregate_policy 
 ------------------------------------
@@ -1254,23 +1216,18 @@ SELECT remove_continuous_aggregate_policy('metrics_cagg');
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1058
+                            1059
 (1 row)
 
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true); -- same param values, so we get a NOTICE
-NOTICE:  continuous aggregate policy already exists for "metrics_cagg", skipping
+NOTICE:  continuous aggregate refresh policy already exists for "metrics_cagg", skipping
  add_continuous_aggregate_policy 
 ---------------------------------
                               -1
 (1 row)
 
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
-WARNING:  continuous aggregate policy already exists for "metrics_cagg"
- add_continuous_aggregate_policy 
----------------------------------
-                              -1
-(1 row)
-
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "metrics_cagg"
 SELECT remove_continuous_aggregate_policy('metrics_cagg');
  remove_continuous_aggregate_policy 
 ------------------------------------
@@ -1278,7 +1235,6 @@ SELECT remove_continuous_aggregate_policy('metrics_cagg');
 (1 row)
 
 --can set compression policy only after setting up refresh policy --
-\set ON_ERROR_STOP 0
 SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
 ERROR:  setup a refresh policy for "metrics_cagg" before setting up a columnstore policy
 --can set compression policy only after enabling compression --
@@ -1295,7 +1251,7 @@ ERROR:  cannot use "compress_created_before" with continuous aggregate "metrics_
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
  COMP_JOB 
 ----------
-     1060
+     1061
 (1 row)
 
 SELECT remove_compression_policy('metrics_cagg');
@@ -1394,7 +1350,7 @@ ALTER materialized view deals_best_weekly set (timescaledb.materialized_only=tru
 ALTER materialized view deals_best_daily set (timescaledb.materialized_only=true);
 -- we have data from 6 weeks before to May 5 2022 (Thu)
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-03');
-SELECT * FROM deals_best_weekly;
+SELECT * FROM deals_best_weekly ORDER BY bucket;
             bucket            |     avg_temp     | max_rating 
 ------------------------------+------------------+------------
  Sun Apr 24 17:00:00 2022 PDT | 117.764705882353 |          6
@@ -1411,7 +1367,7 @@ SELECT * FROM deals_best_daily ORDER BY bucket LIMIT 2;
 -- expect to get an up-to-date notice
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-05');
 NOTICE:  continuous aggregate "deals_best_weekly" is already up-to-date
-SELECT * FROM deals_best_weekly;
+SELECT * FROM deals_best_weekly ORDER BY bucket;
             bucket            |     avg_temp     | max_rating 
 ------------------------------+------------------+------------
  Sun Apr 24 17:00:00 2022 PDT | 117.764705882353 |          6
@@ -1436,7 +1392,7 @@ SELECT set_integer_now_func('t', 'unix_now');
 SELECT add_retention_policy('t', 20);
  add_retention_policy 
 ----------------------
-                 1062
+                 1063
 (1 row)
 
 CREATE MATERIALIZED VIEW cagg(a, sumb) WITH (timescaledb.continuous)

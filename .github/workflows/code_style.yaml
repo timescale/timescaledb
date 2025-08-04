@@ -150,5 +150,8 @@ jobs:
         ./scripts/check_missing_gitignore_for_template_tests.sh
     - name: Check for unnecessary template test files
       if: always()
-      run: ./scripts/check_unecessary_template_tests.sh
+      run: ./scripts/check_unnecessary_template_tests.sh
+    - name: Check for orphaned output test files
+      if: always()
+      run: ./scripts/check_orphaned_test_output_files.sh
 
