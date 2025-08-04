@@ -71,10 +71,6 @@ extern Datum tsl_array_compressor_finish(PG_FUNCTION_ARGS);
 /* Pass through to the specialized functions below for BOOL and TEXT */
 ArrowArray *tsl_array_decompress_all(Datum compressed_array, Oid element_type,
 									 MemoryContext dest_mctx);
-ArrowArray *tsl_bool_array_decompress_all(Datum compressed_array, Oid element_type,
-										  MemoryContext dest_mctx);
-ArrowArray *tsl_text_array_decompress_all(Datum compressed_array, Oid element_type,
-										  MemoryContext dest_mctx);
 
 ArrowArray *text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 														   MemoryContext dest_mctx);

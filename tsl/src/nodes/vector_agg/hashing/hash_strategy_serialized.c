@@ -291,6 +291,11 @@ serialized_key_hashing_get_key(BatchHashingParams params, int row, void *restric
 						   row + (int64 *) column_values->buffers[1],
 						   8);
 					break;
+				case 16:
+					memcpy(&serialized_key_storage[offset],
+						   (row * 2) + (int64 *) column_values->buffers[1],
+						   16);
+					break;
 				default:
 					pg_unreachable();
 					break;

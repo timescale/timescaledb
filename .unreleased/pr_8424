@@ -1,0 +1,1 @@
+Implements: #8424 Block downgrade when orderby setting is NULL

@@ -17,7 +17,7 @@ INSERT INTO chunkskip
 SELECT g, g+interval '1 hour', ceil(random()*20), random()*30
 FROM generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day') g;
 
-ALTER TABLE chunkskip SET (timescaledb.compress, timescaledb.compress_segmentby='location');
+ALTER TABLE chunkskip SET (timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='"time" desc');
 SELECT count(compress_chunk(ch, true)) FROM show_chunks('chunkskip') ch;
 
 DO $$
