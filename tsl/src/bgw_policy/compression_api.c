@@ -99,7 +99,8 @@ policy_recompression_proc(PG_FUNCTION_ARGS)
 }
 
 static void
-validate_compress_after_type(const Dimension *dim, Oid partitioning_type, Oid compress_after_type)
+validate_compress_after_type(const Dimension *dim, Oid partitioning_type, Oid compress_after_type,
+							 bool is_columnstore_policy)
 {
 	Oid expected_type = InvalidOid;
 	if (IS_INTEGER_TYPE(partitioning_type))
@@ -117,8 +118,11 @@ validate_compress_after_type(const Dimension *dim, Oid partitioning_type, Oid co
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("unsupported compress_after argument type, expected type : %s",
-						format_type_be(expected_type))));
+				 is_columnstore_policy ?
+					 errmsg("unsupported \"after\" argument type, expected type : %s",
+							format_type_be(expected_type)) :
+					 errmsg("unsupported \"compress_after\" argument type, expected type : %s",
+							format_type_be(expected_type))));
 	}
 }
 
@@ -146,7 +150,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 								Interval *default_schedule_interval,
 								bool user_defined_schedule_interval, bool if_not_exists,
 								bool fixed_schedule, TimestampTz initial_start,
-								const char *timezone)
+								const char *timezone, bool is_columnstore_policy)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_schema, check_name, owner;
@@ -164,8 +168,12 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	if (is_cagg && created_before != NULL)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot use \"compress_created_before\" with continuous aggregate \"%s\" ",
-						get_rel_name(user_rel_oid))));
+				 is_columnstore_policy ?
+					 errmsg("cannot use \"created_before\" with continuous aggregate \"%s\" ",
+							get_rel_name(user_rel_oid)) :
+					 errmsg("cannot use \"compress_created_before\" with continuous aggregate "
+							"\"%s\" ",
+							get_rel_name(user_rel_oid))));
 
 	owner_id = ts_hypertable_permissions_check(user_rel_oid, GetUserId());
 	ts_bgw_job_validate_job_owner(owner_id);
@@ -244,12 +252,28 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 
 	if (!is_cagg && IS_INTEGER_TYPE(partitioning_type) && !IS_INTEGER_TYPE(compress_after_type) &&
 		created_before == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid value for parameter %s", POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER),
-				 errhint("Integer duration in \"compress_after\" or interval time duration"
+	{
+		if (is_columnstore_policy)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid value for parameter \"after\""),
+					 errhint("Integer duration in \"after\" or interval time duration"
+							 " in \"created_before\" is required for hypertables with integer "
+							 "time dimension.")));
+		}
+		else
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid value for parameter %s",
+							POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER),
+					 errhint(
+						 "Integer duration in \"compress_after\" or interval time duration"
 						 " in \"compress_created_before\" is required for hypertables with integer "
 						 "time dimension.")));
+		}
+	}
 
 	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)) &&
 		!user_defined_schedule_interval)
@@ -282,7 +306,10 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	ts_jsonb_add_int32(parse_state, POLICY_CONFIG_KEY_HYPERTABLE_ID, hypertable->fd.id);
-	validate_compress_after_type(dim, partitioning_type, compress_after_type);
+	validate_compress_after_type(dim,
+								 partitioning_type,
+								 compress_after_type,
+								 is_columnstore_policy);
 
 	switch (compress_after_type)
 	{
@@ -347,6 +374,19 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 Datum
 policy_compression_add(PG_FUNCTION_ARGS)
 {
+	Oid fn_oid = FC_FN_OID(fcinfo);
+	bool is_columnstore_policy = false;
+
+	/*
+	 * `policy_compression_add` is used by both `add_compression_policy()` and
+	 * `add_columnstore_policy()`; but their arguments names differ. We need to
+	 * respect that in the error messages.
+	 */
+	if (OidIsValid(fn_oid) && strcmp(get_func_name(fn_oid), "add_columnstore_policy") == 0)
+	{
+		is_columnstore_policy = true;
+	}
+
 	/*
 	 * The function is not STRICT but we can't allow required args to be NULL
 	 * so we need to act like a strict function in those cases
@@ -378,8 +418,10 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	if ((PG_ARGISNULL(1) && PG_ARGISNULL(6)) || (!PG_ARGISNULL(1) && !PG_ARGISNULL(6)))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg(
-					 "need to specify one of \"compress_after\" or \"compress_created_before\"")));
+				 is_columnstore_policy ?
+					 errmsg("need to specify one of \"after\" or \"created_before\"") :
+					 errmsg("need to specify one of \"compress_after\" or "
+							"\"compress_created_before\"")));
 
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
 	if (fixed_schedule)
@@ -402,7 +444,8 @@ policy_compression_add(PG_FUNCTION_ARGS)
 											 if_not_exists,
 											 fixed_schedule,
 											 initial_start,
-											 valid_timezone);
+											 valid_timezone,
+											 is_columnstore_policy);
 
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
