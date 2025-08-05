@@ -2051,3 +2051,31 @@ group by 2, 3 order by 1 desc
      1 | false       | false
 (7 rows)
 
+\set algo bool
+\set type bool
+select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
+    , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
+;
+ count | bulk_result | rowbyrow_result 
+-------+-------------+-----------------
+    18 | XX001       | XX001
+     3 | true        | true
+     2 | 08P01       | 08P01
+(3 rows)
+
+\set algo uuid
+\set type uuid
+select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
+    , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
+;
+ count | bulk_result | rowbyrow_result 
+-------+-------------+-----------------
+     1 | true        | true
+(1 row)
+

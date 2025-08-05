@@ -101,7 +101,7 @@ simple8brle_bitarray_decompress(Simple8bRleSerialized *compressed, bool inverted
 				result.num_ones += repeat_count;
 
 				/* Repeated 'ones' repeat_count times */
-				if (repeat_count >= 64)
+				if ((repeat_count + bit_position) >= 64)
 				{
 					/* Head: Fill the remaining bits in the current word if not aligned */
 					if (bit_position > 0)
