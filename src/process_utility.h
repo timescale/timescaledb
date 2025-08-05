@@ -24,7 +24,6 @@ typedef struct ProcessUtilityArgs
 	ProcessUtilityContext context;
 	ParamListInfo params;
 	DestReceiver *dest;
-	List *hypertable_list;
 	QueryCompletion *completion_tag;
 	bool readonly_tree;
 } ProcessUtilityArgs;
