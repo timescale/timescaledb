@@ -4,6 +4,15 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.21.2 (2025-08-05)
+
+This release contains performance improvements and bug fixes since the 2.21.1 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#8418](https://github.com/timescale/timescaledb/pull/8418) Fix duplicate constraints in JOIN queries
+* [#8426](https://github.com/timescale/timescaledb/pull/8426) Fix chunk skipping min/max calculation
+* [#8434](https://github.com/timescale/timescaledb/pull/8434) Allow `show_chunks` to process more than 65535 chunks
+
 ## 2.21.1 (2025-07-22)
 
 This release contains one bug fix since the 2.21.0 release. We recommend that you upgrade at the next available opportunity.
