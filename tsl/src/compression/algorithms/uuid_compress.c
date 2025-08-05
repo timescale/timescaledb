@@ -560,7 +560,7 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	ArrowArray *timestamp_array = NULL;
 
 	void *detoasted = PG_DETOAST_DATUM(compressed);
-	StringInfoData si = { .data = detoasted, .len = VARSIZE(compressed) };
+	StringInfoData si = { .data = detoasted, .len = VARSIZE_ANY(compressed) };
 	UuidCompressed *header = consumeCompressedData(&si, sizeof(UuidCompressed));
 	char *timestamp_compressed_data = NULL;
 	char *rand_b_and_variant_compressed_data;
