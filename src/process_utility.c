@@ -422,12 +422,6 @@ relation_not_only(RangeVar *rv)
 				 errmsg("ONLY option not supported on hypertable operations")));
 }
 
-static void
-add_hypertable_to_process_args(ProcessUtilityArgs *args, const Hypertable *ht)
-{
-	args->hypertable_list = lappend_oid(args->hypertable_list, ht->main_table_relid);
-}
-
 static bool
 check_table_in_rangevar_list(List *rvlist, Name schema_name, Name table_name)
 {
@@ -461,42 +455,6 @@ add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
 			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
 		stmt->objects = lappend(stmt->objects, rv);
 	}
-}
-
-static void
-process_drop_trigger_start(ProcessUtilityArgs *args, DropStmt *stmt)
-{
-	Cache *hcache = ts_hypertable_cache_pin();
-	ListCell *lc;
-
-	foreach (lc, stmt->objects)
-	{
-		Node *object = lfirst(lc);
-		Relation rel = NULL;
-		ObjectAddress objaddr;
-
-		/* Get the relation of the trigger */
-		objaddr =
-			get_object_address(stmt->removeType, object, &rel, AccessShareLock, stmt->missing_ok);
-
-		if (OidIsValid(objaddr.objectId))
-		{
-			const Hypertable *ht;
-
-			Assert(NULL != rel);
-			Assert(objaddr.classId == TriggerRelationId);
-			ht =
-				ts_hypertable_cache_get_entry(hcache, RelationGetRelid(rel), CACHE_FLAG_MISSING_OK);
-
-			if (NULL != ht)
-				add_hypertable_to_process_args(args, ht);
-
-			/* Lock from get_object_address must be held until transaction end */
-			table_close(rel, NoLock);
-		}
-	}
-
-	ts_cache_release(&hcache);
 }
 
 static DDLResult
@@ -778,8 +736,6 @@ process_altertableschema(ProcessUtilityArgs *args)
 	else
 	{
 		ts_hypertable_set_schema(ht, alterstmt->newschema);
-
-		add_hypertable_to_process_args(args, ht);
 	}
 
 	ts_cache_release(&hcache);
@@ -867,8 +823,6 @@ process_copy(ProcessUtilityArgs *args)
 
 	args->completion_tag->commandTag = CMDTAG_COPY;
 	args->completion_tag->nprocessed = processed;
-
-	add_hypertable_to_process_args(args, ht);
 
 	ts_cache_release(&hcache);
 
@@ -1096,8 +1050,6 @@ process_vacuum(ProcessUtilityArgs *args)
 
 				if (ht)
 				{
-					add_hypertable_to_process_args(args, ht);
-
 					ctx.ht_vacuum_rel = vacuum_rel;
 					foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
 				}
@@ -1149,8 +1101,6 @@ relation_should_recurse(RangeVar *rv)
 static void
 handle_truncate_hypertable(ProcessUtilityArgs *args, TruncateStmt *stmt, Hypertable *ht)
 {
-	add_hypertable_to_process_args(args, ht);
-
 	/* Delete the metadata */
 	ts_chunk_delete_by_hypertable_id(ht->fd.id);
 
@@ -1602,8 +1552,6 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 		{
 			if (list_length(stmt->objects) != 1)
 				elog(ERROR, "cannot drop a hypertable index along with other objects");
-
-			add_hypertable_to_process_args(args, ht);
 		}
 	}
 
@@ -1847,7 +1795,6 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 
 					if (ht)
 					{
-						add_hypertable_to_process_args(args, ht);
 						foreach_chunk(ht, add_chunk_oid, args);
 					}
 				}
@@ -2023,9 +1970,6 @@ process_drop_start(ProcessUtilityArgs *args)
 		case OBJECT_VIEW:
 			process_drop_view_start(args, stmt);
 			break;
-		case OBJECT_TRIGGER:
-			process_drop_trigger_start(args, stmt);
-			break;
 		case OBJECT_PROCEDURE:
 		case OBJECT_FUNCTION:
 			process_drop_procedure_start(stmt);
@@ -2101,8 +2045,6 @@ process_reindex(ProcessUtilityArgs *args)
 
 				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
 					result = DDL_DONE;
-
-				add_hypertable_to_process_args(args, ht);
 			}
 			break;
 
@@ -2113,7 +2055,6 @@ process_reindex(ProcessUtilityArgs *args)
 
 			if (NULL != ht)
 			{
-				add_hypertable_to_process_args(args, ht);
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
 
 				/*
@@ -2173,8 +2114,6 @@ process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	else
 	{
 		ts_hypertable_set_name(ht, stmt->newname);
-
-		add_hypertable_to_process_args(args, ht);
 	}
 }
 
@@ -2259,7 +2198,6 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 		ts_compression_settings_rename_column_cascade(ht->main_table_relid,
 													  stmt->subname,
 													  stmt->newname);
-		add_hypertable_to_process_args(args, ht);
 		dim = ts_hyperspace_get_mutable_dimension_by_name(ht->space,
 														  DIMENSION_TYPE_ANY,
 														  stmt->subname);
@@ -2303,8 +2241,6 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	if (NULL != ht)
 	{
 		ts_chunk_index_rename_parent(ht, relid, stmt->newname);
-
-		add_hypertable_to_process_args(args, ht);
 	}
 	else
 	{
@@ -2420,7 +2356,6 @@ process_rename_constraint_or_trigger(ProcessUtilityArgs *args, Cache *hcache, Oi
 	if (NULL != ht)
 	{
 		relation_not_only(stmt->relation);
-		add_hypertable_to_process_args(args, ht);
 
 		if (stmt->renameType == OBJECT_TABCONSTRAINT)
 			foreach_chunk(ht, rename_hypertable_constraint, stmt);
@@ -3290,7 +3225,6 @@ process_index_start(ProcessUtilityArgs *args)
 	}
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);
-	add_hypertable_to_process_args(args, ht);
 
 	ts_with_clause_filter(stmt->options, &hypertable_options, &postgres_options);
 
@@ -3533,8 +3467,6 @@ process_cluster_start(ProcessUtilityArgs *args)
 		 * otherwise we'd be holding locks way too long.
 		 */
 		PreventInTransactionBlock(is_top_level, "CLUSTER");
-
-		add_hypertable_to_process_args(args, ht);
 
 		if (NULL == stmt->indexname)
 		{
@@ -4125,7 +4057,6 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 		check_continuous_agg_alter_table_allowed(ht, stmt);
 		check_alter_table_allowed_on_ht_with_compression(ht, stmt);
 		relation_not_only(stmt->relation);
-		add_hypertable_to_process_args(args, ht);
 	}
 	foreach (lc, stmt->cmds)
 	{
@@ -4782,8 +4713,6 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 				 errmsg("DELETE triggers with transition tables not supported")));
 	}
 
-	add_hypertable_to_process_args(args, ht);
-
 	/*
 	 * If it is not a ROW trigger, we do not need to create the ROW triggers
 	 * on the chunks, so we can return early.
@@ -5416,8 +5345,7 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 								.pstmt = pstmt,
 								.parsetree = pstmt->utilityStmt,
 								.queryEnv = queryEnv,
-								.parse_state = make_parsestate(NULL),
-								.hypertable_list = NIL };
+								.parse_state = make_parsestate(NULL) };
 
 	bool altering_timescaledb = false;
 	DDLResult result;
