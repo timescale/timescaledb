@@ -32,8 +32,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should-run: ${{ steps.check.outputs.should-run }}
-      next-version: ${{ steps.check.outputs.next-version }}
-      release-branch: ${{ steps.check.outputs.release-branch }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,52 +40,42 @@ jobs:
       - name: Check Release Conditions
         id: check
         run: |
-          # Read version from config
           NEXT_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          RELEASE_BRANCH="${NEXT_VERSION/%.[0-9]/.x}"
+          SHOULD_RUN="true"
+
+          # Set outputs early
           echo "next-version=$NEXT_VERSION" >> $GITHUB_OUTPUT
-          
-          RELEASE_BRANCH="${NEXT_VERSION/%.0/.x}"
           echo "release-branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
           
-          SHOULD_RUN="false"
+          echo "Checking run conditions for release: $NEXT_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "Current branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "Expected release branch: $RELEASE_BRANCH" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           
-          # Check if tag already exists
+          # Condition: version tag can not exist
           if git tag -l | grep -q "^$NEXT_VERSION$"; then
-            echo "❌ Tag $NEXT_VERSION already exists" >> $GITHUB_STEP_SUMMARY
+            echo "❌ \`$NEXT_VERSION\` tag already exists" >> $GITHUB_STEP_SUMMARY
             echo "should-run=false" >> $GITHUB_OUTPUT
-            exit 0
+            exit 1
           fi
-          
-          # Get current branch
-          CURRENT_BRANCH="${{ github.ref_name }}"
-          
-          # Condition 1: If triggered from main branch, version must end with .0
-          if [[ "$CURRENT_BRANCH" == "main" ]]; then
-            if [[ "$NEXT_VERSION" =~ \.0$ ]]; then
-              SHOULD_RUN="true"
-            else
-              echo "❌ Main branch requires .0 version, got $NEXT_VERSION" >> $GITHUB_STEP_SUMMARY
-              SHOULD_RUN="false"
-            fi
-          # Condition 2: If version doesn't end with .0, branch must match d+.d+.x format
-          elif [[ ! "$NEXT_VERSION" =~ \.0$ ]]; then
-            if [[ "$CURRENT_BRANCH" =~ ^[0-9]+\.[0-9]+\.x$ ]]; then
-              SHOULD_RUN="true"
-            else
-              echo "❌ Non-.0 version requires branch format d+.d+.x, got $CURRENT_BRANCH" >> $GITHUB_STEP_SUMMARY
-              SHOULD_RUN="false"
-            fi
-          # Condition 3: .0 version on non-main branch - not allowed
-          else
-            echo "❌ .0 version ($NEXT_VERSION) only allowed on main branch, got $CURRENT_BRANCH" >> $GITHUB_STEP_SUMMARY
+
+          # Condition: minor releases (.0) must be triggered from the main branch
+          if [[ "$NEXT_VERSION" =~ \.0$ ]] && [[ "${{ github.ref_name }}" != "main" ]]; then
+            echo "❌ \`main\` branch requires minor version release, got $NEXT_VERSION" >> $GITHUB_STEP_SUMMARY
             SHOULD_RUN="false"
+            exit 1
           fi
-          
-          echo "should-run=$SHOULD_RUN" >> $GITHUB_OUTPUT
-          
-          if [[ "$SHOULD_RUN" == "false" ]]; then
-            echo "🛑 Conditions not met, skipping release steps" >> $GITHUB_STEP_SUMMARY
+
+          # Condition: patch releases must be triggered from the release branch
+          if [[ ! "$NEXT_VERSION" =~ \.0$ ]] && [[ "${{ github.ref_name }}" != "$RELEASE_BRANCH" ]]; then
+            echo "❌ the patch release \`$NEXT_VERSION\` must be trigger with from the release branch \`$RELEASE_BRANCH\`, got ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+            SHOULD_RUN="false"
+            exit 1
           fi
+
+          echo "✅ All release conditions satisfied for \`$NEXT_RELEASE\`" >> $GITHUB_STEP_SUMMARY
+          echo "should-run=true" >> $GITHUB_OUTPUT
 
   release-feature-freeze-ceremony:
     name: Release - Feature Freeze
