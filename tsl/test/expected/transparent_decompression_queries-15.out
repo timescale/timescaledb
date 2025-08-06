@@ -55,7 +55,7 @@ select * from test_chartab order by mac_id , ts limit 2;
 
 VACUUM ANALYZE test_chartab;
 -- test constraintawareappend sort node handling
-SET work_mem to '16MB';
+SET work_mem to '8MB';
 SET enable_hashagg TO false;
 SET timescaledb.enable_chunkwise_aggregation TO false;
 SET max_parallel_workers_per_gather = 0;
@@ -101,17 +101,17 @@ GROUP BY 2, 3;
                            Index Cond: (_ts_meta_min_1 < now())
                ->  Sort (actual rows=120960 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
-                     Sort Method: quicksort 
+                     Sort Method: external merge  Disk: 4032kB
                      ->  Seq Scan on _hyper_3_6_chunk (actual rows=120960 loops=1)
                            Filter: ("time" < now())
                ->  Sort (actual rows=120960 loops=1)
                      Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
-                     Sort Method: quicksort 
+                     Sort Method: external merge  Disk: 4032kB
                      ->  Seq Scan on _hyper_3_7_chunk (actual rows=120960 loops=1)
                            Filter: ("time" < now())
                ->  Sort (actual rows=120960 loops=1)
                      Sort Key: _hyper_3_8_chunk.device_id, _hyper_3_8_chunk.measure_id
-                     Sort Method: quicksort 
+                     Sort Method: external merge  Disk: 4032kB
                      ->  Seq Scan on _hyper_3_8_chunk (actual rows=120960 loops=1)
                            Filter: ("time" < now())
                ->  Sort (actual rows=86401 loops=1)
@@ -146,12 +146,12 @@ GROUP BY 2, 3;
                            Index Cond: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
                ->  Sort (actual rows=120960 loops=1)
                      Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
-                     Sort Method: quicksort 
+                     Sort Method: external merge  Disk: 4032kB
                      ->  Seq Scan on _hyper_3_7_chunk (actual rows=120960 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
                ->  Sort (actual rows=120960 loops=1)
                      Sort Key: _hyper_3_8_chunk.device_id, _hyper_3_8_chunk.measure_id
-                     Sort Method: quicksort 
+                     Sort Method: external merge  Disk: 4032kB
                      ->  Seq Scan on _hyper_3_8_chunk (actual rows=120960 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
                ->  Sort (actual rows=86401 loops=1)
