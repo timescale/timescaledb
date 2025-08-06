@@ -3,8 +3,14 @@ name: Release - Feature Freeze Ceremony
 #
 # Feature Freeze
 # 
-# prereq: needs approval from another person to run the action (environment)
-#
+# prereqs: 
+# 0. needs approval from another person to run the action (environment)
+# 1. ensure the correct branch is used to execute the action
+#   a. if the run was triggered from the `main` branch, the NEXT_VERSION must be a new minor (end with a .0)
+#   b. if NEXT_VERSION is a patch relese, then the branch the action was triggered on must be a release branch: `^[0-9]+\.[0-9]+\.x$`
+# 2. ensure the next version does not exist as tag yet
+# 
+# Tasks
 # 0. bump minor -dev version in version.config on main, if and only if it's a .0 release
 # 1. creates the release branch X.Y.x, if and if the branch does not exist yet
 # 2. generates CHANGELOG and opens PR for it
@@ -21,9 +27,73 @@ permissions:
   pull-requests: write
 
 jobs:
+  validate-conditions:
+    name: Validate Run Conditions
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.check.outputs.should-run }}
+      next-version: ${{ steps.check.outputs.next-version }}
+      release-branch: ${{ steps.check.outputs.release-branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Check Release Conditions
+        id: check
+        run: |
+          # Read version from config
+          NEXT_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          echo "next-version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          
+          RELEASE_BRANCH="${NEXT_VERSION/%.0/.x}"
+          echo "release-branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
+          
+          SHOULD_RUN="false"
+          
+          # Check if tag already exists
+          if git tag -l | grep -q "^$NEXT_VERSION$"; then
+            echo "❌ Tag $NEXT_VERSION already exists" >> $GITHUB_STEP_SUMMARY
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Get current branch
+          CURRENT_BRANCH="${{ github.ref_name }}"
+          
+          # Condition 1: If triggered from main branch, version must end with .0
+          if [[ "$CURRENT_BRANCH" == "main" ]]; then
+            if [[ "$NEXT_VERSION" =~ \.0$ ]]; then
+              SHOULD_RUN="true"
+            else
+              echo "❌ Main branch requires .0 version, got $NEXT_VERSION" >> $GITHUB_STEP_SUMMARY
+              SHOULD_RUN="false"
+            fi
+          # Condition 2: If version doesn't end with .0, branch must match d+.d+.x format
+          elif [[ ! "$NEXT_VERSION" =~ \.0$ ]]; then
+            if [[ "$CURRENT_BRANCH" =~ ^[0-9]+\.[0-9]+\.x$ ]]; then
+              SHOULD_RUN="true"
+            else
+              echo "❌ Non-.0 version requires branch format d+.d+.x, got $CURRENT_BRANCH" >> $GITHUB_STEP_SUMMARY
+              SHOULD_RUN="false"
+            fi
+          # Condition 3: .0 version on non-main branch - not allowed
+          else
+            echo "❌ .0 version ($NEXT_VERSION) only allowed on main branch, got $CURRENT_BRANCH" >> $GITHUB_STEP_SUMMARY
+            SHOULD_RUN="false"
+          fi
+          
+          echo "should-run=$SHOULD_RUN" >> $GITHUB_OUTPUT
+          
+          if [[ "$SHOULD_RUN" == "false" ]]; then
+            echo "🛑 Conditions not met, skipping release steps" >> $GITHUB_STEP_SUMMARY
+          fi
+
   release-feature-freeze-ceremony:
     name: Release - Feature Freeze
     runs-on: ubuntu-latest
+    needs: validate-conditions
+    if: needs.validate-conditions.outputs.should-run == 'true'
     environment:
       name: Release Ceremonies
 
