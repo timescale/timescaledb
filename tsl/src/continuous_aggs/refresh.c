@@ -1121,6 +1121,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			WHERE \
 				hypertable_id = $1 \
 				AND dimension_id = $2 \
+				AND range_end >= range_start \
 			ORDER BY \
 				%s \
 		), \
@@ -1132,6 +1133,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 				_timescaledb_catalog.continuous_aggs_materialization_invalidation_log \
 			WHERE \
 				materialization_id = $3 \
+				AND greatest_modified_value >= lowest_modified_value \
 			UNION ALL \
 			SELECT \
 				pg_catalog.min(lowest_modified_value) AS lowest_modified_value, \
@@ -1140,6 +1142,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 				_timescaledb_catalog.continuous_aggs_hypertable_invalidation_log \
 			WHERE \
 				hypertable_id = $1 \
+				AND greatest_modified_value >= lowest_modified_value \
 		) \
 		SELECT \
 			refresh_start AS start, \
