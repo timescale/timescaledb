@@ -564,6 +564,12 @@ bloom1_contains(PG_FUNCTION_ARGS)
 #define ST_DEFINE
 #include <lib/sort_template.h>
 
+/*
+ * Checks whether any element of the given array can be present in the given
+ * bloom filter. This is used for predicate pushdown for x = any(array[...]).
+ * The SQL signature is:
+ * _timescaledb_functions.bloom1_contains_any(bloom1, anyarray)
+ */
 Datum
 bloom1_contains_any(PG_FUNCTION_ARGS)
 {
@@ -608,7 +614,7 @@ bloom1_contains_any(PG_FUNCTION_ARGS)
 
 	/*
 	 * Calculate the per-item base hashes that will be used for computing the
-	 * individual bloom filter bit offsets. We can reuse the "values" space to
+	 * individual bloom filter bit offsets. We can reuse the "items" space to
 	 * avoid more allocations, but have to allocate as a fallback on 32-bit
 	 * systems.
 	 */
