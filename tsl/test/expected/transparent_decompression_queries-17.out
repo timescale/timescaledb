@@ -55,7 +55,7 @@ select * from test_chartab order by mac_id , ts limit 2;
 
 VACUUM ANALYZE test_chartab;
 -- test constraintawareappend sort node handling
-SET work_mem to '8MB';
+SET work_mem to '16MB';
 SET enable_hashagg TO false;
 SET timescaledb.enable_chunkwise_aggregation TO false;
 SET max_parallel_workers_per_gather = 0;
