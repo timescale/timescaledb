@@ -30,23 +30,16 @@ jobs:
   validate-conditions:
     name: Validate Run Conditions
     runs-on: ubuntu-latest
-    outputs:
-      should-run: ${{ steps.check.outputs.should-run }}
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
       - name: Check Release Conditions
-        id: check
         run: |
           NEXT_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
           RELEASE_BRANCH="${NEXT_VERSION/%.[0-9]/.x}"
-          SHOULD_RUN="true"
-
-          # Set outputs early
-          echo "next-version=$NEXT_VERSION" >> $GITHUB_OUTPUT
-          echo "release-branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
           
           echo "Checking run conditions for release: $NEXT_VERSION" >> $GITHUB_STEP_SUMMARY
           echo "Current branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
@@ -56,32 +49,27 @@ jobs:
           # Condition: version tag can not exist
           if git tag -l | grep -q "^$NEXT_VERSION$"; then
             echo "❌ \`$NEXT_VERSION\` tag already exists" >> $GITHUB_STEP_SUMMARY
-            echo "should-run=false" >> $GITHUB_OUTPUT
             exit 1
           fi
 
           # Condition: minor releases (.0) must be triggered from the main branch
           if [[ "$NEXT_VERSION" =~ \.0$ ]] && [[ "${{ github.ref_name }}" != "main" ]]; then
             echo "❌ \`main\` branch requires minor version release, got $NEXT_VERSION" >> $GITHUB_STEP_SUMMARY
-            SHOULD_RUN="false"
             exit 1
           fi
 
           # Condition: patch releases must be triggered from the release branch
           if [[ ! "$NEXT_VERSION" =~ \.0$ ]] && [[ "${{ github.ref_name }}" != "$RELEASE_BRANCH" ]]; then
             echo "❌ the patch release \`$NEXT_VERSION\` must be trigger with from the release branch \`$RELEASE_BRANCH\`, got ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-            SHOULD_RUN="false"
             exit 1
           fi
 
           echo "✅ All release conditions satisfied for \`$NEXT_RELEASE\`" >> $GITHUB_STEP_SUMMARY
-          echo "should-run=true" >> $GITHUB_OUTPUT
 
   release-feature-freeze-ceremony:
     name: Release - Feature Freeze
     runs-on: ubuntu-latest
     needs: validate-conditions
-    if: needs.validate-conditions.outputs.should-run == 'true'
     environment:
       name: Release Ceremonies
 
