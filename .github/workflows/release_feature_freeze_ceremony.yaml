@@ -3,8 +3,14 @@ name: Release - Feature Freeze Ceremony
 #
 # Feature Freeze
 # 
-# prereq: needs approval from another person to run the action (environment)
-#
+# prereqs: 
+# 0. needs approval from another person to run the action (environment)
+# 1. ensure the correct branch is used to execute the action
+#   a. if the run was triggered from the `main` branch, the NEXT_VERSION must be a new minor (end with a .0)
+#   b. if NEXT_VERSION is a patch release, then the branch the action was triggered on must be a release branch: `^[0-9]+\.[0-9]+\.x$`
+# 2. ensure the next version does not exist as tag yet
+# 
+# Tasks
 # 0. bump minor -dev version in version.config on main, if and only if it's a .0 release
 # 1. creates the release branch X.Y.x, if and if the branch does not exist yet
 # 2. generates CHANGELOG and opens PR for it
@@ -21,9 +27,49 @@ permissions:
   pull-requests: write
 
 jobs:
+  validate-conditions:
+    name: Validate Run Conditions
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Check Release Conditions
+        run: |
+          NEXT_VERSION=$(head -1 version.config | cut -d ' ' -f 3 | cut -d '-' -f 1)
+          RELEASE_BRANCH="${NEXT_VERSION/%.[0-9]/.x}"
+          
+          echo "Checking run conditions for release: $NEXT_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "Current branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "Expected release branch: $RELEASE_BRANCH" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Condition: version tag can not exist
+          if git tag -l | grep -q "^$NEXT_VERSION$"; then
+            echo "❌ \`$NEXT_VERSION\` tag already exists" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Condition: minor releases (.0) must be triggered from the main branch
+          if [[ "$NEXT_VERSION" =~ \.0$ ]] && [[ "${{ github.ref_name }}" != "main" ]]; then
+            echo "❌ for minor releases, \`$NEXT_VERSION\` the \`main\` branch is required, but got \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          # Condition: patch releases must be triggered from the release branch
+          if [[ ! "$NEXT_VERSION" =~ \.0$ ]] && [[ "${{ github.ref_name }}" != "$RELEASE_BRANCH" ]]; then
+            echo "❌ the patch releases, \`$NEXT_VERSION\` the action must be started from the release branch \`$RELEASE_BRANCH\`, but got \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+          echo "✅ All release conditions satisfied for \`$NEXT_RELEASE\`" >> $GITHUB_STEP_SUMMARY
+
   release-feature-freeze-ceremony:
     name: Release - Feature Freeze
     runs-on: ubuntu-latest
+    needs: validate-conditions
     environment:
       name: Release Ceremonies
 
