@@ -45,6 +45,9 @@ explain (analyze, costs off, timing off, summary off)
 select * from saop where segmentby = any(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
+select * from saop where '1' = any(array[segmentby, segmentby]);
+
+explain (analyze, costs off, timing off, summary off)
 select * from saop where with_minmax = any(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
@@ -76,6 +79,9 @@ select * from saop where with_bloom = any(array[stable_lower(segmentby), stable_
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[]::text[]);
+
+explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = any(null::text[]);
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[null, null]);
@@ -160,6 +166,9 @@ execute array_param(array['1', '10']);
 explain (analyze, costs off, timing off, summary off)
 execute array_param(array[]::text[]);
 
+explain (analyze, costs off, timing off, summary off)
+execute array_param(null::text[]);
+
 -- Custom plans.
 set plan_cache_mode = force_custom_plan;
 
@@ -168,5 +177,8 @@ execute array_param(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
 execute array_param(array[]::text[]);
+
+explain (analyze, costs off, timing off, summary off)
+execute array_param(null::text[]);
 
 reset timescaledb.enable_chunk_append;

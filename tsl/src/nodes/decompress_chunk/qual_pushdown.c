@@ -38,6 +38,8 @@ typedef struct QualPushdownContext
 	bool needs_recheck;
 } QualPushdownContext;
 
+static Node *qual_pushdown_mutator(Node *node, QualPushdownContext *context);
+
 static QualPushdownContext
 copy_context(const QualPushdownContext *source)
 {
@@ -491,6 +493,126 @@ pushdown_op_to_segment_meta_bloom1(QualPushdownContext *context, OpExpr *orig_op
 								 COERCE_EXPLICIT_CALL);
 }
 
+/*
+ * Try to transform x = any(array[]) into bloom1_contains_any(bloom_x, array[]).
+ */
+static void *
+pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
+{
+	/*
+	 * This always requires rechecking the decompressed data.
+	 */
+	context->needs_recheck = true;
+
+	if (!orig_saop->useOr)
+	{
+		context->can_pushdown = false;
+		return orig_saop;
+	}
+
+	List *expr_args = orig_saop->args;
+	if (list_length(expr_args) != 2)
+	{
+		context->can_pushdown = false;
+		return orig_saop;
+	}
+
+	Expr *orig_leftop = linitial(expr_args);
+	Expr *orig_rightop = lsecond(expr_args);
+
+	if (IsA(orig_leftop, RelabelType))
+		orig_leftop = ((RelabelType *) orig_leftop)->arg;
+	if (IsA(orig_rightop, RelabelType))
+		orig_rightop = ((RelabelType *) orig_rightop)->arg;
+
+	/*
+	 * For scalar array operation, we expect a var on the left side.
+	 */
+	AttrNumber bloom1_attno = InvalidAttrNumber;
+	expr_fetch_bloom1_metadata(context, orig_leftop, &bloom1_attno);
+	if (bloom1_attno == InvalidAttrNumber)
+	{
+		/* No metadata for left operand. */
+		context->can_pushdown = false;
+		return orig_saop;
+	}
+
+	Var *var_with_segment_meta = castNode(Var, orig_leftop);
+
+	/*
+	 * Play it safe and don't push down if the operator collation doesn't match
+	 * the column collation.
+	 */
+	Oid op_collation = orig_saop->inputcollid;
+	if (var_with_segment_meta->varcollid != op_collation)
+	{
+		context->can_pushdown = false;
+		return orig_saop;
+	}
+
+	/*
+	 * We cannot use bloom filters for non-deterministic collations.
+	 */
+	if (OidIsValid(op_collation) && !get_collation_isdeterministic(op_collation))
+	{
+		context->can_pushdown = false;
+		return orig_saop;
+	}
+
+	/*
+	 * We only support hashable equality operators.
+	 */
+	const Oid op_oid = orig_saop->opno;
+	TypeCacheEntry *tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
+	const int strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
+	if (strategy != HTEqualStrategyNumber)
+	{
+		context->can_pushdown = false;
+		return orig_saop;
+	}
+
+	/*
+	 * The hash equality operators are supposed to be strict.
+	 */
+	Assert(op_strict(op_oid));
+
+	/*
+	 * Check if the righthand expression is safe to push down. We cannot combine
+	 * it with the original operator if there can be false negatives.
+	 */
+	QualPushdownContext tmp_context = copy_context(context);
+	Expr *pushed_down_rightop = (Expr *) qual_pushdown_mutator((Node *) orig_rightop, &tmp_context);
+	if (!tmp_context.can_pushdown || tmp_context.needs_recheck)
+	{
+		context->can_pushdown = false;
+		return orig_saop;
+	}
+	Assert(pushed_down_rightop != NULL);
+
+	/*
+	 * var = any(array) implies bloom1_contains_any(var_bloom, array).
+	 */
+	Var *bloom_var = makeVar(context->compressed_rel->relid,
+							 bloom1_attno,
+							 ts_custom_type_cache_get(CUSTOM_TYPE_BLOOM1)->type_oid,
+							 -1,
+							 InvalidOid,
+							 0);
+
+	Oid func = LookupFuncName(list_make2(makeString("_timescaledb_functions"),
+										 makeString("bloom1_contains_any")),
+							  /* nargs = */ -1,
+							  /* argtypes = */ (void *) -1,
+							  /* missing_ok = */ false);
+
+	return makeFuncExpr(func,
+						BOOLOID,
+						list_make2(bloom_var, pushed_down_rightop),
+						/* funccollid = */ InvalidOid,
+						/* inputcollid = */ InvalidOid,
+						COERCE_EXPLICIT_CALL);
+}
+
 static bool
 contain_volatile_functions_checker(Oid func_id, void *context)
 {
@@ -653,6 +775,23 @@ qual_pushdown_mutator(Node *orig_node, QualPushdownContext *context)
 			if (tmp_context.can_pushdown && !tmp_context.needs_recheck)
 			{
 				return pushed_down;
+			}
+
+			ScalarArrayOpExpr *saop = castNode(ScalarArrayOpExpr, orig_node);
+
+			/*
+			 * Try to transform x = any(array[]) into
+			 * bloom1_contains_any(bloom_x, array[]).
+			 */
+			if (ts_guc_enable_sparse_index_bloom)
+			{
+				tmp_context = *context;
+				pushed_down = pushdown_saop_bloom1(&tmp_context, saop);
+				if (tmp_context.can_pushdown)
+				{
+					context->needs_recheck |= tmp_context.needs_recheck;
+					return pushed_down;
+				}
 			}
 
 			/*

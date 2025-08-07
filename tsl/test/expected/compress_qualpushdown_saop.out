@@ -52,6 +52,21 @@ select * from saop where segmentby = any(array['1', '10']);
 (7 rows)
 
 explain (analyze, costs off, timing off, summary off)
+select * from saop where '1' = any(array[segmentby, segmentby]);
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Append (actual rows=4348 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2174 loops=1)
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3 loops=1)
+               Filter: ('1'::text = ANY (ARRAY[segmentby, segmentby]))
+               Rows Removed by Filter: 66
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2174 loops=1)
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+               Filter: ('1'::text = ANY (ARRAY[segmentby, segmentby]))
+               Rows Removed by Filter: 66
+(9 rows)
+
+explain (analyze, costs off, timing off, summary off)
 select * from saop where with_minmax = any(array['1', '10']);
                                    QUERY PLAN                                    
 ---------------------------------------------------------------------------------
@@ -68,18 +83,22 @@ select * from saop where with_minmax = any(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array['1', '10']);
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
  Append (actual rows=270 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=135 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 49865
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+         Rows Removed by Filter: 47604
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, '{1,10}'::text[])
+               Rows Removed by Filter: 13
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=135 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 49865
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(9 rows)
+         Rows Removed by Filter: 47604
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, '{1,10}'::text[])
+               Rows Removed by Filter: 13
+(13 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = all(array['1', '10']);
@@ -121,33 +140,41 @@ select * from saop where with_minmax < all(array['1', '10']);
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[segmentby, '10']);
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=249 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=125 loops=1)
          Filter: (with_bloom = ANY (ARRAY[segmentby, '10'::text]))
-         Rows Removed by Filter: 49875
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+         Rows Removed by Filter: 45614
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=54 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, ARRAY[segmentby, '10'::text])
+               Rows Removed by Filter: 15
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=124 loops=1)
          Filter: (with_bloom = ANY (ARRAY[segmentby, '10'::text]))
-         Rows Removed by Filter: 49876
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(9 rows)
+         Rows Removed by Filter: 47441
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=55 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, ARRAY[segmentby, '10'::text])
+               Rows Removed by Filter: 14
+(13 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[segmentby, null]);
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=56 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=29 loops=1)
          Filter: (with_bloom = ANY (ARRAY[segmentby, NULL::text]))
-         Rows Removed by Filter: 49971
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+         Rows Removed by Filter: 20493
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=23 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, ARRAY[segmentby, NULL::text])
+               Rows Removed by Filter: 46
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=27 loops=1)
          Filter: (with_bloom = ANY (ARRAY[segmentby, NULL::text]))
-         Rows Removed by Filter: 49973
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(9 rows)
+         Rows Removed by Filter: 24147
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=25 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, ARRAY[segmentby, NULL::text])
+               Rows Removed by Filter: 44
+(13 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[segmentby, null, with_minmax]);
@@ -166,19 +193,23 @@ select * from saop where with_bloom = any(array[segmentby, null, with_minmax]);
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[stable_lower(segmentby), stable_lower('1')]);
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on saop (actual rows=121 loops=1)
    Chunks excluded during startup: 0
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=61 loops=1)
          Filter: (with_bloom = ANY (ARRAY[stable_lower(segmentby), stable_lower('1'::text)]))
-         Rows Removed by Filter: 49939
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+         Rows Removed by Filter: 36982
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=42 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, ARRAY[stable_lower(segmentby), stable_lower('1'::text)])
+               Rows Removed by Filter: 27
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=60 loops=1)
          Filter: (with_bloom = ANY (ARRAY[stable_lower(segmentby), stable_lower('1'::text)]))
-         Rows Removed by Filter: 49940
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(10 rows)
+         Rows Removed by Filter: 36461
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=39 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, ARRAY[stable_lower(segmentby), stable_lower('1'::text)])
+               Rows Removed by Filter: 30
+(14 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[stable_lower(segmentby), stable_lower('1'), volatile_lower('10')]);
@@ -205,19 +236,38 @@ select * from saop where with_bloom = any(array[]::text[]);
 (2 rows)
 
 explain (analyze, costs off, timing off, summary off)
+select * from saop where with_bloom = any(null::text[]);
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Append (actual rows=0 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (with_bloom = ANY (NULL::text[]))
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, NULL::text[])
+               Rows Removed by Filter: 69
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (with_bloom = ANY (NULL::text[]))
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, NULL::text[])
+               Rows Removed by Filter: 69
+(11 rows)
+
+explain (analyze, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array[null, null]);
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=0 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{NULL,NULL}'::text[]))
-         Rows Removed by Filter: 50000
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, '{NULL,NULL}'::text[])
+               Rows Removed by Filter: 69
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{NULL,NULL}'::text[]))
-         Rows Removed by Filter: 50000
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(9 rows)
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, '{NULL,NULL}'::text[])
+               Rows Removed by Filter: 69
+(11 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from saop where segmentby = any(array[with_bloom, with_minmax]);
@@ -550,50 +600,77 @@ set timescaledb.enable_chunk_append to off;
 set plan_cache_mode = force_generic_plan;
 explain (analyze, costs off, timing off, summary off)
 execute array_param(array['1', '10']);
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
  Append (actual rows=270 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=135 loops=1)
          Vectorized Filter: (with_bloom = ANY ($1))
-         Rows Removed by Filter: 49865
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+         Rows Removed by Filter: 47604
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
+               Rows Removed by Filter: 13
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=135 loops=1)
          Vectorized Filter: (with_bloom = ANY ($1))
-         Rows Removed by Filter: 49865
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(9 rows)
+         Rows Removed by Filter: 47604
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
+               Rows Removed by Filter: 13
+(13 rows)
 
 explain (analyze, costs off, timing off, summary off)
 execute array_param(array[]::text[]);
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
  Append (actual rows=0 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
          Vectorized Filter: (with_bloom = ANY ($1))
-         Rows Removed by Filter: 50000
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
+               Rows Removed by Filter: 69
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0 loops=1)
          Vectorized Filter: (with_bloom = ANY ($1))
-         Rows Removed by Filter: 50000
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(9 rows)
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
+               Rows Removed by Filter: 69
+(11 rows)
+
+explain (analyze, costs off, timing off, summary off)
+execute array_param(null::text[]);
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Append (actual rows=0 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (with_bloom = ANY ($1))
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
+               Rows Removed by Filter: 69
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (with_bloom = ANY ($1))
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
+               Rows Removed by Filter: 69
+(11 rows)
 
 -- Custom plans.
 set plan_cache_mode = force_custom_plan;
 explain (analyze, costs off, timing off, summary off)
 execute array_param(array['1', '10']);
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
  Append (actual rows=270 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=135 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 49865
-         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=69 loops=1)
+         Rows Removed by Filter: 47604
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, '{1,10}'::text[])
+               Rows Removed by Filter: 13
    ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=135 loops=1)
          Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
-         Rows Removed by Filter: 49865
-         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69 loops=1)
-(9 rows)
+         Rows Removed by Filter: 47604
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, '{1,10}'::text[])
+               Rows Removed by Filter: 13
+(13 rows)
 
 explain (analyze, costs off, timing off, summary off)
 execute array_param(array[]::text[]);
@@ -602,5 +679,22 @@ execute array_param(array[]::text[]);
  Result (actual rows=0 loops=1)
    One-Time Filter: false
 (2 rows)
+
+explain (analyze, costs off, timing off, summary off)
+execute array_param(null::text[]);
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Append (actual rows=0 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (with_bloom = ANY (NULL::text[]))
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, NULL::text[])
+               Rows Removed by Filter: 69
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=0 loops=1)
+         Vectorized Filter: (with_bloom = ANY (NULL::text[]))
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=0 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, NULL::text[])
+               Rows Removed by Filter: 69
+(11 rows)
 
 reset timescaledb.enable_chunk_append;

@@ -557,6 +557,144 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(true);
 }
 
+#define ST_SORT sort_hashes
+#define ST_ELEMENT_TYPE uint64
+#define ST_COMPARE(a, b) ((*(a) > *(b)) - (*(a) < *(b)))
+#define ST_SCOPE static
+#define ST_DEFINE
+#include <lib/sort_template.h>
+
+Datum
+bloom1_contains_any(PG_FUNCTION_ARGS)
+{
+	Bloom1ContainsContext *context =
+		bloom1_contains_context_prepare(fcinfo, /* use_element_type = */ true);
+
+	/*
+	 * This function is not strict, because if we don't have a bloom filter, this
+	 * means the condition can potentially be true.
+	 */
+	struct varlena *bloom = context->current_row_bloom;
+	if (bloom == NULL)
+	{
+		PG_RETURN_BOOL(true);
+	}
+
+	/*
+	 * A null value cannot match the equality condition, although this probably
+	 * should be optimized away by the planner.
+	 */
+	if (PG_ARGISNULL(1))
+	{
+		PG_RETURN_BOOL(false);
+	}
+
+	int num_items;
+	Datum *items;
+	bool *nulls;
+	deconstruct_array(PG_GETARG_ARRAYTYPE_P(1),
+					  context->element_type,
+					  context->element_typlen,
+					  context->element_typbyval,
+					  context->element_typalign,
+					  &items,
+					  &nulls,
+					  &num_items);
+
+	if (num_items == 0)
+	{
+		PG_RETURN_BOOL(false);
+	}
+
+	/*
+	 * Calculate the per-item base hashes that will be used for computing the
+	 * individual bloom filter bit offsets. We can reuse the "values" space to
+	 * avoid more allocations, but have to allocate as a fallback on 32-bit
+	 * systems.
+	 */
+#if FLOAT8PASSBYVAL
+	uint64 *item_base_hashes = items;
+#else
+	uint64 *item_base_hashes = palloc(sizeof(uint64) * num_items);
+#endif
+
+	FmgrInfo *finfo = context->hash_function_finfo;
+	PGFunction hash_fn = context->hash_function_pointer;
+
+	int valid = 0;
+	for (int i = 0; i < num_items; i++)
+	{
+		if (nulls[i])
+		{
+			/*
+			 * A null value cannot match the equality condition.
+			 */
+			continue;
+		}
+
+		item_base_hashes[valid++] = calculate_hash(hash_fn, finfo, items[i]);
+	}
+
+	if (valid == 0)
+	{
+		/*
+		 * No non-null elements.
+		 */
+		PG_RETURN_BOOL(false);
+	}
+
+	/*
+	 * Sort the hashes for cache-friendly probing.
+	 */
+	sort_hashes(item_base_hashes, valid);
+
+	/*
+	 * Get the bloom filter parameters.
+	 */
+	const char *words_buf = bloom1_words_buf(bloom);
+	const uint32 num_bits = bloom1_num_bits(bloom);
+
+	/* Must be a power of two. */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
+
+	/* Must be >= 64 bits. */
+	CheckCompressedData(num_bits >= 64);
+
+	const uint32 num_word_bits = sizeof(*words_buf) * 8;
+	Assert(num_bits % num_word_bits == 0);
+	const uint32 log2_word_bits = pg_leftmost_one_pos32(num_word_bits);
+	Assert(num_word_bits == (1ULL << log2_word_bits));
+
+	const uint32 word_mask = num_word_bits - 1;
+	Assert((word_mask >> num_word_bits) == 0);
+
+	const uint32 absolute_mask = num_bits - 1;
+
+	/* Probe the bloom filter. */
+	for (int item_index = 0; item_index < valid; item_index++)
+	{
+		const uint64 base_hash = item_base_hashes[item_index];
+		bool match = true;
+		for (int i = 0; i < BLOOM1_HASHES; i++)
+		{
+			const uint32 absolute_bit_index = bloom1_get_one_offset(base_hash, i) & absolute_mask;
+			const uint32 word_index = absolute_bit_index >> log2_word_bits;
+			const uint32 word_bit_index = absolute_bit_index & word_mask;
+			if ((words_buf[word_index] & (1ULL << word_bit_index)) == 0)
+			{
+				match = false;
+				break;
+			}
+		}
+		if (match)
+		{
+			PG_RETURN_BOOL(true);
+		}
+	}
+
+	PG_RETURN_BOOL(false);
+}
+
 static int
 bloom1_varlena_alloc_size(int num_bits)
 {
