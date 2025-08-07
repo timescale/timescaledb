@@ -12,7 +12,7 @@ FROM_VERSION=${FROM_VERSION:-$(grep '^previous_version ' version.config | awk '{
 TO_VERSION=${TO_VERSION:-$(grep '^version ' version.config | awk '{ print $3 }')}
 
 TEST_REPAIR=${TEST_REPAIR:-false}
-TEST_VERSION=${TEST_VERSION:-v9}
+TEST_VERSION=${TEST_VERSION:-v10}
 
 OUTPUT_DIR=${OUTPUT_DIR:-update_test/${FROM_VERSION}_to_${TO_VERSION}}
 PGDATA="${OUTPUT_DIR}/data"

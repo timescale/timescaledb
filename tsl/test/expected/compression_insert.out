@@ -408,9 +408,6 @@ SELECT create_hypertable('test_gen', 'id', chunk_time_interval=>10);
 (1 row)
 
 ALTER TABLE test_gen set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_gen" is set to ""
-NOTICE:  default order by for hypertable "test_gen" is set to "id DESC"
 INSERT into test_gen (payload) SELECT generate_series(1,15) ;
 SELECT max(id) from test_gen;
  max 
@@ -484,7 +481,6 @@ INSERT INTO trigger_test(time, device, value,dropcol1) SELECT '2000-01-01',1,1,1
 -- drop the column before we compress
 ALTER TABLE trigger_test DROP COLUMN dropcol1;
 ALTER TABLE trigger_test SET (timescaledb.compress,timescaledb.compress_segmentby='device');
-NOTICE:  default order by for hypertable "trigger_test" is set to ""time" DESC"
 SELECT compress_chunk(c) FROM show_chunks('trigger_test') c;
               compress_chunk              
 ------------------------------------------
@@ -920,9 +916,6 @@ SELECT * FROM cagg_conditions ORDER BY 1;
 (1 row)
 
 ALTER TABLE conditions SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "conditions" is set to ""
-NOTICE:  default order by for hypertable "conditions" is set to "timec DESC"
 SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
               compress_chunk              
 ------------------------------------------
@@ -967,9 +960,6 @@ SELECT table_name FROM create_hypertable('direct_insert','time');
 (1 row)
 
 ALTER TABLE direct_insert SET(timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "direct_insert" is set to ""
-NOTICE:  default order by for hypertable "direct_insert" is set to ""time" DESC"
 SELECT
   format('%I.%I', ht.schema_name, ht.table_name) AS "TABLENAME"
 FROM
@@ -1104,7 +1094,6 @@ SELECT table_name FROM create_hypertable('multi_unique', 'time');
 (1 row)
 
 ALTER TABLE multi_unique SET (timescaledb.compress, timescaledb.compress_segmentby = 'u1, u2');
-NOTICE:  default order by for hypertable "multi_unique" is set to ""time" DESC"
 INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0);
 SELECT count(compress_chunk(c)) FROM show_chunks('multi_unique') c;
  count 
@@ -1134,7 +1123,6 @@ SELECT table_name FROM create_hypertable('unique_null', 'time');
 (1 row)
 
 ALTER TABLE unique_null SET (timescaledb.compress, timescaledb.compress_segmentby = 'u1, u2');
-NOTICE:  default order by for hypertable "unique_null" is set to ""time" DESC"
 INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0);
 SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
  count 

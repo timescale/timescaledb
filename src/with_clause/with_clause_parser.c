@@ -137,6 +137,62 @@ ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, S
 	return results;
 }
 
+/*
+ * This function handles parsing of WITH clauses for ALTER TABLE RESET.
+ * Unlike ts_with_clauses_parse, it does not parse any option values,
+ * as RESET clauses only include option names without associated values.
+ */
+WithClauseResult *
+ts_with_clauses_parse_reset(const List *def_elems, const WithClauseDefinition *args, Size nargs)
+{
+	ListCell *cell;
+	WithClauseResult *results = palloc0(sizeof(*results) * nargs);
+	Size i;
+
+	for (i = 0; i < nargs; i++)
+	{
+		results[i].definition = &args[i];
+		results[i].parsed = args[i].default_val;
+		results[i].is_default = true;
+	}
+
+	foreach (cell, def_elems)
+	{
+		DefElem *def = (DefElem *) lfirst(cell);
+		bool argument_recognized = false;
+
+		for (i = 0; i < nargs; i++)
+		{
+			for (int j = 0; args[i].arg_names[j] != NULL; ++j)
+			{
+				if (pg_strcasecmp(def->defname, args[i].arg_names[j]) == 0)
+				{
+					argument_recognized = true;
+
+					if (!results[i].is_default)
+						ereport(ERROR,
+								(errcode(ERRCODE_AMBIGUOUS_PARAMETER),
+								 errmsg("duplicate parameter \"%s.%s\"",
+										def->defnamespace,
+										def->defname)));
+
+					results[i].is_default = false;
+					break;
+				}
+			}
+		}
+
+		if (!argument_recognized)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("unrecognized parameter \"%s.%s\"", def->defnamespace, def->defname),
+					 errhint("Valid timescaledb parameters are: %s",
+							 ts_with_clause_definition_names(args, nargs))));
+	}
+
+	return results;
+}
+
 extern TSDLLEXPORT char *
 ts_with_clause_result_deparse_value(const WithClauseResult *result)
 {

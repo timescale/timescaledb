@@ -24,7 +24,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
-NOTICE:  default order by for hypertable "t" is set to ""
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
              compress_chunk             
@@ -137,7 +136,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
-NOTICE:  default order by for hypertable "t" is set to ""
 alter table t add column a double precision default 7.1;
 insert into t (ts,c1) values (4,4);
 insert into t (ts,c1) values (5,5);
@@ -237,7 +235,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set(timescaledb.compress, timescaledb.compress_segmentby = 'ts');
-NOTICE:  default order by for hypertable "t" is set to ""
 insert into t (ts) values (1);
 alter table t add column c1 double precision default 42.99;
 update t set c1 = null;
@@ -324,7 +321,6 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
-NOTICE:  default order by for hypertable "t" is set to ""
 insert into t (ts,c1) values (6,6);
 select compress_chunk(show_chunks('t'));
               compress_chunk              

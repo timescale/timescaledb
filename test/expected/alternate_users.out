@@ -59,9 +59,8 @@ CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER
 GRANT CREATE ON SCHEMA "one_Partition" TO :ROLE_DEFAULT_PERM_USER_2;
 --test creating and using schema as non-superuser
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
-\dt
-                 List of relations
- Schema |     Name      | Type  |       Owner       
+SELECT * FROM test.relation WHERE schema='public' ORDER BY schema, name;
+ schema |     name      | type  |       owner       
 --------+---------------+-------+-------------------
  public | one_Partition | table | default_perm_user
 (1 row)

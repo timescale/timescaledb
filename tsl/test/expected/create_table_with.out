@@ -262,9 +262,6 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 
 INSERT INTO t13 SELECT '2025-01-01','d1',0.1;
 SELECT compress_chunk(show_chunks('t13'));
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t13" is set to ""
-NOTICE:  default order by for hypertable "t13" is set to ""time" DESC"
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_43_4_chunk
@@ -292,55 +289,54 @@ ROLLBACK;
 BEGIN;
 CREATE TABLE t14(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.order_by='value');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
--------+----------------+-----------+--------------+--------------+--------------------
- t14   |                |           | {value,time} | {f,t}        | {f,t}
+ relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
+-------+----------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
+ t14   |                |           | {value,time} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 ROLLBACK;
 BEGIN;
 CREATE TABLE t15(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.order_by='time');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
--------+----------------+-----------+---------+--------------+--------------------
- t15   |                |           | {time}  | {f}          | {f}
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+-------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
+ t15   |                |           | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 ROLLBACK;
 BEGIN;
 CREATE TABLE t16(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.segment_by='device');
-NOTICE:  default order by for hypertable "t16" is set to ""time" DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
--------+----------------+-----------+---------+--------------+--------------------
- t16   |                | {device}  | {time}  | {t}          | {t}
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+---------+--------------+--------------------+-------
+ t16   |                | {device}  |         |              |                    | 
 (1 row)
 
 ROLLBACK;
 BEGIN;
 CREATE TABLE t17(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.segment_by='device', tsdb.order_by='time,value');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
--------+----------------+-----------+--------------+--------------+--------------------
- t17   |                | {device}  | {time,value} | {f,f}        | {f,f}
+ relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
+-------+----------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
+ t17   |                | {device}  | {time,value} | {f,f}        | {f,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}]
 (1 row)
 
 ROLLBACK;
 BEGIN;
 CREATE TABLE t18(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.segmentby='device', tsdb.orderby='time,value');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
--------+----------------+-----------+--------------+--------------+--------------------
- t18   |                | {device}  | {time,value} | {f,f}        | {f,f}
+ relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
+-------+----------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
+ t18   |                | {device}  | {time,value} | {f,f}        | {f,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}]
 (1 row)
 
 ROLLBACK;
 BEGIN;
 CREATE TABLE t18(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.compress_segmentby='device', tsdb.compress_orderby='time,value');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
--------+----------------+-----------+--------------+--------------+--------------------
- t18   |                | {device}  | {time,value} | {f,f}        | {f,f}
+ relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
+-------+----------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
+ t18   |                | {device}  | {time,value} | {f,f}        | {f,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}]
 (1 row)
 
 ROLLBACK;
@@ -399,3 +395,111 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 (1 row)
 
 ROLLBACK;
+BEGIN;
+CREATE TABLE t25(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't25'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+---------+--------------+--------------------+-------
+ t25   |                |           |         |              |                    | 
+(1 row)
+
+ROLLBACK;
+BEGIN;
+-- don't allow empty orderby
+\set ON_ERROR_STOP 0
+CREATE TABLE t26(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby = '');
+ERROR:  ordering column can not be empty
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't26'::regclass;
+ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK;
+\set ON_ERROR_STOP 1
+-- can allow empty segmentby
+BEGIN;
+CREATE TABLE t27(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.segmentby = '');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't27'::regclass;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+---------+--------------+--------------------+-------
+ t27   |                | {}        |         |              |                    | 
+(1 row)
+
+ROLLBACK;
+-- test configurable bloom and minmax
+BEGIN;
+CREATE TABLE t28(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='time', tsdb.index='bloom(value)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                         index                                                         
+-------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------
+ t28   |                |           | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+(1 row)
+
+ROLLBACK;
+BEGIN;
+CREATE TABLE t29(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='time', tsdb.index='bloom(value),minmax(device)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                       index                                                                                       
+-------+----------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ t29   |                |           | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "minmax", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+(1 row)
+
+ROLLBACK;
+--multi column
+BEGIN;
+CREATE TABLE t30(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='time',tsdb.index='bloom(value),bloom(device)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                      index                                                                                       
+-------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ t30   |                |           | {time}  | {f}          | {f}                | [{"type": "bloom", "column": "value", "source": "config"}, {"type": "bloom", "column": "device", "source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+(1 row)
+
+ROLLBACK;
+--test errors
+\set ON_ERROR_STOP 0
+-- invalid syntax
+BEGIN;
+CREATE TABLE t31(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),bloom(count(device))');
+ERROR:  sparse index bloom's first option must reference a valid column.
+ROLLBACK;
+BEGIN;
+CREATE TABLE t32(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='value,bloom(count(device))');
+ERROR:  unable to parse sparse index option "value,bloom(count(device))"
+ROLLBACK;
+-- duplicate column
+BEGIN;
+CREATE TABLE t33(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),minmax(value)');
+ERROR:  duplicate column name "value"
+ROLLBACK;
+BEGIN;
+CREATE TABLE t34(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),bloom(value)');
+ERROR:  duplicate column name "value"
+ROLLBACK;
+-- invalid column
+BEGIN;
+CREATE TABLE t35(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),bloom(foo)');
+ERROR:  column "foo" does not exist
+ROLLBACK;
+-- same column as orderby
+BEGIN;
+CREATE TABLE t36(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value)');
+ERROR:  the orderby column "value" cannot have a bloom sparse index 
+ROLLBACK;
+BEGIN;
+CREATE TABLE t37(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='minmax(value)');
+ROLLBACK;
+-- same column as segmentby
+BEGIN;
+CREATE TABLE t38(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.segmentby='device', tsdb.index='minmax(device)');
+ERROR:  the segmentby column "device" can not have sparse indexes
+ROLLBACK;
+-- guc disabled
+set timescaledb.enable_sparse_index_bloom to false;
+BEGIN;
+CREATE TABLE t39(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value)');
+ERROR:  Creating bloom sparse index is disabled
+ROLLBACK;
+--no orderby
+BEGIN;
+CREATE TABLE t40(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.index='bloom(value)');
+ERROR:  cannot set sparse index option without orderby option
+ROLLBACK;
+reset timescaledb.enable_sparse_index_bloom;
+\set ON_ERROR_STOP 1

@@ -306,14 +306,6 @@ REINDEX (VERBOSE) INDEX reindex_norm_time_unique_idx;
 SELECT * FROM test.show_constraintsp('_timescaledb_internal._hyper_12%');
 SELECT * FROM reindex_norm;
 
-SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_12_12_chunk');
-SELECT chunk_index_clone::regclass::text
-FROM _timescaledb_functions.chunk_index_clone('_timescaledb_internal."12_3_reindex_test_pkey"'::regclass);
-SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_12_12_chunk');
-SELECT * FROM _timescaledb_functions.chunk_index_replace('_timescaledb_internal."12_3_reindex_test_pkey"'::regclass, '_timescaledb_internal."_hyper_12_12_chunk_12_3_reindex_test_pkey"'::regclass);
-
-SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_12_12_chunk');
-
 CREATE TABLE ht_dropped(time timestamptz, d0 int, d1 int, c0 int, c1 int, c2 int);
 SELECT create_hypertable('ht_dropped','time');
 INSERT INTO ht_dropped(time,c0,c1,c2) SELECT '2000-01-01',1,2,3;

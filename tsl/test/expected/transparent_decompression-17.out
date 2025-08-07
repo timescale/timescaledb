@@ -747,15 +747,18 @@ WHERE time = '2000-01-01 1:00:00+0'
 ORDER BY time,
     device_id
 LIMIT 10;
-                                                                                        QUERY PLAN                                                                                         
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                         QUERY PLAN                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
          Vectorized Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
          Rows Removed by Filter: 3595
-         ->  Index Scan using compress_hyper_5_15_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_5_15_chunk (actual rows=5 loops=1)
-               Index Cond: ((_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
-(6 rows)
+         ->  Sort (actual rows=5 loops=1)
+               Sort Key: compress_hyper_5_15_chunk.device_id
+               Sort Method: quicksort 
+               ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
+                     Filter: ((_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
+(9 rows)
 
 :PREFIX
 SELECT *

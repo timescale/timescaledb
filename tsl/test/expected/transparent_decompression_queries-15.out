@@ -134,32 +134,21 @@ GROUP BY 2, 3;
 -------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=1 loops=1)
    Group Key: merge_sort.device_id, merge_sort.measure_id
-   ->  Custom Scan (ConstraintAwareAppend) (actual rows=380160 loops=1)
-         Hypertable: merge_sort
-         Chunks excluded during startup: 1
-         ->  Merge Append (actual rows=380160 loops=1)
-               Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
-               ->  Sort (actual rows=51839 loops=1)
-                     Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
-                     Sort Method: quicksort 
+   ->  Sort (actual rows=380160 loops=1)
+         Sort Key: merge_sort.device_id, merge_sort.measure_id
+         Sort Method: external merge 
+         ->  Result (actual rows=380160 loops=1)
+               ->  Custom Scan (ChunkAppend) on merge_sort (actual rows=380160 loops=1)
+                     Chunks excluded during startup: 1
                      ->  Index Scan using _hyper_3_6_chunk_merge_sort_time_idx on _hyper_3_6_chunk (actual rows=51839 loops=1)
                            Index Cond: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
-               ->  Sort (actual rows=120960 loops=1)
-                     Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
-                     Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_7_chunk (actual rows=120960 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
-               ->  Sort (actual rows=120960 loops=1)
-                     Sort Key: _hyper_3_8_chunk.device_id, _hyper_3_8_chunk.measure_id
-                     Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_8_chunk (actual rows=120960 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
-               ->  Sort (actual rows=86401 loops=1)
-                     Sort Key: _hyper_3_9_chunk.device_id, _hyper_3_9_chunk.measure_id
-                     Sort Method: quicksort 
                      ->  Seq Scan on _hyper_3_9_chunk (actual rows=86401 loops=1)
                            Filter: ("time" > ('2000-01-10'::cstring)::timestamp without time zone)
-(27 rows)
+(16 rows)
 
 RESET enable_hashagg;
 RESET timescaledb.enable_chunkwise_aggregation;
@@ -190,17 +179,17 @@ WHERE check_equal_228(rtt) ORDER BY ts;
 EXPLAIN (analyze,costs off,timing off,summary off)
 SELECT * from test_chartab
 WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
- Sort (actual rows=1 loops=1)
-   Sort Key: test_chartab.ts
-   Sort Method: quicksort 
-   ->  Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
-         Chunks excluded during startup: 0
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
-               Filter: check_equal_228(rtt)
-               Rows Removed by Filter: 2
-               Vectorized Filter: (ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
+   Order: test_chartab.ts
+   Chunks excluded during startup: 0
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
+         Filter: ((ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone) AND check_equal_228(rtt))
+         Rows Removed by Filter: 2
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: compress_hyper_2_3_chunk._ts_meta_min_1
+               Sort Method: quicksort 
                ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=3 loops=1)
                      Filter: (_ts_meta_min_1 < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone)
 (11 rows)
@@ -214,9 +203,6 @@ SELECT create_hypertable('pseudo','time');
 (1 row)
 
 ALTER TABLE pseudo SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "pseudo" is set to ""
-NOTICE:  default order by for hypertable "pseudo" is set to ""time" DESC"
 INSERT INTO pseudo SELECT '2000-01-01';
 SELECT compress_chunk(show_chunks('pseudo'));
              compress_chunk              

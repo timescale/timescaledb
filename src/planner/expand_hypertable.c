@@ -1177,6 +1177,18 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 }
 
+static bool
+restrictinfo_has_qual(List *restrictions, OpExpr *qual)
+{
+	ListCell *lc_ri;
+	foreach (lc_ri, restrictions)
+	{
+		if (equal(castNode(RestrictInfo, lfirst(lc_ri))->clause, (Expr *) qual))
+			return true;
+	}
+	return false;
+}
+
 void
 propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 {
@@ -1222,8 +1234,6 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 			Expr *left = linitial(qual->args);
 			Expr *right = lsecond(qual->args);
 			OpExpr *propagated;
-			ListCell *lc_ri;
-			bool new_qual = true;
 
 			/*
 			 * check this is Var OP Expr / Expr OP Var
@@ -1250,50 +1260,41 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 			/*
 			 * check if this is a new qual
 			 */
-			foreach (lc_ri, ctx->restrictions)
+			if (restrictinfo_has_qual(ctx->restrictions, propagated))
+				continue;
+
+			Relids relids = pull_varnos(ctx->root, (Node *) propagated);
+			RestrictInfo *restrictinfo;
+
+			restrictinfo = make_restrictinfo_compat(root,
+													(Expr *) propagated,
+													true,
+													false,
+													false,
+													false,
+													false,
+													ctx->root->qual_security_level,
+													relids,
+													NULL,
+													NULL,
+													NULL);
+			ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
+			/*
+			 * since hypertable expansion happens later, the propagated
+			 * constraints will not be pushed down to the actual scans but stay
+			 * as join filter. So we add them either as join filter or to
+			 * baserestrictinfo depending on whether they reference only
+			 * the currently processed relation or multiple relations.
+			 */
+			if (bms_num_members(relids) == 1 && bms_is_member(rel->relid, relids))
 			{
-				if (equal(castNode(RestrictInfo, lfirst(lc_ri))->clause, propagated))
-				{
-					new_qual = false;
-					break;
-				}
+				if (!restrictinfo_has_qual(rel->baserestrictinfo, propagated))
+					rel->baserestrictinfo = lappend(rel->baserestrictinfo, restrictinfo);
 			}
-
-			if (new_qual)
+			else
 			{
-				Relids relids = pull_varnos(ctx->root, (Node *) propagated);
-				RestrictInfo *restrictinfo;
-
-				restrictinfo = make_restrictinfo_compat(root,
-														(Expr *) propagated,
-														true,
-														false,
-														false,
-														false,
-														false,
-														ctx->root->qual_security_level,
-														relids,
-														NULL,
-														NULL,
-														NULL);
-				ctx->restrictions = lappend(ctx->restrictions, restrictinfo);
-				/*
-				 * since hypertable expansion happens later, the propagated
-				 * constraints will not be pushed down to the actual scans but stay
-				 * as join filter. So we add them either as join filter or to
-				 * baserestrictinfo depending on whether they reference only
-				 * the currently processed relation or multiple relations.
-				 */
-				if (bms_num_members(relids) == 1 && bms_is_member(rel->relid, relids))
-				{
-					if (!list_member(rel->baserestrictinfo, restrictinfo))
-						rel->baserestrictinfo = lappend(rel->baserestrictinfo, restrictinfo);
-				}
-				else
-				{
-					root->parse->jointree->quals =
-						(Node *) lappend((List *) root->parse->jointree->quals, propagated);
-				}
+				root->parse->jointree->quals =
+					(Node *) lappend((List *) root->parse->jointree->quals, propagated);
 			}
 		}
 	}
