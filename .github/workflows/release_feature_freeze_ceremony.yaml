@@ -54,13 +54,13 @@ jobs:
 
           # Condition: minor releases (.0) must be triggered from the main branch
           if [[ "$NEXT_VERSION" =~ \.0$ ]] && [[ "${{ github.ref_name }}" != "main" ]]; then
-            echo "❌ for minor releases, \`$NEXT_VERSION\` the \`main\` branch is required, but got ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "❌ for minor releases, \`$NEXT_VERSION\` the \`main\` branch is required, but got \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
           # Condition: patch releases must be triggered from the release branch
           if [[ ! "$NEXT_VERSION" =~ \.0$ ]] && [[ "${{ github.ref_name }}" != "$RELEASE_BRANCH" ]]; then
-            echo "❌ the patch releases, \`$NEXT_VERSION\` the action must be started from the release branch \`$RELEASE_BRANCH\`, but got ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+            echo "❌ the patch releases, \`$NEXT_VERSION\` the action must be started from the release branch \`$RELEASE_BRANCH\`, but got \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
