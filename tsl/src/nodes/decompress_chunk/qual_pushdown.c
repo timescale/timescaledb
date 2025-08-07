@@ -563,7 +563,8 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 	 * We only support hashable equality operators.
 	 */
 	const Oid op_oid = orig_saop->opno;
-	TypeCacheEntry *tce = lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
+	TypeCacheEntry *tce =
+		lookup_type_cache(var_with_segment_meta->vartype, TYPECACHE_HASH_OPFAMILY);
 	const int strategy = get_op_opfamily_strategy(op_oid, tce->hash_opf);
 	if (strategy != HTEqualStrategyNumber)
 	{
