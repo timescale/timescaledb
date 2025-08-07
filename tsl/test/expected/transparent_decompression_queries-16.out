@@ -136,7 +136,7 @@ GROUP BY 2, 3;
    Group Key: merge_sort.device_id, merge_sort.measure_id
    ->  Sort (actual rows=380160 loops=1)
          Sort Key: merge_sort.device_id, merge_sort.measure_id
-         Sort Method: external merge  Disk: 12656kB
+         Sort Method: external merge 
          ->  Result (actual rows=380160 loops=1)
                ->  Custom Scan (ChunkAppend) on merge_sort (actual rows=380160 loops=1)
                      Chunks excluded during startup: 1
