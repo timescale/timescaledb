@@ -1430,7 +1430,7 @@ SELECT * FROM cond_10
 -- These should fail for different reasons
 \set ON_ERROR_STOP 0
 CALL _timescaledb_functions.process_hypertable_invalidations(NULL);
-ERROR:  invalid relation
+ERROR:  parameter cannot be null
 CALL _timescaledb_functions.process_hypertable_invalidations(0);
 ERROR:  invalid relation
 CALL _timescaledb_functions.process_hypertable_invalidations('measure_10');
