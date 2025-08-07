@@ -7,7 +7,7 @@ name: Release - Feature Freeze Ceremony
 # 0. needs approval from another person to run the action (environment)
 # 1. ensure the correct branch is used to execute the action
 #   a. if the run was triggered from the `main` branch, the NEXT_VERSION must be a new minor (end with a .0)
-#   b. if NEXT_VERSION is a patch relese, then the branch the action was triggered on must be a release branch: `^[0-9]+\.[0-9]+\.x$`
+#   b. if NEXT_VERSION is a patch release, then the branch the action was triggered on must be a release branch: `^[0-9]+\.[0-9]+\.x$`
 # 2. ensure the next version does not exist as tag yet
 # 
 # Tasks
