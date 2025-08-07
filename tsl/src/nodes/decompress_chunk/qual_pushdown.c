@@ -38,8 +38,6 @@ typedef struct QualPushdownContext
 	bool needs_recheck;
 } QualPushdownContext;
 
-static Node *qual_pushdown_mutator(Node *node, QualPushdownContext *context);
-
 static QualPushdownContext
 copy_context(const QualPushdownContext *source)
 {
