@@ -205,7 +205,10 @@ FROM
   uuids
 WHERE
 -- The filters are here just to test, they don't blow up with random data from v4
-  _timescaledb_functions.timestamptz_from_uuid_v7(u) > '2000-01-01:01:01:01'::timestamptz
+-- NOTE that we have v4 and v7 data in the table so the timestamp filter alone makes
+-- the test flaky
+  _timescaledb_functions.timestamptz_from_uuid_v7(u) > '2000-01-01:01:01:01'::timestamptz OR
+  _timescaledb_functions.uuid_version(u) >= 1
 GROUP BY 1
 ORDER BY 1;
 

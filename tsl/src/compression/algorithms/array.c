@@ -589,7 +589,7 @@ tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 {
 	Assert(element_type == UUIDOID);
 	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
-	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
+	StringInfoData si = { .data = compressed_data, .len = VARSIZE_ANY(compressed_data) };
 	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
 
 	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
@@ -604,7 +604,11 @@ tsl_uuid_array_decompress_all(Datum compressed_array, Oid element_type, MemoryCo
 	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(&si);
 
 	const uint32 n_notnull = sizes_serialized->num_elements;
-	const uint32 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	/* the nulls_serialized test shouldn't be necessary, but clang needs this to pass without
+	 * warnings */
+	const uint32 n_total = (header->has_nulls && nulls_serialized != NULL) ?
+							   nulls_serialized->num_elements :
+							   n_notnull;
 	const uint32 n_bytes = n_total * 16;
 
 	const uint64 *restrict compressed_non_null_values = (const uint64 *) (si.data + si.cursor);
