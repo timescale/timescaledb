@@ -48,7 +48,6 @@ set(TEST_FILES
     compression_qualpushdown.sql
     compression_sequence_num_removal.sql
     compression_settings.sql
-    compression_sorted_merge.sql
     compression_sorted_merge_distinct.sql
     compression_uuid.sql
     compression_trigger.sql
@@ -73,11 +72,12 @@ set(TEST_FILES
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
+    cagg_permissions.sql.in
     cagg_query.sql.in
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
-    cagg_permissions.sql.in
     compression_permissions.sql.in
+    compression_sorted_merge.sql.in
     ordered_append.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
