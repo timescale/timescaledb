@@ -21,6 +21,11 @@ if(PG_REGRESS)
     USES_TERMINAL)
 
   add_custom_target(
+    regresscheck-t-rerun
+    COMMAND ${PRIMARY_TEST_DIR}/ci_rerun.sh regresscheck-t
+    USES_TERMINAL)
+
+  add_custom_target(
     regresschecklocal-t
     COMMAND
       ${CMAKE_COMMAND} -E env ${PG_REGRESS_ENV}
@@ -43,6 +48,11 @@ if(PG_REGRESS)
       ${PG_REGRESS_OPTS_BASE} ${PG_REGRESS_SHARED_OPTS_EXTRA}
       ${PG_REGRESS_SHARED_OPTS_INOUT} ${PG_REGRESS_OPTS_TEMP_INSTANCE}
       --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
+    USES_TERMINAL)
+
+  add_custom_target(
+    regresscheck-shared-rerun
+    COMMAND ${PRIMARY_TEST_DIR}/ci_rerun.sh regresscheck-shared
     USES_TERMINAL)
 
   add_custom_target(
@@ -92,6 +102,11 @@ if(PG_ISOLATION_REGRESS)
       ${PG_REGRESS_OPTS_BASE} ${PG_ISOLATION_REGRESS_OPTS_EXTRA}
       ${PG_ISOLATION_REGRESS_OPTS_INOUT} ${PG_REGRESS_OPTS_TEMP_INSTANCE}
       --temp-config=${TEST_OUTPUT_DIR}/postgresql.conf
+    USES_TERMINAL)
+
+  add_custom_target(
+    isolationcheck-t-rerun
+    COMMAND ${PRIMARY_TEST_DIR}/ci_rerun.sh isolationcheck-t
     USES_TERMINAL)
 
   add_custom_target(
