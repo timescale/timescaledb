@@ -22,6 +22,8 @@ jobs:
         echo "| --- | --- | --- |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
 
+        echo "HAS_FAILURES=false" >> $GITHUB_ENV
+
     - name: Build Docker Image
       env:
         GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
@@ -31,6 +33,7 @@ jobs:
           echo "| 🐳 Docker Image | ✅ Triggered | [timescaledb-docker](https://github.com/timescale/timescaledb-docker/actions/workflows/docker-image.yml) |" >> $GITHUB_STEP_SUMMARY
         else
           echo "| 🐳 Docker Image | ❌ Failed | [timescaledb-docker](https://github.com/timescale/timescaledb-docker/actions/workflows/docker-image.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Build Debian Packages
@@ -42,6 +45,7 @@ jobs:
           echo "| 🐧 Debian Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-debian.yml) |" >> $GITHUB_STEP_SUMMARY
         else
           echo "| 🐧 Debian Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-debian.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Build Ubuntu Packages
@@ -53,6 +57,7 @@ jobs:
           echo "| 🟠 Ubuntu Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-ubuntu.yml) |" >> $GITHUB_STEP_SUMMARY
         else
           echo "| 🟠 Ubuntu Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-ubuntu.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Build ARM64 APT Packages
@@ -64,6 +69,7 @@ jobs:
           echo "| 💪 ARM64 APT Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-apt-arm64.yml) |" >> $GITHUB_STEP_SUMMARY
         else
           echo "| 💪 ARM64 APT Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-apt-arm64.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Build RPM Packages
@@ -75,6 +81,7 @@ jobs:
           echo "| ⚙ RPM Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-rpm.yml) |" >> $GITHUB_STEP_SUMMARY
         else
           echo "| ⚙ RPM Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-rpm.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Build Homebrew Packages
@@ -86,6 +93,7 @@ jobs:
           echo "| 🍺 Homebrew Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-homebrew.yml) |" >> $GITHUB_STEP_SUMMARY
         else
           echo "| 🍺 Homebrew Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-homebrew.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Build Windows Packages
@@ -97,6 +105,7 @@ jobs:
           echo "| 🪟 Windows Packages | ✅ Triggered | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-windows.yml) |" >> $GITHUB_STEP_SUMMARY
         else
           echo "| 🪟 Windows Packages | ❌ Failed | [summary](https://github.com/timescale/release-build-scripts/actions/workflows/timescaledb-windows.yml) |" >> $GITHUB_STEP_SUMMARY
+          echo "HAS_FAILURES=true" >> $GITHUB_ENV
         fi
 
     - name: Generate final summary
@@ -108,3 +117,10 @@ jobs:
         echo "1. Monitor the triggered workflows in their respective repositories" >> $GITHUB_STEP_SUMMARY
         echo "2. Check build artifacts once workflows complete" >> $GITHUB_STEP_SUMMARY
         echo "3. Verify package availability in distribution channels" >> $GITHUB_STEP_SUMMARY
+
+    - name: Validate workflow dispatch status
+      if: ${{ env.HAS_FAILURES == 'true' }}
+      run: |
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "❌ one or more workflows could not get dispatched" >> $GITHUB_STEP_SUMMARY
+        exit 1
