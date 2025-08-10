@@ -58,6 +58,7 @@ cache_invalidate_relcache_all(void)
 {
 	ts_hypertable_cache_invalidate_callback();
 	ts_bgw_job_cache_invalidate_callback();
+	ts_catalog_reset();
 }
 
 static Oid hypertable_proxy_table_oid = InvalidOid;
