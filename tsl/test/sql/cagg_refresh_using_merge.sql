@@ -146,3 +146,28 @@ SELECT * FROM conditions_nullable_daily ORDER BY 1, 2 NULLS LAST, 3 NULLS LAST;
 DROP MATERIALIZED VIEW conditions_nullable_daily;
 
 DROP TABLE conditions CASCADE;
+
+-- test cagg refresh with updated values
+CREATE TABLE metrics(time timestamptz NOT NULL, device text, value float8) WITH (tsdb.hypertable,tsdb.partition_column='time');
+
+INSERT INTO metrics
+SELECT time, 'd'||device::text, 1
+FROM generate_series('2025-02-05 17:00+00'::timestamptz,'2025-02-05 19:00+00'::timestamptz, '5 min'::interval) AS g(time), generate_series(1, 10) AS device;
+
+CREATE MATERIALIZED VIEW metrics_summary WITH (timescaledb.continuous) AS
+SELECT device, time_bucket('00:05:00'::interval, time) AS bucket, sum(value) AS value FROM metrics GROUP BY 1, 2;
+
+UPDATE metrics SET value = value - 1 WHERE device='d1' and time ='2025-02-05 17:40:00+00';
+
+CALL refresh_continuous_aggregate('metrics_summary', '2025-02-04', '2025-02-10');
+
+SET enable_bitmapscan TO off;
+
+SET enable_seqscan TO true; SET enable_indexscan TO false;
+-- should be 250
+SELECT count(*) FROM metrics_summary WHERE bucket >= '2025-02-05 17:00:00+00' AND bucket < '2025-02-05 23:00:00+00';
+
+SET enable_seqscan TO false; SET enable_indexscan TO true;
+-- should match the result of the previous query
+SELECT count(*) FROM metrics_summary WHERE bucket >= '2025-02-05 17:00:00+00' AND bucket < '2025-02-05 23:00:00+00';
+
