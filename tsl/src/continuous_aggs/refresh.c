@@ -1293,7 +1293,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			 (batch == 0 && !refresh_newest_first)) &&
 			original_refresh_window->start_isnull)
 		{
-			range->start = ts_time_get_nobegin_or_min(range->type);
+			range->start = cagg_get_time_min(cagg);
 			range->start_isnull = true;
 		}
 
