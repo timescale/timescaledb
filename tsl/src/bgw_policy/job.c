@@ -384,7 +384,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
-	CaggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
+	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
 
 	/* Try to split window range into a list of ranges */
 	List *refresh_window_list =

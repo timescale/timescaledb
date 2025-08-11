@@ -448,7 +448,7 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 
 static void
 parse_offset_arg(const ContinuousAgg *cagg, Oid offset_type, NullableDatum arg,
-				 CaggPolicyOffset *offset)
+				 ContinuousAggPolicyOffset *offset)
 {
 	offset->isnull = arg.isnull;
 

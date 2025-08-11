@@ -93,15 +93,14 @@
  * Processing state used while processing the materialization invalidation log
  * and refreshing the continuous aggregate.
  */
-typedef struct CAggInvalidationState
+typedef struct ContinuousAggInvalidationState
 {
 	const ContinuousAgg *cagg;
 	MemoryContext per_tuple_mctx;
 	Relation cagg_log_rel;
 	Snapshot snapshot;
 	Tuplestorestate *invalidations;
-	const ContinuousAggsBucketFunction *bucket_function;
-} CAggInvalidationState;
+} ContinuousAggInvalidationState;
 
 /*
  * Processing state used while moving invalidations from hypertable
@@ -111,7 +110,7 @@ typedef struct HypertableInvalidationState
 {
 	int32 hypertable_id;
 	Oid dimtype; /* Type of the underlying hypertable's bucketed attribute */
-	const CaggsInfo *all_caggs;
+	const ContinuousAggInfo *all_caggs;
 	MemoryContext per_tuple_mctx;
 	Relation cagg_log_rel;
 	Snapshot snapshot;
@@ -128,21 +127,21 @@ static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hype
 											  LOCKMODE lockmode);
 static HeapTuple create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start,
 										 int64 end);
-static bool save_invalidation_for_refresh(const CAggInvalidationState *state,
+static bool save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 										  const Invalidation *invalidation);
 static void set_remainder_after_cut(Invalidation *remainder, int32 hyper_id,
 									int64 lowest_modified_value, int64 greatest_modified_value);
 static void invalidation_entry_reset(Invalidation *entry);
 static void
 invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
-										 const ContinuousAggsBucketFunction *bucket_function);
+										 const ContinuousAggBucketFunction *bucket_function);
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
 											   int32 hyper_id, Oid dimtype,
-											   const ContinuousAggsBucketFunction *bucket_function);
+											   const ContinuousAggBucketFunction *bucket_function);
 static void
 invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
-											  const ContinuousAggsBucketFunction *bucket_function);
+											  const ContinuousAggBucketFunction *bucket_function);
 static bool invalidations_can_be_merged(const Invalidation *a, const Invalidation *b);
 static bool invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry);
 static void cut_and_insert_new_cagg_invalidation(const HypertableInvalidationState *state,
@@ -150,17 +149,18 @@ static void cut_and_insert_new_cagg_invalidation(const HypertableInvalidationSta
 static void move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *state);
 static void cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hyper_id,
 													   LOCKMODE lockmode);
-static Invalidation cut_cagg_invalidation(const CAggInvalidationState *state,
+static Invalidation cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
 										  const InternalTimeRange *refresh_window,
 										  const Invalidation *entry);
 static Invalidation cut_cagg_invalidation_and_compute_remainder(
-	const CAggInvalidationState *state, const InternalTimeRange *refresh_window,
+	const ContinuousAggInvalidationState *state, const InternalTimeRange *refresh_window,
 	const Invalidation *mergedentry, const Invalidation *current_remainder);
-static void clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
+static void clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state,
 												 const InternalTimeRange *refresh_window,
 												 bool force);
-static void cagg_invalidation_state_init(CAggInvalidationState *state, const ContinuousAgg *cagg);
-static void cagg_invalidation_state_cleanup(const CAggInvalidationState *state);
+static void cagg_invalidation_state_init(ContinuousAggInvalidationState *state,
+										 const ContinuousAgg *cagg);
+static void cagg_invalidation_state_cleanup(const ContinuousAggInvalidationState *state);
 
 static Relation
 open_invalidation_log(LogType type, LOCKMODE lockmode)
@@ -299,7 +299,8 @@ typedef enum InvalidationResult
 #define IS_VALID_INVALIDATION(entry) ((entry)->hyper_id > 0)
 
 static bool
-save_invalidation_for_refresh(const CAggInvalidationState *state, const Invalidation *invalidation)
+save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
+							  const Invalidation *invalidation)
 {
 	int32 cagg_hyper_id = state->cagg->data.mat_hypertable_id;
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_log_rel);
@@ -342,7 +343,7 @@ set_remainder_after_cut(Invalidation *remainder, int32 hyper_id, int64 lowest_mo
  * are inclusive.
  */
 static InvalidationResult
-cut_invalidation_along_refresh_window(const CAggInvalidationState *state,
+cut_invalidation_along_refresh_window(const ContinuousAggInvalidationState *state,
 									  const Invalidation *invalidation,
 									  const InternalTimeRange *refresh_window,
 									  Invalidation *remainder)
@@ -488,7 +489,7 @@ invalidation_entry_reset(Invalidation *entry)
  */
 static void
 invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
-										 const ContinuousAggsBucketFunction *bucket_function)
+										 const ContinuousAggBucketFunction *bucket_function)
 {
 	const int64 time_dimension_min = ts_time_get_min(time_type_oid);
 	const int64 time_dimension_max = ts_time_get_max(time_type_oid);
@@ -583,7 +584,7 @@ invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
 											   int32 hyper_id, Oid dimtype,
-											   const ContinuousAggsBucketFunction *bucket_function)
+											   const ContinuousAggBucketFunction *bucket_function)
 {
 	INVALIDATION_ENTRY_SET(entry,
 						   ti,
@@ -598,7 +599,7 @@ invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleI
 
 static void
 invalidation_entry_set_from_cagg_invalidation(Invalidation *entry, const TupleInfo *ti, Oid dimtype,
-											  const ContinuousAggsBucketFunction *bucket_function)
+											  const ContinuousAggBucketFunction *bucket_function)
 {
 	INVALIDATION_ENTRY_SET(entry,
 						   ti,
@@ -708,7 +709,7 @@ cut_and_insert_new_cagg_invalidation(const HypertableInvalidationState *state,
 static void
 move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *state)
 {
-	const CaggsInfo *all_caggs = state->all_caggs;
+	const ContinuousAggInfo *all_caggs = state->all_caggs;
 	int32 hyper_id = state->hypertable_id;
 	int32 last_cagg_hyper_id;
 	ListCell *lc1, *lc2;
@@ -729,7 +730,7 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 	forboth (lc1, all_caggs->mat_hypertable_ids, lc2, all_caggs->bucket_functions)
 	{
 		int32 cagg_hyper_id = lfirst_int(lc1);
-		const ContinuousAggsBucketFunction *bucket_function = lfirst(lc2);
+		const ContinuousAggBucketFunction *bucket_function = lfirst(lc2);
 
 		Invalidation mergedentry;
 		ScanIterator iterator;
@@ -812,8 +813,8 @@ cagg_invalidations_scan_by_hypertable_init(ScanIterator *iterator, int32 cagg_hy
  * refresh window.
  */
 static Invalidation
-cut_cagg_invalidation(const CAggInvalidationState *state, const InternalTimeRange *refresh_window,
-					  const Invalidation *entry)
+cut_cagg_invalidation(const ContinuousAggInvalidationState *state,
+					  const InternalTimeRange *refresh_window, const Invalidation *entry)
 {
 	InvalidationResult result;
 	Invalidation remainder;
@@ -852,7 +853,7 @@ cut_cagg_invalidation(const CAggInvalidationState *state, const InternalTimeRang
 }
 
 static Invalidation
-cut_cagg_invalidation_and_compute_remainder(const CAggInvalidationState *state,
+cut_cagg_invalidation_and_compute_remainder(const ContinuousAggInvalidationState *state,
 											const InternalTimeRange *refresh_window,
 											const Invalidation *mergedentry,
 											const Invalidation *current_remainder)
@@ -894,7 +895,7 @@ cut_cagg_invalidation_and_compute_remainder(const CAggInvalidationState *state,
  * lowest_modified_value.
  */
 static void
-clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
+clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state,
 									 const InternalTimeRange *refresh_window, bool force)
 {
 	ScanIterator iterator;
@@ -939,13 +940,12 @@ clear_cagg_invalidations_for_refresh(const CAggInvalidationState *state,
 
 		MemoryContext oldmctx;
 		Invalidation logentry;
-		const ContinuousAggsBucketFunction *bucket_function = state->bucket_function;
 
 		oldmctx = MemoryContextSwitchTo(state->per_tuple_mctx);
 		invalidation_entry_set_from_cagg_invalidation(&logentry,
 													  ti,
 													  state->cagg->partition_type,
-													  bucket_function);
+													  state->cagg->bucket_function);
 
 		/* If the tuple was not locked, we cannot process it. */
 		if (ti->lockresult != TM_Ok)
@@ -1011,10 +1011,9 @@ process_remainder:
 }
 
 static void
-cagg_invalidation_state_init(CAggInvalidationState *state, const ContinuousAgg *cagg)
+cagg_invalidation_state_init(ContinuousAggInvalidationState *state, const ContinuousAgg *cagg)
 {
 	state->cagg = cagg;
-	state->bucket_function = cagg->bucket_function;
 	state->cagg_log_rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
 	state->per_tuple_mctx = AllocSetContextCreate(CurrentMemoryContext,
 												  "Materialization invalidations",
@@ -1023,7 +1022,7 @@ cagg_invalidation_state_init(CAggInvalidationState *state, const ContinuousAgg *
 }
 
 static void
-cagg_invalidation_state_cleanup(const CAggInvalidationState *state)
+cagg_invalidation_state_cleanup(const ContinuousAggInvalidationState *state)
 {
 	table_close(state->cagg_log_rel, NoLock);
 	UnregisterSnapshot(state->snapshot);
@@ -1032,7 +1031,7 @@ cagg_invalidation_state_cleanup(const CAggInvalidationState *state)
 
 static void
 hypertable_invalidation_state_init(HypertableInvalidationState *state, int32 hypertable_id,
-								   Oid dimtype, const CaggsInfo *all_caggs)
+								   Oid dimtype, const ContinuousAggInfo *all_caggs)
 {
 	state->hypertable_id = hypertable_id;
 	state->dimtype = dimtype;
@@ -1061,7 +1060,7 @@ void
 invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype)
 {
 	HypertableInvalidationState state;
-	const CaggsInfo all_caggs = ts_continuous_agg_get_all_caggs_info(hypertable_id);
+	const ContinuousAggInfo all_caggs = ts_continuous_agg_get_all_caggs_info(hypertable_id);
 
 	hypertable_invalidation_state_init(&state, hypertable_id, dimtype, &all_caggs);
 	move_invalidations_from_hyper_to_cagg_log(&state);
@@ -1072,9 +1071,9 @@ InvalidationStore *
 invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 							  long max_materializations, bool *do_merged_refresh,
 							  InternalTimeRange *ret_merged_refresh_window,
-							  CaggRefreshContext context, bool force)
+							  ContinuousAggRefreshContext context, bool force)
 {
-	CAggInvalidationState state;
+	ContinuousAggInvalidationState state;
 	InvalidationStore *store = NULL;
 	long count;
 
@@ -1109,7 +1108,6 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 		continuous_agg_calculate_merged_refresh_window(cagg,
 													   refresh_window,
 													   store,
-													   state.bucket_function,
 													   &merged_refresh_window,
 													   context);
 		*do_merged_refresh = true;
