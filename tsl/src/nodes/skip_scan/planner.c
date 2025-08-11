@@ -40,6 +40,9 @@ typedef struct SkipKeyInfo
 	/* Index clause which we'll use to skip past elements we've already seen */
 	RestrictInfo *skip_clause;
 
+	/* Is this key guaranteed to be not null? */
+	bool notnull;
+
 	/* attribute number of the distinct column on the table/chunk which provides comparison value
 	 * for Skip qual */
 	AttrNumber distinct_attno;
@@ -180,18 +183,33 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 		/* get position of distinct column in tuples produced by child scan */
 		TargetEntry *tle = tlist_member_match_var(dvar, child_plan->targetlist);
 
-		bool nulls_first = index_path->indexinfo->nulls_first[skinfo->scankey_attno - 1];
-		if (index_path->indexscandir == BackwardScanDirection)
-			nulls_first = !nulls_first;
-
+		SkipKeyNullStatus sknulls;
+		if (skinfo->notnull)
+			sknulls = SKIPKEY_NOT_NULL;
+		else
+		{
+			bool nulls_first = index_path->indexinfo->nulls_first[skinfo->scankey_attno - 1];
+			if (index_path->indexscandir == BackwardScanDirection)
+				nulls_first = !nulls_first;
+			sknulls = (nulls_first ? SKIPKEY_NULLS_FIRST : SKIPKEY_NULLS_LAST);
+		}
 		skip_plan->custom_private = lappend(skip_plan->custom_private,
 											list_make5_int(tle->resno,
 														   skinfo->distinct_by_val,
 														   skinfo->distinct_typ_len,
-														   nulls_first,
+														   sknulls,
 														   skinfo->scankey_attno));
+		/* Debug info about skip key */
+		if (ts_guc_debug_skip_scan_info)
+		{
+			elog(INFO,
+				 "SkipScan index column %d is %s",
+				 skinfo->scankey_attno,
+				 (sknulls == SKIPKEY_NOT_NULL ?
+					  "NOT NULL" :
+					  (sknulls == SKIPKEY_NULLS_FIRST ? "NULLS FIRST" : "NULLS LAST")));
+		}
 	}
-
 	return &skip_plan->scan.plan;
 }
 
@@ -737,6 +755,96 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 	}
 }
 
+#if PG17_LT
+static bool
+attr_is_notnull(Oid relid, AttrNumber attno)
+{
+	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
+	if (!HeapTupleIsValid(tp))
+		return false;
+	Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+	bool result = att_tup->attnotnull;
+	ReleaseSysCache(tp);
+	return result;
+}
+#endif
+
+/* Check if skip key is guaranteed not-null */
+static void
+check_notnull_skipkey(SkipKeyInfo *skinfo, Path *child_path, IndexPath *index_path)
+{
+	ListCell *l;
+	/* Quickly look through index clauses on this skip key */
+	foreach (l, index_path->indexclauses)
+	{
+		IndexClause *ic = (IndexClause *) lfirst(l);
+		/* index quals are ordered by indexcol, nothing to see if we've passed our indexcol */
+		if (ic->indexcol > skinfo->scankey_attno - 1)
+			break;
+
+		/* Lossy index quals may not cover NULL values but BTree quals are never lossy  */
+		Assert(!ic->lossy);
+
+		/* We may have row comparison with skip key not being a leading col,
+		 * like (col, skipcol) > (3, 5), but it can allow NULL skipcols to pass if (col>3) is true,
+		 * so for row comparisons we will only look at leading "indexcol" and not at "indexcols".
+		 */
+		if (ic->indexcol == skinfo->scankey_attno - 1)
+		{
+			/* Any simple index clause but "isNull" filters out nulls */
+			ListCell *lc;
+			foreach (lc, ic->indexquals)
+			{
+				RestrictInfo *iqual = (RestrictInfo *) lfirst(lc);
+				if (!(IsA(iqual->clause, NullTest) &&
+					  ((NullTest *) iqual->clause)->nulltesttype == IS_NULL))
+				{
+					skinfo->notnull = true;
+					return;
+				}
+			}
+		}
+	}
+
+	/* Otherwise look at all non-indexqual index filters on the key (like (key+1)>5) to see if they
+	 * filter out NULLs */
+	RelOptInfo *indexed_rel = index_path->path.parent;
+	foreach (l, index_path->indexinfo->indrestrictinfo)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(l));
+		Bitmapset *clause_attnos = NULL;
+		pull_varattnos((Node *) ri->clause, indexed_rel->relid, &clause_attnos);
+		if (bms_is_member(skinfo->indexed_column_attno - FirstLowInvalidHeapAttributeNumber,
+						  clause_attnos))
+		{
+			if (!contain_nonstrict_functions((Node *) ri->clause))
+			{
+				skinfo->notnull = true;
+				return;
+			}
+		}
+	}
+
+	/* Failing that, look at filters not pushed down into index (like col1+col2>1) to see if they
+	 * filter out NULLs */
+	RelOptInfo *child_rel = child_path->parent;
+	foreach (l, child_rel->baserestrictinfo)
+	{
+		RestrictInfo *ri = castNode(RestrictInfo, lfirst(l));
+		Bitmapset *clause_attnos = NULL;
+		pull_varattnos((Node *) ri->clause, child_rel->relid, &clause_attnos);
+		if (bms_is_member(skinfo->distinct_attno - FirstLowInvalidHeapAttributeNumber,
+						  clause_attnos))
+		{
+			if (!contain_nonstrict_functions((Node *) ri->clause))
+			{
+				skinfo->notnull = true;
+				return;
+			}
+		}
+	}
+}
+
 static IndexPath *
 get_compressed_index_path(DecompressChunkPath *dcpath)
 {
@@ -802,7 +910,6 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 		/* Placeholder for skip key attributes */
 		SkipKeyInfo *skinfo = palloc(sizeof(SkipKeyInfo));
 		Var *dvar = get_distinct_var(root, dexpr, index_path, child_path, skinfo);
-
 		if (!dvar)
 		{
 			pfree(skinfo);
@@ -815,7 +922,8 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 			pfree(skinfo);
 			return NULL;
 		}
-
+		if (!skinfo->notnull)
+			check_notnull_skipkey(skinfo, child_path, index_path);
 		skip_scan_path->dvars = lappend(skip_scan_path->dvars, dvar);
 		skip_scan_path->skipkeyinfo = lappend(skip_scan_path->skipkeyinfo, skinfo);
 	}
@@ -954,6 +1062,19 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 	Assert(tlexpr && IsA(tlexpr, Var));
 	Var *var = castNode(Var, tlexpr);
 
+	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
+
+	/* check whether a skip var is declared NOT NULL
+	 *  it's enough to check hypertable for NOT NULL
+	 *  as NOT NULL constraint will be propagated to and checked on all chunks
+	 */
+#if PG17_LT
+	skinfo->notnull = attr_is_notnull(ht_rte->relid, var->varattno);
+#else
+	RelOptInfo *baserel = ((Index) var->varno == rel->relid ? rel : rel->parent);
+	skinfo->notnull = bms_is_member(var->varattno, baserel->notnullattnums);
+#endif
+
 	/* If we are dealing with a hypertable Var extracted from distinctClause will point to
 	 * the parent hypertable while the IndexPath will be on a Chunk.
 	 * For a normal PG table they point to the same relation and we are done here. */
@@ -964,7 +1085,6 @@ get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path, Path *c
 		return var;
 	}
 
-	RangeTblEntry *ht_rte = planner_rt_fetch(var->varno, root);
 	RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
 	RangeTblEntry *indexed_rte =
 		(indexed_rel == rel ? chunk_rte : planner_rt_fetch(indexed_rel->relid, root));

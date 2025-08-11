@@ -74,7 +74,7 @@ typedef struct SkipKeyData
 	int distinct_col_attnum;
 	int distinct_typ_len;
 	int sk_attno;
-	bool nulls_first;
+	SkipKeyNullStatus nulls;
 } SkipKeyData;
 
 typedef struct SkipScanState
@@ -175,13 +175,13 @@ skip_scan_begin(CustomScanState *node, EState *estate, int eflags)
 static bool
 has_nulls_first(SkipScanState *state)
 {
-	return state->skip_keys[0].nulls_first;
+	return state->skip_keys[0].nulls == SKIPKEY_NULLS_FIRST;
 }
 
 static bool
 has_nulls_last(SkipScanState *state)
 {
-	return !has_nulls_first(state);
+	return state->skip_keys[0].nulls == SKIPKEY_NULLS_LAST;
 }
 
 static void
@@ -447,7 +447,7 @@ tsl_skip_scan_state_create(CustomScan *cscan)
 		state->skip_keys[i].distinct_col_attnum = linitial_int(skipkeyinfo);
 		state->skip_keys[i].distinct_by_val = lsecond_int(skipkeyinfo);
 		state->skip_keys[i].distinct_typ_len = lthird_int(skipkeyinfo);
-		state->skip_keys[i].nulls_first = lfourth_int(skipkeyinfo);
+		state->skip_keys[i].nulls = lfourth_int(skipkeyinfo);
 		state->skip_keys[i].sk_attno = list_nth_int(skipkeyinfo, 4);
 
 		state->skip_keys[i].prev_is_null = true;

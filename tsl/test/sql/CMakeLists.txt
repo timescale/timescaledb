@@ -63,6 +63,7 @@ set(TEST_FILES
     merge_compress.sql
     modify_exclusion.sql
     move.sql
+    plan_skip_scan_notnull.sql
     policy_generalization.sql
     reorder.sql
     size_utils_tsl.sql

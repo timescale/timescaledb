@@ -8,6 +8,13 @@
 #include <postgres.h>
 #include <nodes/plannodes.h>
 
+typedef enum SkipKeyNullStatus
+{
+	SKIPKEY_NOT_NULL = 0,
+	SKIPKEY_NULLS_FIRST,
+	SKIPKEY_NULLS_LAST
+} SkipKeyNullStatus;
+
 extern void tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel,
 									RelOptInfo *output_rel, UpperRelationKind stage);
 extern Node *tsl_skip_scan_state_create(CustomScan *cscan);
