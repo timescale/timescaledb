@@ -130,7 +130,8 @@ simple8brle_bitarray_decompress(Simple8bRleSerialized *compressed, bool inverted
 				/* Tail: Handle remaining bits (less than 64) */
 				if (repeat_count > 0)
 				{
-					uint64_t tail_mask = (1ULL << repeat_count) - 1;
+					Assert(repeat_count < 64);
+					uint64_t tail_mask = (1ULL << (repeat_count & 63)) - 1;
 					*current_output_ptr |= (tail_mask << bit_position);
 
 					decompressed_index += repeat_count;
