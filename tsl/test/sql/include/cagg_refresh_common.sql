@@ -8,6 +8,7 @@ SELECT create_hypertable('conditions', 'time');
 -- Test refresh on a cagg built on an empty table
 CREATE MATERIALIZED VIEW daily_temp
 WITH (timescaledb.continuous,
+      timescaledb.invalidate_using = :'invalidate_using',
       timescaledb.materialized_only=true)
 AS
 SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
@@ -64,10 +65,8 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00'
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
 
--- Refresh the rest (and try DEBUG output)
-SET client_min_messages TO DEBUG1;
+-- Refresh the rest
 CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
-RESET client_min_messages;
 
 -- Compare the aggregate to the equivalent query on the source table
 SELECT * FROM daily_temp
