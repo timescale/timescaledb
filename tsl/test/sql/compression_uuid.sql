@@ -212,6 +212,34 @@ WHERE
 GROUP BY 1
 ORDER BY 1;
 
+-- Filter UUIDs on timestamp part by using both zeroed UUID and
+-- extracted timestamp. Both methods should yield the same count.
+SELECT
+  count(*) AS count_total,
+  count(*) FILTER (WHERE u < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Jun 25 08:16:46.348 2025 PDT')) AS count_below_on_uuid,
+  count(*) FILTER (WHERE _timescaledb_functions.timestamptz_from_uuid_v7(u) < 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_below_on_time,
+  count(*) FILTER (WHERE u >= _timescaledb_functions.uuid_v7_from_timestamptz('Wed Jun 25 08:16:46.348 2025 PDT', true)) AS count_above_on_uuid,
+  count(*) FILTER (WHERE _timescaledb_functions.timestamptz_from_uuid_v7(u) >= 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_above_on_time
+FROM
+  uuids
+WHERE
+  _timescaledb_functions.uuid_version(u) = 7;
+
+-- The EXPLAIN shows how the immutable "zeroed" function can be
+-- constified for better performance, unlike the parameter version of
+-- the function doing the same thing:
+EXPLAIN (verbose, costs off)
+SELECT
+  count(*) AS count_total,
+  count(*) FILTER (WHERE u < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Jun 25 08:16:46.348 2025 PDT')) AS count_below_on_uuid,
+  count(*) FILTER (WHERE _timescaledb_functions.timestamptz_from_uuid_v7(u) < 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_below_on_time,
+  count(*) FILTER (WHERE u >= _timescaledb_functions.uuid_v7_from_timestamptz('Wed Jun 25 08:16:46.348 2025 PDT', true)) AS count_above_on_uuid,
+  count(*) FILTER (WHERE _timescaledb_functions.timestamptz_from_uuid_v7(u) >= 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_above_on_time
+FROM
+  uuids
+WHERE
+  _timescaledb_functions.uuid_version(u) = 7;
+
 -- Sub ms timestamp test:
 --   generate all microseconds timestamps between the two dates below and
 --   generate a UUID v7 based on the timestamp and
