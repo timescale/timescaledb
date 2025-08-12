@@ -1136,7 +1136,7 @@ dimension_add_not_null_on_column(Oid table_relid, char *colname)
 		.missing_ok = false,
 	};
 
-	ereport(NOTICE,
+	ereport(DEBUG1,
 			(errmsg("adding not-null constraint to column \"%s\"", colname),
 			 errdetail("Dimensions cannot have NULL values.")));
 

@@ -5,7 +5,6 @@
 -- issue 5739
 CREATE TABLE ca_append_result(time timestamptz NULL, device text, value float);
 SELECT table_name FROM create_hypertable('ca_append_result', 'time');
-NOTICE:  adding not-null constraint to column "time"
     table_name    
  ca_append_result
 (1 row)

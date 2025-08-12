@@ -5,7 +5,6 @@ CREATE TABLE vacuum_test(time timestamp, temp float);
 -- create hypertable with three chunks
 SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (1,public,vacuum_test,t)
@@ -62,7 +61,6 @@ DROP TABLE vacuum_test;
 CREATE TABLE analyze_test(time timestamp, temp float);
 SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (2,public,analyze_test,t)
@@ -142,7 +140,6 @@ CREATE TABLE vacuum_test(time timestamp, temp float);
 -- create hypertable with three chunks
 SELECT create_hypertable('vacuum_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (3,public,vacuum_test,t)
@@ -157,7 +154,6 @@ INSERT INTO vacuum_test VALUES ('2017-01-20T16:00:01', 17.5),
 CREATE TABLE analyze_test(time timestamp, temp float);
 SELECT create_hypertable('analyze_test', 'time', chunk_time_interval => 2628000000000, create_default_indexes => false);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (4,public,analyze_test,t)

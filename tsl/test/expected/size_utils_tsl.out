@@ -5,7 +5,6 @@ SET timezone TO 'America/Los_Angeles';
 -- Prepare test data for continuous aggregate size function tests
 CREATE TABLE hypersize(time timestamptz, device int);
 SELECT * FROM create_hypertable('hypersize', 'time');
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | hypersize  | t

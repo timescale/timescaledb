@@ -6,7 +6,6 @@ create function stable_abs(x int4) returns int4 as 'int4abs' language internal s
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
 select create_hypertable('vectorqual', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (1,public,vectorqual,t)
@@ -138,7 +137,6 @@ select count(*) from vectorqual where device = 1 /* can't apply vector ops to th
 create table arithmetic(ts int, a int2, b int4, c int8, d float4, e float8,
     ax int2, bx int4, cx int8, dx float4, ex float8);
 select create_hypertable('arithmetic', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (3,public,arithmetic,t)
@@ -1176,7 +1174,6 @@ ERROR:  debug: encountered non-vector quals when they are disabled
 -- Date columns
 create table date_table(ts date);
 select create_hypertable('date_table', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (7,public,date_table,t)
@@ -1235,7 +1232,6 @@ select * from date_table where ts <  CURRENT_DATE;
 -- Text columns.
 create table text_table(ts int, d int);
 select create_hypertable('text_table', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (9,public,text_table,t)
@@ -1601,7 +1597,6 @@ reset timescaledb.enable_bulk_decompression;
 -- Test the nonstandard Postgres NaN comparison that doesn't match the IEEE floats.
 create table nans(t int, cfloat4 float4, cfloat8 float8);
 select create_hypertable('nans', 't', chunk_time_interval => 1024 * 1024 * 1024);
-NOTICE:  adding not-null constraint to column "t"
  create_hypertable  
 --------------------
  (11,public,nans,t)
@@ -2936,7 +2931,6 @@ set timescaledb.enable_uuid_compression = off;
 -- set timescaledb.debug_require_vector_qual to 'forbid';
 create table uuid_table(ts int, u uuid);
 select count(*) from create_hypertable('uuid_table', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  count 
 -------
      1
@@ -3217,7 +3211,6 @@ set timescaledb.enable_bulk_decompression to on;
 set timescaledb.enable_bool_compression = on;
 create table bool_table(ts int, b bool);
 select count(*) from create_hypertable('bool_table', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  count 
 -------
      1
@@ -4004,7 +3997,6 @@ select * from bool_table where b is not unknown order by 1;
 -- Verify that NULL compression with ints is vectorized
 create table int_table(ts int, b int);
 select count(*) from create_hypertable('int_table', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  count 
 -------
      1

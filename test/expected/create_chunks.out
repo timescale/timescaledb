@@ -27,7 +27,6 @@
 --
 CREATE TABLE chunk_test(time integer, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test', 'time', 'tag', 2, chunk_time_interval => 3);
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,chunk_test,t)
@@ -122,7 +121,6 @@ ORDER BY c.id, d.id;
 --test the edges of an open partition -- INT_64_MAX and INT_64_MIN.
 CREATE TABLE chunk_test_ends(time bigint, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test_ends', 'time', chunk_time_interval => 5);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable       
 ------------------------------
  (2,public,chunk_test_ends,t)
@@ -152,7 +150,6 @@ SELECT * FROM chunk_test_ends ORDER BY time asc, tag, temp;
 CREATE TABLE chunk_test2(time TIMESTAMPTZ, temp float8, tag integer, color integer);
 SELECT create_hypertable('chunk_test2', 'time', 'tag', 2, chunk_time_interval => 3);
 WARNING:  unexpected interval: smaller than one second
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (3,public,chunk_test2,t)
@@ -224,7 +221,6 @@ ERROR:  invalid interval: an explicit interval must be specified
 -- Issue https://github.com/timescale/timescaledb/issues/7406
 CREATE TABLE test_ht (time TIMESTAMPTZ, v1 INTEGER);
 SELECT create_hypertable('test_ht', by_range('time', INTERVAL '1 hour'));
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (4,t)

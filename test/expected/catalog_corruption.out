@@ -5,7 +5,6 @@
 --- Test handling of missing dimension slices
 CREATE TABLE dim_test(time TIMESTAMPTZ, device int);
 SELECT create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 day');
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (1,public,dim_test,t)

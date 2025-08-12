@@ -65,7 +65,6 @@ SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval =
 ERROR:  invalid interval type for customtype dimension
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval => 10e6::bigint, create_default_indexes=>false);
-NOTICE:  adding not-null constraint to column "time_custom"
       create_hypertable       
 ------------------------------
  (1,public,customtype_test,t)

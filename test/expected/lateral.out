@@ -102,7 +102,6 @@ DROP TABLE orders;
 CREATE TABLE t1_timescale (a int, b int);
 CREATE TABLE t2 (a int, b int);
 SELECT create_hypertable('t1_timescale', 'a', chunk_time_interval=>1000);
-NOTICE:  adding not-null constraint to column "a"
      create_hypertable     
 ---------------------------
  (3,public,t1_timescale,t)

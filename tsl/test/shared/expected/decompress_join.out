@@ -31,7 +31,6 @@ DROP TABLE compressed_join_temp;
 -- test join with partially compressed chunks
 CREATE TABLE partial_join(time timestamptz,device text);
 SELECT table_name FROM create_hypertable('partial_join','time');
-NOTICE:  adding not-null constraint to column "time"
   table_name  
  partial_join
 (1 row)

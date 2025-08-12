@@ -4,7 +4,6 @@
 -- Test various cases of COPY with decompression and different chunk layouts.
 create table cdmlcopy(filler bigint, ts int, value float, metric text);
 select create_hypertable('cdmlcopy', 'ts', chunk_time_interval => 1000);
-NOTICE:  adding not-null constraint to column "ts"
    create_hypertable   
 -----------------------
  (1,public,cdmlcopy,t)

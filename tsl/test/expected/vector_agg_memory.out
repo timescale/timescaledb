@@ -10,7 +10,6 @@ create or replace function ts_debug_allocated_bytes(text = 'PortalContext') retu
     language c strict volatile;
 create table mvagg (t int, s0 int, s1 int);
 select create_hypertable('mvagg', 't', chunk_time_interval => pow(10, 9)::int);
-NOTICE:  adding not-null constraint to column "t"
  create_hypertable  
 --------------------
  (1,public,mvagg,t)

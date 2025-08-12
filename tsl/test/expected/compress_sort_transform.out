@@ -9,7 +9,6 @@ set enable_hashagg to off;
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 CREATE TABLE ht_metrics_partially_compressed(time timestamptz, device int, value float);
 SELECT create_hypertable('ht_metrics_partially_compressed','time');
-NOTICE:  adding not-null constraint to column "time"
               create_hypertable               
 ----------------------------------------------
  (1,public,ht_metrics_partially_compressed,t)

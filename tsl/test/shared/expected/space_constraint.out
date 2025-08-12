@@ -657,7 +657,6 @@ QUERY PLAN
 -- test multiple space dimensions and different datatypes
 CREATE TABLE space_constraint(time timestamptz, s1 text, s2 numeric, s3 int, v float);
 SELECT table_name FROM create_hypertable('space_constraint','time');
-NOTICE:  adding not-null constraint to column "time"
     table_name    
  space_constraint
 (1 row)

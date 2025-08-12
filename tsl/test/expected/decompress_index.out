@@ -5,7 +5,6 @@
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float, tag text);
 ALTER TABLE ht_metrics_compressed SET (autovacuum_enabled = false);
 SELECT create_hypertable('ht_metrics_compressed','time',create_default_indexes:=false, chunk_time_interval => interval '100 day');
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable          
 ------------------------------------
  (1,public,ht_metrics_compressed,t)

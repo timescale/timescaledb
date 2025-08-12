@@ -12,7 +12,6 @@
 SET timescaledb.enable_uuid_compression = on;
 CREATE TABLE t (ts int, u uuid);
 SELECT create_hypertable('t', 'ts', chunk_time_interval => 500);
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (1,public,t,t)
@@ -96,7 +95,6 @@ SELECT compress_chunk(show_chunks('t'));
 
 CREATE TABLE mixed_compressed (ts int, u uuid);
 SELECT create_hypertable('mixed_compressed', 'ts', chunk_time_interval => 500);
-NOTICE:  adding not-null constraint to column "ts"
        create_hypertable       
 -------------------------------
  (3,public,mixed_compressed,t)

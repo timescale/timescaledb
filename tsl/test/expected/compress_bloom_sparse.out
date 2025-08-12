@@ -10,7 +10,6 @@ $$ language sql;
 create table bloom(x int, value text, u uuid, ts timestamp);
 select create_hypertable('bloom', 'x');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "x"
  create_hypertable  
 --------------------
  (1,public,bloom,t)
@@ -377,7 +376,6 @@ select count(*) from bloom where ts between '2021-01-07' and '2021-01-14';
 -- Test some corner cases
 create table corner(ts int, s text, c text);
 select create_hypertable('corner', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable  
 ---------------------
  (3,public,corner,t)
@@ -538,7 +536,6 @@ as
 ;
 create table badtable(ts int, s int, b badint);
 select create_hypertable('badtable', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
    create_hypertable   
 -----------------------
  (5,public,badtable,t)
@@ -781,7 +778,6 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
 -- Test a non-by-value 8-byte type.
 create table byref(ts int, x macaddr8);
 select create_hypertable('byref', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable  
 --------------------
  (7,public,byref,t)
@@ -820,7 +816,6 @@ select * from byref where x = float8tomacaddr8(mix(1));
 create table arraybloom(x int, value int[], ts timestamp);
 select create_hypertable('arraybloom', 'x');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "x"
     create_hypertable    
 -------------------------
  (9,public,arraybloom,t)

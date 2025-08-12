@@ -3,7 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 create table sparse(ts int, value float);
 select create_hypertable('sparse', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable  
 ---------------------
  (1,public,sparse,t)

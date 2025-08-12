@@ -20,7 +20,6 @@ INSERT INTO d SELECT g AS ts, true AS b FROM generate_series(5001, 20000) g;
 -- add a few bool columns
 CREATE TABLE t (ts int, b1 bool, b2 bool, b3 bool);
 SELECT create_hypertable('t', 'ts', chunk_time_interval => 5000);
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (1,public,t,t)

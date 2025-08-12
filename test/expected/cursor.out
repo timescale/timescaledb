@@ -3,7 +3,6 @@
 -- LICENSE-APACHE for a copy of the license.
 CREATE TABLE cursor_test(time timestamptz, device_id int, temp float);
 SELECT create_hypertable('cursor_test','time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (1,public,cursor_test,t)

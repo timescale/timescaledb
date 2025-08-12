@@ -7,7 +7,6 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 --basic test with count
 CREATE TABLE int_tab (a integer, b integer, c integer);
 SELECT table_name FROM create_hypertable('int_tab', 'a', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "a"
  table_name 
 ------------
  int_tab
@@ -345,7 +344,6 @@ DROP MATERIALIZED VIEW mat_m1;
 --- code coverage tests : add policy for timestamp and date based table ---
 CREATE TABLE continuous_agg_max_mat_date(time DATE);
 SELECT create_hypertable('continuous_agg_max_mat_date', 'time');
-NOTICE:  adding not-null constraint to column "time"
             create_hypertable             
 ------------------------------------------
  (5,public,continuous_agg_max_mat_date,t)
@@ -747,7 +745,6 @@ DROP MATERIALIZED VIEW max_mat_view_date;
 CREATE TABLE continuous_agg_timestamp(time TIMESTAMP);
 SELECT create_hypertable('continuous_agg_timestamp', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
  (8,public,continuous_agg_timestamp,t)
@@ -818,7 +815,6 @@ DROP MATERIALIZED VIEW max_mat_view_timestamp;
 --smallint table
 CREATE TABLE smallint_tab (a smallint);
 SELECT table_name FROM create_hypertable('smallint_tab', 'a', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "a"
   table_name  
 --------------
  smallint_tab
@@ -1022,7 +1018,6 @@ SELECT add_continuous_aggregate_policy('mat_smallint', '15', '10', '1h'::interva
 --bigint table
 CREATE TABLE bigint_tab (a bigint);
 SELECT table_name FROM create_hypertable('bigint_tab', 'a', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "a"
  table_name 
 ------------
  bigint_tab

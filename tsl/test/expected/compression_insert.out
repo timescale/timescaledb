@@ -7,7 +7,6 @@ SET timezone TO 'America/Los_Angeles';
 CREATE TABLE test1 (timec timestamptz , i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');
-NOTICE:  adding not-null constraint to column "timec"
  table_name 
 ------------
  test1
@@ -225,7 +224,6 @@ DROP TABLE test1;
 -- also tests defaults
 CREATE TABLE test2 ( itime integer, b bigint, t text);
 SELECT table_name from create_hypertable('test2', 'itime', chunk_time_interval=> 10::integer);
-NOTICE:  adding not-null constraint to column "itime"
  table_name 
 ------------
  test2
@@ -300,7 +298,6 @@ CREATE TABLE test2 (timec timestamptz ,
       CONSTRAINT rowconstr CHECK ( b > i )
 );
 SELECT table_name from create_hypertable('test2', 'timec', chunk_time_interval=> INTERVAL '7 days');
-NOTICE:  adding not-null constraint to column "timec"
  table_name 
 ------------
  test2
@@ -368,7 +365,6 @@ CREATE TABLE vessels (timec timestamptz ,
       CONSTRAINT rowconstr CHECK ( b > i )
 );
 SELECT table_name from create_hypertable('vessels', 'timec', chunk_time_interval=> INTERVAL '7 days');
-NOTICE:  adding not-null constraint to column "timec"
  table_name 
 ------------
  vessels
@@ -761,7 +757,6 @@ DROP TABLE trigger_test;
 SET timescaledb.enable_decompression_sorted_merge = 0;
 CREATE TABLE test_ordering(time int);
 SELECT table_name FROM create_hypertable('test_ordering','time',chunk_time_interval:=100);
-NOTICE:  adding not-null constraint to column "time"
   table_name   
 ---------------
  test_ordering

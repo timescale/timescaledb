@@ -16,7 +16,6 @@ create table aggfns(t int, s int,
     cdate date);
 select create_hypertable('aggfns', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
 WARNING:  column type "timestamp without time zone" used for "cts" does not follow best practices
-NOTICE:  adding not-null constraint to column "s"
   create_hypertable  
 ---------------------
  (1,public,aggfns,t)
@@ -132,7 +131,6 @@ select count(compress_chunk(x)) from show_chunks('aggfns') x;
 vacuum freeze analyze aggfns;
 create table edges(t int, s int, ss int, f1 int);
 select create_hypertable('edges', 't', chunk_time_interval => 100000);
-NOTICE:  adding not-null constraint to column "t"
  create_hypertable  
 --------------------
  (3,public,edges,t)
