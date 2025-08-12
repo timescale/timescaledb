@@ -55,7 +55,7 @@ default_ignored_tests = {
 }
 
 # Some tests are ignored on PG earlier than 17 due to broken MergeAppend cost model there.
-ignored_before_pg17 = default_ignored_tests + {"merge_append_partially_compressed"}
+ignored_before_pg17 = default_ignored_tests | {"merge_append_partially_compressed"}
 
 # Tests that we do not run as part of a Flake tests
 flaky_exclude_tests = {
