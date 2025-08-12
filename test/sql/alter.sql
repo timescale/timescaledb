@@ -363,7 +363,7 @@ INSERT INTO original_name.my_table2 (date, quantity) VALUES ('2018-07-04T21:00:0
 ALTER SCHEMA original_name RENAME TO new_name;
 
 DROP SCHEMA new_name CASCADE;
-\dt new_name.*;
+SELECT * FROM test.relation WHERE schema = 'new_name';
 
 -- Make sure we can't rename internal schemas
 \set ON_ERROR_STOP 0

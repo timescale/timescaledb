@@ -14,7 +14,7 @@ SET timescaledb.enable_now_constify TO false;
 SET enable_memoize TO 'off';
 -- disable index only scans to avoid some flaky results
 SET enable_indexonlyscan TO FALSE;
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
