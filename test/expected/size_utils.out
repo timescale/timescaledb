@@ -102,7 +102,6 @@ SELECT * FROM chunks_detailed_size('"public"."two_Partitions"') order by chunk_n
 CREATE TABLE timestamp_partitioned(time TIMESTAMP, value TEXT);
 SELECT * FROM create_hypertable('timestamp_partitioned', 'time', 'value', 2);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
              2 | public      | timestamp_partitioned | t
@@ -120,7 +119,6 @@ SELECT * FROM chunks_detailed_size('timestamp_partitioned') order by chunk_name;
 CREATE TABLE timestamp_partitioned_2(time TIMESTAMP, value CHAR(9));
 SELECT * FROM create_hypertable('timestamp_partitioned_2', 'time', 'value', 2);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |       table_name        | created 
 ---------------+-------------+-------------------------+---------
              3 | public      | timestamp_partitioned_2 | t
@@ -141,7 +139,6 @@ CREATE TABLE toast_test(time TIMESTAMP, value TEXT);
 ALTER TABLE toast_test ALTER COLUMN value SET STORAGE EXTERNAL;
 SELECT * FROM create_hypertable('toast_test', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              4 | public      | toast_test | t
@@ -420,7 +417,6 @@ SELECT
 CREATE TABLE approx_count(time TIMESTAMP, value int);
 SELECT * FROM create_hypertable('approx_count', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              5 | public      | approx_count | t
@@ -729,7 +725,6 @@ HINT:  The operation is only possible on a hypertable or continuous aggregate.
 \set ON_ERROR_STOP 1
 -- Test size functions on empty hypertable
 SELECT * FROM create_hypertable('hypersize', 'time');
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              6 | public      | hypersize  | t

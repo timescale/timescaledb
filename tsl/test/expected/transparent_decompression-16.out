@@ -7866,7 +7866,6 @@ CREATE TABLE readings (time timestamptz, tags_id integer, fuel_consumption DOUBL
 CREATE INDEX ON readings(tags_id, "time" DESC);
 CREATE INDEX ON readings("time" DESC);
 SELECT create_hypertable('readings', 'time', partitioning_column => 'tags_id', number_partitions => 1, chunk_time_interval => 43200000000, create_default_indexes=>false);
-psql:include/transparent_decompression_undiffed.sql:12: NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (13,public,readings,t)
@@ -9479,7 +9478,6 @@ motion_table_t2_datalogger_id_idx on motion_table (datalogger_id);
 CREATE INDEX motion_table_t2_dataloggertime_idx on motion_table(dataloggertime DESC);
 CREATE INDEX motion_table_t2_vessel_id_idx on motion_table(vessel_id);
 SELECT create_hypertable( 'motion_table', 'dataloggertime', chunk_time_interval=> '7 days'::interval);
-NOTICE:  adding not-null constraint to column "dataloggertime"
      create_hypertable      
 ----------------------------
  (15,public,motion_table,t)

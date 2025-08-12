@@ -60,9 +60,7 @@ HINT:  Valid timescaledb parameters are: hypertable, columnstore, partition_colu
 BEGIN;
 CREATE TABLE t3(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time');
 CREATE TABLE t4(time timestamp, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,timescaledb.partition_column='time');
-NOTICE:  adding not-null constraint to column "time"
 CREATE TABLE t5(time date, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time',autovacuum_enabled);
-NOTICE:  adding not-null constraint to column "time"
 CREATE TABLE t6(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore=false,timescaledb.hypertable,tsdb.partition_column='time');
 SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  hypertable_name 

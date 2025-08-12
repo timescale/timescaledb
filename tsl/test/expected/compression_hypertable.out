@@ -63,7 +63,6 @@ CREATE OPERATOR CLASS customtype_ops
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 day');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test1
@@ -202,7 +201,6 @@ SELECT count(*) FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2;
 --add test for altered hypertable
 CREATE TABLE test2 ("Time" timestamptz, i integer, b bigint, t text);
 SELECT table_name from create_hypertable('test2', 'Time', chunk_time_interval=> INTERVAL '1 day');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test2
@@ -579,7 +577,6 @@ DROP TABLE test6;
 CREATE TABLE test7(time INT, c1 DATE, c2 TIMESTAMP, c3 FLOAT, n TEXT);
 SELECT create_hypertable('test7', 'time', chunk_time_interval=> 200);
 WARNING:  column type "timestamp without time zone" used for "c2" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------
  (11,public,test7,t)
@@ -657,7 +654,6 @@ create or replace function mix(x float4) returns float4 as $$ select ((hashfloat
 -- test gorilla for float4 and deltadelta for int32 and other types
 create table test8(ts date, id int, value float4, valueint2 int2, valuebool bool);
 select create_hypertable('test8', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable  
 ---------------------
  (13,public,test8,t)

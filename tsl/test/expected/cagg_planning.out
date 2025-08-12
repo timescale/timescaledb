@@ -11,7 +11,6 @@ SELECT format('\! diff -u --label Baseline --label Optimized %s %s', :'TEST_RESU
 SET timezone TO PST8PDT;
 CREATE TABLE metrics(time timestamptz, device text, metric text, value float);
 SELECT create_hypertable('metrics', 'time');
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------
  (1,public,metrics,t)

@@ -6,7 +6,6 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET client_min_messages TO NOTICE;
 CREATE TABLE continuous_agg_test(timeval integer, col1 integer, col2 integer);
 select create_hypertable('continuous_agg_test', 'timeval', chunk_time_interval=> 2);
-NOTICE:  adding not-null constraint to column "timeval"
         create_hypertable         
 ----------------------------------
  (1,public,continuous_agg_test,t)
@@ -220,7 +219,6 @@ select view_name from timescaledb_information.continuous_aggregates;
 -- they do not meet materialization invalidation threshold for cagg2.
 CREATE TABLE continuous_agg_test(timeval integer, col1 integer, col2 integer);
 select create_hypertable('continuous_agg_test', 'timeval', chunk_time_interval=> 2);
-NOTICE:  adding not-null constraint to column "timeval"
         create_hypertable         
 ----------------------------------
  (4,public,continuous_agg_test,t)
@@ -368,7 +366,6 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_12_chunk
 ----TEST7 multiple continuous aggregates with real time aggregates test----
 create table foo (a integer, b integer, c integer);
 select table_name FROM create_hypertable('foo', 'a', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "a"
  table_name 
 ------------
  foo

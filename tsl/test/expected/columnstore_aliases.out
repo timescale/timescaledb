@@ -30,7 +30,6 @@ $$;
 -- result of each query is not particularly important.
 CREATE TABLE test1 (ts timestamptz, i integer, b bigint, t text);
 SELECT * FROM create_hypertable('test1', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | test1      | t
@@ -86,7 +85,6 @@ SELECT * FROM hypertable_columnstore_stats('test1') where 1 = 2;
 
 CREATE TABLE test2 (ts timestamptz, i integer, b bigint, t text);
 SELECT * FROM create_hypertable('test2', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              3 | public      | test2      | t

@@ -77,7 +77,6 @@ WARNING:  no privileges were granted for "public"
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test_continuous_agg_table(time int, data int);
 SELECT create_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
            create_hypertable            
 ----------------------------------------
  (1,public,test_continuous_agg_table,t)
@@ -664,7 +663,6 @@ SELECT ts_bgw_params_reset_time();
 --
 CREATE TABLE test_continuous_agg_table_w_grant(time int, data int);
 SELECT create_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
                create_hypertable                
 ------------------------------------------------
  (5,public,test_continuous_agg_table_w_grant,t)

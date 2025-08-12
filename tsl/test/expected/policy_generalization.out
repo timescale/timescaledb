@@ -8,7 +8,6 @@ DROP TABLE IF EXISTS test;
 NOTICE:  table "test" does not exist, skipping
 CREATE TABLE test(time INTEGER, device INTEGER, temp FLOAT);
 SELECT create_hypertable('test', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (1,public,test,t)

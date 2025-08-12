@@ -327,7 +327,6 @@ select * from compression_rowcnt_view where chunk_name = :'compressed_chunk';
 -- PREPRE A SELECT before recompress and perform it after recompress
 CREATE TABLE mytab_prep (time timestamptz, a int, b int, c int);
 SELECT create_hypertable('mytab_prep', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (9,public,mytab_prep,t)
@@ -402,7 +401,6 @@ EXECUTE p1;
 -- in the second case, a new compressed chunk is created
 CREATE TABLE mytab (time timestamptz, a int, b int, c int);
 SELECT create_hypertable('mytab', 'time');
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------
  (11,public,mytab,t)
@@ -504,7 +502,6 @@ select :'compressed_chunk_name_before_recompression' as before_recompression, :'
 select '2022-01-01 09:00:00+00' as start_time \gset
 create table nullseg_one (time timestamptz, a int, b int);
 select create_hypertable('nullseg_one', 'time');
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (14,public,nullseg_one,t)
@@ -557,7 +554,6 @@ select * from :compressed_chunk_name;
 -- test multiple NULL segmentby columns
 create table nullseg_many (time timestamptz, a int, b int, c int);
 select create_hypertable('nullseg_many', 'time');
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (16,public,nullseg_many,t)
@@ -616,7 +612,6 @@ select * from :compressed_chunk_name;
 -- Test behaviour when no segmentby columns are present
 CREATE TABLE noseg(time timestamptz, a int, b int, c int);
 SELECT create_hypertable('noseg', by_range('time', INTERVAL '1 day'));
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (18,t)
@@ -644,7 +639,6 @@ INFO:  Using index "compress_hyper_19_20_chunk__ts_meta_min_1__ts_meta_max_1_idx
 -- Test behaviour when default order by is empty: should not segmentwise-recompress in this case
 CREATE TABLE no_oby(ts int, c1 int);
 SELECT create_hypertable('no_oby','ts');
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable   
 ----------------------
  (20,public,no_oby,t)

@@ -7,7 +7,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 CREATE TABLE cluster_test(time INTEGER, temp float, location int, value TEXT);
 SELECT create_hypertable('cluster_test', 'time', chunk_time_interval => 5);
-psql:include/cluster_test_setup.sql:7: NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (1,public,cluster_test,t)
@@ -1214,7 +1213,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY time;
 
 CREATE TABLE ct2(time INTEGER, val BIGINT);
 SELECT create_hypertable('ct2', 'time', chunk_time_interval => 5);
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (2,public,ct2,t)

@@ -337,7 +337,6 @@ CREATE TABLE metrics(time timestamptz primary key, device text, value float);
 SELECT table_name FROM create_hypertable('metrics', 'time');
 CREATE TABLE event(time timestamptz, info text);
 SELECT table_name FROM create_hypertable('event', 'time');
-psql:include/foreign_keys.sql:384: NOTICE:  adding not-null constraint to column "time"
 \set ON_ERROR_STOP 0
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time);
 psql:include/foreign_keys.sql:387: ERROR:  hypertables cannot be used as foreign key references of hypertables
@@ -667,7 +666,6 @@ INSERT INTO i7226 VALUES ('2024-08-29 12:00:00+00', 1);
 create table converted_pk(time timestamptz, id int, unique(time, id));
 create table converted_fk(time timestamptz, id int, foreign key (time, id) references converted_pk(time, id));
 select table_name FROM create_hypertable ('converted_pk', 'time');
-psql:include/foreign_keys.sql:748: NOTICE:  adding not-null constraint to column "time"
 \set ON_ERROR_STOP 0
 -- should fail
 INSERT INTO converted_fk SELECT '2020-01-01', 1;
@@ -1027,7 +1025,6 @@ CREATE TABLE metrics(time timestamptz primary key, device text, value float);
 SELECT table_name FROM create_hypertable('metrics', 'time');
 CREATE TABLE event(time timestamptz, info text);
 SELECT table_name FROM create_hypertable('event', 'time');
-psql:include/foreign_keys.sql:384: NOTICE:  adding not-null constraint to column "time"
 \set ON_ERROR_STOP 0
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time);
 psql:include/foreign_keys.sql:387: ERROR:  hypertables cannot be used as foreign key references of hypertables
@@ -1357,7 +1354,6 @@ INSERT INTO i7226 VALUES ('2024-08-29 12:00:00+00', 1);
 create table converted_pk(time timestamptz, id int, unique(time, id));
 create table converted_fk(time timestamptz, id int, foreign key (time, id) references converted_pk(time, id));
 select table_name FROM create_hypertable ('converted_pk', 'time');
-psql:include/foreign_keys.sql:748: NOTICE:  adding not-null constraint to column "time"
 \set ON_ERROR_STOP 0
 -- should fail
 INSERT INTO converted_fk SELECT '2020-01-01', 1;

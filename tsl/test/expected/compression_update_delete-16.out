@@ -640,7 +640,6 @@ CREATE TABLE sample_table(
     device_id INT,
     val INT);
 SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              9 | public      | sample_table | t
@@ -750,7 +749,6 @@ CREATE TABLE sample_table(
     device_id INT,
     val INT);
 SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
             11 | public      | sample_table | t
@@ -812,7 +810,6 @@ CREATE TABLE sample_table(
     device_id INT,
     val INT);
 SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
             13 | public      | sample_table | t
@@ -996,7 +993,6 @@ CREATE TABLE sample_table(
     d INT,
     e INT default 13);
 SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 5);
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
             15 | public      | sample_table | t
@@ -1222,7 +1218,6 @@ DROP TABLE sample_table;
 -- test with different physical layout
 CREATE TABLE sample_table(time timestamptz, c1 text, c2 text, c3 text);
 SELECT create_hypertable('sample_table','time');
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (17,public,sample_table,t)
@@ -1308,7 +1303,6 @@ DROP TABLE sample_table;
 -- test filtering with ORDER BY columns
 CREATE TABLE sample_table(time timestamptz, c1 int, c2 int, c3 int, c4 int);
 SELECT create_hypertable('sample_table','time',chunk_time_interval=>'1 day'::interval);
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (19,public,sample_table,t)
@@ -2515,7 +2509,6 @@ DROP DATABASE test5586;
 --issue: #6024
 CREATE TABLE t(a integer, b integer);
 SELECT create_hypertable('t', 'a', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "a"
  create_hypertable 
 -------------------
  (31,public,t,t)

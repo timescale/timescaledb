@@ -8,7 +8,6 @@
 create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2 text, type smallint, is_new bool, duration smallint, addr1 text, addr2 text, street text, locality text, town text, district text, country text, category smallint);
 -- Aim to about 100 partitions, the data is from 1995 to 2022.
 select create_hypertable('uk_price_paid', 'date', chunk_time_interval => interval '90 day');
-NOTICE:  adding not-null constraint to column "date"
      create_hypertable      
 ----------------------------
  (1,public,uk_price_paid,t)
@@ -62,7 +61,6 @@ select * from portal_memory_log where (
 -- Test plpgsql leaks
 CREATE TABLE test_ht(tm timestamptz, val float8);
 SELECT * FROM create_hypertable('test_ht', 'tm');
-NOTICE:  adding not-null constraint to column "tm"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | public      | test_ht    | t

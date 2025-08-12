@@ -10,7 +10,6 @@ CREATE OR REPLACE FUNCTION reorder_called(chunk_id INT) RETURNS BOOL AS $$
 $$ LANGUAGE SQL;
 CREATE TABLE test_table(time timestamptz, chunk_id int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,test_table,t)
@@ -326,14 +325,12 @@ NOTICE:  no chunks need reordering for hypertable public.test_table
 CREATE TABLE test_table_int(time bigint, junk int);
 CREATE TABLE test_overflow_smallint(time smallint, junk int);
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (2,public,test_table_int,t)
 (1 row)
 
 SELECT create_hypertable('test_overflow_smallint', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable          
 -------------------------------------
  (3,public,test_overflow_smallint,t)
@@ -535,7 +532,6 @@ end
 $body$;
 create or replace function dummy_now() returns bigint language sql immutable as  'select 2::bigint';
 select create_hypertable('part_time_now_func', 'time', time_partitioning_func => 'time_partfunc', chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (5,public,part_time_now_func,t)

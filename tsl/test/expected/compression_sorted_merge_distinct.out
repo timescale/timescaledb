@@ -9,7 +9,6 @@ create or replace function mix(x float4) returns float4 as $$ select ((hashfloat
 create table t(ts timestamp, low_card int, high_card int, value float);
 select create_hypertable('t', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (1,public,t,t)

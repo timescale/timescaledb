@@ -93,7 +93,6 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Create two chunks to scan in the test
 CREATE TABLE hyper (time timestamptz, temp float);
 SELECT create_hypertable('hyper', 'time');
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable  
 --------------------
  (1,public,hyper,t)

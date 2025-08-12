@@ -11,7 +11,6 @@ SET timezone TO PST8PDT;
 -- others will have 2 chunks in plan
 CREATE TABLE const_now(time timestamptz, time2 timestamptz, device_id int, value float);
 SELECT table_name FROM create_hypertable('const_now','time');
-NOTICE:  adding not-null constraint to column "time"
  table_name 
  const_now
 (1 row)
@@ -397,7 +396,6 @@ DROP TABLE const_now;
 -- test prepared statements
 CREATE TABLE prep_const_now(time timestamptz, device int, value float);
 SELECT table_name FROM create_hypertable('prep_const_now', 'time');
-NOTICE:  adding not-null constraint to column "time"
    table_name   
  prep_const_now
 (1 row)
@@ -578,7 +576,6 @@ DROP TABLE const_now_dst;
 SET timescaledb.current_timestamp_mock TO '2003-01-01 0:30:00+00';
 CREATE TABLE now_view_test(time timestamptz,device text, value float);
 SELECT table_name FROM create_hypertable('now_view_test','time');
-NOTICE:  adding not-null constraint to column "time"
   table_name   
  now_view_test
 (1 row)

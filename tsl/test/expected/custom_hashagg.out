@@ -3,7 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 create table foo( a integer, b timestamptz);
 select count(*) from create_hypertable('foo', 'b');
-NOTICE:  adding not-null constraint to column "b"
  count 
 -------
      1

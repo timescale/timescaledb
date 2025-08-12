@@ -106,7 +106,6 @@ SELECT count(*) FROM (SELECT device, field FROM plan_plus GROUP BY device, field
 -- UUID groupping
 create table uuid_table(ts int, u uuid);
 select count(*) from create_hypertable('uuid_table', 'ts', chunk_time_interval => 6);
-NOTICE:  adding not-null constraint to column "ts"
  count 
 -------
      1

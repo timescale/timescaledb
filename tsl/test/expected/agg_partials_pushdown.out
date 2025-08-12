@@ -515,7 +515,6 @@ RESET enable_hashagg;
 CREATE TABLE merge_append_test (start_time timestamptz, sensor_id int, cluster varchar (253), cost_recommendation_memory numeric);
 SELECT * FROM create_hypertable('merge_append_test', 'start_time');
 WARNING:  column type "character varying" used for "cluster" does not follow best practices
-NOTICE:  adding not-null constraint to column "start_time"
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------
              4 | public      | merge_append_test | t
