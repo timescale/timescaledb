@@ -1372,7 +1372,7 @@ generate_uuidv7(int n)
 
 	for (int i = 0; i < n; ++i)
 	{
-		uuids[i] = UUIDPGetDatum(ts_create_uuid_v7_from_timestamptz(GetCurrentTimestamp()));
+		uuids[i] = UUIDPGetDatum(ts_create_uuid_v7_from_timestamptz(GetCurrentTimestamp(), false));
 	}
 
 	return uuids;
