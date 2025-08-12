@@ -7,6 +7,8 @@ RUNNER=${1:-""}
 
 sed  -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
      -e 's! Disk: [0-9]\{1,\}kB!!' \
+     -e 's! Buckets: [0-9]\+!!' \
+     -e 's! Batches: [0-9]\+!!' \
      -e 's! Memory: [0-9]\{1,\}kB!!' \
      -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
      -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' \

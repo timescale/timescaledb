@@ -468,7 +468,7 @@ select * from saop, arrays where segmentby = any(a);
                Sort Method: top-N heapsort 
                ->  HashAggregate (actual rows=23 loops=1)
                      Group Key: _hyper_1_1_chunk_1.segmentby
-                     Batches: 1 
+                     
                      ->  Append (actual rows=100000 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=50000 loops=1)
                                  ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69 loops=1)
@@ -506,7 +506,7 @@ select * from saop, arrays where with_minmax = any(a);
                            Sort Method: top-N heapsort 
                            ->  HashAggregate (actual rows=23 loops=1)
                                  Group Key: _hyper_1_1_chunk_1.segmentby
-                                 Batches: 1 
+                                 
                                  ->  Append (actual rows=100000 loops=1)
                                        ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=50000 loops=1)
                                              ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69 loops=1)
@@ -535,7 +535,7 @@ select * from saop, arrays where with_bloom = any(a);
                            Sort Method: top-N heapsort 
                            ->  HashAggregate (actual rows=23 loops=1)
                                  Group Key: _hyper_1_1_chunk_1.segmentby
-                                 Batches: 1 
+                                 
                                  ->  Append (actual rows=100000 loops=1)
                                        ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=50000 loops=1)
                                              ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69 loops=1)

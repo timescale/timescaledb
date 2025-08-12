@@ -137,7 +137,7 @@ SELECT current_setting('timescaledb.enable_skipscan') AS enable_skipscan;
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=12 loops=1)
          Group Key: dev
-         Batches: 1 
+         
          ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (7 rows)
 
@@ -253,7 +253,7 @@ CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: dev_name
-         Batches: 1 
+         
          ->  Bitmap Heap Scan on skip_scan (actual rows=2000 loops=1)
                Recheck Cond: (dev_name = ANY ('{device_1,device_2}'::text[]))
                Heap Blocks: exact=13
@@ -273,7 +273,7 @@ CREATE INDEX skip_scan_expr_idx ON :TABLE((dev % 3));
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=4 loops=1)
          Group Key: (dev % 3)
-         Batches: 1 
+         
          ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (7 rows)
 
@@ -426,7 +426,7 @@ stable expression in targetlist on skip_scan
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10022 loops=1)
          Group Key: dev, "time", dev_name, val
-         Batches: 1 
+         
          ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (7 rows)
 
@@ -438,7 +438,7 @@ stable expression in targetlist on skip_scan
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10022 loops=1)
          Group Key: dev, "time", dev_name, val
-         Batches: 1 
+         
          ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (7 rows)
 
@@ -450,7 +450,7 @@ stable expression in targetlist on skip_scan
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10021 loops=1)
          Group Key: dev, "time"
-         Batches: 1 
+         
          ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (7 rows)
 
@@ -470,7 +470,7 @@ stable expression in targetlist on skip_scan
 ---------------------------------------------------------
  HashAggregate (actual rows=102 loops=1)
    Group Key: time_bucket(10, "time")
-   Batches: 1 
+   
    ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (4 rows)
 
@@ -479,7 +479,7 @@ stable expression in targetlist on skip_scan
 ---------------------------------------------------------
  HashAggregate (actual rows=4 loops=1)
    Group Key: length(dev_name)
-   Batches: 1 
+   
    ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (4 rows)
 
@@ -488,7 +488,7 @@ stable expression in targetlist on skip_scan
 ---------------------------------------------------------
  HashAggregate (actual rows=1002 loops=1)
    Group Key: (3 * "time")
-   Batches: 1 
+   
    ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (4 rows)
 
@@ -497,7 +497,7 @@ stable expression in targetlist on skip_scan
 ---------------------------------------------------------
  HashAggregate (actual rows=12 loops=1)
    Group Key: ('Device '::text || dev_name)
-   Batches: 1 
+   
    ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (4 rows)
 
@@ -794,7 +794,7 @@ DISTINCT with wholerow var
 ---------------------------------------------------------
  HashAggregate (actual rows=10022 loops=1)
    Group Key: skip_scan.*
-   Batches: 1 
+   
    ->  Seq Scan on skip_scan (actual rows=10022 loops=1)
 (4 rows)
 
@@ -1159,7 +1159,7 @@ WHERE CLAUSES
 ---------------------------------------
  HashAggregate (actual rows=0 loops=1)
    Group Key: skip_scan.dev
-   Batches: 1 
+   
    ->  Result (actual rows=0 loops=1)
          One-Time Filter: false
 (5 rows)
@@ -1500,7 +1500,7 @@ SELECT current_setting('timescaledb.enable_skipscan') AS enable_skipscan;
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=11 loops=1)
          Group Key: _hyper_1_1_chunk.dev
-         Batches: 1 
+         
          ->  Append (actual rows=10020 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
@@ -1708,7 +1708,7 @@ CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.dev_name
-         Batches: 1 
+         
          ->  Append (actual rows=2000 loops=1)
                ->  Bitmap Heap Scan on _hyper_1_1_chunk (actual rows=500 loops=1)
                      Recheck Cond: (dev_name = ANY ('{device_1,device_2}'::text[]))
@@ -1744,7 +1744,7 @@ CREATE INDEX skip_scan_expr_idx ON :TABLE((dev % 3));
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=4 loops=1)
          Group Key: (_hyper_1_1_chunk.dev % 3)
-         Batches: 1 
+         
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
                      ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
@@ -1999,7 +1999,7 @@ stable expression in targetlist on skip_scan_ht
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
          Group Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time", _hyper_1_1_chunk.dev_name, _hyper_1_1_chunk.val
-         Batches: 1 
+         
          ->  Append (actual rows=10020 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
@@ -2015,7 +2015,7 @@ stable expression in targetlist on skip_scan_ht
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
          Group Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time", _hyper_1_1_chunk.dev_name, _hyper_1_1_chunk.val
-         Batches: 1 
+         
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
                      ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
@@ -2032,7 +2032,7 @@ stable expression in targetlist on skip_scan_ht
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
          Group Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
-         Batches: 1 
+         
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
                      ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
@@ -2068,7 +2068,7 @@ stable expression in targetlist on skip_scan_ht
 ---------------------------------------------------------------------------
  HashAggregate (actual rows=100 loops=1)
    Group Key: time_bucket(10, _hyper_1_1_chunk."time")
-   Batches: 1 
+   
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
@@ -2082,7 +2082,7 @@ stable expression in targetlist on skip_scan_ht
 ---------------------------------------------------------------------------
  HashAggregate (actual rows=3 loops=1)
    Group Key: length(_hyper_1_1_chunk.dev_name)
-   Batches: 1 
+   
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
@@ -2096,7 +2096,7 @@ stable expression in targetlist on skip_scan_ht
 ---------------------------------------------------------------------------
  HashAggregate (actual rows=1000 loops=1)
    Group Key: (3 * _hyper_1_1_chunk."time")
-   Batches: 1 
+   
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
@@ -2110,7 +2110,7 @@ stable expression in targetlist on skip_scan_ht
 ---------------------------------------------------------------------------
  HashAggregate (actual rows=11 loops=1)
    Group Key: ('Device '::text || _hyper_1_1_chunk.dev_name)
-   Batches: 1 
+   
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
@@ -2700,7 +2700,7 @@ DISTINCT with wholerow var
 ---------------------------------------------------------------------
  HashAggregate (actual rows=10020 loops=1)
    Group Key: ((skip_scan_ht.*)::skip_scan_ht)
-   Batches: 1 
+   
    ->  Append (actual rows=10020 loops=1)
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
          ->  Seq Scan on _hyper_1_2_chunk (actual rows=2505 loops=1)
@@ -3374,7 +3374,7 @@ WHERE CLAUSES
 ---------------------------------------
  HashAggregate (actual rows=0 loops=1)
    Group Key: skip_scan_ht.dev
-   Batches: 1 
+   
    ->  Result (actual rows=0 loops=1)
          One-Time Filter: false
 (5 rows)
@@ -4173,7 +4173,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=11 loops=1)
          Group Key: _hyper_3_5_chunk.dev
-         Batches: 1 
+         
          ->  Append (actual rows=10020 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                      ->  Sort (actual rows=11 loops=1)
@@ -4629,7 +4629,7 @@ stable expression in targetlist on skip_scan_htc
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
          Group Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time", _hyper_3_5_chunk.dev_name, _hyper_3_5_chunk.val
-         Batches: 1 
+         
          ->  Append (actual rows=10020 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                      ->  Seq Scan on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4649,7 +4649,7 @@ stable expression in targetlist on skip_scan_htc
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
          Group Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time", _hyper_3_5_chunk.dev_name, _hyper_3_5_chunk.val
-         Batches: 1 
+         
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)
@@ -4670,7 +4670,7 @@ stable expression in targetlist on skip_scan_htc
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
          Group Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time"
-         Batches: 1 
+         
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)
@@ -4723,7 +4723,7 @@ stable expression in targetlist on skip_scan_htc
 ---------------------------------------------------------------------------------------------
  HashAggregate (actual rows=11 loops=1)
    Group Key: (_hyper_3_5_chunk.dev + 1)
-   Batches: 1 
+   
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)
@@ -5057,7 +5057,7 @@ DISTINCT with wholerow var
 ---------------------------------------------------------------------------------------
  HashAggregate (actual rows=10020 loops=1)
    Group Key: ((skip_scan_htc.*)::skip_scan_htc)
-   Batches: 1 
+   
    ->  Append (actual rows=10020 loops=1)
          ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                ->  Seq Scan on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -5269,7 +5269,7 @@ stable expression in targetlist on skip_scan_htc
 ---------------------------------------------------------------------------------------------
  HashAggregate (actual rows=11 loops=1)
    Group Key: ('Device '::text || _hyper_3_5_chunk.dev_name)
-   Batches: 1 
+   
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=2505 loops=1)

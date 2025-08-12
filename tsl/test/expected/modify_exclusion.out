@@ -1133,11 +1133,11 @@ BEGIN;
                            Index Cond: (metrics_int4_4."time" < length(version()))
                ->  Hash (actual rows=4 loops=1)
                      Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
-                     Buckets: 1024  Batches: 1 
+                      
                      ->  HashAggregate (actual rows=4 loops=1)
                            Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
                            Group Key: metrics_int2."time"
-                           Batches: 1 
+                           
                            ->  Append (actual rows=4 loops=1)
                                  ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk metrics_int2_1 (actual rows=1 loops=1)
                                        Output: metrics_int2_1.ctid, metrics_int2_1."time", metrics_int2_1.tableoid
@@ -1175,11 +1175,11 @@ BEGIN;
                            Output: metrics_int4_4."time", metrics_int4_4.tableoid, metrics_int4_4.ctid
                ->  Hash (actual rows=4 loops=1)
                      Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
-                     Buckets: 1024  Batches: 1 
+                      
                      ->  HashAggregate (actual rows=4 loops=1)
                            Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
                            Group Key: metrics_int2."time"
-                           Batches: 1 
+                           
                            ->  Append (actual rows=4 loops=1)
                                  ->  Index Scan Backward using _hyper_1_1_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_1_chunk metrics_int2_1 (actual rows=1 loops=1)
                                        Output: metrics_int2_1.ctid, metrics_int2_1."time", metrics_int2_1.tableoid
@@ -1225,11 +1225,11 @@ BEGIN;
                            Index Cond: (metrics_int4_4."time" < length(version()))
                ->  Hash (actual rows=4 loops=1)
                      Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
-                     Buckets: 1024  Batches: 1 
+                      
                      ->  HashAggregate (actual rows=4 loops=1)
                            Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
                            Group Key: metrics_int2."time"
-                           Batches: 1 
+                           
                            ->  Append (actual rows=4 loops=1)
                                  ->  Index Scan Backward using _hyper_1_1_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_1_chunk metrics_int2_1 (actual rows=1 loops=1)
                                        Output: metrics_int2_1.ctid, metrics_int2_1."time", metrics_int2_1.tableoid
@@ -1275,11 +1275,11 @@ BEGIN;
                            Index Cond: (metrics_int4_4."time" < length(version()))
                ->  Hash (actual rows=4 loops=1)
                      Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
-                     Buckets: 1024  Batches: 1 
+                      
                      ->  HashAggregate (actual rows=4 loops=1)
                            Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
                            Group Key: metrics_int2."time"
-                           Batches: 1 
+                           
                            ->  Append (actual rows=4 loops=1)
                                  ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk metrics_int2_1 (actual rows=1 loops=1)
                                        Output: metrics_int2_1.ctid, metrics_int2_1."time", metrics_int2_1.tableoid
@@ -1317,11 +1317,11 @@ BEGIN;
                            Output: metrics_int4_4."time", metrics_int4_4.tableoid, metrics_int4_4.ctid
                ->  Hash (actual rows=4 loops=1)
                      Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
-                     Buckets: 1024  Batches: 1 
+                      
                      ->  HashAggregate (actual rows=4 loops=1)
                            Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
                            Group Key: metrics_int2."time"
-                           Batches: 1 
+                           
                            ->  Append (actual rows=4 loops=1)
                                  ->  Index Scan Backward using _hyper_1_1_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_1_chunk metrics_int2_1 (actual rows=1 loops=1)
                                        Output: metrics_int2_1.ctid, metrics_int2_1."time", metrics_int2_1.tableoid
@@ -1367,11 +1367,11 @@ BEGIN;
                            Index Cond: (metrics_int4_4."time" < length(version()))
                ->  Hash (actual rows=4 loops=1)
                      Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
-                     Buckets: 1024  Batches: 1 
+                      
                      ->  HashAggregate (actual rows=4 loops=1)
                            Output: metrics_int2.ctid, metrics_int2."time", metrics_int2.tableoid
                            Group Key: metrics_int2."time"
-                           Batches: 1 
+                           
                            ->  Append (actual rows=4 loops=1)
                                  ->  Index Scan Backward using _hyper_1_1_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_1_chunk metrics_int2_1 (actual rows=1 loops=1)
                                        Output: metrics_int2_1.ctid, metrics_int2_1."time", metrics_int2_1.tableoid
