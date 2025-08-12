@@ -9,4 +9,4 @@
 #include <utils/uuid.h>
 
 extern pg_uuid_t *ts_uuid_create(void);
-extern TSDLLEXPORT pg_uuid_t *ts_create_uuid_v7_from_timestamptz(TimestampTz ts);
+extern TSDLLEXPORT pg_uuid_t *ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool zero);
