@@ -14,14 +14,12 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 CREATE TABLE test_table(time timestamptz, junk int);
 CREATE TABLE test_table_int(time bigint, junk int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,test_table,t)
 (1 row)
 
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (2,public,test_table_int,t)
@@ -83,7 +81,6 @@ select * from _timescaledb_config.bgw_job where id=:job_id;
 -- Should be 1/2 default chunk interval length
 CREATE TABLE test_table2(time timestamptz, junk int);
 SELECT create_hypertable('test_table2', 'time', chunk_time_interval=>INTERVAL '1 day');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (3,public,test_table2,t)
@@ -408,7 +405,6 @@ ERROR:  table "non_hypertable" is not a hypertable
 -- Now make sure things work with multiple policies on multiple hypertables
 CREATE TABLE test_table(time timestamptz, junk int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (4,public,test_table,t)
@@ -417,7 +413,6 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE INDEX second_index on test_table (time);
 CREATE TABLE test_table2(time timestamptz, junk int);
 SELECT create_hypertable('test_table2', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (5,public,test_table2,t)
@@ -481,7 +476,6 @@ select job_id,chunk_id,num_times_job_run from _timescaledb_internal.bgw_policy_c
 
 CREATE TABLE test_table(time timestamptz, junk int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (6,public,test_table,t)
@@ -549,7 +543,6 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 -- Now check dropping a job will drop the chunk_stat row
 CREATE TABLE test_table(time timestamptz, junk int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (7,public,test_table,t)

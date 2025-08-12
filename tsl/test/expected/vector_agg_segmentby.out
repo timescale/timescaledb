@@ -6,7 +6,6 @@
 \set GROUPING_CARDINALITY 10::int
 create table svagg(t int, f int, s int);
 select create_hypertable('svagg', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
-NOTICE:  adding not-null constraint to column "s"
  create_hypertable  
 --------------------
  (1,public,svagg,t)

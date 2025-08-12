@@ -12,7 +12,6 @@ $$ LANGUAGE SQL;
 create table agggroup(t int, s int,
     cint2 int2, cint4 int4, cint8 int8);
 select create_hypertable('agggroup', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
-NOTICE:  adding not-null constraint to column "s"
    create_hypertable   
 -----------------------
  (1,public,agggroup,t)
@@ -147,7 +146,6 @@ vacuum freeze analyze agggroup;
 -- Long strings
 create table long(t int, a text, b text, c text, d text);
 select create_hypertable('long', 't');
-NOTICE:  adding not-null constraint to column "t"
  create_hypertable 
 -------------------
  (3,public,long,t)

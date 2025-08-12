@@ -40,7 +40,6 @@ AS :TSL_MODULE_PATHNAME LANGUAGE C VOLATILE;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE test1.hyper1 (time bigint, temp float);
 SELECT create_hypertable('test1.hyper1', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable  
 --------------------
  (1,test1,hyper1,t)

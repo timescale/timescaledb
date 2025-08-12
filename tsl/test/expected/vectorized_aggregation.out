@@ -3632,7 +3632,6 @@ SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY 
 --
 CREATE TABLE testtable3 (time timestamptz, location_id int, device_id int, sensor_id int);
 SELECT create_hypertable('testtable3', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (5,public,testtable3,t)

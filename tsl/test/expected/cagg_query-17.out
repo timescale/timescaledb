@@ -787,21 +787,18 @@ CREATE TABLE table_bigint (
   data bigint
 );
 SELECT create_hypertable('table_smallint', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:345: NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (7,public,table_smallint,t)
 (1 row)
 
 SELECT create_hypertable('table_int', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:346: NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (8,public,table_int,t)
 (1 row)
 
 SELECT create_hypertable('table_bigint', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:347: NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (9,public,table_bigint,t)

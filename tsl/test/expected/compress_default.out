@@ -5,7 +5,6 @@
 -- batch.
 create table t(ts int);
 select create_hypertable('t', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (1,public,t,t)

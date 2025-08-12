@@ -8,7 +8,6 @@ CREATE ACCESS METHOD testam TYPE TABLE HANDLER heap_tableam_handler;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE testam (time timestamptz, device int, temp float) USING testam;
 SELECT create_hypertable('testam', 'time', 'device', 2);
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------
  (1,public,testam,t)

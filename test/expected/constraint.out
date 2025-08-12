@@ -567,7 +567,6 @@ CREATE TABLE hyper_ex (
     ) WHERE (not canceled)
 );
 SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              6 | public      | hyper_ex   | t
@@ -625,7 +624,6 @@ CREATE TABLE hyper_ex_invalid (
 );
 \set ON_ERROR_STOP 0
 SELECT * FROM create_hypertable('hyper_ex_invalid', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
-NOTICE:  adding not-null constraint to column "time"
 ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 \set ON_ERROR_STOP 1
 --- NO INHERIT constraints (not allowed) ----
@@ -648,7 +646,6 @@ CREATE TABLE hyper_noinherit_alter (
     sensor_1 NUMERIC NULL DEFAULT 1
 );
 SELECT * FROM create_hypertable('hyper_noinherit_alter', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
              8 | public      | hyper_noinherit_alter | t
@@ -664,7 +661,6 @@ CREATE TABLE hyper_unique_deferred (
   sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
 );
 SELECT * FROM create_hypertable('hyper_unique_deferred', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
              9 | public      | hyper_unique_deferred | t
@@ -745,7 +741,6 @@ CREATE TABLE hyper_ex_deferred (
     ) WHERE (not canceled) DEFERRABLE INITIALLY DEFERRED
 );
 SELECT * FROM create_hypertable('hyper_ex_deferred', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------
             12 | public      | hyper_ex_deferred | t

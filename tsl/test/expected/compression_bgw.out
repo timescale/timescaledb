@@ -138,7 +138,6 @@ NOTICE:  drop cascades to view dummyv1
 --smallint test
 CREATE TABLE test_table_smallint(time SMALLINT, val SMALLINT);
 SELECT create_hypertable('test_table_smallint', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (3,public,test_table_smallint,t)
@@ -179,7 +178,6 @@ ORDER BY chunk_name;
 --integer tests
 CREATE TABLE test_table_integer(time INTEGER, val INTEGER);
 SELECT create_hypertable('test_table_integer', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (5,public,test_table_integer,t)
@@ -216,7 +214,6 @@ ORDER BY chunk_name;
 --bigint test
 CREATE TABLE test_table_bigint(time BIGINT, val BIGINT);
 SELECT create_hypertable('test_table_bigint', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable        
 --------------------------------
  (7,public,test_table_bigint,t)
@@ -255,7 +252,6 @@ ORDER BY chunk_name;
 SET ROLE NOLOGIN_ROLE;
 CREATE TABLE test_table_nologin(time bigint, val int);
 SELECT create_hypertable('test_table_nologin', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (9,public,test_table_nologin,t)
@@ -663,7 +659,6 @@ SELECT delete_job(:JOB_RECOMPRESS);
 --compression policy should ignore frozen partially compressed chunks
 CREATE TABLE test_table_frozen(time TIMESTAMPTZ, val SMALLINT);
 SELECT create_hypertable('test_table_frozen', 'time', chunk_time_interval => '1 day'::interval);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (18,public,test_table_frozen,t)
@@ -856,7 +851,6 @@ DROP TABLE metrics2;
 --compression policy errors
 CREATE TABLE test_compression_policy_errors(time TIMESTAMPTZ, val SMALLINT);
 SELECT create_hypertable('test_compression_policy_errors', 'time', chunk_time_interval => '1 day'::interval);
-NOTICE:  adding not-null constraint to column "time"
               create_hypertable               
 ----------------------------------------------
  (22,public,test_compression_policy_errors,t)

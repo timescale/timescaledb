@@ -8,7 +8,6 @@
 create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
 create table dvagg(a int, b int);
 select create_hypertable('dvagg', 'a', chunk_time_interval => 1000);
-NOTICE:  adding not-null constraint to column "a"
  create_hypertable  
 --------------------
  (1,public,dvagg,t)

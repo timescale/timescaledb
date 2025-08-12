@@ -18,7 +18,6 @@ ERROR:  You are using a PostgreSQL service. This feature is only available on Ti
 \set ON_ERROR_STOP 1
 SET timescaledb.enable_hypertable_create TO on;
 SELECT * FROM create_hypertable('test', 'time');
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | test       | t

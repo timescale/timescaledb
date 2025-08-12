@@ -91,7 +91,6 @@ DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
 CREATE TABLE my_ht (time BIGINT, val integer);
 SELECT * FROM create_hypertable('my_ht', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
-psql:include/ddl_ops_1.sql:66: NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              3 | public      | my_ht      | t
@@ -387,7 +386,6 @@ CREATE TABLE alter_test(time timestamptz, temp float, color varchar(10));
 -- create hypertable with two chunks
 SELECT create_hypertable('alter_test', 'time', 'color', 2, chunk_time_interval => 2628000000000);
 WARNING:  column type "character varying" used for "color" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (9,public,alter_test,t)
@@ -512,7 +510,6 @@ ERROR:  ONLY option not supported on hypertable operations
 \set ON_ERROR_STOP 1
 CREATE TABLE alter_test_bigint(time bigint, temp float);
 SELECT create_hypertable('alter_test_bigint', 'time', chunk_time_interval => 2628000000000);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (10,public,alter_test_bigint,t)
@@ -554,7 +551,6 @@ CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
 -- has no default hash function
 -- on PG14 custom types are hashable
 SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (12,public,part_custom_dim,t)

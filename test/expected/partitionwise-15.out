@@ -5,7 +5,6 @@
 -- Create a two dimensional hypertable
 CREATE TABLE hyper (time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('hyper', 'time', 'device', 2);
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | hyper      | t
@@ -525,7 +524,6 @@ ORDER BY 1, 2;
 -- anything
 CREATE TABLE hyper_meta (time timestamptz, device int, info text);
 SELECT * FROM create_hypertable('hyper_meta', 'time', 'device', 2);
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | public      | hyper_meta | t
@@ -679,7 +677,6 @@ END
 $BODY$;
 CREATE TABLE hyper_timepart (time float8, device int, temp float);
 SELECT * FROM create_hypertable('hyper_timepart', 'time', 'device', 2, time_partitioning_func => 'time_func');
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name   | created 
 ---------------+-------------+----------------+---------
              3 | public      | hyper_timepart | t

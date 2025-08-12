@@ -66,7 +66,6 @@ END;
 $$;
 CREATE TABLE append_test(time timestamptz, temp float, colorid integer, attr jsonb);
 SELECT create_hypertable('append_test', 'time', chunk_time_interval => 2628000000000);
-psql:include/append_load.sql:56: NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (1,public,append_test,t)
@@ -82,7 +81,6 @@ VACUUM (ANALYZE) append_test;
 -- Create another hypertable to join with
 CREATE TABLE join_test(time timestamptz, temp float, colorid integer);
 SELECT create_hypertable('join_test', 'time', chunk_time_interval => 2628000000000);
-psql:include/append_load.sql:68: NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (2,public,join_test,t)
@@ -1932,7 +1930,6 @@ RESET enable_hashagg;
 -- to trigger this we need a Sort node that is below ChunkAppend
 CREATE TABLE join_limit (time timestamptz, device_id int);
 SELECT table_name FROM create_hypertable('join_limit','time',create_default_indexes:=false);
-psql:include/append_query.sql:315: NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  join_limit
