@@ -3134,15 +3134,18 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 
 -- compression on one chunk will prevent skipscan if it's the only chunk remaining
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
          Vectorized Filter: ("time" = 100)
          Rows Removed by Filter: 2494
-         ->  Index Scan using compress_hyper_2_17_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_17_chunk (actual rows=11 loops=1)
-               Index Cond: ((_ts_meta_min_1 <= 100) AND (_ts_meta_max_1 >= 100))
-(6 rows)
+         ->  Sort (actual rows=11 loops=1)
+               Sort Key: compress_hyper_2_17_chunk.dev
+               Sort Method: quicksort 
+               ->  Seq Scan on compress_hyper_2_17_chunk (actual rows=11 loops=1)
+                     Filter: ((_ts_meta_min_1 <= 100) AND (_ts_meta_max_1 >= 100))
+(9 rows)
 
 SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
             decompress_chunk            
@@ -5887,6 +5890,7 @@ LIMIT queries on skip_scan_htcl
 
 \qecho range queries on :TABLE
 range queries on skip_scan_htcl
+set enable_seqscan to off;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time BETWEEN 100 AND 300 GROUP BY dev;
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -5932,6 +5936,7 @@ range queries on skip_scan_htcl
                      Index Cond: (_ts_meta_max_1 > 800)
 (7 rows)
 
+reset enable_seqscan;
 -- Various tests for "segmentby = 'dev'"
 ---------------------------------------
 \qecho SUBSELECTS on :TABLE

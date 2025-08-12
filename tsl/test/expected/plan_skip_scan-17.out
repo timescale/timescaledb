@@ -7295,6 +7295,7 @@ LIMIT queries on skip_scan_htcl
 
 \qecho range queries on :TABLE
 range queries on skip_scan_htcl
+set enable_seqscan to off;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time BETWEEN 100 AND 300;
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -7337,6 +7338,7 @@ range queries on skip_scan_htcl
                      Index Cond: (_ts_meta_max_1 > 800)
 (6 rows)
 
+reset enable_seqscan;
 -- Various tests for "segmentby = 'dev'"
 ---------------------------------------
 \qecho SUBSELECTS on :TABLE
