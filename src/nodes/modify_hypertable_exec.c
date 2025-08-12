@@ -131,7 +131,6 @@ typedef struct ModifyTableContext
  */
 typedef struct UpdateContext
 {
-	bool updated; /* did UPDATE actually occur? */
 	bool		crossPartUpdate;	/* was it a cross-partition update? */
 #if PG16_LT
 	bool updateIndexes; /* index update required? */
@@ -2994,7 +2993,7 @@ lmerge_matched:;
 										  newslot,
 										  mtstate->canSetTag,
 										  &updateCxt);
-				if (result == TM_Ok && updateCxt.updated)
+				if (result == TM_Ok)
 				{
 					ExecUpdateEpilogue(context,
 									   &updateCxt,
@@ -3002,7 +3001,7 @@ lmerge_matched:;
 									   tupleid,
 									   NULL,
 									   newslot);
-					mtstate->mt_merge_updated = 1;
+					mtstate->mt_merge_updated += 1;
 				}
 
 				break;

@@ -2,6 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE VIEW chunk_settings AS
+SELECT hypertable, count(*) as chunks, segmentby, orderby, index
+FROM timescaledb_information.chunk_compression_settings cs group by hypertable,segmentby,orderby, index ORDER BY 1,2,3,4,5;
 -- statitics on
 CREATE TABLE "public"."metrics" (
     "time" timestamp with time zone NOT NULL,
@@ -44,10 +47,10 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
     27
 (1 row)
 
-select * from timescaledb_information.chunk_compression_settings limit 1;
- hypertable |                 chunk                  | segmentby |   orderby   
-------------+----------------------------------------+-----------+-------------
- metrics    | _timescaledb_internal._hyper_1_1_chunk | device_id | "time" DESC
+select * from chunk_settings;
+ hypertable | chunks | segmentby |   orderby   |                            index                            
+------------+--------+-----------+-------------+-------------------------------------------------------------
+ metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
@@ -64,10 +67,10 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
     27
 (1 row)
 
-select * from timescaledb_information.chunk_compression_settings limit 1;
- hypertable |                 chunk                  | segmentby |   orderby   
-------------+----------------------------------------+-----------+-------------
- metrics    | _timescaledb_internal._hyper_1_1_chunk | device_id | "time" DESC
+select * from chunk_settings;
+ hypertable | chunks | segmentby |   orderby   |                            index                            
+------------+--------+-----------+-------------+-------------------------------------------------------------
+ metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
@@ -83,9 +86,9 @@ SET timescaledb.compression_orderby_default_function = '';
 ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_orderby = '"time" desc', timescaledb.compress_segmentby = '');
 WARNING:  column "device_id" should be used for segmenting or ordering
 SELECT * FROM _timescaledb_catalog.compression_settings;
-  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
----------+----------------+-----------+---------+--------------+--------------------
- metrics |                | {}        | {time}  | {t}          | {t}
+  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
+---------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
+ metrics |                | {}        | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
@@ -98,10 +101,10 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
     27
 (1 row)
 
-select * from timescaledb_information.chunk_compression_settings limit 1;
- hypertable |                 chunk                  | segmentby |        orderby        
-------------+----------------------------------------+-----------+-----------------------
- metrics    | _timescaledb_internal._hyper_1_1_chunk |           | device_id,"time" DESC
+select * from chunk_settings;
+ hypertable | chunks | segmentby |        orderby        |                                                            index                                                            
+------------+--------+-----------+-----------------------+-----------------------------------------------------------------------------------------------------------------------------
+ metrics    |     27 |           | device_id,"time" DESC | [{"type": "minmax", "column": "device_id", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
@@ -120,10 +123,10 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
     27
 (1 row)
 
-select * from timescaledb_information.chunk_compression_settings limit 1;
- hypertable |                 chunk                  | segmentby |   orderby   
-------------+----------------------------------------+-----------+-------------
- metrics    | _timescaledb_internal._hyper_1_1_chunk | device_id | "time" DESC
+select * from chunk_settings;
+ hypertable | chunks | segmentby |   orderby   |                            index                            
+------------+--------+-----------+-------------+-------------------------------------------------------------
+ metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
@@ -248,10 +251,10 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
     27
 (1 row)
 
-select * from timescaledb_information.chunk_compression_settings limit 1;
- hypertable |                 chunk                  | segmentby |   orderby   
-------------+----------------------------------------+-----------+-------------
- metrics    | _timescaledb_internal._hyper_1_1_chunk | device_id | "time" DESC
+select * from chunk_settings;
+ hypertable | chunks | segmentby |   orderby   |                            index                            
+------------+--------+-----------+-------------+-------------------------------------------------------------
+ metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
@@ -531,10 +534,10 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
     38
 (1 row)
 
-select * from timescaledb_information.chunk_compression_settings limit 1;
- hypertable |                   chunk                   | segmentby  |   orderby   
-------------+-------------------------------------------+------------+-------------
- metrics    | _timescaledb_internal._hyper_11_163_chunk | device_id2 | "time" DESC
+select * from chunk_settings;
+ hypertable | chunks | segmentby  |   orderby   |                            index                            
+------------+--------+------------+-------------+-------------------------------------------------------------
+ metrics    |     38 | device_id2 | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
@@ -551,10 +554,10 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
     38
 (1 row)
 
-select * from timescaledb_information.chunk_compression_settings limit 1;
- hypertable |                   chunk                   | segmentby |   orderby   
-------------+-------------------------------------------+-----------+-------------
- metrics    | _timescaledb_internal._hyper_11_163_chunk | device_id | "time" DESC
+select * from chunk_settings;
+ hypertable | chunks | segmentby |   orderby   |                            index                            
+------------+--------+-----------+-------------+-------------------------------------------------------------
+ metrics    |     38 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
@@ -581,9 +584,9 @@ SELECT _timescaledb_functions.get_orderby_defaults('table1', ARRAY['col1']::text
 
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
---------+----------------+-----------+---------+--------------+--------------------
- table1 |                | {col1}    |         |              | 
+ relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+--------+----------------+-----------+---------+--------------+--------------------+-------
+ table1 |                | {col1}    |         |              |                    | 
 (1 row)
 
 ALTER TABLE table1 SET (timescaledb.compress = false);
@@ -718,10 +721,10 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_table') x;
      1
 (1 row)
 
-SELECT * FROM timescaledb_information.chunk_compression_settings limit 1;
- hypertable |                   chunk                   | segmentby |   orderby    
-------------+-------------------------------------------+-----------+--------------
- test_table | _timescaledb_internal._hyper_26_277_chunk |           | uuid,ts DESC
+select * from chunk_settings;
+ hypertable | chunks | segmentby |   orderby    |                                                        index                                                         
+------------+--------+-----------+--------------+----------------------------------------------------------------------------------------------------------------------
+ test_table |      1 |           | uuid,ts DESC | [{"type": "minmax", "column": "uuid", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
 (1 row)
 
 DROP TABLE test_table;

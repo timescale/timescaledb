@@ -61,6 +61,22 @@ typedef enum SkipScanStage
 	SS_END,
 } SkipScanStage;
 
+typedef struct SkipKeyData
+{
+	ScanKey skip_key;
+
+	/* Comparison value filled in at runtime */
+	Datum prev_datum;
+	bool prev_is_null;
+
+	/* Info about the type we are performing DISTINCT on */
+	bool distinct_by_val;
+	int distinct_col_attnum;
+	int distinct_typ_len;
+	int sk_attno;
+	bool nulls_first;
+} SkipKeyData;
+
 typedef struct SkipScanState
 {
 	CustomScanState cscan_state;
@@ -73,20 +89,12 @@ typedef struct SkipScanState
 	/* Pointers into the Index(Only)Scan */
 	int *num_scan_keys;
 	ScanKey *scan_keys;
-	ScanKey skip_key;
 
-	Datum prev_datum;
-	bool prev_is_null;
-
-	/* Info about the type we are performing DISTINCT on */
-	bool distinct_by_val;
-	int distinct_col_attnum;
-	int distinct_typ_len;
-	int sk_attno;
+	int num_skip_keys;
+	SkipKeyData *skip_keys;
 
 	SkipScanStage stage;
 
-	bool nulls_first;
 	/* rescan required before getting next tuple */
 	bool needs_rescan;
 
@@ -150,22 +158,24 @@ skip_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	 * skip key is put as first key for the respective column in sort_indexquals
 	 */
 	ScanKey data = *state->scan_keys;
+	int j = 0;
 	for (int i = 0; i < *state->num_scan_keys; i++)
 	{
-		if (data[i].sk_flags == SK_ISNULL && data[i].sk_attno == state->sk_attno)
+		if (data[i].sk_flags == SK_ISNULL && data[i].sk_attno == state->skip_keys[j].sk_attno)
 		{
-			state->skip_key = &data[i];
-			break;
+			state->skip_keys[j++].skip_key = &data[i];
+			if (j == state->num_skip_keys)
+				break;
 		}
 	}
-	if (!state->skip_key)
+	if (j < state->num_skip_keys)
 		elog(ERROR, "ScanKey for skip qual not found");
 }
 
 static bool
 has_nulls_first(SkipScanState *state)
 {
-	return state->nulls_first;
+	return state->skip_keys[0].nulls_first;
 }
 
 static bool
@@ -218,20 +228,20 @@ skip_scan_switch_stage(SkipScanState *state, SkipScanStage new_stage)
 	switch (new_stage)
 	{
 		case SS_NOT_NULL:
-			state->skip_key->sk_flags = SK_ISNULL | SK_SEARCHNOTNULL;
-			state->skip_key->sk_argument = 0;
+			state->skip_keys[0].skip_key->sk_flags = SK_ISNULL | SK_SEARCHNOTNULL;
+			state->skip_keys[0].skip_key->sk_argument = 0;
 			state->needs_rescan = true;
 			break;
 
 		case SS_VALUES:
-			state->skip_key->sk_flags = 0;
+			state->skip_keys[0].skip_key->sk_flags = 0;
 			state->needs_rescan = true;
 			break;
 
 		case SS_NULLS_LAST:
 		case SS_NULLS_FIRST:
-			state->skip_key->sk_flags = SK_ISNULL | SK_SEARCHNULL;
-			state->skip_key->sk_argument = 0;
+			state->skip_keys[0].skip_key->sk_flags = SK_ISNULL | SK_SEARCHNULL;
+			state->skip_keys[0].skip_key->sk_argument = 0;
 			state->needs_rescan = true;
 			break;
 
@@ -246,24 +256,27 @@ skip_scan_switch_stage(SkipScanState *state, SkipScanStage new_stage)
 static void
 skip_scan_update_key(SkipScanState *state, TupleTableSlot *slot)
 {
-	if (!state->prev_is_null && !state->distinct_by_val)
+	if (!state->skip_keys[0].prev_is_null && !state->skip_keys[0].distinct_by_val)
 	{
 		Assert(state->stage == SS_VALUES);
-		pfree(DatumGetPointer(state->prev_datum));
+		pfree(DatumGetPointer(state->skip_keys[0].prev_datum));
 	}
 
 	MemoryContext old_ctx = MemoryContextSwitchTo(state->ctx);
-	state->prev_datum = slot_getattr(slot, state->distinct_col_attnum, &state->prev_is_null);
-	if (state->prev_is_null)
+	state->skip_keys[0].prev_datum = slot_getattr(slot,
+												  state->skip_keys[0].distinct_col_attnum,
+												  &state->skip_keys[0].prev_is_null);
+	if (state->skip_keys[0].prev_is_null)
 	{
-		state->skip_key->sk_flags = SK_ISNULL;
-		state->skip_key->sk_argument = 0;
+		state->skip_keys[0].skip_key->sk_flags = SK_ISNULL;
+		state->skip_keys[0].skip_key->sk_argument = 0;
 	}
 	else
 	{
-		state->prev_datum =
-			datumCopy(state->prev_datum, state->distinct_by_val, state->distinct_typ_len);
-		state->skip_key->sk_argument = state->prev_datum;
+		state->skip_keys[0].prev_datum = datumCopy(state->skip_keys[0].prev_datum,
+												   state->skip_keys[0].distinct_by_val,
+												   state->skip_keys[0].distinct_typ_len);
+		state->skip_keys[0].skip_key->sk_argument = state->skip_keys[0].prev_datum;
 	}
 
 	MemoryContextSwitchTo(old_ctx);
@@ -388,8 +401,8 @@ skip_scan_rescan(CustomScanState *node)
 	else
 		skip_scan_switch_stage(state, SS_NOT_NULL);
 
-	state->prev_is_null = true;
-	state->prev_datum = 0;
+	state->skip_keys[0].prev_is_null = true;
+	state->skip_keys[0].prev_datum = 0;
 
 	state->needs_rescan = false;
 	ScanState *child_state = linitial(state->cscan_state.custom_ps);
@@ -422,13 +435,24 @@ tsl_skip_scan_state_create(CustomScan *cscan)
 	}
 	state->stage = SS_BEGIN;
 
-	state->distinct_col_attnum = linitial_int(cscan->custom_private);
-	state->distinct_by_val = lsecond_int(cscan->custom_private);
-	state->distinct_typ_len = lthird_int(cscan->custom_private);
-	state->nulls_first = lfourth_int(cscan->custom_private);
-	state->sk_attno = list_nth_int(cscan->custom_private, 4);
+	state->num_skip_keys = list_length(cscan->custom_private);
+	state->skip_keys = palloc(sizeof(SkipKeyData) * state->num_skip_keys);
 
-	state->prev_is_null = true;
+	ListCell *lc;
+	int i = 0;
+	foreach (lc, cscan->custom_private)
+	{
+		List *skipkeyinfo = (List *) lfirst(lc);
+
+		state->skip_keys[i].distinct_col_attnum = linitial_int(skipkeyinfo);
+		state->skip_keys[i].distinct_by_val = lsecond_int(skipkeyinfo);
+		state->skip_keys[i].distinct_typ_len = lthird_int(skipkeyinfo);
+		state->skip_keys[i].nulls_first = lfourth_int(skipkeyinfo);
+		state->skip_keys[i].sk_attno = list_nth_int(skipkeyinfo, 4);
+
+		state->skip_keys[i].prev_is_null = true;
+		i++;
+	}
 	state->cscan_state.methods = &skip_scan_state_methods;
 	return (Node *) state;
 }
