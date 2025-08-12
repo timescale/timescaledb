@@ -96,7 +96,8 @@ set(SOLO_TESTS
     index
     pg_dump_unprivileged
     tablespace
-    telemetry)
+    telemetry
+    net)
 
 list(APPEND SOLO_TESTS ${LOADER_TEST_FILE})
 
