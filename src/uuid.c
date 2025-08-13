@@ -145,6 +145,7 @@ Datum
 ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
 {
 	pg_uuid_t *uuid = PG_GETARG_UUID_P(0);
+	bool sub_ms = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 
 	/* Check that the variant field corresponds to RFC9562 */
 	if (!IS_RFC9562_VARIANT(uuid))
@@ -159,9 +160,13 @@ ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
 
 	/* The timestamp is now milliseconds from Unix Epoch (1970-01-01)*/
 	uint64 timestamp = (pg_ntoh64(timestamp_be)) >> 16;
+	uint32 subms_timestamp = 0;
 
-	/* Get the sub ms part as well, reversing the scaling */
-	uint32 subms_timestamp = (((uuid->data[6] & 0xF) << 8) | uuid->data[7]) * 1000 / (1 << 12);
+	if (sub_ms)
+	{
+		/* Get the sub ms part as well, reversing the scaling */
+		subms_timestamp = (((uuid->data[6] & 0xF) << 8) | uuid->data[7]) * 1000 / (1 << 12);
+	}
 
 	/* Milliseconds timestamp from PG Epoch (2000-01-01) */
 	uint64 timestamp_millis =

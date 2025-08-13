@@ -329,10 +329,10 @@ FROM
   uuids
 WHERE
   _timescaledb_functions.uuid_version(u) = 7;
-                                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                                                                                                         QUERY PLAN                                                                                                                                                                                                                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Aggregate
-   Output: count(*), count(*) FILTER (WHERE (u < '0197a7a9-b48c-7000-8000-000000000000'::uuid)), count(*) FILTER (WHERE (_timescaledb_functions.timestamptz_from_uuid_v7(u) < 'Wed Jun 25 08:16:46.348 2025 PDT'::timestamp with time zone)), count(*) FILTER (WHERE (u >= _timescaledb_functions.uuid_v7_from_timestamptz('Wed Jun 25 08:16:46.348 2025 PDT'::timestamp with time zone, true))), count(*) FILTER (WHERE (_timescaledb_functions.timestamptz_from_uuid_v7(u) >= 'Wed Jun 25 08:16:46.348 2025 PDT'::timestamp with time zone))
+   Output: count(*), count(*) FILTER (WHERE (u < '0197a7a9-b48c-7000-8000-000000000000'::uuid)), count(*) FILTER (WHERE (_timescaledb_functions.timestamptz_from_uuid_v7(u, false) < 'Wed Jun 25 08:16:46.348 2025 PDT'::timestamp with time zone)), count(*) FILTER (WHERE (u >= _timescaledb_functions.uuid_v7_from_timestamptz('Wed Jun 25 08:16:46.348 2025 PDT'::timestamp with time zone, true))), count(*) FILTER (WHERE (_timescaledb_functions.timestamptz_from_uuid_v7(u, false) >= 'Wed Jun 25 08:16:46.348 2025 PDT'::timestamp with time zone))
    ->  Seq Scan on public.uuids
          Output: i, u
          Filter: (_timescaledb_functions.uuid_version(uuids.u) = 7)
@@ -352,7 +352,7 @@ SELECT u, ts, ts2
 FROM
   (
     SELECT
-      u, ts, _timescaledb_functions.timestamptz_from_uuid_v7(u) ts2
+      u, ts, _timescaledb_functions.timestamptz_from_uuid_v7(u, true) ts2
     FROM
       subms
   ) x
