@@ -121,7 +121,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Buffers: shared hit=1
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
          Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
                Buffers: shared hit=1
@@ -138,7 +137,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Buffers: shared hit=1
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
          Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
                Buffers: shared hit=1
@@ -156,7 +154,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Buffers: shared hit=10
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
          Buffers: shared hit=10
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
                Buffers: shared hit=10
@@ -174,7 +171,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Buffers: shared hit=3
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
          Buffers: shared hit=3
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
                Buffers: shared hit=1
@@ -191,7 +187,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Buffers: shared hit=13
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
          Buffers: shared hit=13
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
                Buffers: shared hit=1
@@ -208,7 +203,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Buffers: shared hit=7
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
          Buffers: shared hit=7
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
                Buffers: shared hit=1
@@ -375,7 +369,6 @@ INSERT INTO btest VALUES('2020-01-20T09:00:43', '2020-01-20T09:00:43', 2, 35.3);
    Buffers: shared hit=5
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
          Buffers: shared hit=5
          ->  Append (actual rows=11.00 loops=1)
                Buffers: shared hit=5
@@ -545,7 +538,6 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
    Buffers: shared hit=5
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
          Buffers: shared hit=5
          ->  Append (actual rows=11.00 loops=1)
                Buffers: shared hit=5

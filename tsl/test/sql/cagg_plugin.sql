@@ -171,6 +171,24 @@ SELECT * FROM get_invalidations('my_slot', 'conditions', 'does_not_exist');
 -- testing.)
 SELECT * FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
 
+-- Check that adding a lot of invalidations as separate transactions
+-- in one go reads them all from the WAL.
+DO $$
+DECLARE
+  rec RECORD;
+BEGIN
+  FOR rec IN
+     SELECT t, d FROM generate_series('2020-05-10'::timestamptz, '2020-05-11'::timestamptz, '1 minute'::interval) t,
+                       generate_series(1,10) d
+  LOOP
+     INSERT INTO conditions VALUES (rec.t, rec.d, 100.0 * random());
+     COMMIT;
+  END LOOP;
+END
+$$;
+
+SELECT count(*) FROM get_invalidations('my_slot', 'conditions', 'recorded_at');
+
 -- Test using a table without a primary key but with an index that can
 -- be used as replica identity.
 

@@ -4,13 +4,24 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <access/htup.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
+#include <extension.h>
+#include <fmgr.h>
+#include <funcapi.h>
+#include <hypertable_cache.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/memnodes.h>
+#include <parser/parse_func.h>
+#include <scan_iterator.h>
+#include <scanner.h>
 #include <storage/lockdefs.h>
+#include <time_bucket.h>
+#include <time_utils.h>
+#include <utils.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/memutils.h>
@@ -18,17 +29,7 @@
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
 
-#include <extension.h>
-#include <fmgr.h>
-#include <funcapi.h>
-#include <hypertable_cache.h>
-#include <parser/parse_func.h>
-#include <scan_iterator.h>
-#include <scanner.h>
-#include <time_bucket.h>
-#include <time_utils.h>
-#include <utils.h>
-
+#include "continuous_aggs/invalidation_multi.h"
 #include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
 #include "debug_point.h"
@@ -125,16 +126,11 @@ typedef enum LogType
 static Relation open_invalidation_log(LogType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
-static HeapTuple create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start,
-										 int64 end);
 static bool save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 										  const Invalidation *invalidation);
 static void set_remainder_after_cut(Invalidation *remainder, int32 hyper_id,
 									int64 lowest_modified_value, int64 greatest_modified_value);
 static void invalidation_entry_reset(Invalidation *entry);
-static void
-invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
-										 const ContinuousAggBucketFunction *bucket_function);
 static void
 invalidation_entry_set_from_hyper_invalidation(Invalidation *entry, const TupleInfo *ti,
 											   int32 hyper_id, Oid dimtype,
@@ -161,6 +157,8 @@ static void clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidation
 static void cagg_invalidation_state_init(ContinuousAggInvalidationState *state,
 										 const ContinuousAgg *cagg);
 static void cagg_invalidation_state_cleanup(const ContinuousAggInvalidationState *state);
+static void continuous_agg_process_hypertable_invalidations_single(Oid hypertable_relid);
+static void continuous_agg_process_hypertable_invalidations_multi(ArrayType *hypertable_array);
 
 static Relation
 open_invalidation_log(LogType type, LOCKMODE lockmode)
@@ -192,7 +190,7 @@ hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id, LOCKMO
 		Int32GetDatum(hyper_id));
 }
 
-static HeapTuple
+HeapTuple
 create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end)
 {
 	Datum values[Natts_continuous_aggs_materialization_invalidation_log] = { 0 };
@@ -487,7 +485,7 @@ invalidation_entry_reset(Invalidation *entry)
  * invalidation to bucket boundaries and in the process merge a lot more
  * invalidations.
  */
-static void
+void
 invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
 										 const ContinuousAggBucketFunction *bucket_function)
 {
@@ -1052,9 +1050,9 @@ hypertable_invalidation_state_cleanup(const HypertableInvalidationState *state)
 }
 
 /*
- * Move invalidations from hypertable invalidation log to materialization
- * invalidation log. This will move *all* hypertable invalidations to the
- * connected continuous aggregates.
+ * Move invalidations for a single hypertable from hypertable invalidation log
+ * to materialization invalidation log. This will move *all* hypertable
+ * invalidations for the hypertable to the associated continuous aggregates.
  */
 void
 invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype)
@@ -1128,18 +1126,87 @@ invalidation_store_free(InvalidationStore *store)
 }
 
 /*
- * Move all invalidations from the hypertable invalidation log to the
- * materialization invalidation log.
+ * Wrapper function to move all invalidations from the hypertable invalidation
+ * log to the materialization invalidation log.
+ *
+ * This will call the appropriate function depending on the type of the
+ * argument.
+ *
+ * It accepts NAME, REGCLASS, or REGCLASS[]. We need the NAME overload since
+ * we do not want the user to have to write "'my_table'::regclass" when
+ * calling it with a simple table name and the "fallback" case for implicit
+ * conversions is any type int he "String" type category.
+ *
+ * See https://www.postgresql.org/docs/current/typeconv-func.html#TYPECONV-FUNC
  */
 Datum
 continuous_agg_process_hypertable_invalidations(PG_FUNCTION_ARGS)
 {
+	Oid *argtypes;
+	char **argnames;
+	char *argmodes;
+
 	ts_feature_flag_check(FEATURE_CAGG);
 
 	TS_PREVENT_IN_TRANSACTION_BLOCK(get_func_name(FC_FN_OID(fcinfo)));
 
-	Oid hypertable_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	if (PG_ARGISNULL(0))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("parameter cannot be null")));
 
+	/*
+	 * Check the types and number of arguments that we passed in and validate
+	 * what we can handle it.
+	 */
+	HeapTuple func_tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(fcinfo->flinfo->fn_oid));
+	if (!HeapTupleIsValid(func_tuple))
+		elog(ERROR, "cache lookup failed for function %u", fcinfo->flinfo->fn_oid);
+
+	int numargs = get_func_arg_info(func_tuple, &argtypes, &argnames, &argmodes);
+
+	ReleaseSysCache(func_tuple);
+
+	Ensure(numargs == 1, "expected one argument, but got %d", numargs);
+	Ensure(argtypes[0] == NAMEOID || argtypes[0] == REGCLASSOID || argtypes[0] == REGCLASSARRAYOID,
+		   "bad argument type %d",
+		   argtypes[0]);
+
+	if (argtypes[0] == NAMEOID)
+	{
+		/*
+		 * We deal with text explicitly to not have to cast the argument to
+		 * REGCLASS. We just call the input function directly here.
+		 */
+		Name name = PG_GETARG_NAME(0);
+
+		/*
+		 * We do not use DirectInputFunctionCallSafe here because it does not
+		 * exist prior to PG16.
+		 */
+		Datum result = DirectFunctionCall3(regclassin,
+										   NameGetDatum(name),
+										   ObjectIdGetDatum(InvalidOid),
+										   Int32GetDatum(-1));
+		Oid hypertable_relid = DatumGetObjectId(result);
+		continuous_agg_process_hypertable_invalidations_single(hypertable_relid);
+	}
+	else if (argtypes[0] == REGCLASSOID)
+	{
+		Oid hypertable_relid = PG_GETARG_OID(0);
+		continuous_agg_process_hypertable_invalidations_single(hypertable_relid);
+	}
+	else if (argtypes[0] == REGCLASSARRAYOID)
+	{
+		ArrayType *hypertable_array = PG_GETARG_ARRAYTYPE_P(0);
+		continuous_agg_process_hypertable_invalidations_multi(hypertable_array);
+	}
+
+	PG_RETURN_VOID();
+}
+
+static void
+continuous_agg_process_hypertable_invalidations_single(Oid hypertable_relid)
+{
 	if (!OidIsValid(hypertable_relid))
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid relation")));
 
@@ -1165,6 +1232,32 @@ continuous_agg_process_hypertable_invalidations(PG_FUNCTION_ARGS)
 
 	invalidation_threshold_get(hypertable_id, dimtype);
 	invalidation_process_hypertable_log(hypertable_id, dimtype);
+}
 
-	PG_RETURN_VOID();
+/*
+ * PostgreSQL function to move hypertable invalidations to materialization
+ * invalidation log.
+ */
+static void
+continuous_agg_process_hypertable_invalidations_multi(ArrayType *hypertable_array)
+{
+	ArrayIterator array_iterator = array_create_iterator(hypertable_array, 0, NULL);
+	List *hypertables = NIL;
+
+	Datum value;
+	bool isnull;
+	while (array_iterate(array_iterator, &value, &isnull))
+	{
+		Oid hypertable_relid = DatumGetObjectId(value);
+		int32 hypertable_id = ts_hypertable_relid_to_id(hypertable_relid);
+		TS_DEBUG_LOG("add relation \"%s\" to list: hypertable_id=%d",
+					 get_rel_name(hypertable_relid),
+					 hypertable_id);
+		ts_hypertable_permissions_check(hypertable_relid, GetUserId());
+		hypertables = lappend_int(hypertables, hypertable_id);
+	}
+
+	array_free_iterator(array_iterator);
+
+	multi_invalidation_process_hypertable_log(hypertables);
 }

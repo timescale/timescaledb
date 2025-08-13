@@ -444,11 +444,9 @@ psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
          Hash Cond: (time_bucket('@ 30 days'::interval, "time"."time") = data.btime)
          ->  Function Scan on generate_series "time" (actual rows=6 loops=1)
          ->  Hash (actual rows=3 loops=1)
-               Buckets: 1024  Batches: 1 
                ->  Subquery Scan on data (actual rows=3 loops=1)
                      ->  HashAggregate (actual rows=3 loops=1)
                            Group Key: time_bucket('@ 30 days'::interval, append_test."time")
-                           Batches: 1 
                            ->  Result (actual rows=5 loops=1)
                                  ->  Custom Scan (ChunkAppend) on append_test (actual rows=5 loops=1)
                                        Chunks excluded during startup: 0
@@ -1647,7 +1645,6 @@ ORDER BY time DESC, device_id;
    Hash Cond: (g."time" = m_1."time")
    ->  Function Scan on generate_series g (actual rows=32 loops=1)
    ->  Hash (actual rows=26787 loops=1)
-         Buckets: 32768  Batches: 1 
          ->  Append (actual rows=26787 loops=1)
                ->  Seq Scan on _hyper_5_17_chunk m_1 (actual rows=4032 loops=1)
                ->  Seq Scan on _hyper_5_18_chunk m_2 (actual rows=6048 loops=1)
@@ -2192,7 +2189,6 @@ psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
    Single Copy: true
    ->  HashAggregate (actual rows=3 loops=1)
          Group Key: append_test."time", append_test.colorid
-         Worker 0:  Batches: 1 
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=3 loops=1)
                Hypertable: append_test
                Chunks excluded during startup: 1

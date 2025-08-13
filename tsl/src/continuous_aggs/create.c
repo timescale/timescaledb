@@ -71,6 +71,7 @@
 #include "finalize.h"
 #include "invalidation_threshold.h"
 
+#include "continuous_aggs/invalidation_multi.h"
 #include "debug_assert.h"
 #include "dimension.h"
 #include "extension_constants.h"
