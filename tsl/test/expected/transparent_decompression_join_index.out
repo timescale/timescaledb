@@ -131,13 +131,12 @@ full join query_params q2
                      Sort Key: _hyper_1_1_chunk.a
                      ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                            ->  Seq Scan on compress_hyper_2_2_chunk
-               ->  Sort
-                     Sort Key: q.a
+               ->  Materialize
                      ->  CTE Scan on query_params q
    ->  Sort
          Sort Key: q2.b
          ->  CTE Scan on query_params q2
-(22 rows)
+(21 rows)
 
 reset enable_seqscan;
 reset jit;
