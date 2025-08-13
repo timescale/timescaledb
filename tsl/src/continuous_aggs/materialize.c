@@ -76,6 +76,7 @@ typedef struct MaterializationPlan
 {
 	SPIPlanPtr plan;
 	bool read_only;
+	int nargs;
 	MaterializationCreateStatement create_statement;
 	MaterializationEmitError emit_error;
 	MaterializationEmitProgress emit_progress;
@@ -100,25 +101,35 @@ static void emit_materialization_merge_progress(MaterializationContext *context,
 												uint64 rows_processed);
 
 static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES + 1] = {
-	[PLAN_TYPE_INSERT] = { .create_statement = create_materialization_insert_statement,
+	[PLAN_TYPE_INSERT] = { .nargs = 2,
+						   .create_statement = create_materialization_insert_statement,
 						   .emit_error = emit_materialization_insert_error,
 						   .emit_progress = emit_materialization_insert_progress },
-	[PLAN_TYPE_DELETE] = { .create_statement = create_materialization_delete_statement,
+	[PLAN_TYPE_DELETE] = { .nargs = 2,
+						   .create_statement = create_materialization_delete_statement,
 						   .emit_error = emit_materialization_delete_error,
 						   .emit_progress = emit_materialization_delete_progress },
 	[PLAN_TYPE_EXISTS] = { .read_only = true,
+						   .nargs = 2,
 						   .create_statement = create_materialization_exists_statement,
 						   .emit_error = emit_materialization_exists_error },
-	[PLAN_TYPE_MERGE] = { .create_statement = create_materialization_merge_statement,
+	[PLAN_TYPE_MERGE] = { .nargs = 2,
+						  .create_statement = create_materialization_merge_statement,
 						  .emit_error = emit_materialization_merge_error,
 						  .emit_progress = emit_materialization_merge_progress },
-	[PLAN_TYPE_MERGE_DELETE] = { .create_statement = create_materialization_merge_delete_statement,
+	[PLAN_TYPE_MERGE_DELETE] = { .nargs = 2,
+								 .create_statement = create_materialization_merge_delete_statement,
 								 .emit_error = emit_materialization_delete_error,
 								 .emit_progress = emit_materialization_delete_progress },
 };
 
+static Oid *create_materialization_plan_argtypes(MaterializationContext *context,
+												 MaterializationPlanType plan_type, int nargs);
 static MaterializationPlan *create_materialization_plan(MaterializationContext *context,
 														MaterializationPlanType plan_type);
+static void create_materialization_plan_args(MaterializationContext *context,
+											 MaterializationPlanType plan_type, int nargs,
+											 Datum **values, char **nulls);
 static uint64 execute_materialization_plan(MaterializationContext *context,
 										   MaterializationPlanType plan_type);
 static void free_materialization_plan(MaterializationContext *context,
@@ -621,6 +632,17 @@ emit_materialization_merge_progress(MaterializationContext *context, uint64 rows
 		 NameStr(*context->materialization_table.name));
 }
 
+static Oid *
+create_materialization_plan_argtypes(MaterializationContext *context,
+									 MaterializationPlanType plan_type, int nargs)
+{
+	Oid *argtypes = (Oid *) palloc(nargs * sizeof(Oid));
+	argtypes[0] = context->materialization_range.type;
+	argtypes[1] = context->materialization_range.type;
+
+	return argtypes;
+}
+
 static MaterializationPlan *
 create_materialization_plan(MaterializationContext *context, MaterializationPlanType plan_type)
 {
@@ -632,38 +654,56 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 	if (materialization->plan == NULL)
 	{
 		char *query = materialization->create_statement(context);
-		Oid types[] = { context->materialization_range.type, context->materialization_range.type };
+		Oid *argtypes =
+			create_materialization_plan_argtypes(context, plan_type, materialization->nargs);
 
 		elog(DEBUG2, "%s: %s", __func__, query);
-		materialization->plan = SPI_prepare(query, 2, types);
+		materialization->plan = SPI_prepare(query, materialization->nargs, argtypes);
 		if (materialization->plan == NULL)
 			elog(ERROR, "%s: SPI_prepare failed: %s", __func__, query);
 
 		SPI_keepplan(materialization->plan);
 		pfree(query);
+		pfree(argtypes);
 	}
 
 	return materialization;
+}
+
+static void
+create_materialization_plan_args(MaterializationContext *context, MaterializationPlanType plan_type,
+								 int nargs, Datum **values, char **nulls)
+{
+	*values = (Datum *) palloc(nargs * sizeof(Datum));
+	*nulls = (char *) palloc(nargs * sizeof(char));
+	(*values)[0] = context->materialization_range.start;
+	(*values)[1] = context->materialization_range.end;
+	(*nulls)[0] = false;
+	(*nulls)[1] = false;
 }
 
 static uint64
 execute_materialization_plan(MaterializationContext *context, MaterializationPlanType plan_type)
 {
 	MaterializationPlan *materialization = create_materialization_plan(context, plan_type);
-	Datum values[] = { context->materialization_range.start, context->materialization_range.end };
-	char nulls[] = { false, false };
+
+	Datum *values = NULL;
+	char *nulls = NULL;
+	create_materialization_plan_args(context, plan_type, materialization->nargs, &values, &nulls);
 
 	int res = SPI_execute_plan(materialization->plan, values, nulls, materialization->read_only, 0);
 
-	if (res < 0 && materialization->emit_error != NULL)
+	if (res < 0)
 	{
-		materialization->emit_error(context);
+		if (materialization->emit_error)
+			materialization->emit_error(context);
 	}
-	else
-	{
-		if (materialization->emit_progress != NULL)
-			materialization->emit_progress(context, SPI_processed);
-	}
+
+	if (materialization->emit_progress)
+		materialization->emit_progress(context, SPI_processed);
+
+	pfree(values);
+	pfree(nulls);
 
 	return SPI_processed;
 }
