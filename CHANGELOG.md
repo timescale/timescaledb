@@ -4,6 +4,13 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.21.3 (2025-08-12)
+
+This release contains performance improvements and bug fixes since the 2.21.2 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#8471](https://github.com/timescale/timescaledb/pull/8471) Fix MERGE behaviour with updated values
+
 ## 2.21.2 (2025-08-05)
 
 This release contains performance improvements and bug fixes since the 2.21.1 release. We recommend that you upgrade at the next available opportunity.

@@ -2382,11 +2382,11 @@ FROM :TEST_TABLE o1
   LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
-   ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: ((o1_1."time" = o2_1."time") AND (o1_1.device_id = o2_1.device_id))
-         ->  Sort (actual rows=100 loops=1)
-               Sort Key: o1_1."time", o1_1.device_id
-               Sort Method: quicksort 
+   ->  Sort (actual rows=100 loops=1)
+         Sort Key: o1_1."time"
+         Sort Method: top-N heapsort 
+         ->  Hash Join (actual rows=68370 loops=1)
+               Hash Cond: ((o1_1.device_id = o2_1.device_id) AND (o1_1."time" = o2_1."time"))
                ->  Append (actual rows=68370 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_1 (actual rows=17990 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=20 loops=1)
@@ -2394,17 +2394,15 @@ QUERY PLAN
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=30 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_3 (actual rows=25190 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-         ->  Sort (actual rows=100 loops=1)
-               Sort Key: o2_1."time", o2_1.device_id
-               Sort Method: quicksort 
-               ->  Append (actual rows=68370 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_1 (actual rows=17990 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=20 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_2 (actual rows=25190 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_3 (actual rows=25190 loops=1)
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
-(23 rows)
+               ->  Hash (actual rows=68370 loops=1)
+                     ->  Append (actual rows=68370 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_1 (actual rows=17990 loops=1)
+                                 ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=20 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_2 (actual rows=25190 loops=1)
+                                 ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_3 (actual rows=25190 loops=1)
+                                 ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
+(22 rows)
 
 -- test JOIN on device_id
 -- should not use ordered append for 2nd hypertable
@@ -3749,11 +3747,11 @@ FROM :TEST_TABLE o1
   LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
-   ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: ((o1_1."time" = o2_1."time") AND (o1_1.device_id = o2_1.device_id))
-         ->  Sort (actual rows=100 loops=1)
-               Sort Key: o1_1."time", o1_1.device_id
-               Sort Method: quicksort 
+   ->  Sort (actual rows=100 loops=1)
+         Sort Key: o1_1."time"
+         Sort Method: top-N heapsort 
+         ->  Hash Join (actual rows=68370 loops=1)
+               Hash Cond: ((o1_1.device_id = o2_1.device_id) AND (o1_1."time" = o2_1."time"))
                ->  Append (actual rows=68370 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_1 (actual rows=3598 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
@@ -3773,10 +3771,7 @@ QUERY PLAN
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=18 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_9 (actual rows=5038 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Materialize (actual rows=100 loops=1)
-               ->  Sort (actual rows=100 loops=1)
-                     Sort Key: o2_1."time", o2_1.device_id
-                     Sort Method: quicksort 
+               ->  Hash (actual rows=68370 loops=1)
                      ->  Append (actual rows=68370 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_1 (actual rows=3598 loops=1)
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=4 loops=1)
@@ -3796,7 +3791,7 @@ QUERY PLAN
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=18 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_9 (actual rows=5038 loops=1)
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
-(48 rows)
+(46 rows)
 
 -- test JOIN on device_id
 -- should not use ordered append for 2nd hypertable
@@ -3951,7 +3946,6 @@ QUERY PLAN
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=20 loops=1)
          Group Key: time_bucket('@ 1 day'::interval, tbl1_1."time")
-         Batches: 1 
          ->  Merge Join (actual rows=9121 loops=1)
                Merge Cond: ((tbl1_1.device = tbl2_1.device) AND (tbl1_1."time" = tbl2_1."time"))
                ->  Sort (actual rows=9121 loops=1)

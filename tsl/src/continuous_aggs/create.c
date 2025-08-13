@@ -71,6 +71,7 @@
 #include "finalize.h"
 #include "invalidation_threshold.h"
 
+#include "continuous_aggs/invalidation_multi.h"
 #include "debug_assert.h"
 #include "dimension.h"
 #include "extension_constants.h"
@@ -97,11 +98,13 @@ static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_func
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
 static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
-static void mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht);
+static void mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
+												  Hypertable *ht);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
 static void fixup_userview_query_tlist(Query *userquery, List *tlist_aliases);
 static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
-						CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options);
+						ContinuousAggTimeBucketInfo *bucket_info,
+						WithClauseResult *with_clause_options);
 
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
@@ -143,11 +146,12 @@ makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 
 /* STATIC functions defined on the structs above. */
 static int32 mattablecolumninfo_create_materialization_table(
-	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
-	CAggTimebucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
+	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
+	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *tablespacename,
 	char *table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress);
-static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
-														  Query *userview_query, bool finalized);
+static Query *
+mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
+											Query *userview_query, bool finalized);
 
 /*
  * Create a entry for the materialization table in table CONTINUOUS_AGGS.
@@ -467,7 +471,8 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
  * i.e. #indexes =(  #grp-cols - 1)
  */
 static void
-mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht)
+mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
+									  Hypertable *ht)
 {
 	IndexStmt stmt = {
 		.type = T_IndexStmt,
@@ -533,12 +538,10 @@ mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable
  *        materialization table
  */
 static int32
-mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, int32 hypertable_id,
-												RangeVar *mat_rel, CAggTimebucketInfo *bucket_info,
-												bool create_addl_index, char *const tablespacename,
-												char *const table_access_method,
-												int64 matpartcol_interval,
-												ObjectAddress *mataddress)
+mattablecolumninfo_create_materialization_table(
+	MaterializationHypertableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
+	ContinuousAggTimeBucketInfo *bucket_info, bool create_addl_index, char *const tablespacename,
+	char *const table_access_method, int64 matpartcol_interval, ObjectAddress *mataddress)
 {
 	Oid uid, saved_uid;
 	int sec_ctx;
@@ -608,8 +611,8 @@ mattablecolumninfo_create_materialization_table(MatTableColumnInfo *matcolinfo, 
  * the materialization columns and remove HAVING clause and ORDER BY.
  */
 static Query *
-mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo, Query *userview_query,
-											bool finalized)
+mattablecolumninfo_get_partial_select_query(MaterializationHypertableColumnInfo *mattblinfo,
+											Query *userview_query, bool finalized)
 {
 	Query *partial_selquery = NULL;
 
@@ -809,11 +812,11 @@ error_not_in_prerequisite_state(const char *wanted, const char *used)
  */
 static void
 cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
-			CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options)
+			ContinuousAggTimeBucketInfo *bucket_info, WithClauseResult *with_clause_options)
 {
 	ObjectAddress mataddress;
 	char relnamebuf[NAMEDATALEN];
-	MatTableColumnInfo mattblinfo;
+	MaterializationHypertableColumnInfo mattblinfo;
 	FinalizeQueryInfo finalqinfo;
 	CatalogSecurityContext sec_ctx;
 	bool is_create_mattbl_index;
@@ -1050,7 +1053,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 									WithClauseResult *with_clause_options)
 {
 	const CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, node);
-	CAggTimebucketInfo timebucket_exprinfo;
+	ContinuousAggTimeBucketInfo timebucket_exprinfo;
 	Oid nspid;
 	bool finalized = with_clause_options[CreateMaterializedViewFlagFinalized].parsed;
 	ViewStmt viewstmt = {
@@ -1158,7 +1161,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		refresh_window.start = cagg_get_time_min(cagg);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
-		CaggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
+		ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_CREATION };
 		continuous_agg_refresh_internal(cagg,
 										&refresh_window,
 										context,
@@ -1204,7 +1207,7 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 	relation_close(direct_view_rel, NoLock);
 	RemoveRangeTableEntries(direct_query);
 
-	CAggTimebucketInfo timebucket_exprinfo =
+	ContinuousAggTimeBucketInfo timebucket_exprinfo =
 		cagg_validate_query(direct_query,
 							agg->data.finalized,
 							NameStr(agg->data.user_view_schema),

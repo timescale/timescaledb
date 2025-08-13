@@ -366,6 +366,7 @@ extern DecompressionIterator *
 uuid_decompression_iterator_from_datum_forward(Datum uuid_compressed, Oid element_type)
 {
 	UuidDecompressionIterator *iterator = palloc0(sizeof(*iterator));
+	CheckCompressedData(DatumGetPointer(uuid_compressed) != NULL);
 	decompression_iterator_init(iterator,
 								(void *) PG_DETOAST_DATUM(uuid_compressed),
 								element_type,
@@ -418,6 +419,7 @@ extern DecompressionIterator *
 uuid_decompression_iterator_from_datum_reverse(Datum uuid_compressed, Oid element_type)
 {
 	UuidDecompressionIterator *iterator = palloc(sizeof(*iterator));
+	CheckCompressedData(DatumGetPointer(uuid_compressed) != NULL);
 	decompression_iterator_init(iterator,
 								(void *) PG_DETOAST_DATUM(uuid_compressed),
 								element_type,
@@ -454,6 +456,20 @@ uuid_compressed_recv(StringInfo buffer)
 	uint16 num_nulls = pq_getmsgint(buffer, 2);
 	uint32 timestamp_size = pq_getmsgint32(buffer);
 	uint32 rand_b_and_variant_size = pq_getmsgint32(buffer);
+
+	/* The timestamp_size must accommodate the delta-delta header (24 bytes) */
+	CheckCompressedData(timestamp_size > 24);
+	CheckCompressedData(rand_b_and_variant_size > 0);
+	CheckCompressedData(rand_b_and_variant_size % sizeof(uint64) == 0);
+	CheckCompressedData(timestamp_size % sizeof(uint64) == 0);
+	CheckCompressedData(rand_b_and_variant_size / sizeof(uint64) < GLOBAL_MAX_ROWS_PER_COMPRESSION);
+
+	/* A good enough to catch totally bogus timestamp_size values, the actual limit is slightly
+	 * tighter */
+	CheckCompressedData(timestamp_size < (GLOBAL_MAX_ROWS_PER_COMPRESSION * (sizeof(uint64) + 1)));
+
+	uint32 total_values = num_nulls + rand_b_and_variant_size / sizeof(uint64);
+	CheckCompressedData(total_values < GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	total_compressed_sized = sizeof(UuidCompressed) + timestamp_size + rand_b_and_variant_size;
 	CheckCompressedData(total_compressed_sized <= MaxAllocSize);
@@ -558,6 +574,7 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 
 	MemoryContext old_context;
 	ArrowArray *timestamp_array = NULL;
+	CheckCompressedData(DatumGetPointer(compressed) != NULL);
 
 	void *detoasted = PG_DETOAST_DATUM(compressed);
 	StringInfoData si = { .data = detoasted, .len = VARSIZE_ANY(compressed) };
@@ -567,8 +584,17 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 
 	CheckCompressedData(header->compression_algorithm == COMPRESSION_ALGORITHM_UUID);
 	CheckCompressedData(header->subtype == UUID_COMPRESS_SUBTYPE_DELTADELTA);
-	CheckCompressedData(header->timestamp_size > 0);
+
+	/* The timestamp_size must accommodate the delta-delta header (24 bytes) */
+	CheckCompressedData(header->timestamp_size > 24);
 	CheckCompressedData(header->rand_b_and_variant_size > 0);
+	CheckCompressedData(header->rand_b_and_variant_size % sizeof(uint64) == 0);
+	CheckCompressedData(header->timestamp_size % sizeof(uint64) == 0);
+
+	/* A good enough to catch totally bogus timestamp_size values, the actual limit is slightly
+	 * tighter */
+	CheckCompressedData(header->timestamp_size <
+						(GLOBAL_MAX_ROWS_PER_COMPRESSION * (sizeof(uint64) + 1)));
 
 	timestamp_compressed_data = consumeCompressedData(&si, header->timestamp_size);
 	rand_b_and_variant_compressed_data =
@@ -577,6 +603,7 @@ uuid_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 	int32 num_values = (int32) (header->rand_b_and_variant_size / sizeof(uint64));
 	int32 total_elements = (int32) header->num_nulls + num_values;
 	CheckCompressedData(num_values > 0);
+	CheckCompressedData(num_values < GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	old_context = MemoryContextSwitchTo(dest_mctx);
 

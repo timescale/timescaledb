@@ -118,16 +118,23 @@ jobs:
       fail-fast: false
       matrix:
         case: [
-            { algo: gorilla   , pgtype: float8, bulk: false, runs:  500000000 },
-            { algo: deltadelta, pgtype: int8  , bulk: false, runs:  500000000 },
-            { algo: gorilla   , pgtype: float8, bulk: true , runs: 1000000000 },
-            { algo: deltadelta, pgtype: int8  , bulk: true , runs: 1000000000 },
+            { algo: gorilla   , pgtype: float8, bulk: false, runs:   500000000 },
+            { algo: deltadelta, pgtype: int8  , bulk: false, runs:   500000000 },
+            { algo: gorilla   , pgtype: float8, bulk: true , runs:  1000000000 },
+            { algo: deltadelta, pgtype: int8  , bulk: true , runs:  1000000000 },
             # array has a peculiar recv function that recompresses all input, so
             # fuzzing it is much slower. The dictionary recv also uses it.
-            { algo: array     , pgtype: text  , bulk: false, runs:   10000000 },
-            { algo: array     , pgtype: text  , bulk: true , runs:   10000000 },
-            { algo: dictionary, pgtype: text  , bulk: false, runs:  100000000 },
-            { algo: dictionary, pgtype: text  , bulk: true , runs:  100000000 },
+            { algo: array     , pgtype: text  , bulk: false, runs:    10000000 },
+            { algo: array     , pgtype: text  , bulk: true , runs:    10000000 },
+            { algo: dictionary, pgtype: text  , bulk: false, runs:   100000000 },
+            { algo: dictionary, pgtype: text  , bulk: true , runs:   100000000 },
+            { algo: bool,       pgtype: bool  , bulk: false, runs:   500000000 },
+            { algo: bool,       pgtype: bool  , bulk: true , runs:  1000000000 },
+            # uuid tests are slower because it is more work to compare
+            { algo: dictionary, pgtype: uuid  , bulk: false, runs:     5000000 },
+            { algo: dictionary, pgtype: uuid  , bulk: true , runs:    10000000 },
+            { algo: uuid,       pgtype: uuid  , bulk: false, runs:     5000000 },
+            { algo: uuid,       pgtype: uuid  , bulk: true , runs:    10000000 },
             ]
 
     name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}

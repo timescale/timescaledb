@@ -444,7 +444,6 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY ROLLUP(t);
          Hash Key: _hyper_3_5_chunk.timecustom
          Group Key: ()
          Worker 0:  actual rows=7 loops=1
-           Batches: 1 
          ->  Append (actual rows=11 loops=1)
                Worker 0:  actual rows=11 loops=1
                ->  Seq Scan on _timescaledb_internal._hyper_3_5_chunk (actual rows=7 loops=1)

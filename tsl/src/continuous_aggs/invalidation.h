@@ -48,6 +48,11 @@ extern InvalidationStore *
 invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
 							  long max_materializations, bool *do_merged_refresh,
 							  InternalTimeRange *ret_merged_refresh_window,
-							  CaggRefreshContext context, bool force);
+							  ContinuousAggRefreshContext context, bool force);
 
 extern void invalidation_store_free(InvalidationStore *store);
+extern void
+invalidation_expand_to_bucket_boundaries(Invalidation *inv, Oid time_type_oid,
+										 const ContinuousAggBucketFunction *bucket_function);
+extern HeapTuple create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start,
+										 int64 end);
