@@ -96,7 +96,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
 (7 rows)
 
@@ -108,7 +107,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
 (7 rows)
 
@@ -121,7 +119,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
 (7 rows)
 
@@ -134,7 +131,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
 (7 rows)
 
@@ -146,7 +142,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
 (7 rows)
 
@@ -158,7 +153,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
 (7 rows)
 
@@ -263,7 +257,6 @@ INSERT INTO btest VALUES('2020-01-20T09:00:43', '2020-01-20T09:00:43', 2, 35.3);
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         
          ->  Append (actual rows=11 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
@@ -367,7 +360,6 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         
          ->  Append (actual rows=11 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)

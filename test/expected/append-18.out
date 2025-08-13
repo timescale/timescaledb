@@ -444,11 +444,9 @@ psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
          Hash Cond: (time_bucket('@ 30 days'::interval, "time"."time") = data.btime)
          ->  Function Scan on generate_series "time" (actual rows=6.00 loops=1)
          ->  Hash (actual rows=3.00 loops=1)
-                
                ->  Subquery Scan on data (actual rows=3.00 loops=1)
                      ->  HashAggregate (actual rows=3.00 loops=1)
                            Group Key: time_bucket('@ 30 days'::interval, append_test."time")
-                           
                            ->  Result (actual rows=5.00 loops=1)
                                  ->  Custom Scan (ChunkAppend) on append_test (actual rows=5.00 loops=1)
                                        Chunks excluded during startup: 0
@@ -2305,7 +2303,6 @@ LEFT JOIN i2661 ht ON
          ->  Seq Scan on _hyper_7_33_chunk ht_3 (actual rows=961.00 loops=1)
                Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
    ->  Hash (actual rows=13.00 loops=1)
-          
          ->  ProjectSet (actual rows=13.00 loops=1)
                ->  Result (actual rows=1.00 loops=1)
 (14 rows)
@@ -2484,7 +2481,6 @@ psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
    Single Copy: true
    ->  HashAggregate (actual rows=3.00 loops=1)
          Group Key: append_test."time", append_test.colorid
-         Worker 0:  
          ->  Custom Scan (ConstraintAwareAppend) (actual rows=3.00 loops=1)
                Hypertable: append_test
                Chunks excluded during startup: 1
