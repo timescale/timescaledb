@@ -3951,7 +3951,6 @@ QUERY PLAN
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=20 loops=1)
          Group Key: time_bucket('@ 1 day'::interval, tbl1_1."time")
-         Batches: 1 
          ->  Merge Join (actual rows=9121 loops=1)
                Merge Cond: ((tbl1_1.device = tbl2_1.device) AND (tbl1_1."time" = tbl2_1."time"))
                ->  Sort (actual rows=9121 loops=1)

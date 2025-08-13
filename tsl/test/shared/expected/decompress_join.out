@@ -23,7 +23,6 @@ QUERY PLAN
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_3 (actual rows=1 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Hash (actual rows=10 loops=1)
-               Buckets: 1024  Batches: 1 
                ->  Seq Scan on compressed_join_temp t (actual rows=10 loops=1)
 (13 rows)
 

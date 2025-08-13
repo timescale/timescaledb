@@ -299,7 +299,6 @@ basic DISTINCT queries on skip_scan
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=12 loops=1)
          Group Key: dev, count(DISTINCT dev)
-         Batches: 1 
          ->  GroupAggregate (actual rows=12 loops=1)
                Group Key: dev
                ->  Custom Scan (SkipScan) on skip_scan (actual rows=12 loops=1)
@@ -1449,7 +1448,6 @@ basic DISTINCT queries on skip_scan_ht
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=11 loops=1)
          Group Key: _hyper_1_1_chunk.dev, count(DISTINCT _hyper_1_1_chunk.dev)
-         Batches: 1 
          ->  GroupAggregate (actual rows=11 loops=1)
                Group Key: _hyper_1_1_chunk.dev
                ->  Merge Append (actual rows=44 loops=1)
@@ -3580,7 +3578,6 @@ basic DISTINCT queries on skip_scan_htc
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=11 loops=1)
          Group Key: _hyper_3_5_chunk.dev, count(DISTINCT _hyper_3_5_chunk.dev)
-         Batches: 1 
          ->  GroupAggregate (actual rows=11 loops=1)
                Group Key: _hyper_3_5_chunk.dev
                ->  Merge Append (actual rows=44 loops=1)
@@ -5534,7 +5531,6 @@ basic DISTINCT queries on skip_scan_htcl
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=11 loops=1)
          Group Key: _hyper_5_9_chunk.dev, count(DISTINCT _hyper_5_9_chunk.dev)
-         Batches: 1 
          ->  GroupAggregate (actual rows=11 loops=1)
                Group Key: _hyper_5_9_chunk.dev
                ->  Merge Append (actual rows=44 loops=1)

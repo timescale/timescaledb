@@ -412,7 +412,6 @@ group by 1
                      ->  Index Only Scan Backward using _hyper_1_1_chunk_ht_metrics_partially_compressed_time_idx on _hyper_1_1_chunk a_1 (actual rows=720 loops=1)
                            Index Cond: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)
                ->  Hash (actual rows=1800 loops=1)
-                     Buckets: 2048  Batches: 1 
                      ->  Append (actual rows=1800 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk b_1 (actual rows=1080 loops=1)
                                  Vectorized Filter: ("time" < 'Tue Jan 07 00:00:00 2020 PST'::timestamp with time zone)

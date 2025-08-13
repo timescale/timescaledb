@@ -1045,7 +1045,6 @@ ORDER BY t1.x1, jt.y1;
          Hash Cond: (jt.x1 = t1_1.x1)
          ->  Seq Scan on join_table jt (actual rows=2 loops=1)
          ->  Hash (actual rows=10005 loops=1)
-               Buckets: 16384  Batches: 1 
                ->  Append (actual rows=10005 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk t1_1 (actual rows=10004 loops=1)
                            ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)

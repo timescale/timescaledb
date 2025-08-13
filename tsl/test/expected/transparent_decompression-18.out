@@ -2730,7 +2730,6 @@ LIMIT 100;
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (actual rows=1680 loops=1)
                            ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5 loops=1)
                ->  Hash (actual rows=1728 loops=1)
-                     Buckets: 4096  Batches: 1 
                      ->  Append (actual rows=1728 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m2_1 (actual rows=720 loops=1)
                                  ->  Seq Scan on compress_hyper_5_15_chunk compress_hyper_5_15_chunk_1 (actual rows=1 loops=1)
@@ -2773,7 +2772,6 @@ LIMIT 100;
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (actual rows=1680 loops=1)
                            ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5 loops=1)
                ->  Hash (actual rows=1728 loops=1)
-                     Buckets: 8192  Batches: 1 
                      ->  Append (actual rows=1728 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=0 loops=1)
                                  ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0 loops=1)
@@ -2831,7 +2829,6 @@ LIMIT 20;
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (actual rows=1680 loops=1)
                            ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5 loops=1)
                ->  Hash (actual rows=8640 loops=1)
-                     Buckets: 16384  Batches: 1 
                      ->  Append (actual rows=8640 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m2_1 (actual rows=3600 loops=1)
                                  ->  Seq Scan on compress_hyper_5_15_chunk compress_hyper_5_15_chunk_1 (actual rows=5 loops=1)
@@ -2868,7 +2865,6 @@ LIMIT 10;
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (actual rows=1680 loops=1)
                            ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5 loops=1)
                ->  Hash (actual rows=8640 loops=1)
-                     Buckets: 16384  Batches: 1 
                      ->  Append (actual rows=8640 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m2_1 (actual rows=3600 loops=1)
                                  ->  Seq Scan on compress_hyper_5_15_chunk compress_hyper_5_15_chunk_1 (actual rows=5 loops=1)
@@ -6629,7 +6625,6 @@ WHERE device_id IN (
                Output: _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.device_id
    ->  Hash (actual rows=2 loops=1)
          Output: "*VALUES*".column1
-         Buckets: 1024  Batches: 1 
          ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
                Output: "*VALUES*".column1
 (42 rows)
@@ -7100,7 +7095,6 @@ LIMIT 100;
                            ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=3 loops=1)
                      ->  Seq Scan on _hyper_2_12_chunk m1_9 (actual rows=336 loops=1)
                ->  Hash (actual rows=1728 loops=1)
-                     Buckets: 8192  Batches: 1 
                      ->  Append (actual rows=1728 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=0 loops=1)
                                  ->  Seq Scan on compress_hyper_6_17_chunk compress_hyper_6_17_chunk_1 (actual rows=0 loops=1)
@@ -7160,7 +7154,6 @@ LIMIT 100;
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m1_3 (actual rows=1680 loops=1)
                            ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5 loops=1)
                ->  Hash (actual rows=1728 loops=1)
-                     Buckets: 8192  Batches: 1 
                      ->  Append (actual rows=1728 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=0 loops=1)
                                  ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0 loops=1)
@@ -7227,7 +7220,6 @@ LIMIT 20;
                            ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=3 loops=1)
                      ->  Seq Scan on _hyper_2_12_chunk m1_9 (actual rows=336 loops=1)
                ->  Hash (actual rows=8640 loops=1)
-                     Buckets: 16384  Batches: 1 
                      ->  Append (actual rows=8640 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=720 loops=1)
                                  ->  Seq Scan on compress_hyper_6_17_chunk compress_hyper_6_17_chunk_1 (actual rows=1 loops=1)
@@ -7282,7 +7274,6 @@ LIMIT 10;
                            ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=3 loops=1)
                      ->  Seq Scan on _hyper_2_12_chunk m1_9 (actual rows=336 loops=1)
                ->  Hash (actual rows=8640 loops=1)
-                     Buckets: 16384  Batches: 1 
                      ->  Append (actual rows=8640 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=720 loops=1)
                                  ->  Seq Scan on compress_hyper_6_17_chunk compress_hyper_6_17_chunk_1 (actual rows=1 loops=1)
