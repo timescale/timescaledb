@@ -7,13 +7,13 @@
 
 #include <postgres.h>
 
+#include "compression/arrow_c_data_interface.h"
+#include "compression_sql_test.h"
+
 #include <funcapi.h>
 #include <libpq/pqformat.h>
 #include <utils/builtins.h>
-
-#include "compression_sql_test.h"
-
-#include "compression/arrow_c_data_interface.h"
+#include <utils/uuid.h>
 
 #if !defined(NDEBUG) || defined(TS_COMPRESSION_FUZZING)
 
@@ -56,21 +56,35 @@ get_compression_algorithm(char *name)
 #define CTYPE float8
 #define PG_TYPE_PREFIX FLOAT8
 #define DATUM_TO_CTYPE DatumGetFloat8
+#define IS_FINITE(X) isfinite((double) X)
 #include "decompress_arithmetic_test_impl.c"
-#undef ALGO
-#undef CTYPE
-#undef PG_TYPE_PREFIX
-#undef DATUM_TO_CTYPE
 
 #define ALGO DELTADELTA
 #define CTYPE int64
 #define PG_TYPE_PREFIX INT8
 #define DATUM_TO_CTYPE DatumGetInt64
 #include "decompress_arithmetic_test_impl.c"
-#undef ALGO
-#undef CTYPE
-#undef PG_TYPE_PREFIX
-#undef DATUM_TO_CTYPE
+
+#define ALGO BOOL
+#define CTYPE bool
+#define PG_TYPE_PREFIX BOOL
+#define DATUM_TO_CTYPE DatumGetBool
+#define ARROW_GET_VALUE(A, I) (arrow_row_is_valid(((const uint64 *) ((A)->buffers[1])), I))
+#include "decompress_arithmetic_test_impl.c"
+
+#define ALGO DICTIONARY
+#define CTYPE pg_uuid_t
+#define PG_TYPE_PREFIX UUID
+#define DATUM_TO_CTYPE *DatumGetUUIDP
+#define IS_NOT_EQUAL(X, Y) (memcmp(&X, &Y, sizeof(pg_uuid_t)) != 0)
+#include "decompress_arithmetic_test_impl.c"
+
+#define ALGO UUID
+#define CTYPE pg_uuid_t
+#define PG_TYPE_PREFIX UUID
+#define DATUM_TO_CTYPE *DatumGetUUIDP
+#define IS_NOT_EQUAL(X, Y) (memcmp(&X, &Y, sizeof(pg_uuid_t)) != 0)
+#include "decompress_arithmetic_test_impl.c"
 
 /*
  * The table of the supported testing configurations. We use it to generate
@@ -84,7 +98,13 @@ get_compression_algorithm(char *name)
 	X(ARRAY, TEXT, false)                                                                          \
 	X(ARRAY, TEXT, true)                                                                           \
 	X(DICTIONARY, TEXT, false)                                                                     \
-	X(DICTIONARY, TEXT, true)
+	X(DICTIONARY, TEXT, true)                                                                      \
+	X(DICTIONARY, UUID, false)                                                                     \
+	X(DICTIONARY, UUID, true)                                                                      \
+	X(BOOL, BOOL, false)                                                                           \
+	X(BOOL, BOOL, true)                                                                            \
+	X(UUID, UUID, false)                                                                           \
+	X(UUID, UUID, true)
 
 static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size, bool bulk)
 {

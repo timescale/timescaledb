@@ -8,9 +8,11 @@ set(TEST_FILES
     bgw_policy.sql
     bgw_security.sql
     cagg_api.sql
+    cagg_config.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
+    cagg_invalidation_multi.sql
     cagg_policy.sql
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
@@ -25,6 +27,7 @@ set(TEST_FILES
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
     compress_bloom_sparse.sql
+    compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
     compress_float8_corrupt.sql
@@ -145,7 +148,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     insert_memory_usage.sql
     information_view_chunk_count.sql
     read_only.sql
-    transparent_decompression_queries.sql
     tsl_tables.sql
     license_tsl.sql
     fixed_schedules.sql
@@ -169,7 +171,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_update_delete.sql.in
-    continuous_aggs.sql.in)
+    continuous_aggs.sql.in
+    transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
@@ -203,13 +206,19 @@ set(SOLO_TESTS
     cagg_bgw
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
-    cagg_invalidation
-    cagg_plugin
     cagg_policy_incremental
     move
     reorder
     split_chunk
-    telemetry_stats)
+    telemetry_stats
+    # These are solo tests because of a bug in PostgreSQL 17.5. A fix for it
+    # seems to be scheduled for release with 17.6.
+    #
+    # See
+    # https://github.com/postgres/postgres/commit/d87d07b7ad3b782cb74566cd771ecdb2823adf6a
+    cagg_invalidation
+    cagg_plugin
+    cagg_invalidation_multi)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

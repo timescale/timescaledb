@@ -17,7 +17,7 @@
 #include <partialize_finalize.h>
 
 /* Static function prototypes */
-static Var *mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input,
+static Var *mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input,
 										int original_query_resno, bool finalized,
 										bool *skip_adding);
 static inline void makeMaterializeColumnName(char *colbuf, const char *type,
@@ -44,7 +44,8 @@ makeMaterializeColumnName(char *colbuf, const char *type, int original_query_res
  * materialize table columns and partialize exprs.
  */
 void
-finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo *mattblinfo)
+finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
+				   MaterializationHypertableColumnInfo *mattblinfo)
 {
 	ListCell *lc;
 	int resno = 1;
@@ -223,8 +224,8 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
  *
  */
 static Var *
-mattablecolumninfo_addentry(MatTableColumnInfo *out, Node *input, int original_query_resno,
-							bool finalized, bool *skip_adding)
+mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input,
+							int original_query_resno, bool finalized, bool *skip_adding)
 {
 	int matcolno = list_length(out->matcollist) + 1;
 	char colbuf[NAMEDATALEN];

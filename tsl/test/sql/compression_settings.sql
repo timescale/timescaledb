@@ -93,11 +93,17 @@ SELECT compress_chunk(show_chunks('metrics'), true);
 SELECT * FROM settings;
 SELECT * FROM ht_settings;
 SELECT * FROM chunk_settings;
-ALTER TABLE metrics SET (timescaledb.compress_segmentby='d2');
+ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='bloom(value)');
 
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL ORDER BY id LIMIT 1 OFFSET 1\gset
 
 -- recompressing chunks should apply current hypertable settings
+SELECT compress_chunk(:'CHUNK', recompress:=true);
+SELECT compress_chunk(:'CHUNK', recompress:=true);
+
+ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='');
+
+SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL ORDER BY id LIMIT 1 OFFSET 1\gset
 SELECT compress_chunk(:'CHUNK', recompress:=true);
 SELECT * FROM settings;
 SELECT * FROM ht_settings;

@@ -806,7 +806,7 @@ enum
 #define Natts_cagg_bucket_function (_Anum_cagg_bucket_function_max - 1)
 
 static Datum
-create_cagg_get_bucket_function_datum(TupleDesc tupdesc, ContinuousAggsBucketFunction *bf)
+create_cagg_get_bucket_function_datum(TupleDesc tupdesc, ContinuousAggBucketFunction *bf)
 {
 	NullableDatum datums[Natts_cagg_bucket_function] = { { 0 } };
 	HeapTuple tuple;
@@ -893,7 +893,7 @@ cagg_get_bucket_function_datum(int32 mat_hypertable_id, FunctionCallInfo fcinfo)
 	if (fcinfo != NULL && get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "function returning record called in context that cannot accept type record");
 
-	ContinuousAggsBucketFunction *bf = ts_cagg_get_bucket_function_info(direct_view_oid);
+	ContinuousAggBucketFunction *bf = ts_cagg_get_bucket_function_info(direct_view_oid);
 
 	if (!OidIsValid(bf->bucket_function))
 	{

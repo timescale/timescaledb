@@ -13,9 +13,21 @@
 #define PG_TYPE_OID_HELPER2(X) PG_TYPE_OID_HELPER(X)
 #define PG_TYPE_OID PG_TYPE_OID_HELPER2(PG_TYPE_PREFIX)
 
+#ifndef IS_NOT_EQUAL
+#define IS_NOT_EQUAL(X, Y) ((X) != (Y))
+#endif
+
+#ifndef IS_FINITE
+#define IS_FINITE(X) true
+#endif
+
+#ifndef ARROW_GET_VALUE
+#define ARROW_GET_VALUE(A, I) ((CTYPE *) (A)->buffers[1])[I]
+#endif
+
 static void
-FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, DecompressResult *results,
-								   int n)
+FUNCTION_NAME3(check_arrow, CTYPE, ALGO)(ArrowArray *arrow, int error_type,
+										 DecompressResult *results, int n)
 {
 	if (n != arrow->length)
 	{
@@ -41,14 +53,14 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
 
 		if (!results[i].is_null)
 		{
-			const CTYPE arrow_value = ((CTYPE *) arrow->buffers[1])[i];
+			const CTYPE arrow_value = ARROW_GET_VALUE(arrow, i);
 			const CTYPE rowbyrow_value = DATUM_TO_CTYPE(results[i].val);
 
 			/*
 			 * Floats can also be NaN/infinite and the comparison doesn't
 			 * work in that case.
 			 */
-			if (isfinite((double) arrow_value) != isfinite((double) rowbyrow_value))
+			if (IS_FINITE(arrow_value) != IS_FINITE(rowbyrow_value))
 			{
 				ereport(error_type,
 						(errcode(ERRCODE_INTERNAL_ERROR),
@@ -56,7 +68,7 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
 						 errdetail("At row %d\n", i)));
 			}
 
-			if (isfinite((double) arrow_value) && arrow_value != rowbyrow_value)
+			if (IS_FINITE(arrow_value) && IS_NOT_EQUAL(arrow_value, rowbyrow_value))
 			{
 				ereport(error_type,
 						(errcode(ERRCODE_INTERNAL_ERROR),
@@ -126,7 +138,7 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	/* Check that both ways of decompression match. */
 	if (bulk)
 	{
-		FUNCTION_NAME2(check_arrow, CTYPE)(arrow, ERROR, results, n);
+		FUNCTION_NAME3(check_arrow, CTYPE, ALGO)(arrow, ERROR, results, n);
 		return n;
 	}
 
@@ -182,12 +194,12 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 			 * Floats can also be NaN/infinite and the comparison doesn't
 			 * work in that case.
 			 */
-			if (isfinite((double) old_value) != isfinite((double) new_value))
+			if (IS_FINITE(old_value) != IS_FINITE(new_value))
 			{
 				elog(ERROR, "the repeated decompression result doesn't match");
 			}
 
-			if (isfinite((double) old_value) && old_value != new_value)
+			if (IS_FINITE(old_value) && IS_NOT_EQUAL(old_value, new_value))
 			{
 				elog(ERROR, "the repeated decompression result doesn't match");
 			}
@@ -211,7 +223,7 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	}
 	PG_END_TRY();
 
-	FUNCTION_NAME2(check_arrow, CTYPE)(arrow, PANIC, results, n);
+	FUNCTION_NAME3(check_arrow, CTYPE, ALGO)(arrow, PANIC, results, n);
 
 	return n;
 }
@@ -224,3 +236,12 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 #undef PG_TYPE_OID
 #undef PG_TYPE_OID_HELPER
 #undef PG_TYPE_OID_HELPER2
+
+/* These are defined by the caller */
+#undef ALGO
+#undef CTYPE
+#undef PG_TYPE_PREFIX
+#undef DATUM_TO_CTYPE
+#undef IS_FINITE
+#undef IS_NOT_EQUAL
+#undef ARROW_GET_VALUE

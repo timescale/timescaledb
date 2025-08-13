@@ -215,16 +215,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device
-                                 Batches: 1 
                                  ->  Index Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"), _hyper_1_14_chunk.device
-                                 Batches: 1 
                                  ->  Index Scan using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
 (25 rows)
@@ -239,16 +236,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")), _hyper_1_14_chunk.device
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"), _hyper_1_14_chunk.device
-                                 Batches: 1 
                                  ->  Index Scan using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device
-                                 Batches: 1 
                                  ->  Index Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
          ->  Custom Scan (ChunkAppend) on _materialized_hypertable_5 (actual rows=4 loops=1)
@@ -325,16 +319,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: _hyper_1_3_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: _hyper_1_3_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Index Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: _hyper_1_14_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Index Scan using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
 (24 rows)
@@ -354,16 +345,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: _hyper_1_3_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: _hyper_1_3_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Index Scan using _hyper_1_3_chunk_metrics_time_idx on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: _hyper_1_14_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Index Scan using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
 (24 rows)
@@ -445,17 +433,14 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
 (28 rows)
@@ -470,16 +455,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
@@ -511,17 +493,14 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
 (28 rows)
@@ -536,16 +515,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
@@ -577,17 +553,14 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
 (28 rows)
@@ -602,16 +575,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
@@ -643,17 +613,14 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"), _hyper_1_14_chunk.device
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
 (28 rows)
@@ -668,16 +635,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")), _hyper_1_14_chunk.device
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"), _hyper_1_14_chunk.device
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
@@ -763,16 +727,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: _hyper_1_14_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: _hyper_1_14_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: _hyper_1_3_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
@@ -793,16 +754,13 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Finalize HashAggregate (actual rows=2 loops=1)
                      Group Key: _hyper_1_14_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
-                     Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
                                  Group Key: _hyper_1_14_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
                                  Group Key: _hyper_1_3_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")
-                                 Batches: 1 
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3

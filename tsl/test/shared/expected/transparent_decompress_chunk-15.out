@@ -465,12 +465,12 @@ QUERY PLAN
    ->  Gather Merge (actual rows=20 loops=1)
          Workers Planned: 2
          Workers Launched: 2
-         ->  Sort (actual rows=10 loops=2)
-               Sort Key: _hyper_X_X_chunk.device_id
-               Worker 0:  Sort Method: quicksort 
-               Worker 1:  Sort Method: quicksort 
-               ->  Custom Scan (VectorAgg) (actual rows=10 loops=2)
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=10 loops=2)
+               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+                     ->  Sort (actual rows=10 loops=2)
+                           Sort Key: compress_hyper_X_X_chunk.device_id
+                           Worker 0:  Sort Method: quicksort 
+                           Worker 1:  Sort Method: quicksort 
                            ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=2)
 (12 rows)
 
@@ -483,12 +483,12 @@ QUERY PLAN
          ->  Gather Merge (actual rows=20 loops=1)
                Workers Planned: 2
                Workers Launched: 2
-               ->  Sort (actual rows=10 loops=2)
-                     Sort Key: _hyper_X_X_chunk.device_id
-                     Worker 0:  Sort Method: quicksort 
-                     Worker 1:  Sort Method: quicksort 
-                     ->  Custom Scan (VectorAgg) (actual rows=10 loops=2)
-                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+               ->  Custom Scan (VectorAgg) (actual rows=10 loops=2)
+                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+                           ->  Sort (actual rows=10 loops=2)
+                                 Sort Key: compress_hyper_X_X_chunk.device_id
+                                 Worker 0:  Sort Method: quicksort 
+                                 Worker 1:  Sort Method: quicksort 
                                  ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=2)
 (13 rows)
 
@@ -721,23 +721,26 @@ FROM :TEST_TABLE m1
     LIMIT 10;
 QUERY PLAN
  Limit
-   ->  Merge Join
-         Merge Cond: (m1."time" = m3."time")
-         ->  Nested Loop
+   ->  Nested Loop
+         ->  Gather Merge
+               Workers Planned: 1
                ->  Sort
                      Sort Key: m1."time", m1.device_id
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
-                           ->  Seq Scan on compress_hyper_X_X_chunk
-               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
-                     Filter: (m1."time" = "time")
-                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-                           Index Cond: (device_id = m1.device_id)
-         ->  Sort
-               Sort Key: m3."time"
-               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m3
-                     ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
-                           Filter: (device_id = 3)
-(17 rows)
+                     ->  Parallel Hash Join
+                           Hash Cond: (m3."time" = m1."time")
+                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m3
+                                 ->  Parallel Bitmap Heap Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
+                                       Recheck Cond: (device_id = 3)
+                                       ->  Bitmap Index Scan on compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx
+                                             Index Cond: (device_id = 3)
+                           ->  Parallel Hash
+                                 ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
+                                       ->  Parallel Seq Scan on compress_hyper_X_X_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
+               Filter: (m1."time" = "time")
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                     Index Cond: (device_id = m1.device_id)
+(20 rows)
 
 RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE
@@ -817,15 +820,18 @@ ORDER BY m1.time,
 LIMIT 10;
 QUERY PLAN
  Limit
-   ->  Nested Loop Left Join
-         Join Filter: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
+   ->  Gather Merge
+         Workers Planned: 2
          ->  Sort
                Sort Key: m1."time", m1.device_id
-               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
-                     ->  Seq Scan on compress_hyper_X_X_chunk
-         ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
-               ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-(9 rows)
+               ->  Parallel Hash Left Join
+                     Hash Cond: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
+                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
+                           ->  Parallel Seq Scan on compress_hyper_X_X_chunk
+                     ->  Parallel Hash
+                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
+                                 ->  Parallel Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+(12 rows)
 
 RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE
@@ -843,15 +849,15 @@ QUERY PLAN
  Limit
    ->  Sort
          Sort Key: m1."time", m1.device_id, m2."time", m2.device_id
-         ->  Hash Left Join
-               Hash Cond: (m1."time" = m2."time")
+         ->  Hash Right Join
+               Hash Cond: (m2."time" = m1."time")
                Join Filter: (m1.device_id = 1)
-               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
-                     ->  Seq Scan on compress_hyper_X_X_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                           Index Cond: (device_id = 2)
                ->  Hash
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
-                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-                                 Index Cond: (device_id = 2)
+                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
+                           ->  Seq Scan on compress_hyper_X_X_chunk
 (12 rows)
 
 -- test implicit self-join

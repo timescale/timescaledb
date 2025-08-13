@@ -31,6 +31,7 @@
 #include "continuous_aggs/create.h"
 #include "continuous_aggs/insert.h"
 #include "continuous_aggs/invalidation.h"
+#include "continuous_aggs/invalidation_multi.h"
 #include "continuous_aggs/invalidation_record.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
@@ -170,6 +171,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.uuid_compressor_append = tsl_uuid_compressor_append,
 	.uuid_compressor_finish = tsl_uuid_compressor_finish,
 	.bloom1_contains = bloom1_contains,
+	.bloom1_get_hash_function = bloom1_get_hash_function,
 	.process_compress_table = tsl_process_compress_table,
 	.process_altertable_cmd = tsl_process_altertable_cmd,
 	.process_rename_cmd = tsl_process_rename_cmd,
