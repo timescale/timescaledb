@@ -2748,7 +2748,6 @@ LIMIT 100;
                                  Filter: (device_id = 2)
                                  Rows Removed by Filter: 4
                ->  Hash (actual rows=8640 loops=1)
-                     Buckets: 16384  Batches: 1 
                      ->  Append (actual rows=8640 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m1_1 (actual rows=3600 loops=1)
                                  ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
@@ -7163,7 +7162,6 @@ LIMIT 100;
                      ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_9 (actual rows=0 loops=1)
                            Index Cond: (device_id = 2)
                ->  Hash (actual rows=8640 loops=1)
-                     Buckets: 16384  Batches: 1 
                      ->  Append (actual rows=8640 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_2_4_chunk m1_1 (actual rows=720 loops=1)
                                  ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)

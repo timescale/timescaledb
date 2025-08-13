@@ -585,7 +585,6 @@ ORDER BY time;
                ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk mt_5 (actual rows=5 loops=1)
                      ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
          ->  Hash (actual rows=1 loops=1)
-               Buckets: 2048  Batches: 1 
                ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
 (21 rows)
 

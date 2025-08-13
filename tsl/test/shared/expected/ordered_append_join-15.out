@@ -2395,7 +2395,6 @@ QUERY PLAN
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_3 (actual rows=25190 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=30 loops=1)
                ->  Hash (actual rows=68370 loops=1)
-                     Buckets: 2097152  Batches: 1 
                      ->  Append (actual rows=68370 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_1 (actual rows=17990 loops=1)
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=20 loops=1)
@@ -3773,7 +3772,6 @@ QUERY PLAN
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_9 (actual rows=5038 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                ->  Hash (actual rows=68370 loops=1)
-                     Buckets: 4194304  Batches: 2 
                      ->  Append (actual rows=68370 loops=1)
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_1 (actual rows=3598 loops=1)
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=4 loops=1)
