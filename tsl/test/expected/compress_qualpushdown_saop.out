@@ -459,20 +459,18 @@ select * from saop where segmentby = '1' or (with_bloom = stable_lower('1') and 
 explain (analyze, costs off, timing off, summary off)
 with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where segmentby = any(a);
-                                                                                              QUERY PLAN                                                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                           QUERY PLAN                                                                                           
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=43479 loops=1)
    ->  Limit (actual rows=10 loops=1)
-         ->  Sort (actual rows=10 loops=1)
-               Sort Key: _hyper_1_1_chunk_1.segmentby
-               Sort Method: top-N heapsort 
-               ->  HashAggregate (actual rows=23 loops=1)
-                     Group Key: _hyper_1_1_chunk_1.segmentby
-                     ->  Append (actual rows=100000 loops=1)
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=50000 loops=1)
-                                 ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69 loops=1)
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=50000 loops=1)
-                                 ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=69 loops=1)
+         ->  Group (actual rows=10 loops=1)
+               Group Key: _hyper_1_1_chunk_1.segmentby
+               ->  Merge Append (actual rows=39132 loops=1)
+                     Sort Key: _hyper_1_1_chunk_1.segmentby
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=19566 loops=1)
+                           ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=28 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=19567 loops=1)
+                           ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=28 loops=1)
    ->  Append (actual rows=4348 loops=10)
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2174 loops=10)
                Filter: (segmentby = ANY ((ARRAY[_hyper_1_1_chunk_1.segmentby])))
@@ -482,13 +480,13 @@ select * from saop, arrays where segmentby = any(a);
                Filter: (segmentby = ANY ((ARRAY[_hyper_1_1_chunk_1.segmentby])))
                ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk (actual rows=3 loops=10)
                      Index Cond: (segmentby = ANY ((ARRAY[_hyper_1_1_chunk_1.segmentby])))
-(22 rows)
+(19 rows)
 
 explain (analyze, costs off, timing off, summary off)
 with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where with_minmax = any(a);
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=34481 loops=1)
    Join Filter: (_hyper_1_1_chunk.with_minmax = ANY (arrays.a))
    Rows Removed by Join Filter: 965519
@@ -500,23 +498,21 @@ select * from saop, arrays where with_minmax = any(a);
    ->  Materialize (actual rows=10 loops=100000)
          ->  Subquery Scan on arrays (actual rows=10 loops=1)
                ->  Limit (actual rows=10 loops=1)
-                     ->  Sort (actual rows=10 loops=1)
-                           Sort Key: _hyper_1_1_chunk_1.segmentby
-                           Sort Method: top-N heapsort 
-                           ->  HashAggregate (actual rows=23 loops=1)
-                                 Group Key: _hyper_1_1_chunk_1.segmentby
-                                 ->  Append (actual rows=100000 loops=1)
-                                       ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=50000 loops=1)
-                                             ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69 loops=1)
-                                       ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=50000 loops=1)
-                                             ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=69 loops=1)
-(22 rows)
+                     ->  Group (actual rows=10 loops=1)
+                           Group Key: _hyper_1_1_chunk_1.segmentby
+                           ->  Merge Append (actual rows=39132 loops=1)
+                                 Sort Key: _hyper_1_1_chunk_1.segmentby
+                                 ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=19566 loops=1)
+                                       ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=28 loops=1)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=19567 loops=1)
+                                       ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=28 loops=1)
+(19 rows)
 
 explain (analyze, costs off, timing off, summary off)
 with arrays as (select array[segmentby] a from saop group by segmentby order by segmentby limit 10)
 select * from saop, arrays where with_bloom = any(a);
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=473 loops=1)
    Join Filter: (_hyper_1_1_chunk.with_bloom = ANY (arrays.a))
    Rows Removed by Join Filter: 999527
@@ -528,17 +524,15 @@ select * from saop, arrays where with_bloom = any(a);
    ->  Materialize (actual rows=10 loops=100000)
          ->  Subquery Scan on arrays (actual rows=10 loops=1)
                ->  Limit (actual rows=10 loops=1)
-                     ->  Sort (actual rows=10 loops=1)
-                           Sort Key: _hyper_1_1_chunk_1.segmentby
-                           Sort Method: top-N heapsort 
-                           ->  HashAggregate (actual rows=23 loops=1)
-                                 Group Key: _hyper_1_1_chunk_1.segmentby
-                                 ->  Append (actual rows=100000 loops=1)
-                                       ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=50000 loops=1)
-                                             ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=69 loops=1)
-                                       ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=50000 loops=1)
-                                             ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=69 loops=1)
-(22 rows)
+                     ->  Group (actual rows=10 loops=1)
+                           Group Key: _hyper_1_1_chunk_1.segmentby
+                           ->  Merge Append (actual rows=39132 loops=1)
+                                 Sort Key: _hyper_1_1_chunk_1.segmentby
+                                 ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=19566 loops=1)
+                                       ->  Index Scan using compress_hyper_2_3_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk compress_hyper_2_3_chunk_1 (actual rows=28 loops=1)
+                                 ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=19567 loops=1)
+                                       ->  Index Scan using compress_hyper_2_4_chunk_segmentby__ts_meta_min_1__ts_meta__idx on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=28 loops=1)
+(19 rows)
 
 -- Array parameter of prepared statements.
 prepare array_param as select * from saop where with_bloom = any($1);

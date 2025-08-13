@@ -52,9 +52,15 @@ select * from bscan where id = 1 or id = 2
 ;
 
 -- Also try a join with a Bitmap Heap Scan
+set enable_mergejoin to off;
+set enable_hashjoin to off;
+
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from bscan t1, bscan t2
 where (t2.id = 1 or t2.id = 2)
     and t1.s = t2.s
     and t1.payload = -537;
 ;
+
+reset enable_mergejoin;
+reset enable_hashjoin;

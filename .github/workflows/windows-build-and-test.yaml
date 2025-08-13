@@ -74,14 +74,15 @@ jobs:
       TABLESPACE1: D:\tablespace1\
       TABLESPACE2: D:\tablespace2\
       IGNORES: >-
-        compress_bloom_sparse_debug
+        bgw_launcher
+        chunk_adaptive
         compress_bloom_sparse_compat
+        compress_bloom_sparse_debug
         compress_qualpushdown_saop
         compressed_copy
         compression_algos
         compression_uuid
-        bgw_launcher
-        chunk_adaptive
+        merge_append_partially_compressed
         metadata
         telemetry
       SKIPS: >-
