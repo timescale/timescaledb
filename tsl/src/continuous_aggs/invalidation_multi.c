@@ -533,7 +533,8 @@ multi_invalidation_move_invalidations(MultiInvalidationState *state)
 	char nulls[3];
 	Datum args[3];
 
-	SPI_connect();
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
 
 	/* Set up plan if not already set up */
 	if (plan_get_invalidations == NULL)
