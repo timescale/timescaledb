@@ -58,23 +58,10 @@ ts_uuid_generate(PG_FUNCTION_ARGS)
 }
 
 pg_uuid_t *
-ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool zeroed)
+ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool zeroed)
 {
-	/*
-	 * TimestampTz is a 64bit integer, counting the microseconds from 2000-01-01.
-	 * The UUID v7 format uses the first 48 bits for the timestamp, that represents
-	 * the number of milliseconds since 1970-01-01.
-	 */
-
-	/* Difference in milliseconds between 2000-01-01 and 1970-01-01 */
-	int64 epoch_diff_millis =
-		((int64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY) * 1000ULL;
-	int64 epoch_millis = (ts / 1000) + epoch_diff_millis;
-
-	/* The microseconds part of the timestamp, scaled to 12 bits, same as in PG18 */
-	uint32 ts_micros = (ts % 1000) * (1 << 12) / 1000;
-	uint64_t timestamp_be = pg_hton64(epoch_millis << 16);
 	pg_uuid_t *uuid;
+	uint64_t timestamp_be = pg_hton64((unixtime_us / 1000) << 16);
 
 	if (zeroed)
 	{
@@ -88,6 +75,9 @@ ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool zeroed)
 
 	/* Fill the first 48 bits with the timestamp */
 	memcpy(uuid->data, &timestamp_be, 6);
+
+	/* The microseconds part of the timestamp, scaled to 12 bits, same as in PG18 */
+	uint32 ts_micros = (unixtime_us % 1000) * (1 << 12) / 1000;
 
 	/*
 	 * Sub milliseconds timestamps are optional. We store the microseconds part in the
@@ -106,6 +96,15 @@ ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool zeroed)
 	return uuid;
 }
 
+pg_uuid_t *
+ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool zeroed)
+{
+	int64 epoch_diff_us = ((int64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY);
+	int64 unixtime_us = ts + epoch_diff_us;
+
+	return ts_create_uuid_v7_from_unixtime_us(unixtime_us, zeroed);
+}
+
 TS_FUNCTION_INFO_V1(ts_uuid_generate_v7);
 
 Datum
@@ -120,9 +119,9 @@ Datum
 ts_uuid_v7_from_timestamptz(PG_FUNCTION_ARGS)
 {
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
-	bool zeroed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	bool zero = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 
-	PG_RETURN_UUID_P(ts_create_uuid_v7_from_timestamptz(timestamp, zeroed));
+	PG_RETURN_UUID_P(ts_create_uuid_v7_from_timestamptz(timestamp, zero));
 }
 
 TS_FUNCTION_INFO_V1(ts_uuid_v7_from_timestamptz_zeroed);
@@ -139,38 +138,36 @@ ts_uuid_v7_from_timestamptz_zeroed(PG_FUNCTION_ARGS)
 #define IS_RFC9562_VARIANT(uuid) (UUID_VARIANT(uuid) == 0x80)
 #define UUID_VERSION(uuid) (((uuid)->data[6] & 0xf0) >> 4)
 
-static bool
-ts_uuid_extract_timestamp(const pg_uuid_t *uuid, TimestampTz *ts, bool sub_ms)
+/*
+ * Extract the millisecond Unix epoch timestamp from the UUIDv7, with optional
+ * extra sub-millisecond fraction in microseconds.
+ */
+bool
+ts_uuid_v7_extract_unixtime(const pg_uuid_t *uuid, uint64 *unixtime_ms, uint16 *extra_us)
 {
-	/* Check that the variant field corresponds to RFC9562 */
-	if (!IS_RFC9562_VARIANT(uuid))
-		return false;
+	bool is_uuidv7 = false;
 
-	if (UUID_VERSION(uuid) != 7)
-		return false;
+	/* Check that the variant field corresponds to RFC9562 */
+	if (IS_RFC9562_VARIANT(uuid))
+	{
+		/* Get the version from the UUID */
+		is_uuidv7 = (UUID_VERSION(uuid) == 7);
+	}
 
 	/* Big endian timestamp in milliseconds from Unix Epoch */
 	uint64 timestamp_be = 0;
 	memcpy(&timestamp_be, uuid->data, 6);
 
 	/* The timestamp is now milliseconds from Unix Epoch (1970-01-01)*/
-	uint64 timestamp = (pg_ntoh64(timestamp_be)) >> 16;
-	uint32 subms_timestamp = 0;
+	*unixtime_ms = (pg_ntoh64(timestamp_be)) >> 16;
 
-	if (sub_ms)
+	if (extra_us)
 	{
-		/* Get the sub ms part as well, reversing the scaling */
-		subms_timestamp = (((uuid->data[6] & 0xF) << 8) | uuid->data[7]) * 1000 / (1 << 12);
+		/* Optionally, get the sub ms part as microseconds, reversing the scaling */
+		*extra_us = (((uuid->data[6] & 0xF) << 8) | uuid->data[7]) * 1000 / (1 << 12);
 	}
 
-	/* Milliseconds timestamp from PG Epoch (2000-01-01) */
-	uint64 timestamp_millis =
-		(timestamp - ((uint64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY) * 1000ULL);
-
-	/* Add up the whole to get microseconds */
-	*ts = timestamp_millis * 1000 + subms_timestamp;
-
-	return true;
+	return is_uuidv7;
 }
 
 TS_FUNCTION_INFO_V1(ts_timestamptz_from_uuid_v7);
@@ -179,10 +176,18 @@ Datum
 ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
 {
 	pg_uuid_t *uuid = PG_GETARG_UUID_P(0);
-	TimestampTz ts;
+	uint64 unixtime_millis = 0;
 
-	if (!ts_uuid_extract_timestamp(uuid, &ts, false))
+	if (!ts_uuid_v7_extract_unixtime(uuid, &unixtime_millis, NULL))
 		PG_RETURN_NULL();
+
+	/* Milliseconds timestamp from PG Epoch (2000-01-01) */
+	uint64 timestamp_millis =
+		(unixtime_millis -
+		 ((uint64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY) * 1000ULL);
+
+	/* Convert to microseconds */
+	TimestampTz ts = timestamp_millis * 1000;
 
 	PG_RETURN_TIMESTAMPTZ(ts);
 }
@@ -193,10 +198,19 @@ Datum
 ts_timestamptz_from_uuid_v7_with_microseconds(PG_FUNCTION_ARGS)
 {
 	pg_uuid_t *uuid = PG_GETARG_UUID_P(0);
-	TimestampTz ts;
+	uint64 unixtime_millis = 0;
+	uint16 extra_micros = 0;
 
-	if (!ts_uuid_extract_timestamp(uuid, &ts, true))
+	if (!ts_uuid_v7_extract_unixtime(uuid, &unixtime_millis, &extra_micros))
 		PG_RETURN_NULL();
+
+	/* Milliseconds timestamp from PG Epoch (2000-01-01) */
+	uint64 timestamp_millis =
+		(unixtime_millis -
+		 ((uint64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY) * 1000ULL);
+
+	/* Add up the whole to get microseconds */
+	TimestampTz ts = timestamp_millis * 1000 + extra_micros;
 
 	PG_RETURN_TIMESTAMPTZ(ts);
 }
