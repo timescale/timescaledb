@@ -110,6 +110,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.index_matches(regclass,regclass)
  _timescaledb_functions.insert_blocker()
  _timescaledb_functions.interval_to_usec(interval)
+ _timescaledb_functions.job_history_bsearch(timestamp with time zone)
  _timescaledb_functions.jsonb_get_matching_index_entry(jsonb,text,text)
  _timescaledb_functions.last_combinefunc(internal,internal)
  _timescaledb_functions.last_sfunc(internal,anyelement,"any")

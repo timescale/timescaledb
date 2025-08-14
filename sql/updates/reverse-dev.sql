@@ -229,3 +229,4 @@ GRANT SELECT ON TABLE _timescaledb_catalog.chunk_index TO PUBLIC;
 DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_status_text(regclass);
 DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_status_text(int);
 
+DROP FUNCTION _timescaledb_functions.job_history_bsearch(TIMESTAMPTZ);
