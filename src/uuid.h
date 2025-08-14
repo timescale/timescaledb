@@ -10,7 +10,8 @@
 #include <utils/uuid.h>
 
 extern pg_uuid_t *ts_uuid_create(void);
-extern pg_uuid_t *ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool zeroed);
+extern pg_uuid_t *ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool zeroed,
+													 bool set_version);
 extern TSDLLEXPORT pg_uuid_t *ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool zero);
 extern bool ts_uuid_v7_extract_unixtime(const pg_uuid_t *uuid, uint64 *unixtime_ms,
 										uint16 *extra_us);

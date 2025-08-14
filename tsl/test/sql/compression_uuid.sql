@@ -262,6 +262,54 @@ FROM
 WHERE
   (x.ts - x.ts2) > '00:00:00.000001' OR (x.ts - x.ts2) < '-00:00:00.000001';
 
+
+-- Make sure UUIDv7 compression is enabled
+SET timescaledb.enable_uuid_compression = true;
+
+-- Test compression on uuid partitioning column
+CREATE TABLE uuid_part (id uuid, value int);
+SELECT create_hypertable('uuid_part', by_range('id', interval '1 month'));
+
+-- Insert the static UUIDs
+INSERT INTO uuid_part SELECT u, i FROM uuids
+WHERE _timescaledb_functions.uuid_version(u) = 7 AND i <= 104;
+
+-- Insert some outlier values to filter for
+INSERT INTO uuid_part (value, id) VALUES
+       (105, _timescaledb_functions.uuid_v7_from_timestamptz('2025-08-13 03:03:04 PDT'::timestamptz)),
+       (106, _timescaledb_functions.uuid_v7_from_timestamptz('2025-08-14 03:04:05 PDT'::timestamptz)),
+       (107, _timescaledb_functions.uuid_v7_from_timestamptz('2025-08-15 04:05:06 PDT'::timestamptz));
+
+SELECT * FROM show_chunks('uuid_part');
+ALTER TABLE uuid_part SET (timescaledb.compress, timescaledb.compress_orderby = 'id');
+
+-- Show how data is spread across chunks
+SELECT tableoid::regclass, count(*) FROM uuid_part GROUP BY tableoid ORDER BY tableoid;
+SELECT count(*) FROM uuid_part
+WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
+      id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
+
+EXPLAIN (verbose, costs off)
+SELECT count(*) FROM uuid_part
+WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
+      id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
+
+-- Compress
+SELECT compress_chunk(ch) FROM show_chunks('uuid_part') ch;
+
+-- Check that chunk exclusion and filtering works as expected on
+-- compressed UUID data.
+SELECT count(*) FROM uuid_part
+WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
+      id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
+
+-- Check that chunk exclusion still works and that filters are pushed
+-- down to a min-max scan on the compressed chunk.
+EXPLAIN (verbose, costs off)
+SELECT count(*) FROM uuid_part
+WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
+      id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
+
 -- Cleanup
 DROP TABLE t;
 DROP TABLE subms;
@@ -269,4 +317,5 @@ DROP TABLE uuids;
 DROP TABLE mixed_compressed;
 DROP TABLE compressed_chunks;
 DROP TABLE compression_info;
+DROP TABLE uuid_part;
 RESET timescaledb.enable_uuid_compression;
