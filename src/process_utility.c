@@ -100,6 +100,7 @@ static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 static bool expect_chunk_modification = false;
 static ProcessUtilityContext last_process_utility_context = PROCESS_UTILITY_TOPLEVEL;
+static void check_no_timescale_options(AlterTableCmd *cmd, Oid reloid);
 static DDLResult process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht);
 static DDLResult process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht);
 
@@ -4040,17 +4041,17 @@ static DDLResult
 process_altertable_start_table(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
-	Oid relid = AlterTableLookupRelation(stmt, NoLock);
+	Oid reloid = AlterTableLookupRelation(stmt, NoLock);
 	Cache *hcache;
 	Hypertable *ht;
 	ListCell *lc;
 
-	if (!OidIsValid(relid))
+	if (!OidIsValid(reloid))
 		return DDL_CONTINUE;
 
-	check_chunk_alter_table_operation_allowed(relid, stmt);
+	check_chunk_alter_table_operation_allowed(reloid, stmt);
 
-	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
+	ht = ts_hypertable_cache_get_cache_and_entry(reloid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (ht != NULL)
 	{
 		ts_hypertable_permissions_check_by_id(ht->fd.id);
@@ -4148,16 +4149,26 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 					if (process_altertable_set_options(cmd, ht) == DDL_DONE)
 						stmt->cmds = foreach_delete_current(stmt->cmds, lc);
 				}
+				else
+				{
+					check_no_timescale_options(cmd, reloid);
+				}
 				break;
 			}
 			case AT_ResetRelOptions:
 			case AT_ReplaceRelOptions:
 				if (ht)
+				{
 					process_altertable_reset_options(cmd, ht);
+				}
+				else
+				{
+					check_no_timescale_options(cmd, reloid);
+				}
 				break;
 			case AT_SetTableSpace:
 				if (NULL == ht)
-					process_altertable_chunk_set_tablespace(cmd, relid);
+					process_altertable_chunk_set_tablespace(cmd, reloid);
 				break;
 			default:
 				break;
@@ -4796,6 +4807,23 @@ process_reassign_owned_start(ProcessUtilityArgs *args)
 		}
 	}
 	return DDL_CONTINUE;
+}
+
+static void
+check_no_timescale_options(AlterTableCmd *cmd, Oid reloid)
+{
+	List *pg_options = NIL, *compress_options = NIL;
+	Ensure(IsA(cmd->def, List), "wrong node type used as ALTER TABLE command definition");
+	List *inpdef = (List *) cmd->def;
+	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
+
+	if (compress_options != NIL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("timescaledb table options can only be specified for hypertables"),
+				 errdetail("%s is not a hypertable", get_rel_name(reloid))));
+	}
 }
 
 /* ALTER TABLE <name> SET ( timescaledb.compress, ...) */
