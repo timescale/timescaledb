@@ -345,7 +345,8 @@ FROM (
 ) ts
 LEFT JOIN i2661 ht ON
   (FLOOR(EXTRACT (EPOCH FROM ht."timestamp") / 300) * 300 = EXTRACT (EPOCH FROM ts.timestamp))
-  AND ht.timestamp > '2019-12-30T00:00:00Z'::timestamp;
+  AND ht.timestamp > '2019-12-30T00:00:00Z'::timestamp
+ORDER BY ts.timestamp, ht.timestamp;
 
 -- #3030 test chunkappend keeps pathkeys when subpath is append
 -- on PG11 this will not use ChunkAppend but MergeAppend

@@ -86,40 +86,29 @@ EXPLAIN (analyze,costs off,timing off,summary off) SELECT
 FROM merge_sort
 WHERE time < now()
 GROUP BY 2, 3;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=1 loops=1)
    Group Key: merge_sort.device_id, merge_sort.measure_id
-   ->  Custom Scan (ConstraintAwareAppend) (actual rows=535681 loops=1)
-         Hypertable: merge_sort
-         Chunks excluded during startup: 0
-         ->  Merge Append (actual rows=535681 loops=1)
-               Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
-               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=86400 loops=1)
-                     Vectorized Filter: ("time" < "timestamp"(now()))
-                     ->  Index Scan using compress_hyper_4_10_chunk_device_id_measure_id__ts_meta_min_idx on compress_hyper_4_10_chunk (actual rows=87 loops=1)
-                           Index Cond: (_ts_meta_min_1 < now())
-               ->  Sort (actual rows=120960 loops=1)
-                     Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_6_chunk (actual rows=120960 loops=1)
-                           Filter: ("time" < now())
-               ->  Sort (actual rows=120960 loops=1)
-                     Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=120960 loops=1)
-                           Filter: ("time" < now())
-               ->  Sort (actual rows=120960 loops=1)
-                     Sort Key: _hyper_3_8_chunk.device_id, _hyper_3_8_chunk.measure_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_8_chunk (actual rows=120960 loops=1)
-                           Filter: ("time" < now())
-               ->  Sort (actual rows=86401 loops=1)
-                     Sort Key: _hyper_3_9_chunk.device_id, _hyper_3_9_chunk.measure_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=86401 loops=1)
-                           Filter: ("time" < now())
-(31 rows)
+   ->  Sort (actual rows=535681 loops=1)
+         Sort Key: merge_sort.device_id, merge_sort.measure_id
+         Sort Method: external merge 
+         ->  Result (actual rows=535681 loops=1)
+               ->  Custom Scan (ChunkAppend) on merge_sort (actual rows=535681 loops=1)
+                     Chunks excluded during startup: 0
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=86400 loops=1)
+                           Vectorized Filter: ("time" < "timestamp"(now()))
+                           ->  Seq Scan on compress_hyper_4_10_chunk (actual rows=87 loops=1)
+                                 Filter: (_ts_meta_min_1 < now())
+                     ->  Index Scan using _hyper_3_6_chunk_merge_sort_time_idx on _hyper_3_6_chunk (actual rows=120960 loops=1)
+                           Index Cond: ("time" < now())
+                     ->  Index Scan using _hyper_3_7_chunk_merge_sort_time_idx on _hyper_3_7_chunk (actual rows=120960 loops=1)
+                           Index Cond: ("time" < now())
+                     ->  Index Scan using _hyper_3_8_chunk_merge_sort_time_idx on _hyper_3_8_chunk (actual rows=120960 loops=1)
+                           Index Cond: ("time" < now())
+                     ->  Index Scan using _hyper_3_9_chunk_merge_sort_time_idx on _hyper_3_9_chunk (actual rows=86401 loops=1)
+                           Index Cond: ("time" < now())
+(20 rows)
 
 -- this should exclude the decompressed chunk
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT

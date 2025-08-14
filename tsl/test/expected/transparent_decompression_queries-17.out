@@ -102,23 +102,23 @@ GROUP BY 2, 3;
                ->  Sort (actual rows=120960 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_6_chunk (actual rows=120960 loops=1)
-                           Filter: ("time" < now())
+                     ->  Index Scan using _hyper_3_6_chunk_merge_sort_time_idx on _hyper_3_6_chunk (actual rows=120960 loops=1)
+                           Index Cond: ("time" < now())
                ->  Sort (actual rows=120960 loops=1)
                      Sort Key: _hyper_3_7_chunk.device_id, _hyper_3_7_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=120960 loops=1)
-                           Filter: ("time" < now())
+                     ->  Index Scan using _hyper_3_7_chunk_merge_sort_time_idx on _hyper_3_7_chunk (actual rows=120960 loops=1)
+                           Index Cond: ("time" < now())
                ->  Sort (actual rows=120960 loops=1)
                      Sort Key: _hyper_3_8_chunk.device_id, _hyper_3_8_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_8_chunk (actual rows=120960 loops=1)
-                           Filter: ("time" < now())
+                     ->  Index Scan using _hyper_3_8_chunk_merge_sort_time_idx on _hyper_3_8_chunk (actual rows=120960 loops=1)
+                           Index Cond: ("time" < now())
                ->  Sort (actual rows=86401 loops=1)
                      Sort Key: _hyper_3_9_chunk.device_id, _hyper_3_9_chunk.measure_id
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_9_chunk (actual rows=86401 loops=1)
-                           Filter: ("time" < now())
+                     ->  Index Scan using _hyper_3_9_chunk_merge_sort_time_idx on _hyper_3_9_chunk (actual rows=86401 loops=1)
+                           Index Cond: ("time" < now())
 (31 rows)
 
 -- this should exclude the decompressed chunk
