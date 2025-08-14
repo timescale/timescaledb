@@ -1041,6 +1041,7 @@ get_default_interval(Oid dimtype, bool adaptive_chunking)
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 		case DATEOID:
+		case UUIDOID:
 			interval = adaptive_chunking ? DEFAULT_CHUNK_TIME_INTERVAL_ADAPTIVE :
 										   DEFAULT_CHUNK_TIME_INTERVAL;
 			break;
@@ -1085,7 +1086,7 @@ dimension_interval_to_internal(const char *colname, Oid dimtype, Oid valuetype, 
 			interval = get_validated_integer_interval(dimtype, DatumGetInt64(value));
 			break;
 		case INTERVALOID:
-			if (!IS_TIMESTAMP_TYPE(dimtype))
+			if (!IS_TIMESTAMP_TYPE(dimtype) && !IS_UUID_TYPE(dimtype))
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 						 errmsg("invalid interval type for %s dimension", format_type_be(dimtype)),

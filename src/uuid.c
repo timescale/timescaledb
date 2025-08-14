@@ -58,7 +58,7 @@ ts_uuid_generate(PG_FUNCTION_ARGS)
 }
 
 pg_uuid_t *
-ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool zeroed)
+ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool zeroed, bool set_version)
 {
 	pg_uuid_t *uuid;
 	uint64_t timestamp_be = pg_hton64((unixtime_us / 1000) << 16);
@@ -87,11 +87,14 @@ ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool zeroed)
 	uuid->data[6] = (unsigned char) (ts_micros >> 8);
 	uuid->data[7] = (unsigned char) ts_micros;
 
-	/* Set version 7 (0111) in bits 6-7 of byte 6, keep random bits 0-5 */
-	uuid->data[6] = (uuid->data[6] & 0x0F) | 0x70;
+	if (set_version)
+	{
+		/* Set version 7 (0111) in bits 6-7 of byte 6, keep random bits 0-5 */
+		uuid->data[6] = (uuid->data[6] & 0x0F) | 0x70;
 
-	/* Set variant (10) in bits 4-5 of byte 8, keep random bits 0-3 and 6-7 */
-	uuid->data[8] = (uuid->data[8] & 0x3F) | 0x80;
+		/* Set variant (10) in bits 4-5 of byte 8, keep random bits 0-3 and 6-7 */
+		uuid->data[8] = (uuid->data[8] & 0x3F) | 0x80;
+	}
 
 	return uuid;
 }
@@ -102,7 +105,7 @@ ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool zeroed)
 	int64 epoch_diff_us = ((int64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY);
 	int64 unixtime_us = ts + epoch_diff_us;
 
-	return ts_create_uuid_v7_from_unixtime_us(unixtime_us, zeroed);
+	return ts_create_uuid_v7_from_unixtime_us(unixtime_us, zeroed, true);
 }
 
 TS_FUNCTION_INFO_V1(ts_uuid_generate_v7);

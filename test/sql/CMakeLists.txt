@@ -58,6 +58,7 @@ set(TEST_FILES
     update.sql
     upsert.sql
     util.sql
+    uuid.sql
     vacuum.sql
     vacuum_parallel.sql
     version.sql
