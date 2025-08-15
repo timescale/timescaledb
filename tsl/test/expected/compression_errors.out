@@ -250,6 +250,8 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::reg
 ALTER TABLE foo SET (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='');
 create table foo_fake (a integer, b integer, c integer, t text, p point);
 ALTER TABLE foo_fake RESET (timescaledb.compress_segmentby);
+ERROR:  timescaledb table options can only be specified for hypertables
+DETAIL:  foo_fake is not a hypertable
 select table_name from create_hypertable('foo_fake', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
 DETAIL:  Dimensions cannot have NULL values.
