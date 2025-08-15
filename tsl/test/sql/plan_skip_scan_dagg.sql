@@ -22,3 +22,17 @@
 -- run tests on compressed hypertable with different layouts of compressed chunks
 \set TABLE skip_scan_htcl
 \ir include/skip_scan_dagg_load_comp_query.sql
+
+-- test SkipScan NOT NULL mode for both distinct and distinct agg queries
+-- The test deletes NULLs in the end to set NOT NULL constraint on the distinct column,
+-- therefore it should be the last test in the suite.
+\ir include/skip_scan_notnull_setup.sql
+
+\set TABLE skip_scan
+\ir include/skip_scan_notnull.sql
+
+\set TABLE skip_scan_ht
+\ir include/skip_scan_notnull.sql
+
+\set TABLE skip_scan_htc
+\ir include/skip_scan_notnull.sql

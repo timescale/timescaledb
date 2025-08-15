@@ -137,22 +137,30 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -215,6 +223,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -370,22 +380,30 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -448,6 +466,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -618,22 +638,30 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -696,6 +724,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -851,22 +881,30 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -929,6 +967,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -1102,11 +1142,16 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev DESC NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 -- NULLS FIRST doesn't match segmentby NULL direction
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 -- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev, time DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time;
 -- multicolumn sort not matching compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time DESC;
@@ -1132,6 +1177,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev, dev_name DESC;
 -- dev_name is not a leading column
 :PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 ORDER BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 AND dev_name IS NOT NULL ORDER BY dev_name;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev = 1;
 -- Basic tests for "segmentby = 'dev'"
 -----------------------------------------
@@ -1155,6 +1202,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT dev + 1, 'q1_13' FROM :TABLE;
 -- DISTINCT ON queries
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
@@ -1194,6 +1243,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT 'Device ' || dev_name FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -1331,11 +1382,16 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev DESC NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 -- NULLS FIRST doesn't match segmentby NULL direction
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 -- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev, time DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time;
 -- multicolumn sort not matching compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time DESC;
@@ -1361,6 +1417,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev, dev_name DESC;
 -- dev_name is not a leading column
 :PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 ORDER BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 AND dev_name IS NOT NULL ORDER BY dev_name;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev = 1;
 -- Basic tests for "segmentby = 'dev'"
 -----------------------------------------
@@ -1384,6 +1442,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT dev + 1, 'q1_13' FROM :TABLE;
 -- DISTINCT ON queries
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
@@ -1423,6 +1483,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT 'Device ' || dev_name FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
