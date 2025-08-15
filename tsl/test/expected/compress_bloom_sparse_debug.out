@@ -8,7 +8,6 @@ CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
 $$ LANGUAGE SQL;
 create table test(ts int, s text, c text);
 select create_hypertable('test', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (1,public,test,t)
@@ -177,7 +176,6 @@ select ts_bloom1_debug_hash('2025-05-05'::timestamptz);
 create table detoaster(ts int, tag text) with (tsdb.hypertable,
     tsdb.partition_column = 'ts', tsdb.compress, tsdb.compress_orderby = 'ts')
 ;
-NOTICE:  adding not-null constraint to column "ts"
 insert into detoaster select ts, ts::text from generate_series(1, 1000) ts;
 insert into detoaster select ts, ts::text from generate_series(1000001, 1001000) ts;
 create index on detoaster(tag);

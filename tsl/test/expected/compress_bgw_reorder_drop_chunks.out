@@ -39,7 +39,6 @@ SELECT ts_bgw_params_create();
 -----------------------------------
 CREATE TABLE test_retention_table(time timestamptz, drop_order int);
 SELECT create_hypertable('test_retention_table', 'time', chunk_time_interval => INTERVAL '1 week');
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable         
 -----------------------------------
  (1,public,test_retention_table,t)

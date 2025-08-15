@@ -15,7 +15,6 @@ create function volatile_lower(x text) returns text as 'lower' language internal
 set max_parallel_workers_per_gather = 0;
 create table saop(ts int, segmentby text, with_minmax text, with_bloom text);
 select create_hypertable('saop', 'ts', chunk_time_interval => 50001);
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (1,public,saop,t)

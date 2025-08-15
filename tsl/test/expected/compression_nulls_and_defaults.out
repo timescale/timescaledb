@@ -17,7 +17,6 @@ drop table if exists t;
 NOTICE:  table "t" does not exist, skipping
 create table t(ts int, c1 int);
 select create_hypertable('t','ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (1,public,t,t)
@@ -76,7 +75,6 @@ set timescaledb.enable_segmentwise_recompression to on;
 drop table if exists t;
 create table t(ts int, c1 int);
 select create_hypertable('t','ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (3,public,t,t)
@@ -129,7 +127,6 @@ set timescaledb.enable_segmentwise_recompression to off;
 drop table if exists t;
 create table t(ts int, c1 int);
 select create_hypertable('t','ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (5,public,t,t)
@@ -180,7 +177,6 @@ set timescaledb.enable_segmentwise_recompression to on;
 drop table if exists t;
 create table t(ts int, c1 int);
 select create_hypertable('t','ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (7,public,t,t)
@@ -228,7 +224,6 @@ set timescaledb.enable_segmentwise_recompression to off;
 drop table if exists t;
 create table t (ts int);
 select create_hypertable('t', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (9,public,t,t)
@@ -267,7 +262,6 @@ set timescaledb.enable_segmentwise_recompression to on;
 drop table if exists t;
 create table t(ts int);
 select create_hypertable('t', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (11,public,t,t)
@@ -314,7 +308,6 @@ set timescaledb.enable_segmentwise_recompression to off;
 drop table if exists t;
 create table t(ts int, c1 int);
 select create_hypertable('t','ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (13,public,t,t)
@@ -375,7 +368,6 @@ set timescaledb.enable_segmentwise_recompression to on;
 drop table if exists t;
 create table t(ts int, c1 int);
 select create_hypertable('t','ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (15,public,t,t)
@@ -452,7 +444,6 @@ select * from t;
 drop table if exists t;
 create table t(ts int, c1 int);
 select create_hypertable('t','ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (17,public,t,t)
@@ -525,7 +516,6 @@ select * from t;
 drop table if exists t;
 create table t(ts int, c1 int);
 select create_hypertable('t','ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (19,public,t,t)
@@ -658,7 +648,6 @@ drop table if exists codecov;
 NOTICE:  table "codecov" does not exist, skipping
 create table codecov(ts int, c1 int);
 select create_hypertable('codecov','ts');
-NOTICE:  adding not-null constraint to column "ts"
    create_hypertable   
 -----------------------
  (21,public,codecov,t)

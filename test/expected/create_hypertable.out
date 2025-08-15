@@ -67,7 +67,6 @@ RESET ROLE;
 GRANT :ROLE_DEFAULT_PERM_USER TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 select * from create_hypertable('test_schema.test_table_no_not_null', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |       table_name       | created 
 ---------------+-------------+------------------------+---------
              1 | test_schema | test_table_no_not_null | t
@@ -90,7 +89,6 @@ RESET ROLE;
 GRANT CREATE ON SCHEMA chunk_schema TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2, chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'), associated_schema_name => 'chunk_schema');
-NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | test_schema | test_table | t
@@ -173,7 +171,6 @@ ERROR:  get_create_command only supports hypertables with up to 2 dimensions
 \set ON_ERROR_STOP 1
 --test adding one more open dimension
 select add_dimension('test_schema.test_table', 'id', chunk_time_interval => 1000);
-NOTICE:  adding not-null constraint to column "id"
           add_dimension          
 ---------------------------------
  (6,test_schema,test_table,id,t)
@@ -199,14 +196,12 @@ select * from _timescaledb_catalog.dimension;
 -- Test add_dimension: can use interval types for TIMESTAMPTZ columns
 CREATE TABLE dim_test_time(time TIMESTAMPTZ, time2 TIMESTAMPTZ, time3 BIGINT, temp float8, device int, location int);
 SELECT create_hypertable('dim_test_time', 'time');
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (3,public,dim_test_time,t)
 (1 row)
 
 SELECT add_dimension('dim_test_time', 'time2', chunk_time_interval => INTERVAL '1 day');
-NOTICE:  adding not-null constraint to column "time2"
           add_dimension           
 ----------------------------------
  (8,public,dim_test_time,time2,t)
@@ -221,7 +216,6 @@ SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => 'foo'::TEX
 ERROR:  invalid interval type for bigint dimension
 \set ON_ERROR_STOP 1
 SELECT add_dimension('dim_test_time', 'time3', chunk_time_interval => 500);
-NOTICE:  adding not-null constraint to column "time3"
           add_dimension           
 ----------------------------------
  (9,public,dim_test_time,time3,t)
@@ -230,7 +224,6 @@ NOTICE:  adding not-null constraint to column "time3"
 -- Test add_dimension: integrals should work on TIMESTAMPTZ columns
 CREATE TABLE dim_test_time2(time TIMESTAMPTZ, time2 TIMESTAMPTZ, temp float8, device int, location int);
 SELECT create_hypertable('dim_test_time2', 'time');
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (4,public,dim_test_time2,t)
@@ -238,7 +231,6 @@ NOTICE:  adding not-null constraint to column "time"
 
 SELECT add_dimension('dim_test_time2', 'time2', chunk_time_interval => 500);
 WARNING:  unexpected interval: smaller than one second
-NOTICE:  adding not-null constraint to column "time2"
            add_dimension            
 ------------------------------------
  (11,public,dim_test_time2,time2,t)
@@ -270,7 +262,6 @@ ERROR:  cannot specify both the number of partitions and an interval
 -- test adding a new dimension on a non-empty table
 CREATE TABLE dim_test(time TIMESTAMPTZ, device int);
 SELECT create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 day');
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (5,public,dim_test,t)
@@ -360,7 +351,6 @@ DROP TABLE dim_test;
 -- test add_dimension() with existing data on table with space partitioning
 CREATE TABLE dim_test(time TIMESTAMPTZ, device int, data int);
 SELECT create_hypertable('dim_test', 'time', 'device', 2, chunk_time_interval => INTERVAL '1 day');
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (6,public,dim_test,t)
@@ -441,7 +431,6 @@ NOTICE:  column "location" is already a dimension, skipping
 create table test_schema.test_1dim(time timestamp, temp float);
 select create_hypertable('test_schema.test_1dim', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (7,test_schema,test_1dim,t)
@@ -508,7 +497,6 @@ CREATE TABLE test_schema.test_invalid_func(time timestamptz, temp float8, device
 SELECT create_hypertable('test_schema.test_invalid_func', 'time', 'device', 2, partitioning_func => 'invalid_partfunc');
 ERROR:  invalid partitioning function
 SELECT create_hypertable('test_schema.test_invalid_func', 'time');
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable          
 -------------------------------------
  (8,test_schema,test_invalid_func,t)
@@ -526,7 +514,6 @@ SELECT create_hypertable('test_schema.open_dim_part_func', 'time', time_partitio
 ERROR:  invalid partitioning function
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('test_schema.open_dim_part_func', 'time', time_partitioning_func => 'time_partfunc');
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
  (9,test_schema,open_dim_part_func,t)
@@ -538,7 +525,6 @@ SELECT add_dimension('test_schema.open_dim_part_func', 'event_time', chunk_time_
 ERROR:  invalid partitioning function
 \set ON_ERROR_STOP 1
 SELECT add_dimension('test_schema.open_dim_part_func', 'event_time', chunk_time_interval => interval '1 day', partitioning_func => 'time_partfunc');
-NOTICE:  adding not-null constraint to column "event_time"
                   add_dimension                   
 --------------------------------------------------
  (20,test_schema,open_dim_part_func,event_time,t)
@@ -562,7 +548,6 @@ ERROR:  table "test_migrate" is not empty
 \set ON_ERROR_STOP 1
 select create_hypertable('test_schema.test_migrate', 'time', migrate_data => true);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
 NOTICE:  migrating data to chunks
         create_hypertable        
 ---------------------------------
@@ -613,7 +598,6 @@ select * from only _timescaledb_internal._hyper_10_10_chunk;
 create table test_schema.test_migrate_empty(time timestamp, temp float);
 select create_hypertable('test_schema.test_migrate_empty', 'time', migrate_data => true);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
  (11,test_schema,test_migrate_empty,t)
@@ -623,7 +607,6 @@ CREATE TYPE test_type AS (time timestamp, temp float);
 CREATE TABLE test_table_of_type OF test_type;
 SELECT create_hypertable('test_table_of_type', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (12,public,test_table_of_type,t)
@@ -639,7 +622,6 @@ NOTICE:  drop cascades to 3 other objects
 CREATE TABLE test_table_of_type (time timestamp, temp float);
 SELECT create_hypertable('test_table_of_type', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (13,public,test_table_of_type,t)
@@ -711,7 +693,6 @@ ERROR:  invalid partitioning function
 \set ON_ERROR_STOP 1
 -- Test that add_dimension fails due to invalid partitioning function
 select create_hypertable('test_schema.test_partfunc', 'time');
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (14,test_schema,test_partfunc,t)
@@ -737,7 +718,6 @@ select add_dimension('test_schema.test_partfunc', 'device', 2, partitioning_func
 -- check get_create_command produces valid command
 CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
 SELECT create_hypertable('test_schema.test_sql_cmd','time');
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (15,test_schema,test_sql_cmd,t)
@@ -758,7 +738,6 @@ SELECT _timescaledb_functions.get_create_command('test_sql_cmd') AS create_cmd; 
 DROP TABLE test_schema.test_sql_cmd CASCADE;
 CREATE TABLE test_schema.test_sql_cmd(time TIMESTAMPTZ, temp FLOAT8, device_id TEXT, device_type TEXT, location TEXT, id INT, id2 INT);
 SELECT test.execute_sql(:'create_cmd');
-NOTICE:  adding not-null constraint to column "time"
                                                             execute_sql                                                            
 -----------------------------------------------------------------------------------------------------------------------------------
  SELECT create_hypertable('test_schema.test_sql_cmd', 'time', chunk_time_interval => 604800000000, create_default_indexes=>FALSE);
@@ -767,7 +746,6 @@ NOTICE:  adding not-null constraint to column "time"
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test_table_int(time bigint, junk int);
 SELECT hypertable_id AS "TEST_TABLE_INT_HYPERTABLE_ID" FROM create_hypertable('test_table_int', 'time', chunk_time_interval => 1) \gset
-NOTICE:  adding not-null constraint to column "time"
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA IF NOT EXISTS my_schema;
 create or replace function my_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
@@ -1028,7 +1006,6 @@ create table tidrangescan_test (
   some_column bigint
 );
 select create_hypertable('tidrangescan_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (22,public,tidrangescan_test,t)

@@ -19,7 +19,6 @@ CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 CREATE TABLE tspace_2dim(time timestamp, temp float, device text) TABLESPACE tablespace1;
 SELECT create_hypertable('tspace_2dim', 'time', 'device', 2);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (1,public,tspace_2dim,t)
@@ -177,7 +176,6 @@ SET ROLE :ROLE_DEFAULT_PERM_USER_2;
 CREATE TABLE tspace_1dim(time timestamp, temp float, device text);
 SELECT create_hypertable('tspace_1dim', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (2,public,tspace_1dim,t)
@@ -435,7 +433,6 @@ SELECT * FROM _timescaledb_catalog.tablespace;
 CREATE TABLE tbl_1(time timestamp, temp float, device text);
 SELECT create_hypertable('tbl_1', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable  
 --------------------
  (3,public,tbl_1,t)
@@ -444,7 +441,6 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE TABLE tbl_2(time timestamp, temp float, device text);
 SELECT create_hypertable('tbl_2', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable  
 --------------------
  (4,public,tbl_2,t)
@@ -453,7 +449,6 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE TABLE tbl_3(time timestamp, temp float, device text);
 SELECT create_hypertable('tbl_3', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable  
 --------------------
  (5,public,tbl_3,t)
@@ -571,7 +566,6 @@ DROP TABLE tbl_3;
 CREATE TABLE tbl_1(time timestamp, temp float, device text);
 SELECT create_hypertable('tbl_1', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable  
 --------------------
  (6,public,tbl_1,t)

@@ -1467,7 +1467,6 @@ WARNING:  column type "character varying" used for "block" does not follow best 
 WARNING:  column type "character varying" used for "message_name" does not follow best practices
 WARNING:  column type "character varying" used for "signal_name" does not follow best practices
 WARNING:  column type "character varying" used for "signal_string_value" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------
  (11,public,bugtab,t)
@@ -1527,7 +1526,6 @@ CREATE TABLE test (
 );
 SELECT create_hypertable('test', 'dttm');
 WARNING:  column type "timestamp without time zone" used for "dttm" does not follow best practices
-NOTICE:  adding not-null constraint to column "dttm"
  create_hypertable  
 --------------------
  (13,public,test,t)

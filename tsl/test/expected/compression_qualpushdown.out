@@ -152,14 +152,12 @@ knowledge_date date NOT NULL
 SELECT create_hypertable('metaseg_tab', 'end_dt', chunk_time_interval=>interval '1 month', create_default_indexes=>false);
 WARNING:  column type "timestamp without time zone" used for "start_dt" does not follow best practices
 WARNING:  column type "timestamp without time zone" used for "end_dt" does not follow best practices
-NOTICE:  adding not-null constraint to column "end_dt"
     create_hypertable     
 --------------------------
  (3,public,metaseg_tab,t)
 (1 row)
 
 SELECT add_dimension('metaseg_tab', 'fmid', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "fmid"
          add_dimension         
 -------------------------------
  (3,public,metaseg_tab,fmid,t)
@@ -338,7 +336,6 @@ CREATE TABLE deleteme AS
         FROM generate_series('2008-03-01 00:00'::timestamp with time zone,
                              '2008-03-04 12:00', '1 second');
 SELECT create_hypertable('deleteme', 'timestamp', migrate_data => true);
-NOTICE:  adding not-null constraint to column "timestamp"
 NOTICE:  migrating data to chunks
    create_hypertable   
 -----------------------
@@ -417,7 +414,6 @@ DROP table deleteme_with_bytea;
 -- test sqlvaluefunction pushdown
 CREATE TABLE svf_pushdown(time timestamptz, c_date date, c_time time, c_timetz timetz, c_timestamp timestamptz, c_name text, c_bool bool);
 SELECT table_name FROM create_hypertable('svf_pushdown', 'time');
-NOTICE:  adding not-null constraint to column "time"
   table_name  
 --------------
  svf_pushdown
@@ -643,7 +639,6 @@ DROP TABLE svf_pushdown;
 -- expression tree.
 create table booltab(ts int, segmentby bool, flag bool, value int);
 select create_hypertable('booltab', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
    create_hypertable   
 -----------------------
  (13,public,booltab,t)

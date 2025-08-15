@@ -3,7 +3,6 @@
 -- LICENSE-APACHE for a copy of the license.
 CREATE TABLE index_test(time timestamptz, temp float);
 SELECT create_hypertable('index_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,index_test,t)
@@ -24,12 +23,10 @@ CREATE UNIQUE INDEX index_test_time_idx ON index_test (time);
 -- Creating a hypertable from a table with an index that doesn't cover
 -- all partitioning columns should fail
 SELECT create_hypertable('index_test', 'time', 'device', 2);
-NOTICE:  adding not-null constraint to column "time"
 ERROR:  cannot create a unique index without the column "device" (used in partitioning)
 \set ON_ERROR_STOP 1
 -- Partitioning on only time should work
 SELECT create_hypertable('index_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (3,public,index_test,t)
@@ -110,7 +107,6 @@ SELECT * FROM test.show_columns('index_test');
 
 -- No pre-existing UNIQUE index, so partitioning on two columns should work
 SELECT create_hypertable('index_test', 'time', 'device', 2);
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (4,public,index_test,t)
@@ -372,7 +368,6 @@ SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_i
 CREATE TABLE index_test(time timestamptz, temp float, device int) TABLESPACE tablespace1;
 -- Default indexes should be in the table's tablespace
 SELECT create_hypertable('index_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (5,public,index_test,t)
@@ -456,7 +451,6 @@ SELECT * FROM index_expr_test WHERE meta ->> 'field' = 'value1';
 CREATE TABLE index_test(time timestamptz, temp float);
 CREATE UNIQUE INDEX index_test_idx ON index_test (time, temp);
 SELECT create_hypertable('index_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (6,public,index_test,t)
@@ -471,7 +465,6 @@ ERROR:  cannot drop a hypertable index along with other objects
 -- test expression index with dropped columns
 CREATE TABLE idx_expr_test(filler int, time timestamptz, meta text);
 SELECT table_name FROM create_hypertable('idx_expr_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
   table_name   
 ---------------
  idx_expr_test
@@ -484,7 +477,6 @@ DROP TABLE idx_expr_test CASCADE;
 -- test multicolumn expression index with dropped columns
 CREATE TABLE idx_expr_test(filler int, time timestamptz, t1 text, t2 text, t3 text);
 SELECT table_name FROM create_hypertable('idx_expr_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
   table_name   
 ---------------
  idx_expr_test
@@ -497,7 +489,6 @@ DROP TABLE idx_expr_test CASCADE;
 -- test index with predicate and dropped columns
 CREATE TABLE idx_predicate_test(filler int, time timestamptz);
 SELECT table_name FROM create_hypertable('idx_predicate_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
      table_name     
 --------------------
  idx_predicate_test
@@ -511,7 +502,6 @@ DROP TABLE idx_predicate_test;
 -- test index with table references
 CREATE TABLE idx_tableref_test(time timestamptz);
 SELECT table_name FROM create_hypertable('idx_tableref_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
     table_name     
 -------------------
  idx_tableref_test
@@ -645,7 +635,6 @@ SELECT * FROM reindex_norm;
 
 CREATE TABLE ht_dropped(time timestamptz, d0 int, d1 int, c0 int, c1 int, c2 int);
 SELECT create_hypertable('ht_dropped','time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (13,public,ht_dropped,t)
@@ -694,7 +683,6 @@ INSERT INTO i3056(order_number,date_created) VALUES (1, '2000-01-01');
 -- #5908 test CREATE INDEX ON ONLY main table
 CREATE TABLE test(time timestamptz, temp float);
 SELECT create_hypertable('test', 'time');
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable  
 --------------------
  (15,public,test,t)

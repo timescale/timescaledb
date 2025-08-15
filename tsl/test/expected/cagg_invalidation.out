@@ -891,7 +891,6 @@ ORDER BY 1,2;
 ----------------------------------------------
 CREATE table threshold_test (time int, value int);
 SELECT create_hypertable('threshold_test', 'time', chunk_time_interval => 4);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (7,public,threshold_test,t)

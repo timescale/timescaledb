@@ -1173,7 +1173,6 @@ and provolatile = 'i'
 and n.nspname = 'pg_catalog' \gset
 create table time_part_func (time float8, temp float);
 select create_hypertable('time_part_func', 'time', time_partitioning_func => :'time_funcid', create_default_indexes => false, chunk_time_interval => interval '1 month');
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (5,public,time_part_func,t)

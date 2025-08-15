@@ -14,7 +14,6 @@ ALTER TABLE alter_before ALTER COLUMN temp SET STATISTICS 100;
 ALTER TABLE alter_before ALTER COLUMN notes SET STORAGE EXTERNAL;
 SELECT create_hypertable('alter_before', 'time', chunk_time_interval => 2628000000000);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (1,public,alter_before,t)
@@ -66,7 +65,6 @@ ORDER BY c.relname, a.attnum;
 CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 SELECT create_hypertable('alter_after', 'time', chunk_time_interval => 2628000000000);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (2,public,alter_after,t)
@@ -257,7 +255,6 @@ WHERE tablename = 'hyper_in_space' OR tablename LIKE '\_hyper\__\__\_chunk' ORDE
 
 CREATE TABLE hyper_in_space(time bigint, temp float, device int);
 SELECT create_hypertable('hyper_in_space', 'time', 'device', 4, chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (3,public,hyper_in_space,t)
@@ -345,7 +342,6 @@ ERROR:  tablespace "tablespace1" is still attached to 1 hypertables
 DROP TABLE hyper_in_space;
 CREATE TABLE hyper_in_space(time bigint, temp float, device int) TABLESPACE tablespace1;
 SELECT create_hypertable('hyper_in_space', 'time', 'device', 4, chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (4,public,hyper_in_space,t)
@@ -810,7 +806,6 @@ DROP ROLE role_4474;
 -- root table's setting
 CREATE TABLE replid(time timestamptz, value int);
 SELECT create_hypertable('replid', 'time', chunk_time_interval => interval '1 day', create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------
  (16,public,replid,t)

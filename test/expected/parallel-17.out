@@ -10,7 +10,6 @@
 CREATE TABLE test (i int, j double precision, ts timestamp);
 SELECT create_hypertable('test','i',chunk_time_interval:=500000);
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "i"
  create_hypertable 
 -------------------
  (1,public,test,t)

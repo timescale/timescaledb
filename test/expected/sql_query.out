@@ -95,7 +95,6 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev
 CREATE TABLE "int_part"(time timestamp, object_id int, temp float);
 SELECT create_hypertable('"int_part"', 'time', 'object_id', 2);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (2,public,int_part,t)

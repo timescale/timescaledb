@@ -4,7 +4,6 @@
 \set EXPLAIN_ANALYZE 'EXPLAIN (analyze,costs off,timing off,summary off)'
 CREATE TABLE continuous_agg_test(time int, data int);
 SELECT create_hypertable('continuous_agg_test', 'time', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (1,public,continuous_agg_test,t)
@@ -43,7 +42,6 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE TABLE continuous_agg_test_mat(time int);
 SELECT create_hypertable('continuous_agg_test_mat', 'time', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
  (2,public,continuous_agg_test_mat,t)
@@ -214,7 +212,6 @@ TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 -- CREATE VIEW creates the invalidation trigger correctly
 CREATE TABLE ca_inval_test(time int);
 SELECT create_hypertable('ca_inval_test', 'time', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (3,public,ca_inval_test,t)
@@ -311,7 +308,6 @@ TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 -- the view was created
 CREATE TABLE ts_continuous_test(time INTEGER, location INTEGER);
     SELECT create_hypertable('ts_continuous_test', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (5,public,ts_continuous_test,t)
@@ -383,7 +379,6 @@ NOTICE:  drop cascades to 3 other objects
 ----
 CREATE TABLE chunks(time timestamptz, device int, value float);
 SELECT FROM create_hypertable('chunks','time',chunk_time_interval:='1d'::interval);
-NOTICE:  adding not-null constraint to column "time"
 --
 (1 row)
 
@@ -1409,7 +1404,6 @@ CREATE TABLE continuous_agg_test(time int, data int);
 -- Test with integer partitioning
 CREATE TABLE integer_ht(time int, data int);
 SELECT create_hypertable('integer_ht', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (10,public,integer_ht,t)
@@ -1455,7 +1449,6 @@ SELECT * FROM integer_ht_cagg;
 -- Test with big integer partitioning
 CREATE TABLE big_integer_ht(time bigint, data bigint);
 SELECT create_hypertable('big_integer_ht', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable       
 ------------------------------
  (12,public,big_integer_ht,t)
@@ -1501,7 +1494,6 @@ SELECT * FROM big_integer_ht_cagg;
 -- Test with small integer partitioning
 CREATE TABLE small_integer_ht(time bigint, data bigint);
 SELECT create_hypertable('small_integer_ht', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable        
 --------------------------------
  (14,public,small_integer_ht,t)

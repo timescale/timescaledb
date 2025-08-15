@@ -42,7 +42,6 @@ SELECT ts_bgw_params_create();
 CREATE TABLE drop_chunks_table(time BIGINT, data INTEGER);
 SELECT hypertable_id AS drop_chunks_table_nid
     FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 1) \gset
-NOTICE:  adding not-null constraint to column "time"
 CREATE OR REPLACE FUNCTION integer_now_test2() returns bigint LANGUAGE SQL STABLE as $$ SELECT 40::bigint  $$;
 SELECT set_integer_now_func('drop_chunks_table', 'integer_now_test2');
  set_integer_now_func 

@@ -1081,7 +1081,6 @@ timec         timestamp with time zone  ,
  utilization   double precision
 );
 SELECT create_hypertable('entity_m1', 'timec', chunk_time_interval=>'30 days'::interval);
-NOTICE:  adding not-null constraint to column "timec"
    create_hypertable    
 ------------------------
  (7,public,entity_m1,t)

@@ -826,7 +826,6 @@ SELECT * FROM _timescaledb_catalog.chunk_column_stats;
 -- Check min/max ranges for partial chunks with segmentby columns get recalculated correctly by seementwise recompression
 CREATE TABLE chunk_skipping(time timestamptz,device text, updated_at timestamptz)
 WITH (tsdb.hypertable, tsdb.partition_column='time',tsdb.segmentby='device');
-NOTICE:  adding not-null constraint to column "time"
 SELECT enable_chunk_skipping('chunk_skipping', 'updated_at');
  enable_chunk_skipping 
 -----------------------

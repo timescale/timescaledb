@@ -246,7 +246,6 @@ $BODY$
 $BODY$;
 CREATE TABLE device_readings_int(time int, value float);
 SELECT create_hypertable('device_readings_int','time',chunk_time_interval:=10);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (6,public,device_readings_int,t)
@@ -436,7 +435,6 @@ DROP TABLE sensor_data;
 -- END OF BASIC USAGE TESTS --
 CREATE TABLE metrics(time timestamptz, device TEXT, value float);
 SELECT table_name FROM create_hypertable('metrics','time');
-NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  metrics

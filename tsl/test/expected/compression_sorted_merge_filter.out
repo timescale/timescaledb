@@ -4,7 +4,6 @@
 create table batches(ts timestamp, id int);
 select create_hypertable('batches', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable   
 ----------------------
  (1,public,batches,t)

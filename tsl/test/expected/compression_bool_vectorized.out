@@ -6,7 +6,6 @@ NOTICE:  table "t1" does not exist, skipping
 set timescaledb.enable_bool_compression = on;
 create table t1 (ts int, b bool);
 select create_hypertable('t1','ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
  (1,public,t1,t)

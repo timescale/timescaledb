@@ -28,7 +28,6 @@ insert into rand_minstd_state values (321);
 --basic test with count
 create table foo (a integer, b integer, c integer, d integer);
 select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "a"
  table_name 
 ------------
  foo
@@ -185,7 +184,6 @@ delete from foo where a = 10;
 --TEST2b try complex DML on compressed chunk
 create table foo_join ( a integer, newval integer);
 select table_name from create_hypertable('foo_join', 'a', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "a"
  table_name 
 ------------
  foo_join
@@ -194,7 +192,6 @@ NOTICE:  adding not-null constraint to column "a"
 insert into foo_join select generate_series(0,40, 10), 111;
 create table foo_join2 ( a integer, newval integer);
 select table_name from create_hypertable('foo_join2', 'a', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "a"
  table_name 
 ------------
  foo_join2
@@ -529,7 +526,6 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch
 SET timescaledb.enable_transparent_decompression TO ON;
 CREATE TABLE plan_inval(time timestamptz, device_id int);
 SELECT create_hypertable('plan_inval','time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (7,public,plan_inval,t)
@@ -913,7 +909,6 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='datatype_te
 --TEST try to compress a hypertable that has a continuous aggregate
 CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
 SELECT create_hypertable('metrics','time');
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (13,public,metrics,t)
@@ -1633,7 +1628,6 @@ SELECT count(*) FROM metrics;
 -- test sequence number is local to segment by
 CREATE TABLE local_seq(time timestamptz, device int);
 SELECT table_name FROM create_hypertable('local_seq','time');
-NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  local_seq
@@ -1656,7 +1650,6 @@ SELECT compress_chunk(c) FROM show_chunks('local_seq') c;
 -- hypertable fails with error "invalid child of chunk append: Node (26)"
 CREATE TABLE tidrangescan_test(time timestamptz, device_id int, v1 float, v2 float);
 SELECT create_hypertable('tidrangescan_test','time');
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (35,public,tidrangescan_test,t)
@@ -1843,7 +1836,6 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 1000;
 CREATE TABLE ts_device_table(time INTEGER, device INTEGER, location INTEGER, value INTEGER);
 CREATE UNIQUE INDEX device_time_idx on ts_device_table(time, device);
 SELECT create_hypertable('ts_device_table', 'time', chunk_time_interval => 1000);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (39,public,ts_device_table,t)
@@ -1896,7 +1888,6 @@ RESET min_parallel_index_scan_size;
 RESET min_parallel_table_scan_size;
 CREATE TABLE ht_metrics_partially_compressed(time timestamptz, device int, value float);
 SELECT create_hypertable('ht_metrics_partially_compressed','time',create_default_indexes:=false);
-NOTICE:  adding not-null constraint to column "time"
                create_hypertable               
 -----------------------------------------------
  (41,public,ht_metrics_partially_compressed,t)
@@ -2729,7 +2720,6 @@ SELECT * FROM ONLY :CHUNK2;
 CREATE TABLE compressed_table (time timestamptz, a int, b int, c int);
 CREATE UNIQUE INDEX compressed_table_index ON compressed_table(time, a, b, c);
 SELECT create_hypertable('compressed_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable        
 --------------------------------
  (49,public,compressed_table,t)
@@ -2773,7 +2763,6 @@ RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
 -- Test decompression with DML which compares int8 to int4
 CREATE TABLE hyper_84 (time timestamptz, device int8, location int8, temp float8);
 SELECT create_hypertable('hyper_84', 'time', create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (51,public,hyper_84,t)
@@ -2800,7 +2789,6 @@ DELETE FROM hyper_84 WHERE device = 1;
 -- Test using DELETE instead of TRUNCATE after compression
 CREATE TABLE hyper_delete (time timestamptz, device int, location int, temp float, t text);
 SELECT table_name FROM create_hypertable('hyper_delete', 'time');
-NOTICE:  adding not-null constraint to column "time"
   table_name  
 --------------
  hyper_delete
@@ -2855,7 +2843,6 @@ RESET timescaledb.enable_delete_after_compression;
 -- Test batch size limiting GUC
 CREATE TABLE hyper_85 (time timestamptz, device int8, location int8, temp float8);
 SELECT create_hypertable('hyper_85', 'time', create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (55,public,hyper_85,t)
@@ -2928,7 +2915,6 @@ SET timescaledb.enable_compression_ratio_warnings TO ON;
 -- Compressing a table with very few rows virtually guarantees a poor compression rate
 CREATE TABLE badly_compressed_ht (time timestamptz, device_id integer, a integer);
 SELECT create_hypertable('badly_compressed_ht', 'time');
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable         
 -----------------------------------
  (57,public,badly_compressed_ht,t)

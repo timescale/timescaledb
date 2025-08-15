@@ -321,7 +321,6 @@ CREATE MATERIALIZED VIEW temperature_tz_4h_ts_offset
 NOTICE:  refreshing continuous aggregate "temperature_tz_4h_ts_offset"
 CREATE TABLE integer_ht(a integer, b integer, c integer);
 SELECT table_name FROM create_hypertable('integer_ht', 'a', chunk_time_interval=> 10);
-NOTICE:  adding not-null constraint to column "a"
  table_name 
 ------------
  integer_ht
