@@ -167,3 +167,5 @@ $$;
 UPDATE _timescaledb_catalog.compression_settings
 SET segmentby = NULL
 WHERE segmentby = '{}';
+
+DROP FUNCTION _timescaledb_functions.job_history_bsearch(TIMESTAMPTZ);
