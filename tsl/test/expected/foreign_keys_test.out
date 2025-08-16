@@ -69,11 +69,8 @@ psql:include/foreign_keys.sql:59: ERROR:  cannot drop table _timescaledb_interna
 DROP TABLE _timescaledb_internal._hyper_1_2_chunk;
 psql:include/foreign_keys.sql:60: ERROR:  cannot drop table _timescaledb_internal._hyper_1_2_chunk because other objects depend on it
 SELECT drop_chunks('metrics', '1 month'::interval);
-psql:include/foreign_keys.sql:61: ERROR:  cannot drop constraint 1_1_metrics_pkey on table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+psql:include/foreign_keys.sql:61: NOTICE:  drop cascades to constraint event_time_fkey on table event
 \set ON_ERROR_STOP 1
--- after removing constraint dropping should succeed
-ALTER TABLE event DROP CONSTRAINT event_time_fkey;
-SELECT drop_chunks('metrics', '1 month'::interval);
 DROP TABLE event;
 DROP TABLE metrics;
 -- test single column fk constraint from plain table to hypertable during hypertable creation with RESTRICT
@@ -85,14 +82,14 @@ CREATE TABLE event(time timestamptz references metrics(time) ON DELETE RESTRICT 
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:82: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:78: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:89: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:85: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -101,10 +98,10 @@ ROLLBACK;
 \set ON_ERROR_STOP 0
 -- should fail
 DELETE FROM metrics WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:99: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+psql:include/foreign_keys.sql:95: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
 -- should fail
 UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:101: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+psql:include/foreign_keys.sql:97: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
 \set ON_ERROR_STOP 1
 SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
 SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
@@ -113,7 +110,7 @@ INSERT INTO metrics(time, device, value) VALUES ('2021-01-01', 'd1', 1.0);
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2021-01-02', 'info1');
-psql:include/foreign_keys.sql:112: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:108: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2021-01-01', 'info2');
@@ -130,14 +127,14 @@ CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE O
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:134: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:130: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:141: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:137: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -166,14 +163,14 @@ CREATE TABLE event(time timestamptz references metrics(time) ON DELETE SET NULL 
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:177: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:173: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:184: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:180: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -202,14 +199,14 @@ CREATE TABLE event(time timestamptz default null references metrics(time) ON DEL
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:220: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:216: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:227: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:223: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -238,14 +235,14 @@ ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES m
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:264: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:260: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 -- should fail
 \set ON_ERROR_STOP 0
 DELETE FROM metrics WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:271: ERROR:  update or delete on table "_hyper_6_8_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+psql:include/foreign_keys.sql:267: ERROR:  update or delete on table "_hyper_6_8_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
 \set ON_ERROR_STOP 1
 SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
 SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
@@ -260,18 +257,18 @@ ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time,device) REFER
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, device, info) VALUES ('2020-01-02', 'd1', 'info1');
-psql:include/foreign_keys.sql:292: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:288: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd2', 'info2');
-psql:include/foreign_keys.sql:293: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:289: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd1', 'info2');
 -- should fail
 \set ON_ERROR_STOP 0
 DELETE FROM metrics WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:300: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+psql:include/foreign_keys.sql:296: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
 DELETE FROM metrics WHERE device = 'd1';
-psql:include/foreign_keys.sql:301: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+psql:include/foreign_keys.sql:297: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
 \set ON_ERROR_STOP 1
 DROP TABLE event;
 DROP TABLE metrics;
@@ -285,7 +282,7 @@ INSERT INTO event(time, info) VALUES ('2020-02-01', 'info1');
 -- should fail
 \set ON_ERROR_STOP 0
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE SET NULL;
-psql:include/foreign_keys.sql:319: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:315: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO metrics(time, device, value) VALUES ('2020-02-01', 'd1', 1.0);
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE CASCADE;
@@ -305,14 +302,14 @@ CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE O
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:347: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:343: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:354: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:350: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -339,12 +336,12 @@ CREATE TABLE event(time timestamptz, info text);
 SELECT table_name FROM create_hypertable('event', 'time');
 \set ON_ERROR_STOP 0
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time);
-psql:include/foreign_keys.sql:387: ERROR:  hypertables cannot be used as foreign key references of hypertables
+psql:include/foreign_keys.sql:383: ERROR:  hypertables cannot be used as foreign key references of hypertables
 \set ON_ERROR_STOP 1
 CREATE TABLE event2(time timestamptz REFERENCES metrics(time), info text);
 \set ON_ERROR_STOP 0
 SELECT table_name FROM create_hypertable('event2', 'time');
-psql:include/foreign_keys.sql:392: ERROR:  hypertables cannot be used as foreign key references of hypertables
+psql:include/foreign_keys.sql:388: ERROR:  hypertables cannot be used as foreign key references of hypertables
 \set ON_ERROR_STOP 1
 DROP TABLE event;
 DROP TABLE event2;
@@ -371,14 +368,14 @@ INSERT INTO ht(time) VALUES ('2020-01-01');
 -- NO ACTION
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
-psql:include/foreign_keys.sql:426: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_14_ht_fk_no_action_fkey"
+psql:include/foreign_keys.sql:422: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_14_ht_fk_no_action_fkey"
 -- ON UPDATE NO ACTION
 BEGIN;
 INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
 INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
 -- should error
 UPDATE fk_no_action SET fk_no_action = 'fk_no_action_updated';
-psql:include/foreign_keys.sql:433: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+psql:include/foreign_keys.sql:429: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
 ROLLBACK;
 -- ON UPDATE NO ACTION with compression
 BEGIN;
@@ -387,7 +384,7 @@ INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should error
 UPDATE fk_no_action SET fk_no_action = 'fk_no_action_updated';
-psql:include/foreign_keys.sql:442: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+psql:include/foreign_keys.sql:438: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
 ROLLBACK;
 -- ON DELETE NO ACTION
 BEGIN;
@@ -395,7 +392,7 @@ INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
 INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
 -- should error
 DELETE FROM fk_no_action;
-psql:include/foreign_keys.sql:450: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+psql:include/foreign_keys.sql:446: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
 ROLLBACK;
 -- ON DELETE NO ACTION with compression
 BEGIN;
@@ -404,19 +401,19 @@ INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should error
 DELETE FROM fk_no_action;
-psql:include/foreign_keys.sql:459: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+psql:include/foreign_keys.sql:455: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
 ROLLBACK;
 -- RESTRICT
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
-psql:include/foreign_keys.sql:464: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_15_ht_fk_restrict_fkey"
+psql:include/foreign_keys.sql:460: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_15_ht_fk_restrict_fkey"
 -- ON UPDATE RESTRICT
 BEGIN;
 INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
 INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
 -- should error
 UPDATE fk_restrict SET fk_restrict = 'fk_restrict_updated';
-psql:include/foreign_keys.sql:471: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+psql:include/foreign_keys.sql:467: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
 ROLLBACK;
 -- ON UPDATE RESTRICT with compression
 BEGIN;
@@ -425,7 +422,7 @@ INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should error
 UPDATE fk_restrict SET fk_restrict = 'fk_restrict_updated';
-psql:include/foreign_keys.sql:480: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+psql:include/foreign_keys.sql:476: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
 ROLLBACK;
 -- ON DELETE RESTRICT
 BEGIN;
@@ -433,7 +430,7 @@ INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
 INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
 -- should error
 DELETE FROM fk_restrict;
-psql:include/foreign_keys.sql:488: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+psql:include/foreign_keys.sql:484: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
 ROLLBACK;
 -- ON DELETE RESTRICT with compression
 BEGIN;
@@ -442,12 +439,12 @@ INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should error
 DELETE FROM fk_restrict;
-psql:include/foreign_keys.sql:497: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+psql:include/foreign_keys.sql:493: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
 ROLLBACK;
 -- CASCADE
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
-psql:include/foreign_keys.sql:503: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_13_ht_fk_cascade_fkey"
+psql:include/foreign_keys.sql:499: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_13_ht_fk_cascade_fkey"
 -- ON UPDATE CASCADE
 BEGIN;
 INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
@@ -536,7 +533,7 @@ ROLLBACK;
 -- SET NULL
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
-psql:include/foreign_keys.sql:603: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_17_ht_fk_set_null_fkey"
+psql:include/foreign_keys.sql:599: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_17_ht_fk_set_null_fkey"
 -- ON UPDATE SET NULL
 BEGIN;
 INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
@@ -598,7 +595,7 @@ ROLLBACK;
 -- SET DEFAULT
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
-psql:include/foreign_keys.sql:671: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_16_ht_fk_set_default_fkey"
+psql:include/foreign_keys.sql:667: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_16_ht_fk_set_default_fkey"
 -- ON UPDATE SET DEFAULT
 BEGIN;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
@@ -669,21 +666,21 @@ select table_name FROM create_hypertable ('converted_pk', 'time');
 \set ON_ERROR_STOP 0
 -- should fail
 INSERT INTO converted_fk SELECT '2020-01-01', 1;
-psql:include/foreign_keys.sql:752: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
+psql:include/foreign_keys.sql:748: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO converted_pk SELECT '2020-01-01 0:01', 1;
 \set ON_ERROR_STOP 0
 -- should still fail
 INSERT INTO converted_fk SELECT '2020-01-01', 1;
-psql:include/foreign_keys.sql:759: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
+psql:include/foreign_keys.sql:755: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO converted_fk SELECT '2020-01-01 0:01', 1;
 \set ON_ERROR_STOP 0
 -- should fail
 DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
-psql:include/foreign_keys.sql:765: ERROR:  update or delete on table "_hyper_16_34_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
+psql:include/foreign_keys.sql:761: ERROR:  update or delete on table "_hyper_16_34_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
 TRUNCATE converted_pk;
-psql:include/foreign_keys.sql:766: ERROR:  cannot truncate a table referenced in a foreign key constraint
+psql:include/foreign_keys.sql:762: ERROR:  cannot truncate a table referenced in a foreign key constraint
 \set ON_ERROR_STOP 1
 DELETE FROM converted_fk;
 DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
@@ -757,11 +754,8 @@ psql:include/foreign_keys.sql:59: ERROR:  cannot drop table _timescaledb_interna
 DROP TABLE _timescaledb_internal._hyper_1_2_chunk;
 psql:include/foreign_keys.sql:60: ERROR:  cannot drop table _timescaledb_internal._hyper_1_2_chunk because other objects depend on it
 SELECT drop_chunks('metrics', '1 month'::interval);
-psql:include/foreign_keys.sql:61: ERROR:  cannot drop constraint 1_1_metrics_pkey on table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+psql:include/foreign_keys.sql:61: NOTICE:  drop cascades to constraint event_time_fkey on table event
 \set ON_ERROR_STOP 1
--- after removing constraint dropping should succeed
-ALTER TABLE event DROP CONSTRAINT event_time_fkey;
-SELECT drop_chunks('metrics', '1 month'::interval);
 DROP TABLE event;
 DROP TABLE metrics;
 -- test single column fk constraint from plain table to hypertable during hypertable creation with RESTRICT
@@ -773,14 +767,14 @@ CREATE TABLE event(time timestamptz references metrics(time) ON DELETE RESTRICT 
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:82: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:78: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:89: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:85: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -789,10 +783,10 @@ ROLLBACK;
 \set ON_ERROR_STOP 0
 -- should fail
 DELETE FROM metrics WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:99: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+psql:include/foreign_keys.sql:95: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
 -- should fail
 UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:101: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+psql:include/foreign_keys.sql:97: ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
 \set ON_ERROR_STOP 1
 SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
 SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
@@ -801,7 +795,7 @@ INSERT INTO metrics(time, device, value) VALUES ('2021-01-01', 'd1', 1.0);
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2021-01-02', 'info1');
-psql:include/foreign_keys.sql:112: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:108: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2021-01-01', 'info2');
@@ -818,14 +812,14 @@ CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE O
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:134: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:130: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:141: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:137: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -854,14 +848,14 @@ CREATE TABLE event(time timestamptz references metrics(time) ON DELETE SET NULL 
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:177: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:173: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:184: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:180: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -890,14 +884,14 @@ CREATE TABLE event(time timestamptz default null references metrics(time) ON DEL
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:220: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:216: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:227: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:223: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -926,14 +920,14 @@ ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES m
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:264: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:260: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 -- should fail
 \set ON_ERROR_STOP 0
 DELETE FROM metrics WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:271: ERROR:  update or delete on table "_hyper_6_8_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+psql:include/foreign_keys.sql:267: ERROR:  update or delete on table "_hyper_6_8_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
 \set ON_ERROR_STOP 1
 SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
 SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
@@ -948,18 +942,18 @@ ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time,device) REFER
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, device, info) VALUES ('2020-01-02', 'd1', 'info1');
-psql:include/foreign_keys.sql:292: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:288: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd2', 'info2');
-psql:include/foreign_keys.sql:293: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:289: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd1', 'info2');
 -- should fail
 \set ON_ERROR_STOP 0
 DELETE FROM metrics WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:300: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+psql:include/foreign_keys.sql:296: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
 DELETE FROM metrics WHERE device = 'd1';
-psql:include/foreign_keys.sql:301: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+psql:include/foreign_keys.sql:297: ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
 \set ON_ERROR_STOP 1
 DROP TABLE event;
 DROP TABLE metrics;
@@ -973,7 +967,7 @@ INSERT INTO event(time, info) VALUES ('2020-02-01', 'info1');
 -- should fail
 \set ON_ERROR_STOP 0
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE SET NULL;
-psql:include/foreign_keys.sql:319: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:315: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO metrics(time, device, value) VALUES ('2020-02-01', 'd1', 1.0);
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE CASCADE;
@@ -993,14 +987,14 @@ CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE O
 -- should fail
 \set ON_ERROR_STOP 0
 INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
-psql:include/foreign_keys.sql:347: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:343: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
 \set ON_ERROR_STOP 0
 -- should fail
 UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
-psql:include/foreign_keys.sql:354: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+psql:include/foreign_keys.sql:350: ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
 \set ON_ERROR_STOP 1
 -- should succeed
 BEGIN;
@@ -1027,12 +1021,12 @@ CREATE TABLE event(time timestamptz, info text);
 SELECT table_name FROM create_hypertable('event', 'time');
 \set ON_ERROR_STOP 0
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time);
-psql:include/foreign_keys.sql:387: ERROR:  hypertables cannot be used as foreign key references of hypertables
+psql:include/foreign_keys.sql:383: ERROR:  hypertables cannot be used as foreign key references of hypertables
 \set ON_ERROR_STOP 1
 CREATE TABLE event2(time timestamptz REFERENCES metrics(time), info text);
 \set ON_ERROR_STOP 0
 SELECT table_name FROM create_hypertable('event2', 'time');
-psql:include/foreign_keys.sql:392: ERROR:  hypertables cannot be used as foreign key references of hypertables
+psql:include/foreign_keys.sql:388: ERROR:  hypertables cannot be used as foreign key references of hypertables
 \set ON_ERROR_STOP 1
 DROP TABLE event;
 DROP TABLE event2;
@@ -1059,14 +1053,14 @@ INSERT INTO ht(time) VALUES ('2020-01-01');
 -- NO ACTION
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
-psql:include/foreign_keys.sql:426: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_14_ht_fk_no_action_fkey"
+psql:include/foreign_keys.sql:422: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_14_ht_fk_no_action_fkey"
 -- ON UPDATE NO ACTION
 BEGIN;
 INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
 INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
 -- should error
 UPDATE fk_no_action SET fk_no_action = 'fk_no_action_updated';
-psql:include/foreign_keys.sql:433: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+psql:include/foreign_keys.sql:429: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
 ROLLBACK;
 -- ON UPDATE NO ACTION with compression
 BEGIN;
@@ -1075,7 +1069,7 @@ INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should error
 UPDATE fk_no_action SET fk_no_action = 'fk_no_action_updated';
-psql:include/foreign_keys.sql:442: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+psql:include/foreign_keys.sql:438: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
 ROLLBACK;
 -- ON DELETE NO ACTION
 BEGIN;
@@ -1083,7 +1077,7 @@ INSERT INTO fk_no_action(fk_no_action) VALUES ('fk_no_action');
 INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
 -- should error
 DELETE FROM fk_no_action;
-psql:include/foreign_keys.sql:450: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+psql:include/foreign_keys.sql:446: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
 ROLLBACK;
 -- ON DELETE NO ACTION with compression
 BEGIN;
@@ -1092,19 +1086,19 @@ INSERT INTO ht(time, fk_no_action) VALUES ('2020-01-01', 'fk_no_action');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should error
 DELETE FROM fk_no_action;
-psql:include/foreign_keys.sql:459: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
+psql:include/foreign_keys.sql:455: ERROR:  update or delete on table "fk_no_action" violates foreign key constraint "ht_fk_no_action_fkey" on table "ht"
 ROLLBACK;
 -- RESTRICT
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
-psql:include/foreign_keys.sql:464: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_15_ht_fk_restrict_fkey"
+psql:include/foreign_keys.sql:460: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_15_ht_fk_restrict_fkey"
 -- ON UPDATE RESTRICT
 BEGIN;
 INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
 INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
 -- should error
 UPDATE fk_restrict SET fk_restrict = 'fk_restrict_updated';
-psql:include/foreign_keys.sql:471: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+psql:include/foreign_keys.sql:467: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
 ROLLBACK;
 -- ON UPDATE RESTRICT with compression
 BEGIN;
@@ -1113,7 +1107,7 @@ INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should error
 UPDATE fk_restrict SET fk_restrict = 'fk_restrict_updated';
-psql:include/foreign_keys.sql:480: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+psql:include/foreign_keys.sql:476: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
 ROLLBACK;
 -- ON DELETE RESTRICT
 BEGIN;
@@ -1121,7 +1115,7 @@ INSERT INTO fk_restrict(fk_restrict) VALUES ('fk_restrict');
 INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
 -- should error
 DELETE FROM fk_restrict;
-psql:include/foreign_keys.sql:488: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+psql:include/foreign_keys.sql:484: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
 ROLLBACK;
 -- ON DELETE RESTRICT with compression
 BEGIN;
@@ -1130,12 +1124,12 @@ INSERT INTO ht(time, fk_restrict) VALUES ('2020-01-01', 'fk_restrict');
 SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should error
 DELETE FROM fk_restrict;
-psql:include/foreign_keys.sql:497: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
+psql:include/foreign_keys.sql:493: ERROR:  update or delete on table "fk_restrict" violates foreign key constraint "ht_fk_restrict_fkey" on table "ht"
 ROLLBACK;
 -- CASCADE
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_cascade) VALUES ('2020-01-01', 'fk_cascade');
-psql:include/foreign_keys.sql:503: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_13_ht_fk_cascade_fkey"
+psql:include/foreign_keys.sql:499: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_13_ht_fk_cascade_fkey"
 -- ON UPDATE CASCADE
 BEGIN;
 INSERT INTO fk_cascade(fk_cascade) VALUES ('fk_cascade');
@@ -1224,7 +1218,7 @@ ROLLBACK;
 -- SET NULL
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_null) VALUES ('2020-01-01', 'fk_set_null');
-psql:include/foreign_keys.sql:603: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_17_ht_fk_set_null_fkey"
+psql:include/foreign_keys.sql:599: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_17_ht_fk_set_null_fkey"
 -- ON UPDATE SET NULL
 BEGIN;
 INSERT INTO fk_set_null(fk_set_null) VALUES ('fk_set_null');
@@ -1286,7 +1280,7 @@ ROLLBACK;
 -- SET DEFAULT
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
-psql:include/foreign_keys.sql:671: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_16_ht_fk_set_default_fkey"
+psql:include/foreign_keys.sql:667: ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_16_ht_fk_set_default_fkey"
 -- ON UPDATE SET DEFAULT
 BEGIN;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
@@ -1357,21 +1351,21 @@ select table_name FROM create_hypertable ('converted_pk', 'time');
 \set ON_ERROR_STOP 0
 -- should fail
 INSERT INTO converted_fk SELECT '2020-01-01', 1;
-psql:include/foreign_keys.sql:752: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
+psql:include/foreign_keys.sql:748: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO converted_pk SELECT '2020-01-01 0:01', 1;
 \set ON_ERROR_STOP 0
 -- should still fail
 INSERT INTO converted_fk SELECT '2020-01-01', 1;
-psql:include/foreign_keys.sql:759: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
+psql:include/foreign_keys.sql:755: ERROR:  insert or update on table "converted_fk" violates foreign key constraint "converted_fk_time_id_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO converted_fk SELECT '2020-01-01 0:01', 1;
 \set ON_ERROR_STOP 0
 -- should fail
 DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
-psql:include/foreign_keys.sql:765: ERROR:  update or delete on table "_hyper_16_34_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
+psql:include/foreign_keys.sql:761: ERROR:  update or delete on table "_hyper_16_34_chunk" violates foreign key constraint "converted_fk_time_id_fkey1" on table "converted_fk"
 TRUNCATE converted_pk;
-psql:include/foreign_keys.sql:766: ERROR:  cannot truncate a table referenced in a foreign key constraint
+psql:include/foreign_keys.sql:762: ERROR:  cannot truncate a table referenced in a foreign key constraint
 \set ON_ERROR_STOP 1
 DELETE FROM converted_fk;
 DELETE FROM converted_pk WHERE time = '2020-01-01 0:01';
