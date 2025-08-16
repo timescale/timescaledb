@@ -693,3 +693,261 @@ FROM
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_CLUSTER_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
 DROP ROLE test_cagg_refresh_policy_user;
+--------------------------------------------
+-- "Timestamp out of range" issue - SDC 3189
+CREATE TABLE test_metrics (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT,
+    value FLOAT
+);
+-- Set chunk time to 1 day
+SELECT create_hypertable('test_metrics', 'time', chunk_time_interval => INTERVAL '1 day');
+     create_hypertable     
+---------------------------
+ (4,public,test_metrics,t)
+(1 row)
+
+-- Create a continuous aggregate with fixed time_bucket 1 hour
+CREATE MATERIALIZED VIEW test_cagg
+WITH (timescaledb.continuous) AS
+SELECT 
+    time_bucket('1 hour', time) AS bucket,
+    device_id,
+    avg(value) as avg_value
+FROM test_metrics
+GROUP BY 1, 2;
+NOTICE:  continuous aggregate "test_cagg" is already up-to-date
+--Create a continuous aggregate with variable time_bucket
+CREATE MATERIALIZED VIEW test_cagg_var
+WITH (timescaledb.continuous) AS
+SELECT 
+    time_bucket('1 month', time) AS bucket,
+    device_id,
+    avg(value) as avg_value
+FROM test_metrics
+GROUP BY 1, 2;
+NOTICE:  continuous aggregate "test_cagg_var" is already up-to-date
+INSERT INTO test_metrics (time, device_id, value)
+VALUES ('2025-08-05', 1, 10.0);
+-- Force a refresh of the continuous aggregates
+CALL refresh_continuous_aggregate('test_cagg', NULL, interval '1 hour');
+--Check materialization log, 
+--for the cagg with fixed window bucket, 
+--it will have a row of [-9223372036854775808, -210866803200000001],
+--that is [-infinity, CAGG_INVALIDATION_WRONG_GREATEST_VALUE]
+SELECT lowest_modified_value, greatest_modified_value 
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg 
+                            WHERE user_view_name = 'test_cagg')
+      AND greatest_modified_value = -210866803200000001;
+ lowest_modified_value | greatest_modified_value 
+-----------------------+-------------------------
+  -9223372036854775808 |     -210866803200000001
+(1 row)
+
+CALL refresh_continuous_aggregate('test_cagg_var', NULL, interval '1 month');
+--The cagg with variable window bucket won't have 
+--the row of [-9223372036854775808, -210866803200000001],
+--because we use -infinity for the refresh window range_start for variable bucket.
+SELECT lowest_modified_value, greatest_modified_value 
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg 
+                            WHERE user_view_name = 'test_cagg_var')
+      AND greatest_modified_value = -210866803200000001;
+ lowest_modified_value | greatest_modified_value 
+-----------------------+-------------------------
+(0 rows)
+
+--Now insert some data that would trigger incremental refresh on test_cagg
+INSERT INTO test_metrics (time, device_id, value)
+    VALUES 
+        ('2025-08-05 15:00:00-05', 1, 10.0),
+        ('2025-07-03 19:00:00-05', 1, 20.0);
+SELECT add_continuous_aggregate_policy('test_cagg',
+  start_offset => NULL,
+  end_offset => INTERVAL '1 hour',
+  schedule_interval => INTERVAL '5 minute');
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1004
+(1 row)
+
+SELECT add_continuous_aggregate_policy('test_cagg_var',
+  start_offset => NULL,
+  end_offset => INTERVAL '1 hour',
+  schedule_interval => INTERVAL '5 minute');
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1005
+(1 row)
+
+ --make the policy run and check the log
+ --before the fix in https://github.com/timescale/timescaledb/pull/8476 this would result
+ --in a crash of failed Assert("refresh_window->end > result.start") on debug build,
+ --or "Timestamp out of range" error on release build
+ --After the fix, it will run successfully
+TRUNCATE bgw_log;
+SELECT ts_bgw_params_reset_time(0, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no | mock_time |              application_name              |                                                                               msg                                                                               
+--------+-----------+--------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
+      2 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 13:00:00 2025 PDT, Tue Aug 05 14:00:00 2025 PDT ] (batch 1 of 45)
+      1 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+      2 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+      3 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 12:00:00 2025 PDT, Tue Aug 05 13:00:00 2025 PDT ] (batch 2 of 45)
+      4 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+      5 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+      6 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 11:00:00 2025 PDT, Tue Aug 05 12:00:00 2025 PDT ] (batch 3 of 45)
+      7 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+      8 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+      9 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 10:00:00 2025 PDT, Tue Aug 05 11:00:00 2025 PDT ] (batch 4 of 45)
+     10 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     11 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     12 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 09:00:00 2025 PDT, Tue Aug 05 10:00:00 2025 PDT ] (batch 5 of 45)
+     13 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     14 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     15 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 08:00:00 2025 PDT, Tue Aug 05 09:00:00 2025 PDT ] (batch 6 of 45)
+     16 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     17 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     18 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 07:00:00 2025 PDT, Tue Aug 05 08:00:00 2025 PDT ] (batch 7 of 45)
+     19 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     20 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     21 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 06:00:00 2025 PDT, Tue Aug 05 07:00:00 2025 PDT ] (batch 8 of 45)
+     22 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     23 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     24 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 05:00:00 2025 PDT, Tue Aug 05 06:00:00 2025 PDT ] (batch 9 of 45)
+     25 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     26 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     27 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 04:00:00 2025 PDT, Tue Aug 05 05:00:00 2025 PDT ] (batch 10 of 45)
+     28 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     29 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     30 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 03:00:00 2025 PDT, Tue Aug 05 04:00:00 2025 PDT ] (batch 11 of 45)
+     31 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     32 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     33 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 02:00:00 2025 PDT, Tue Aug 05 03:00:00 2025 PDT ] (batch 12 of 45)
+     34 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     35 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     36 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 01:00:00 2025 PDT, Tue Aug 05 02:00:00 2025 PDT ] (batch 13 of 45)
+     37 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     38 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     39 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Tue Aug 05 00:00:00 2025 PDT, Tue Aug 05 01:00:00 2025 PDT ] (batch 14 of 45)
+     40 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     41 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     42 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Mon Aug 04 23:00:00 2025 PDT, Tue Aug 05 00:00:00 2025 PDT ] (batch 15 of 45)
+     43 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     44 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     45 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Mon Aug 04 22:00:00 2025 PDT, Mon Aug 04 23:00:00 2025 PDT ] (batch 16 of 45)
+     46 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     47 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     48 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Mon Aug 04 21:00:00 2025 PDT, Mon Aug 04 22:00:00 2025 PDT ] (batch 17 of 45)
+     49 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     50 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     51 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Mon Aug 04 20:00:00 2025 PDT, Mon Aug 04 21:00:00 2025 PDT ] (batch 18 of 45)
+     52 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     53 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     54 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Mon Aug 04 19:00:00 2025 PDT, Mon Aug 04 20:00:00 2025 PDT ] (batch 19 of 45)
+     55 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     56 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     57 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Mon Aug 04 18:00:00 2025 PDT, Mon Aug 04 19:00:00 2025 PDT ] (batch 20 of 45)
+     58 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     59 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     60 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Mon Aug 04 17:00:00 2025 PDT, Mon Aug 04 18:00:00 2025 PDT ] (batch 21 of 45)
+     61 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     62 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     63 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 16:00:00 2025 PDT, Fri Jul 04 17:00:00 2025 PDT ] (batch 22 of 45)
+     64 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     65 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     66 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 15:00:00 2025 PDT, Fri Jul 04 16:00:00 2025 PDT ] (batch 23 of 45)
+     67 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     68 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     69 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 14:00:00 2025 PDT, Fri Jul 04 15:00:00 2025 PDT ] (batch 24 of 45)
+     70 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     71 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     72 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 13:00:00 2025 PDT, Fri Jul 04 14:00:00 2025 PDT ] (batch 25 of 45)
+     73 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     74 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     75 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 12:00:00 2025 PDT, Fri Jul 04 13:00:00 2025 PDT ] (batch 26 of 45)
+     76 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     77 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     78 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 11:00:00 2025 PDT, Fri Jul 04 12:00:00 2025 PDT ] (batch 27 of 45)
+     79 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     80 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     81 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 10:00:00 2025 PDT, Fri Jul 04 11:00:00 2025 PDT ] (batch 28 of 45)
+     82 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     83 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     84 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 09:00:00 2025 PDT, Fri Jul 04 10:00:00 2025 PDT ] (batch 29 of 45)
+     85 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     86 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     87 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 08:00:00 2025 PDT, Fri Jul 04 09:00:00 2025 PDT ] (batch 30 of 45)
+     88 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     89 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     90 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 07:00:00 2025 PDT, Fri Jul 04 08:00:00 2025 PDT ] (batch 31 of 45)
+     91 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     92 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     93 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 06:00:00 2025 PDT, Fri Jul 04 07:00:00 2025 PDT ] (batch 32 of 45)
+     94 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     95 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     96 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 05:00:00 2025 PDT, Fri Jul 04 06:00:00 2025 PDT ] (batch 33 of 45)
+     97 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+     98 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+     99 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 04:00:00 2025 PDT, Fri Jul 04 05:00:00 2025 PDT ] (batch 34 of 45)
+    100 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    101 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    102 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 03:00:00 2025 PDT, Fri Jul 04 04:00:00 2025 PDT ] (batch 35 of 45)
+    103 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    104 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    105 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 02:00:00 2025 PDT, Fri Jul 04 03:00:00 2025 PDT ] (batch 36 of 45)
+    106 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    107 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    108 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 01:00:00 2025 PDT, Fri Jul 04 02:00:00 2025 PDT ] (batch 37 of 45)
+    109 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    110 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    111 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Fri Jul 04 00:00:00 2025 PDT, Fri Jul 04 01:00:00 2025 PDT ] (batch 38 of 45)
+    112 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    113 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    114 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Thu Jul 03 23:00:00 2025 PDT, Fri Jul 04 00:00:00 2025 PDT ] (batch 39 of 45)
+    115 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    116 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    117 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Thu Jul 03 22:00:00 2025 PDT, Thu Jul 03 23:00:00 2025 PDT ] (batch 40 of 45)
+    118 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    119 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    120 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Thu Jul 03 21:00:00 2025 PDT, Thu Jul 03 22:00:00 2025 PDT ] (batch 41 of 45)
+    121 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    122 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    123 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Thu Jul 03 20:00:00 2025 PDT, Thu Jul 03 21:00:00 2025 PDT ] (batch 42 of 45)
+    124 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    125 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    126 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Thu Jul 03 19:00:00 2025 PDT, Thu Jul 03 20:00:00 2025 PDT ] (batch 43 of 45)
+    127 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    128 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    129 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Thu Jul 03 18:00:00 2025 PDT, Thu Jul 03 19:00:00 2025 PDT ] (batch 44 of 45)
+    130 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    131 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 0 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+    132 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "test_cagg" in window [ Thu Jul 03 17:00:00 2025 PDT, Thu Jul 03 18:00:00 2025 PDT ] (batch 45 of 45)
+    133 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_5"
+    134 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_5"
+      0 |         0 | Refresh Continuous Aggregate Policy [1005] | refresh window size (00:00:00) is smaller than or equal to batch size (30 days), falling back to single batch processing
+      1 |         0 | Refresh Continuous Aggregate Policy [1005] | continuous aggregate refresh (individual invalidation) on "test_cagg_var" in window [ Mon Jun 30 17:00:00 2025 PDT, Thu Jul 31 17:00:00 2025 PDT ]
+      2 |         0 | Refresh Continuous Aggregate Policy [1005] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_6"
+      3 |         0 | Refresh Continuous Aggregate Policy [1005] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_6"
+(142 rows)
+
+--clean up
+DROP TABLE test_metrics cascade;
+NOTICE:  drop cascades to 4 other objects
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_32_chunk
