@@ -69,11 +69,8 @@ psql:include/foreign_keys.sql:59: ERROR:  cannot drop table _timescaledb_interna
 DROP TABLE _timescaledb_internal._hyper_1_2_chunk;
 psql:include/foreign_keys.sql:60: ERROR:  cannot drop table _timescaledb_internal._hyper_1_2_chunk because other objects depend on it
 SELECT drop_chunks('metrics', '1 month'::interval);
-psql:include/foreign_keys.sql:61: ERROR:  cannot drop constraint 1_1_metrics_pkey on table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+psql:include/foreign_keys.sql:61: NOTICE:  drop cascades to constraint event_time_fkey on table event
 \set ON_ERROR_STOP 1
--- after removing constraint dropping should succeed
-ALTER TABLE event DROP CONSTRAINT event_time_fkey;
-SELECT drop_chunks('metrics', '1 month'::interval);
 DROP TABLE event;
 DROP TABLE metrics;
 -- test single column fk constraint from plain table to hypertable during hypertable creation with RESTRICT
@@ -759,11 +756,8 @@ psql:include/foreign_keys.sql:59: ERROR:  cannot drop table _timescaledb_interna
 DROP TABLE _timescaledb_internal._hyper_1_2_chunk;
 psql:include/foreign_keys.sql:60: ERROR:  cannot drop table _timescaledb_internal._hyper_1_2_chunk because other objects depend on it
 SELECT drop_chunks('metrics', '1 month'::interval);
-psql:include/foreign_keys.sql:61: ERROR:  cannot drop constraint 1_1_metrics_pkey on table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+psql:include/foreign_keys.sql:61: NOTICE:  drop cascades to constraint event_time_fkey on table event
 \set ON_ERROR_STOP 1
--- after removing constraint dropping should succeed
-ALTER TABLE event DROP CONSTRAINT event_time_fkey;
-SELECT drop_chunks('metrics', '1 month'::interval);
 DROP TABLE event;
 DROP TABLE metrics;
 -- test single column fk constraint from plain table to hypertable during hypertable creation with RESTRICT
