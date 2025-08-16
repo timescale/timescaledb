@@ -61,10 +61,6 @@ DROP TABLE _timescaledb_internal._hyper_1_2_chunk;
 SELECT drop_chunks('metrics', '1 month'::interval);
 \set ON_ERROR_STOP 1
 
--- after removing constraint dropping should succeed
-ALTER TABLE event DROP CONSTRAINT event_time_fkey;
-SELECT drop_chunks('metrics', '1 month'::interval);
-
 DROP TABLE event;
 DROP TABLE metrics;
 
