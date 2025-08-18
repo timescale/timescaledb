@@ -1,0 +1,1 @@
+Fixes: #8500 Fix uniqueness check with generated columns and hypercore

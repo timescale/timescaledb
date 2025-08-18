@@ -6,7 +6,7 @@
 #pragma once
 
 #include <postgres.h>
-#include <nodes/execnodes.h>
+#include <executor/nodeModifyTable.h>
 
 #include "hypertable.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
