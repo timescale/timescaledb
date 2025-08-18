@@ -76,7 +76,7 @@ FUNCTION_NAME(hash_strategy_prepare_for_batch)(GroupingPolicyHash *policy,
 {
 	uint16 nrows = 0;
 	vector_slot_get_qual_result(vector_slot, &nrows);
-	hash_strategy_output_key_alloc(policy, nrows);
+	hash_strategy_output_key_alloc(&policy->hashing, nrows);
 	FUNCTION_NAME(key_hashing_prepare_for_batch)(policy, vector_slot);
 }
 
@@ -169,6 +169,10 @@ FUNCTION_NAME(fill_offsets_impl)(BatchHashingParams params, int start_row, int e
 	}
 }
 
+/*
+ * In some special cases we call a more efficient specialization of the grouping
+ * function.
+ */
 static void
 FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, TupleTableSlot *vector_slot, int start_row,
 							int end_row)
@@ -176,6 +180,15 @@ FUNCTION_NAME(fill_offsets)(GroupingPolicyHash *policy, TupleTableSlot *vector_s
 	Assert((size_t) end_row <= policy->num_key_index_for_row);
 
 	BatchHashingParams params = build_batch_hashing_params(policy, vector_slot);
+
+#ifdef USE_DICT_HASHING
+	if (params.hashing->use_key_index_for_dict)
+	{
+		Assert(params.single_grouping_column.decompression_type == DT_ArrowTextDict);
+		single_text_offsets_translate(params, start_row, end_row);
+		return;
+	}
+#endif
 
 	FUNCTION_NAME(fill_offsets_impl)(params, start_row, end_row);
 }
