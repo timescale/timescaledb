@@ -22,11 +22,22 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.uuid_v7_from_timestamptz_zeroe
 ) RETURNS UUID
 AS '@MODULE_PATHNAME@', 'ts_uuid_v7_from_timestamptz_zeroed' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
+--
+-- Get the v7 UUID timestamp with millisecond precision.
+--
 CREATE OR REPLACE FUNCTION _timescaledb_functions.timestamptz_from_uuid_v7(
-  uuid UUID,
-  sub_ms BOOLEAN = false -- extract a sub-millisecond timestamp based on rand_a bits
+  uuid UUID
 ) RETURNS TIMESTAMPTZ
 AS '@MODULE_PATHNAME@', 'ts_timestamptz_from_uuid_v7' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+--
+-- Get the v7 UUID timestamp with microsecond precision using the
+-- (optional) rand_a bits.
+--
+CREATE OR REPLACE FUNCTION _timescaledb_functions.timestamptz_from_uuid_v7_with_microseconds(
+  uuid UUID
+) RETURNS TIMESTAMPTZ
+AS '@MODULE_PATHNAME@', 'ts_timestamptz_from_uuid_v7_with_microseconds' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.uuid_version(
   uuid UUID

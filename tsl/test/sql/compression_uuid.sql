@@ -255,7 +255,7 @@ SELECT u, ts, ts2
 FROM
   (
     SELECT
-      u, ts, _timescaledb_functions.timestamptz_from_uuid_v7(u, true) ts2
+      u, ts, _timescaledb_functions.timestamptz_from_uuid_v7_with_microseconds(u) ts2
     FROM
       subms
   ) x
