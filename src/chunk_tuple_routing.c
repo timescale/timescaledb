@@ -261,6 +261,18 @@ ts_chunk_tuple_routing_decompress_for_insert(ChunkInsertState *cis, TupleTableSl
 	 */
 
 	ts_cm_functions->init_decompress_state_for_insert(cis, slot);
+
+	/* If we are dealing with generated stored columns, generate the values
+	 * so can use it for uniqueness checks.
+	 */
+	Relation resultRelationDesc = cis->result_relation_info->ri_RelationDesc;
+	if (resultRelationDesc->rd_att->constr &&
+		resultRelationDesc->rd_att->constr->has_generated_stored)
+	{
+		slot->tts_tableOid = RelationGetRelid(resultRelationDesc);
+		ExecComputeStoredGenerated(cis->result_relation_info, estate, slot, CMD_INSERT);
+		cis->skip_generated_column_computations = true;
+	}
 	ts_cm_functions->decompress_batches_for_insert(cis, slot);
 
 	/* mark rows visible */

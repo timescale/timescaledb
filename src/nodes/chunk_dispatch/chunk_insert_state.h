@@ -106,6 +106,8 @@ typedef struct ChunkInsertState
 	bool skip_current_tuple;
 	SharedCounters *counters;
 
+	/* for tracking generated column computations */
+	bool skip_generated_column_computations;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;
