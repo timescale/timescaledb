@@ -139,20 +139,15 @@ ts_uuid_v7_from_timestamptz_zeroed(PG_FUNCTION_ARGS)
 #define IS_RFC9562_VARIANT(uuid) (UUID_VARIANT(uuid) == 0x80)
 #define UUID_VERSION(uuid) (((uuid)->data[6] & 0xf0) >> 4)
 
-TS_FUNCTION_INFO_V1(ts_timestamptz_from_uuid_v7);
-
-Datum
-ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
+static bool
+ts_uuid_extract_timestamp(const pg_uuid_t *uuid, TimestampTz *ts, bool sub_ms)
 {
-	pg_uuid_t *uuid = PG_GETARG_UUID_P(0);
-	bool sub_ms = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
-
 	/* Check that the variant field corresponds to RFC9562 */
 	if (!IS_RFC9562_VARIANT(uuid))
-		PG_RETURN_NULL();
+		return false;
 
 	if (UUID_VERSION(uuid) != 7)
-		PG_RETURN_NULL();
+		return false;
 
 	/* Big endian timestamp in milliseconds from Unix Epoch */
 	uint64 timestamp_be = 0;
@@ -173,7 +168,35 @@ ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
 		(timestamp - ((uint64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * SECS_PER_DAY) * 1000ULL);
 
 	/* Add up the whole to get microseconds */
-	TimestampTz ts = timestamp_millis * 1000 + subms_timestamp;
+	*ts = timestamp_millis * 1000 + subms_timestamp;
+
+	return true;
+}
+
+TS_FUNCTION_INFO_V1(ts_timestamptz_from_uuid_v7);
+
+Datum
+ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS)
+{
+	pg_uuid_t *uuid = PG_GETARG_UUID_P(0);
+	TimestampTz ts;
+
+	if (!ts_uuid_extract_timestamp(uuid, &ts, false))
+		PG_RETURN_NULL();
+
+	PG_RETURN_TIMESTAMPTZ(ts);
+}
+
+TS_FUNCTION_INFO_V1(ts_timestamptz_from_uuid_v7_with_microseconds);
+
+Datum
+ts_timestamptz_from_uuid_v7_with_microseconds(PG_FUNCTION_ARGS)
+{
+	pg_uuid_t *uuid = PG_GETARG_UUID_P(0);
+	TimestampTz ts;
+
+	if (!ts_uuid_extract_timestamp(uuid, &ts, true))
+		PG_RETURN_NULL();
 
 	PG_RETURN_TIMESTAMPTZ(ts);
 }
