@@ -24,7 +24,7 @@
 #include "export.h"
 
 extern TSDLLEXPORT void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
-													 Index newvarno, List **translated_vars);
+													 Index newvarno, AppendRelInfo *appinfo);
 
 extern TSDLLEXPORT struct PathTarget *ts_make_partial_grouping_target(struct PlannerInfo *root,
 																	  PathTarget *grouping_target);

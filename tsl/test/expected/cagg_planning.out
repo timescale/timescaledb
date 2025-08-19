@@ -211,10 +211,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                ->  Index Scan Backward using _hyper_5_11_chunk__materialized_hypertable_5_time_bucket_idx on _hyper_5_11_chunk (actual rows=1 loops=1)
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
@@ -235,10 +235,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time")) DESC
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")), _hyper_1_14_chunk.device
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
@@ -272,9 +272,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
          ->  Subquery Scan on "*SELECT* 2" (actual rows=2 loops=1)
                ->  GroupAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device
                      ->  Sort (actual rows=6 loops=1)
-                           Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device, _hyper_1_3_chunk.value
+                           Sort Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device, metrics.value
                            Sort Method: quicksort 
                            ->  Result (actual rows=6 loops=1)
                                  ->  Append (actual rows=6 loops=1)
@@ -285,15 +285,15 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
 (20 rows)
 
 :PREFIX SELECT 'query 08' AS label, * FROM cagg3 ORDER BY time_bucket DESC;
-                                                                        QUERY PLAN                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Subquery Scan on "*SELECT* 2" (actual rows=2 loops=1)
                ->  GroupAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")), _hyper_1_14_chunk.device
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device
                      ->  Sort (actual rows=6 loops=1)
-                           Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC, _hyper_1_14_chunk.device, _hyper_1_14_chunk.value
+                           Sort Key: (time_bucket('@ 3 days'::interval, metrics."time")) DESC, metrics.device, metrics.value
                            Sort Method: quicksort 
                            ->  Result (actual rows=6 loops=1)
                                  ->  Append (actual rows=6 loops=1)
@@ -314,7 +314,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                                                      QUERY PLAN                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=6 loops=1)
-   Sort Key: ((_hyper_5_10_chunk.time_bucket)::date)
+   Sort Key: ((_materialized_hypertable_5.time_bucket)::date)
    Sort Method: quicksort 
    ->  Result (actual rows=6 loops=1)
          ->  Append (actual rows=6 loops=1)
@@ -324,7 +324,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      ->  Index Scan using _hyper_5_11_chunk__materialized_hypertable_5_time_bucket_idx on _hyper_5_11_chunk (actual rows=1 loops=1)
                            Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: _hyper_1_3_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+                     Group Key: metrics.device, (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
@@ -343,7 +343,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                                                      QUERY PLAN                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=6 loops=1)
-   Sort Key: ((_hyper_5_10_chunk.time_bucket)::date) DESC
+   Sort Key: ((_materialized_hypertable_5.time_bucket)::date) DESC
    Sort Method: quicksort 
    ->  Result (actual rows=6 loops=1)
          ->  Append (actual rows=6 loops=1)
@@ -353,7 +353,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      ->  Index Scan using _hyper_5_11_chunk__materialized_hypertable_5_time_bucket_idx on _hyper_5_11_chunk (actual rows=1 loops=1)
                            Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: _hyper_1_3_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+                     Group Key: metrics.device, (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
@@ -433,7 +433,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_2_4_chunk.time_bucket
+               Sort Key: _materialized_hypertable_2.time_bucket
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_2_4_chunk (actual rows=3 loops=1)
@@ -441,10 +441,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      ->  Seq Scan on _hyper_2_5_chunk (actual rows=1 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
@@ -466,10 +466,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time")) DESC
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
@@ -484,7 +484,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_2_5_chunk.time_bucket DESC
+               Sort Key: _materialized_hypertable_2.time_bucket DESC
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_2_5_chunk (actual rows=1 loops=1)
@@ -499,7 +499,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_3_6_chunk.time_bucket
+               Sort Key: _materialized_hypertable_3.time_bucket
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_3_6_chunk (actual rows=3 loops=1)
@@ -507,10 +507,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
@@ -532,10 +532,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time")) DESC
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
@@ -550,7 +550,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_3_7_chunk.time_bucket DESC
+               Sort Key: _materialized_hypertable_3.time_bucket DESC
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
@@ -565,7 +565,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_4_9_chunk.time_bucket
+               Sort Key: _materialized_hypertable_4.time_bucket
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_4_9_chunk (actual rows=3 loops=1)
@@ -573,10 +573,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      ->  Seq Scan on _hyper_4_8_chunk (actual rows=1 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
@@ -598,10 +598,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time")) DESC
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
@@ -616,7 +616,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_4_8_chunk.time_bucket DESC
+               Sort Key: _materialized_hypertable_4.time_bucket DESC
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_4_8_chunk (actual rows=1 loops=1)
@@ -631,7 +631,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_5_10_chunk.time_bucket
+               Sort Key: _materialized_hypertable_5.time_bucket
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_5_10_chunk (actual rows=3 loops=1)
@@ -639,10 +639,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      ->  Seq Scan on _hyper_5_11_chunk (actual rows=1 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time"))
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time"))
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=2 loops=1)
@@ -664,10 +664,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=2 loops=1)
-               Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC
+               Sort Key: (time_bucket('@ 3 days'::interval, metrics."time")) DESC
                Sort Method: quicksort 
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")), _hyper_1_14_chunk.device
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
@@ -682,7 +682,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_5_11_chunk.time_bucket DESC
+               Sort Key: _materialized_hypertable_5.time_bucket DESC
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_5_11_chunk (actual rows=1 loops=1)
@@ -692,12 +692,12 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
 (28 rows)
 
 :PREFIX SELECT 'query 07' AS label, * FROM cagg3 ORDER BY time_bucket;
-                                                                    QUERY PLAN                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_6_12_chunk.time_bucket
+               Sort Key: _materialized_hypertable_6.time_bucket
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_6_12_chunk (actual rows=3 loops=1)
@@ -706,9 +706,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
          ->  Subquery Scan on "*SELECT* 2" (actual rows=2 loops=1)
                ->  GroupAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device
                      ->  Sort (actual rows=6 loops=1)
-                           Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device, _hyper_1_3_chunk.value
+                           Sort Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device, metrics.value
                            Sort Method: quicksort 
                            ->  Result (actual rows=6 loops=1)
                                  ->  Append (actual rows=6 loops=1)
@@ -720,15 +720,15 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
 (23 rows)
 
 :PREFIX SELECT 'query 08' AS label, * FROM cagg3 ORDER BY time_bucket DESC;
-                                                                        QUERY PLAN                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=6 loops=1)
    ->  Append (actual rows=6 loops=1)
          ->  Subquery Scan on "*SELECT* 2" (actual rows=2 loops=1)
                ->  GroupAggregate (actual rows=2 loops=1)
-                     Group Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")), _hyper_1_14_chunk.device
+                     Group Key: (time_bucket('@ 3 days'::interval, metrics."time")), metrics.device
                      ->  Sort (actual rows=6 loops=1)
-                           Sort Key: (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")) DESC, _hyper_1_14_chunk.device, _hyper_1_14_chunk.value
+                           Sort Key: (time_bucket('@ 3 days'::interval, metrics."time")) DESC, metrics.device, metrics.value
                            Sort Method: quicksort 
                            ->  Result (actual rows=6 loops=1)
                                  ->  Append (actual rows=6 loops=1)
@@ -738,7 +738,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                              Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                              Rows Removed by Filter: 3
          ->  Sort (actual rows=4 loops=1)
-               Sort Key: _hyper_6_13_chunk.time_bucket DESC
+               Sort Key: _materialized_hypertable_6.time_bucket DESC
                Sort Method: quicksort 
                ->  Append (actual rows=4 loops=1)
                      ->  Seq Scan on _hyper_6_13_chunk (actual rows=1 loops=1)
@@ -752,7 +752,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                                             QUERY PLAN                                                            
 ----------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=6 loops=1)
-   Sort Key: ((_hyper_5_10_chunk.time_bucket)::date)
+   Sort Key: ((_materialized_hypertable_5.time_bucket)::date)
    Sort Method: quicksort 
    ->  Result (actual rows=6 loops=1)
          ->  Append (actual rows=6 loops=1)
@@ -762,7 +762,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      ->  Seq Scan on _hyper_5_11_chunk (actual rows=1 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: _hyper_1_14_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Group Key: metrics.device, (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
@@ -782,7 +782,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                                             QUERY PLAN                                                            
 ----------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=6 loops=1)
-   Sort Key: ((_hyper_5_10_chunk.time_bucket)::date) DESC
+   Sort Key: ((_materialized_hypertable_5.time_bucket)::date) DESC
    Sort Method: quicksort 
    ->  Result (actual rows=6 loops=1)
          ->  Append (actual rows=6 loops=1)
@@ -792,7 +792,7 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      ->  Seq Scan on _hyper_5_11_chunk (actual rows=1 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Finalize HashAggregate (actual rows=2 loops=1)
-                     Group Key: _hyper_1_14_chunk.device, (time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"))
+                     Group Key: metrics.device, (time_bucket('@ 3 days'::interval, metrics."time"))
                      Batches: 1 
                      ->  Append (actual rows=3 loops=1)
                            ->  Partial HashAggregate (actual rows=1 loops=1)
