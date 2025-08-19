@@ -740,3 +740,108 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 #define COMPARE_GT BTGreaterStrategyNumber
 #define pk_cmptype pk_strategy
 #endif
+
+/* PG18 adds is_merge_delete param to ExecBR{Delete|Update}Triggers function.
+ * This has been backported to 17.6 but with a new name (ExecBR{Delete|Update}TriggersNew)j
+ * Add compat function to cover 3 versions (pre 17.6, 17.6 - 18, post 18)
+ * https://github.com/postgres/postgres/commit/5022ff25
+ */
+#if PG_VERSION_NUM < 170006
+#define ExecBRDeleteTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   relinfo,                                                        \
+								   tupleid,                                                        \
+								   fdw_trigtuple,                                                  \
+								   epqslot,                                                        \
+								   tmresult,                                                       \
+								   tmfd,                                                           \
+								   is_merge_delete)                                                \
+	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot, tmresult, tmfd)
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   relinfo,                                                        \
+								   tupleid,                                                        \
+								   fdw_trigtuple,                                                  \
+								   epqslot,                                                        \
+								   tmresult,                                                       \
+								   tmfd,                                                           \
+								   is_merge_delete)                                                \
+	ExecBRUpdateTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot, tmresult, tmfd)
+#endif
+
+#if PG_VERSION_NUM >= 170006 && PG_VERSION_NUM < 180000
+#define ExecBRDeleteTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   relinfo,                                                        \
+								   tupleid,                                                        \
+								   fdw_trigtuple,                                                  \
+								   epqslot,                                                        \
+								   tmresult,                                                       \
+								   tmfd,                                                           \
+								   is_merge_delete)                                                \
+	ExecBRDeleteTriggersNew(estate,                                                                \
+							epqstate,                                                              \
+							relinfo,                                                               \
+							tupleid,                                                               \
+							fdw_trigtuple,                                                         \
+							epqslot,                                                               \
+							tmresult,                                                              \
+							tmfd,                                                                  \
+							is_merge_delete)
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   relinfo,                                                        \
+								   tupleid,                                                        \
+								   fdw_trigtuple,                                                  \
+								   epqslot,                                                        \
+								   tmresult,                                                       \
+								   tmfd,                                                           \
+								   is_merge_delete)                                                \
+	ExecBRUpdateTriggersNew(estate,                                                                \
+							epqstate,                                                              \
+							relinfo,                                                               \
+							tupleid,                                                               \
+							fdw_trigtuple,                                                         \
+							epqslot,                                                               \
+							tmresult,                                                              \
+							tmfd,                                                                  \
+							is_merge_delete)
+#endif
+#if PG18_GE
+#define ExecBRDeleteTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   relinfo,                                                        \
+								   tupleid,                                                        \
+								   fdw_trigtuple,                                                  \
+								   epqslot,                                                        \
+								   tmresult,                                                       \
+								   tmfd,                                                           \
+								   is_merge_delete)                                                \
+	ExecBRDeleteTriggers(estate,                                                                   \
+						 epqstate,                                                                 \
+						 relinfo,                                                                  \
+						 tupleid,                                                                  \
+						 fdw_trigtuple,                                                            \
+						 epqslot,                                                                  \
+						 tmresult,                                                                 \
+						 tmfd,                                                                     \
+						 is_merge_delete)
+#define ExecBRUpdateTriggersCompat(estate,                                                         \
+								   epqstate,                                                       \
+								   relinfo,                                                        \
+								   tupleid,                                                        \
+								   fdw_trigtuple,                                                  \
+								   epqslot,                                                        \
+								   tmresult,                                                       \
+								   tmfd,                                                           \
+								   is_merge_delete)                                                \
+	ExecBRUpdateTriggers(estate,                                                                   \
+						 epqstate,                                                                 \
+						 relinfo,                                                                  \
+						 tupleid,                                                                  \
+						 fdw_trigtuple,                                                            \
+						 epqslot,                                                                  \
+						 tmresult,                                                                 \
+						 tmfd,                                                                     \
+						 is_merge_delete)
+#endif
