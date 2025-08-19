@@ -548,47 +548,33 @@ chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
 	return cim;
 }
 
-static ScanTupleResult
-chunk_index_collect(TupleInfo *ti, void *data)
-{
-	List **mappings = (List **) data;
-	ChunkIndexMapping *cim;
-	MemoryContext oldmctx;
-
-	cim = chunk_index_mapping_from_tuple(ti, NULL);
-	oldmctx = MemoryContextSwitchTo(ti->mctx);
-	*mappings = lappend(*mappings, cim);
-	MemoryContextSwitchTo(oldmctx);
-
-	return SCAN_CONTINUE;
-}
-
 List *
 ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 {
-	ScanKeyData scankey[2];
-	const char *indexname = get_rel_name(hypertable_indexrelid);
 	List *mappings = NIL;
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.id);
+	ListCell *lc;
 
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(ht->fd.id));
-	ScanKeyInit(&scankey[1],
-				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				CStringGetDatum((indexname)));
+	foreach (lc, chunks)
+	{
+		Chunk *chunk = lfirst(lc);
+		if (!OidIsValid(chunk->table_id))
+			continue;
 
-	chunk_index_scan(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-					 scankey,
-					 2,
-					 chunk_index_collect,
-					 NULL,
-					 (void *) &mappings,
-					 AccessShareLock);
-
+		Relation chunk_rel = table_open(chunk->table_id, AccessShareLock);
+		Oid chunk_indexrelid =
+			ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, hypertable_indexrelid);
+		table_close(chunk_rel, AccessShareLock);
+		if (OidIsValid(chunk_indexrelid))
+		{
+			ChunkIndexMapping *cim = palloc0(sizeof(ChunkIndexMapping));
+			cim->chunkoid = chunk->table_id;
+			cim->indexoid = chunk_indexrelid;
+			cim->parent_indexoid = hypertable_indexrelid;
+			cim->hypertableoid = ht->fd.id;
+			mappings = lappend(mappings, cim);
+		}
+	}
 	return mappings;
 }
 
@@ -1155,13 +1141,10 @@ chunk_index_duplicate_index(Relation hypertable_rel, Chunk *src_chunk, Oid chunk
 							Relation dest_chunk_rel, Oid index_tablespace)
 {
 	Relation chunk_index_rel = index_open(chunk_index_oid, AccessShareLock);
-	ChunkIndexMapping cim;
 	Oid constraint_oid;
 	Oid new_chunk_indexrelid;
 
-	ts_chunk_index_get_by_indexrelid(src_chunk, chunk_index_oid, &cim);
-
-	constraint_oid = get_index_constraint(cim.parent_indexoid);
+	constraint_oid = get_index_constraint(chunk_index_oid);
 
 	new_chunk_indexrelid = chunk_relation_index_create(hypertable_rel,
 													   chunk_index_rel,
