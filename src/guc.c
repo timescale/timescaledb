@@ -117,6 +117,7 @@ TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 bool ts_guc_enable_event_triggers = false;
+bool ts_guc_debug_skip_scan_info = false;
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
@@ -687,6 +688,17 @@ _guc_init(void)
 							 1.0,
 							 0.0,
 							 1.0,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("debug_skip_scan_info"),
+							 "Print debug info about SkipScan",
+							 "Print debug info about SkipScan distinct columns",
+							 &ts_guc_debug_skip_scan_info,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
