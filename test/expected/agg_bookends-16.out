@@ -259,10 +259,10 @@ INSERT INTO btest VALUES('2020-01-20T09:00:43', '2020-01-20T09:00:43', 2, 35.3);
                                QUERY PLAN                               
 ------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
-   Sort Key: _hyper_1_1_chunk.gp
+   Sort Key: btest.gp
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
-         Group Key: _hyper_1_1_chunk.gp
+         Group Key: btest.gp
          ->  Append (actual rows=11 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
@@ -375,10 +375,10 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
                                QUERY PLAN                               
 ------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
-   Sort Key: _hyper_1_1_chunk.gp
+   Sort Key: btest.gp
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
-         Group Key: _hyper_1_1_chunk.gp
+         Group Key: btest.gp
          ->  Append (actual rows=11 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
@@ -501,7 +501,7 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
                                QUERY PLAN                               
 ------------------------------------------------------------------------
  Sort (actual rows=1 loops=1)
-   Sort Key: (last(_hyper_1_1_chunk.temp, _hyper_1_1_chunk."time"))
+   Sort Key: (last(btest.temp, btest."time"))
    Sort Method: quicksort 
    ->  Aggregate (actual rows=1 loops=1)
          ->  Append (actual rows=11 loops=1)
@@ -567,7 +567,7 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 ------------------------------------------------------------------------
  WindowAgg (actual rows=11 loops=1)
    ->  Sort (actual rows=11 loops=1)
-         Sort Key: _hyper_1_1_chunk.gp
+         Sort Key: btest.gp
          Sort Method: quicksort 
          ->  Append (actual rows=11 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
@@ -602,7 +602,7 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
    InitPlan 1 (returns $0)
      ->  Limit (actual rows=1 loops=1)
            ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk.time_alt DESC
+                 Sort Key: btest.time_alt DESC
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_alt_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                        Index Cond: (time_alt IS NOT NULL)
                  ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_alt_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
@@ -638,10 +638,10 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 
 -- test nested FIRST/LAST in ORDER BY - no optimization possible
 :PREFIX SELECT abs(last(temp, time)) FROM btest ORDER BY abs(last(temp,time));
-                               QUERY PLAN                                
--------------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Sort (actual rows=1 loops=1)
-   Sort Key: (abs(last(_hyper_1_1_chunk.temp, _hyper_1_1_chunk."time")))
+   Sort Key: (abs(last(btest.temp, btest."time")))
    Sort Method: quicksort 
    ->  Aggregate (actual rows=1 loops=1)
          ->  Append (actual rows=11 loops=1)
