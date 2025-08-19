@@ -44,7 +44,7 @@ explain (costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes
  Result
    ->  Unique
          ->  Merge Append
-               Sort Key: _hyper_1_1_chunk.s0, _hyper_1_1_chunk.s1, _hyper_1_1_chunk.t DESC
+               Sort Key: mvagg.s0, mvagg.s1, mvagg.t DESC
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
                      ->  Index Scan using compress_hyper_2_3_chunk_s0_s1__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_3_chunk
@@ -79,7 +79,7 @@ explain (costs off) select ts_debug_allocated_bytes() bytes,
                                                               QUERY PLAN                                                              
 --------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Group Key: _hyper_1_1_chunk.s1
+   Group Key: mvagg.s1
    ->  Append
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk

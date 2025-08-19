@@ -350,10 +350,10 @@ VACUUM ANALYZE mytab_prep;
 -- plan should be invalidated to return results from the uncompressed chunk also
 set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
 EXPLAIN (COSTS OFF) EXECUTE p1;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                           QUERY PLAN                           
+----------------------------------------------------------------
  Sort
-   Sort Key: _hyper_9_10_chunk.a, _hyper_9_10_chunk.c, _hyper_9_10_chunk."time" DESC
+   Sort Key: mytab_prep.a, mytab_prep.c, mytab_prep."time" DESC
    ->  Append
          ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
                ->  Seq Scan on compress_hyper_10_11_chunk
