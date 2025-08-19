@@ -64,7 +64,9 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 };
 
 #define GUC_CAGG_LOW_WORK_MEM_NAME "cagg_processing_low_work_mem"
+#define GUC_CAGG_LOW_WORK_MEM_VALUE (0.6 * 65536)
 #define GUC_CAGG_HIGH_WORK_MEM_NAME "cagg_processing_high_work_mem"
+#define GUC_CAGG_HIGH_WORK_MEM_VALUE (0.8 * 65536)
 
 bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
@@ -89,8 +91,8 @@ TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 TSDLLEXPORT int ts_guc_cagg_wal_batch_size = 10000;
-TSDLLEXPORT int ts_guc_cagg_low_work_mem = 0.6 * 65536;
-TSDLLEXPORT int ts_guc_cagg_high_work_mem = 0.8 * 65536;
+TSDLLEXPORT int ts_guc_cagg_low_work_mem = GUC_CAGG_LOW_WORK_MEM_VALUE;
+TSDLLEXPORT int ts_guc_cagg_high_work_mem = GUC_CAGG_HIGH_WORK_MEM_VALUE;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
@@ -943,7 +945,7 @@ _guc_init(void)
 							"The low working memory limit for the continuous aggregate "
 							"invalidation processing.",
 							&ts_guc_cagg_low_work_mem,
-							0.6 * maintenance_work_mem,
+							GUC_CAGG_LOW_WORK_MEM_VALUE,
 							64,
 							MAX_KILOBYTES,
 							PGC_USERSET,
@@ -958,7 +960,7 @@ _guc_init(void)
 							"The high working memory limit for the continuous aggregate "
 							"invalidation processing.",
 							&ts_guc_cagg_high_work_mem,
-							0.8 * maintenance_work_mem,
+							GUC_CAGG_HIGH_WORK_MEM_VALUE,
 							64,
 							MAX_KILOBYTES,
 							PGC_USERSET,
