@@ -33,10 +33,7 @@
  * utility functions *
  *********************/
 
-static bool ranges_overlap(InternalTimeRange invalidation_range,
-						   InternalTimeRange new_materialization_range);
 static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
-static int64 range_length(const InternalTimeRange range);
 static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 												bool *is_infinite_out);
 static List *cagg_find_aggref_and_var_cols(ContinuousAgg *cagg, Hypertable *mat_ht);
@@ -145,19 +142,15 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 									  SchemaAndName partial_view,
 									  SchemaAndName materialization_table,
 									  const NameData *time_column_name,
-									  InternalTimeRange new_materialization_range,
-									  InternalTimeRange invalidation_range, int32 chunk_id)
+									  InternalTimeRange materialization_range, int32 chunk_id)
 {
-	InternalTimeRange combined_materialization_range = new_materialization_range;
-	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
-
 	MaterializationContext context = {
 		.mat_ht = mat_ht,
 		.cagg = cagg,
 		.partial_view = partial_view,
 		.materialization_table = materialization_table,
 		.time_column_name = (NameData *) time_column_name,
-		.materialization_range = internal_time_range_to_time_range(new_materialization_range),
+		.materialization_range = internal_time_range_to_time_range(materialization_range),
 		/*
 		 * chunk_id is valid if the materializaion update should be done only on the given chunk.
 		 * This is used currently for refresh on chunk drop only. In other cases, manual
@@ -177,69 +170,15 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 	/* pin the start of new_materialization to the end of new_materialization,
 	 * we are not allowed to materialize beyond that point
 	 */
-	if (new_materialization_range.start > new_materialization_range.end)
-		new_materialization_range.start = new_materialization_range.end;
+	if (materialization_range.start > materialization_range.end)
+		materialization_range.start = materialization_range.end;
 
-	if (range_length(invalidation_range) > 0)
-	{
-		Assert(invalidation_range.start <= invalidation_range.end);
-
-		/* we never materialize beyond the new materialization range */
-		if (invalidation_range.start >= new_materialization_range.end ||
-			invalidation_range.end > new_materialization_range.end)
-			elog(ERROR, "internal error: invalidation range ahead of new materialization range");
-
-		/* If the invalidation and new materialization ranges overlap, materialize in one go */
-		materialize_invalidations_separately =
-			!ranges_overlap(invalidation_range, new_materialization_range);
-
-		combined_materialization_range.start =
-			int64_min(invalidation_range.start, new_materialization_range.start);
-	}
-
-	/* Then insert the materializations.
-	 * We insert them in two groups:
-	 * [lowest_invalidated, greatest_invalidated] and
-	 * [start_of_new_materialization, end_of_new_materialization]
-	 * eventually, we may want more precise deletions and insertions for the invalidated ranges.
-	 * if greatest_invalidated == end_of_new_materialization then we only perform 1 insertion.
-	 * to prevent values from being inserted multiple times.
-	 */
-	if (range_length(invalidation_range) == 0 || !materialize_invalidations_separately)
-	{
-		context.materialization_range =
-			internal_time_range_to_time_range(combined_materialization_range);
-		execute_materializations(&context);
-	}
-	else
-	{
-		context.materialization_range = internal_time_range_to_time_range(invalidation_range);
-		execute_materializations(&context);
-
-		context.materialization_range =
-			internal_time_range_to_time_range(new_materialization_range);
-		execute_materializations(&context);
-	}
+	/* Then insert the materializations */
+	context.materialization_range = internal_time_range_to_time_range(materialization_range);
+	execute_materializations(&context);
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
-}
-
-static bool
-ranges_overlap(InternalTimeRange invalidation_range, InternalTimeRange new_materialization_range)
-{
-	Assert(invalidation_range.start <= invalidation_range.end);
-	Assert(new_materialization_range.start <= new_materialization_range.end);
-	return !(invalidation_range.end < new_materialization_range.start ||
-			 new_materialization_range.end < invalidation_range.start);
-}
-
-static int64
-range_length(const InternalTimeRange range)
-{
-	Assert(range.end >= range.start);
-
-	return int64_saturating_sub(range.end, range.start);
 }
 
 static Datum
