@@ -413,14 +413,6 @@ continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 		.schema = &refresh->cagg_ht->fd.schema_name,
 		.name = &refresh->cagg_ht->fd.table_name,
 	};
-	/* The materialization function takes two ranges, one for new data and one
-	 * for invalidated data. A refresh just uses one of them so the other one
-	 * has a zero range. */
-	InternalTimeRange unused_invalidation_range = {
-		.type = refresh->refresh_window.type,
-		.start = 0,
-		.end = 0,
-	};
 	const Dimension *time_dim = hyperspace_get_open_dimension(refresh->cagg_ht->space, 0);
 
 	Assert(time_dim != NULL);
@@ -431,7 +423,6 @@ continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 										  cagg_hypertable_name,
 										  &time_dim->fd.column_name,
 										  *bucketed_refresh_window,
-										  unused_invalidation_range,
 										  chunk_id);
 }
 
