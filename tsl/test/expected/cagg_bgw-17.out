@@ -573,19 +573,19 @@ SELECT * FROM sorted_bgw_log;
       6 | 43200000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
       0 | 86400000000 | DB Scheduler                               | [TESTING] Registered new background worker
       1 | 86400000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
-      0 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (merged invalidation) on "test_continuous_agg_view" in window [ 8, 10 ] (batch 1 of 5)
+      0 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 8, 10 ] (batch 1 of 5)
       1 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
       2 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-      3 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (merged invalidation) on "test_continuous_agg_view" in window [ 6, 8 ] (batch 2 of 5)
+      3 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 6, 8 ] (batch 2 of 5)
       4 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
       5 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-      6 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (merged invalidation) on "test_continuous_agg_view" in window [ 4, 6 ] (batch 3 of 5)
+      6 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 4, 6 ] (batch 3 of 5)
       7 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
       8 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-      9 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (merged invalidation) on "test_continuous_agg_view" in window [ 2, 4 ] (batch 4 of 5)
+      9 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 2, 4 ] (batch 4 of 5)
      10 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
      11 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
-     12 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (merged invalidation) on "test_continuous_agg_view" in window [ 0, 2 ] (batch 5 of 5)
+     12 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | continuous aggregate refresh (individual invalidation) on "test_continuous_agg_view" in window [ 0, 2 ] (batch 5 of 5)
      13 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | deleted 1 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_3"
      14 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
 (46 rows)
