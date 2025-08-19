@@ -38,8 +38,8 @@
 #define is_supported_pg_version_18(version) ((version >= 180000) && (version < 190000))
 
 /*
- * PG16 support is a WIP and not complete yet.
- * To compile with PG16, use -DEXPERIMENTAL=ON with cmake.
+ * To compile with an unsupported version, use -DEXPERIMENTAL=ON with cmake.
+ * (Useful when testing with unreleased versions)
  */
 #define is_supported_pg_version(version)                                                           \
 	(is_supported_pg_version_15(version) || is_supported_pg_version_16(version) ||                 \
