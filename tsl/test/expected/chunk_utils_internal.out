@@ -707,7 +707,7 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try');
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_5_10_chunk.timec
+   Sort Key: ht_try.timec
    ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk
    ->  Foreign Scan on child_fdw_table
 (4 rows)
@@ -1572,7 +1572,7 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp',empty:
                                            QUERY PLAN                                            
 -------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_20_32_chunk."time"
+   Sort Key: test_chunkapp."time"
    ->  Index Scan Backward using _hyper_20_32_chunk_test_chunkapp_time_idx on _hyper_20_32_chunk
    ->  Index Scan Backward using _hyper_20_33_chunk_test_chunkapp_time_idx on _hyper_20_33_chunk
    ->  Foreign Scan on test_chunkapp_fdw_child
@@ -1601,7 +1601,7 @@ WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_sl
                                            QUERY PLAN                                            
 -------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_20_32_chunk."time"
+   Sort Key: test_chunkapp."time"
    ->  Index Scan Backward using _hyper_20_32_chunk_test_chunkapp_time_idx on _hyper_20_32_chunk
          Index Cond: ("time" < 'Sun Jan 01 00:00:00 2023 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_20_33_chunk_test_chunkapp_time_idx on _hyper_20_33_chunk

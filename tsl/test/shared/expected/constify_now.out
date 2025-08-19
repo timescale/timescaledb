@@ -587,7 +587,7 @@ CREATE VIEW now_view AS SELECT time, device, avg(value) from now_view_test GROUP
 :PREFIX SELECT * FROM now_view;
 QUERY PLAN
  Finalize HashAggregate
-   Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+   Group Key: now_view_test."time", now_view_test.device
    ->  Append
          ->  Partial HashAggregate
                Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
@@ -610,7 +610,7 @@ QUERY PLAN
 :PREFIX SELECT * FROM now_view WHERE time > now() - '168h'::interval;
 QUERY PLAN
  Finalize HashAggregate
-   Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+   Group Key: now_view_test."time", now_view_test.device
    ->  Append
          ->  Partial HashAggregate
                Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
@@ -773,7 +773,7 @@ ORDER BY "timestamp" ASC;
 EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
  Merge Append
-   Sort Key: _hyper_X_X_chunk."timestamp"
+   Sort Key: logged_data."timestamp"
    ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
@@ -797,7 +797,7 @@ SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
 EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
  Merge Append
-   Sort Key: _hyper_X_X_chunk."timestamp"
+   Sort Key: logged_data."timestamp"
    ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
@@ -820,7 +820,7 @@ SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
 EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
  Merge Append
-   Sort Key: _hyper_X_X_chunk."timestamp"
+   Sort Key: logged_data."timestamp"
    ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)

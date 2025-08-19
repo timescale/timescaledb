@@ -69,17 +69,17 @@ FROM "test"
 GROUP BY sec
 ORDER BY sec
 LIMIT 5;
-                                         QUERY PLAN                                          
----------------------------------------------------------------------------------------------
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
  Limit
    ->  Finalize GroupAggregate
-         Group Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
+         Group Key: (time_bucket('@ 1 sec'::interval, test.ts))
          ->  Gather Merge
                Workers Planned: 2
                ->  Partial GroupAggregate
-                     Group Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
+                     Group Key: (time_bucket('@ 1 sec'::interval, test.ts))
                      ->  Sort
-                           Sort Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk.ts))
+                           Sort Key: (time_bucket('@ 1 sec'::interval, test.ts))
                            ->  Result
                                  ->  Parallel Append
                                        ->  Parallel Seq Scan on _hyper_1_1_chunk

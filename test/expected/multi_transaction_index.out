@@ -372,10 +372,10 @@ EXPLAIN (verbose, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORD
                               QUERY PLAN                              
 ----------------------------------------------------------------------
  Limit
-   Output: _hyper_3_4_chunk."time"
+   Output: partial_index_test."time"
    ->  Sort
-         Output: _hyper_3_4_chunk."time"
-         Sort Key: _hyper_3_4_chunk."time"
+         Output: partial_index_test."time"
+         Sort Key: partial_index_test."time"
          ->  Append
                ->  Seq Scan on _timescaledb_internal._hyper_3_4_chunk
                      Output: _hyper_3_4_chunk."time"

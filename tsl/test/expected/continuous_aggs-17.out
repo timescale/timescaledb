@@ -2032,19 +2032,19 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
                                                           QUERY PLAN                                                          
 ------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_59_123_chunk.sum DESC
+   Sort Key: _materialized_hypertable_59.sum DESC
    ->  Merge Append
-         Sort Key: _hyper_59_123_chunk.sum DESC
+         Sort Key: _materialized_hypertable_59.sum DESC
          ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
                Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
          ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
                Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
    ->  Sort
-         Sort Key: (sum(_hyper_52_111_chunk.temperature)) DESC
+         Sort Key: (sum(conditions.temperature)) DESC
          ->  Finalize GroupAggregate
-               Group Key: (time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec))
+               Group Key: (time_bucket('@ 7 days'::interval, conditions.timec))
                ->  Merge Append
-                     Sort Key: (time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec))
+                     Sort Key: (time_bucket('@ 7 days'::interval, conditions.timec))
                      ->  Partial GroupAggregate
                            Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
                            ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
@@ -2069,21 +2069,21 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
                                                              QUERY PLAN                                                             
 ------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_59_123_chunk.count
+   Sort Key: _materialized_hypertable_59.count
    ->  Merge Append
-         Sort Key: _hyper_59_123_chunk.sum DESC
+         Sort Key: _materialized_hypertable_59.sum DESC
          ->  Merge Append
-               Sort Key: _hyper_59_123_chunk.sum DESC
+               Sort Key: _materialized_hypertable_59.sum DESC
                ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
                      Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
                ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
                      Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
          ->  Sort
-               Sort Key: (sum(_hyper_52_111_chunk.temperature)) DESC
+               Sort Key: (sum(conditions.temperature)) DESC
                ->  Finalize GroupAggregate
-                     Group Key: (time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec))
+                     Group Key: (time_bucket('@ 7 days'::interval, conditions.timec))
                      ->  Merge Append
-                           Sort Key: (time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec))
+                           Sort Key: (time_bucket('@ 7 days'::interval, conditions.timec))
                            ->  Partial GroupAggregate
                                  Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
                                  ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
@@ -2122,7 +2122,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
                                                        QUERY PLAN                                                       
 ------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_59_123_chunk.sum DESC
+   Sort Key: _materialized_hypertable_59.sum DESC
    ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
    ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
 (4 rows)
@@ -2140,9 +2140,9 @@ EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
                                                           QUERY PLAN                                                          
 ------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Sort Key: _hyper_59_123_chunk.count
+   Sort Key: _materialized_hypertable_59.count
    ->  Merge Append
-         Sort Key: _hyper_59_123_chunk.sum DESC
+         Sort Key: _materialized_hypertable_59.sum DESC
          ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
          ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
 (6 rows)
@@ -2281,11 +2281,11 @@ EXPLAIN (COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket
                                                                                            QUERY PLAN                                                                                           
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_63_183_chunk.sum DESC
+   Sort Key: _materialized_hypertable_63.sum DESC
    ->  Gather Merge
          Workers Planned: 2
          ->  Sort
-               Sort Key: _hyper_63_183_chunk.sum DESC
+               Sort Key: _materialized_hypertable_63.sum DESC
                ->  Parallel Append
                      ->  Parallel Index Scan using _hyper_63_183_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_183_chunk
                            Index Cond: ((time_bucket < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))

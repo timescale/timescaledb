@@ -69,12 +69,12 @@ select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from p
                                                                                                         QUERY PLAN                                                                                                         
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
-   Output: x.x, (sum((_hyper_1_1_chunk.a + x.x)))
+   Output: x.x, (sum((pvagg.a + x.x)))
    ->  Function Scan on pg_catalog.unnest x
          Output: x.x
          Function Call: unnest('{0,1,2}'::integer[])
    ->  Finalize Aggregate
-         Output: sum((_hyper_1_1_chunk.a + x.x))
+         Output: sum((pvagg.a + x.x))
          ->  Append
                ->  Partial Aggregate
                      Output: PARTIAL sum((_hyper_1_1_chunk.a + x.x))

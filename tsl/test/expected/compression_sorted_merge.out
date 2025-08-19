@@ -1125,7 +1125,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
    Startup Exclusion: false
    Runtime Exclusion: false
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
+         Sort Key: test1."time"
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4 loops=1)
                Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5, _hyper_1_1_chunk.c1, _hyper_1_1_chunk.c2
                Batch Sorted Merge: true

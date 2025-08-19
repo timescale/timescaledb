@@ -183,7 +183,7 @@ explain (costs off) select sum(c) from dvagg group by grouping sets ((), (a));
                          QUERY PLAN                         
 ------------------------------------------------------------
  MixedAggregate
-   Hash Key: _hyper_1_1_chunk.a
+   Hash Key: dvagg.a
    Group Key: ()
    ->  Append
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk

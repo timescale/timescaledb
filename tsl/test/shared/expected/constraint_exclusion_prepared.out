@@ -887,7 +887,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100 loops=1)
          Order: metrics_space."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
@@ -895,7 +895,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -903,7 +903,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -918,7 +918,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100 loops=1)
          Order: metrics_space."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
@@ -926,7 +926,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -934,7 +934,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -949,7 +949,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100 loops=1)
          Order: metrics_space."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
@@ -957,7 +957,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -965,7 +965,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -980,7 +980,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100 loops=1)
          Order: metrics_space."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
@@ -988,7 +988,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -996,7 +996,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -1011,7 +1011,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100 loops=1)
          Order: metrics_space."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=60 loops=1)
@@ -1019,7 +1019,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=21 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -1027,7 +1027,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -1057,7 +1057,7 @@ QUERY PLAN
          Hypertable: metrics_space
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space.device_id, metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
@@ -1079,7 +1079,7 @@ QUERY PLAN
          Hypertable: metrics_space
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space.device_id, metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
@@ -1101,7 +1101,7 @@ QUERY PLAN
          Hypertable: metrics_space
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space.device_id, metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
@@ -1123,7 +1123,7 @@ QUERY PLAN
          Hypertable: metrics_space
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space.device_id, metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
@@ -1145,7 +1145,7 @@ QUERY PLAN
          Hypertable: metrics_space
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space.device_id, metrics_space."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
@@ -1717,7 +1717,7 @@ QUERY PLAN
          Hypertable: metrics_compressed
          Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_compressed.device_id, metrics_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
@@ -1741,7 +1741,7 @@ QUERY PLAN
          Hypertable: metrics_compressed
          Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_compressed.device_id, metrics_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
@@ -1765,7 +1765,7 @@ QUERY PLAN
          Hypertable: metrics_compressed
          Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_compressed.device_id, metrics_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
@@ -1789,7 +1789,7 @@ QUERY PLAN
          Hypertable: metrics_compressed
          Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_compressed.device_id, metrics_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
@@ -1813,7 +1813,7 @@ QUERY PLAN
          Hypertable: metrics_compressed
          Chunks excluded during startup: 1
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_compressed.device_id, metrics_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
@@ -2387,7 +2387,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100 loops=1)
          Order: metrics_space_compressed."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
@@ -2410,7 +2410,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2430,7 +2430,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2457,7 +2457,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100 loops=1)
          Order: metrics_space_compressed."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
@@ -2480,7 +2480,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2500,7 +2500,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2527,7 +2527,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100 loops=1)
          Order: metrics_space_compressed."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
@@ -2550,7 +2550,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2570,7 +2570,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2597,7 +2597,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100 loops=1)
          Order: metrics_space_compressed."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
@@ -2620,7 +2620,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2640,7 +2640,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2667,7 +2667,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100 loops=1)
          Order: metrics_space_compressed."time"
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (actual rows=21 loops=1)
                      Sort Key: _hyper_X_X_chunk."time"
                      Sort Method: top-N heapsort 
@@ -2690,7 +2690,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2710,7 +2710,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed."time"
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time"
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2752,7 +2752,7 @@ QUERY PLAN
          Hypertable: metrics_space_compressed
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed.device_id, metrics_space_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
@@ -2804,7 +2804,7 @@ QUERY PLAN
          Hypertable: metrics_space_compressed
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed.device_id, metrics_space_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
@@ -2856,7 +2856,7 @@ QUERY PLAN
          Hypertable: metrics_space_compressed
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed.device_id, metrics_space_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
@@ -2908,7 +2908,7 @@ QUERY PLAN
          Hypertable: metrics_space_compressed
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed.device_id, metrics_space_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
@@ -2960,7 +2960,7 @@ QUERY PLAN
          Hypertable: metrics_space_compressed
          Chunks excluded during startup: 3
          ->  Merge Append (actual rows=100 loops=1)
-               Sort Key: _hyper_X_X_chunk.device_id, _hyper_X_X_chunk."time"
+               Sort Key: metrics_space_compressed.device_id, metrics_space_compressed."time"
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=100 loops=1)
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Sort (actual rows=1 loops=1)
