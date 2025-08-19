@@ -1067,15 +1067,12 @@ invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype)
 
 InvalidationStore *
 invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
-							  long max_materializations, bool *do_merged_refresh,
-							  InternalTimeRange *ret_merged_refresh_window,
-							  ContinuousAggRefreshContext context, bool force)
+							  long max_materializations, ContinuousAggRefreshContext context,
+							  bool force)
 {
 	ContinuousAggInvalidationState state;
 	InvalidationStore *store = NULL;
 	long count;
-
-	*do_merged_refresh = false;
 
 	cagg_invalidation_state_init(&state, cagg);
 	state.invalidations = tuplestore_begin_heap(false, false, work_mem);
@@ -1094,25 +1091,6 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 	}
 
 	cagg_invalidation_state_cleanup(&state);
-
-	/*
-	 * If there are many individual invalidation ranges to refresh, then
-	 * revert to a merged refresh across the range decided by lowest and
-	 * highest invalidated value.
-	 */
-	if (count && tuplestore_tuple_count(store->tupstore) > max_materializations)
-	{
-		InternalTimeRange merged_refresh_window;
-		continuous_agg_calculate_merged_refresh_window(cagg,
-													   refresh_window,
-													   store,
-													   &merged_refresh_window,
-													   context);
-		*do_merged_refresh = true;
-		*ret_merged_refresh_window = merged_refresh_window;
-		invalidation_store_free(store);
-		store = NULL;
-	}
 
 	return store;
 }
