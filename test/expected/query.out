@@ -150,14 +150,14 @@ SHOW timescaledb.enable_optimizations;
 (5 rows)
 
 :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone))
+         Group Key: (date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone))
          ->  Result
                ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone)) DESC
+                     Sort Key: (date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone)) DESC
                      ->  Index Scan using _hyper_4_6_chunk_time_plain_date on _hyper_4_6_chunk
                      ->  Index Scan using _hyper_4_7_chunk_time_plain_date on _hyper_4_7_chunk
                      ->  Index Scan using _hyper_4_8_chunk_time_plain_date on _hyper_4_8_chunk
