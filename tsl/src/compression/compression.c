@@ -2235,7 +2235,11 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 	const char *input = PG_GETARG_CSTRING(0);
 	size_t input_len = strlen(input);
 	int decoded_len;
+#if PG18_GE
+	uint8 *decoded;
+#else
 	char *decoded;
+#endif
 	StringInfoData data;
 	Datum result;
 
@@ -2251,7 +2255,7 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 
 	decoded[decoded_len] = '\0';
 	data = (StringInfoData){
-		.data = decoded,
+		.data = (char *) decoded,
 		.len = decoded_len,
 		.maxlen = decoded_len,
 	};
@@ -2267,7 +2271,11 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 	Datum bytes_data = DirectFunctionCall1(tsl_compressed_data_send, PG_GETARG_DATUM(0));
 	bytea *bytes = DatumGetByteaP(bytes_data);
 	int raw_len = VARSIZE_ANY_EXHDR(bytes);
+#if PG18_GE
+	const uint8 *raw_data = (uint8 *) VARDATA(bytes);
+#else
 	const char *raw_data = VARDATA(bytes);
+#endif
 	int encoded_len = pg_b64_enc_len(raw_len);
 	char *encoded = palloc(encoded_len + 1);
 	encoded_len = pg_b64_encode(raw_data, raw_len, encoded, encoded_len);
