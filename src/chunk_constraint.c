@@ -961,7 +961,8 @@ chunk_constraint_drop_constraint(TupleInfo *ti)
 		};
 
 		if (OidIsValid(constrobj.objectId))
-			performDeletion(&constrobj, DROP_RESTRICT, 0);
+			/* must use DROP_CASCADE if regular table references a hypertable */
+			performDeletion(&constrobj, DROP_CASCADE, 0);
 	}
 }
 
