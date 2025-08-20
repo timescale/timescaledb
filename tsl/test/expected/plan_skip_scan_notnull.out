@@ -153,7 +153,7 @@ SET timescaledb.debug_skip_scan_info  TO true;
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Base queries with regular NULL mode
 :PREFIX SELECT DISTINCT dev FROM :TABLE;
-psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Unique (actual rows=12 loops=1)
@@ -163,7 +163,7 @@ psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LA
 (5 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE order by dev DESC;
-psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FIRST
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS FIRST)
                                                  QUERY PLAN                                                 
 ------------------------------------------------------------------------------------------------------------
  Unique (actual rows=12 loops=1)
@@ -174,7 +174,7 @@ psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FI
 
 -- Index quals except IS NULL discard NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL;
-psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -184,7 +184,7 @@ psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NUL
 (5 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev > 2;
-psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Unique (actual rows=8 loops=1)
@@ -194,7 +194,7 @@ psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NUL
 (5 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev BETWEEN 1 AND 5;
-psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Unique (actual rows=5 loops=1)
@@ -206,7 +206,7 @@ psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NUL
 -- next two filters produce small output for which we may select seqscan, don't want it
 set enable_seqscan=0;
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev in (1,2,3);
-psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
@@ -216,7 +216,7 @@ psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NUL
 (5 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NULL;
-psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -227,7 +227,7 @@ psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS L
 
 -- PG is smart enough to convert negation of IS NOT NULL to IS NULL index condition
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE (dev IS NOT NULL) = false;
-psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -238,7 +238,7 @@ psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS L
 
 -- Complex expressions over IS NOT NULL are non-strict filters
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE ((dev is null) = false)::int + 1 > 1;
-psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -252,7 +252,7 @@ psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS L
 reset enable_seqscan;
 -- Strict Index filters discard NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev * 2 < 8;
-psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Unique (actual rows=4 loops=1)
@@ -265,7 +265,7 @@ psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NUL
 
 -- OR is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev < 2 OR dev > 0;
-psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -278,7 +278,7 @@ psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS L
 
 -- Coalesce is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,-1) < 1;
-psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Unique (actual rows=2 loops=1)
@@ -291,7 +291,7 @@ psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS L
 
 -- Strict non-index filters on relation discard NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100;
-psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -303,7 +303,7 @@ psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NUL
 
 -- OR is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100 OR dev > 0;
-psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -315,7 +315,7 @@ psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS L
 
 -- Coalesce is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100;
-psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -327,7 +327,7 @@ psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS L
 
 -- If at least one filter is strict then it filters out NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100 and dev + time < 100;
-psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -339,7 +339,7 @@ psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NUL
 
 -- Index qual on a non-skip key: skip key can be NULL
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1';
-psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Unique (actual rows=9 loops=1)
@@ -350,7 +350,7 @@ psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS L
 
 -- Index quals on several keys including skip key
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1' and dev > 2;
-psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Unique (actual rows=8 loops=1)
@@ -362,7 +362,7 @@ psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NUL
 -- Index qual row comparison will filter out NULLs in skip key when skip key is a leading column
 -- But for compressed chunks ROW is not pushed into index quals, it is treated as a filter and is not strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev,dev_name) > row(1,'device_1');
-psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
  Unique (actual rows=9 loops=1)
@@ -373,7 +373,7 @@ psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NOT NUL
 
 -- Satisfying (dev_name>'device_1') may allow NULLs into dev
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev_name,dev) > row('device_1',1);
-psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
  Unique (actual rows=9 loops=1)
@@ -384,7 +384,7 @@ psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS L
 
 -- Non-index qual row comparison: row comparison in general is not strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev+1,dev_name) > row(1,'device_1');
-psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -397,7 +397,7 @@ psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS L
 
 -- Different SkipScan column
 :PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev=1 and dev_name IS NOT NULL;
-psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NULL
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev_name NOT NULL)
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -409,7 +409,7 @@ psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NUL
 -- Boolean and NOT NULL constraint tests
 -- Boolean column index qual is strict
 :PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b;
-psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on skip_scan_b_idx(b NOT NULL)
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -419,7 +419,7 @@ psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NUL
 (5 rows)
 
 :PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b != true;
-psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on skip_scan_b_idx(b NOT NULL)
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -430,7 +430,7 @@ psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NUL
 
 -- Boolean column predicates could be non-strict filters, below filter can accept NULLs
 :PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b IS NOT true;
-psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on skip_scan_b_idx(b NULLS LAST)
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
  Unique (actual rows=2 loops=1)
@@ -443,7 +443,7 @@ psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS L
 
 -- dev is declared NOT NULL
 :PREFIX SELECT DISTINCT dev FROM skip_scan_nn;
-psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on skip_scan_nn_idx(dev NOT NULL)
                                          QUERY PLAN                                          
 ---------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -475,10 +475,10 @@ NOTICE:  migrating data to chunks
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Base queries with regular NULL mode
 :PREFIX SELECT DISTINCT dev FROM :TABLE;
-psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                              QUERY PLAN                                                             
 ------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -499,10 +499,10 @@ psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LA
 (19 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE order by dev DESC;
-psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FIRST
-psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FIRST
-psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FIRST
-psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FIRST
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS FIRST)
                                                                  QUERY PLAN                                                                  
 ---------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -524,10 +524,10 @@ psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FI
 
 -- Index quals except IS NULL discard NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL;
-psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
                                                              QUERY PLAN                                                             
 ------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -548,10 +548,10 @@ psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NUL
 (19 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev > 2;
-psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=8 loops=1)
@@ -572,10 +572,10 @@ psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NUL
 (19 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev BETWEEN 1 AND 5;
-psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=5 loops=1)
@@ -598,10 +598,10 @@ psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NUL
 -- next two filters produce small output for which we may select seqscan, don't want it
 set enable_seqscan=0;
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev in (1,2,3);
-psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
@@ -622,10 +622,10 @@ psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NUL
 (19 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NULL;
-psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -647,10 +647,10 @@ psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS L
 
 -- PG is smart enough to convert negation of IS NOT NULL to IS NULL index condition
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE (dev IS NOT NULL) = false;
-psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -672,10 +672,10 @@ psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS L
 
 -- Complex expressions over IS NOT NULL are non-strict filters
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE ((dev is null) = false)::int + 1 > 1;
-psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                              QUERY PLAN                                                             
 ------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -706,10 +706,10 @@ psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS L
 reset enable_seqscan;
 -- Strict Index filters discard NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev * 2 < 8;
-psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
@@ -739,10 +739,10 @@ psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NUL
 
 -- OR is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev < 2 OR dev > 0;
-psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                              QUERY PLAN                                                             
 ------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -772,10 +772,10 @@ psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS L
 
 -- Coalesce is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,-1) < 1;
-psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -805,10 +805,10 @@ psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS L
 
 -- Strict non-index filters on relation discard NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100;
-psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
                                                           QUERY PLAN                                                           
 -------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -833,10 +833,10 @@ psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NUL
 
 -- OR is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100 OR dev > 0;
-psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                           QUERY PLAN                                                           
 -------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -862,10 +862,10 @@ psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS L
 
 -- Coalesce is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100;
-psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                           QUERY PLAN                                                           
 -------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -890,10 +890,10 @@ psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS L
 
 -- If at least one filter is strict then it filters out NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100 and dev + time < 100;
-psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
                                                           QUERY PLAN                                                           
 -------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -918,10 +918,10 @@ psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NUL
 
 -- Index qual on a non-skip key: skip key can be NULL
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1';
-psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=9 loops=1)
@@ -943,10 +943,10 @@ psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS L
 
 -- Index quals on several keys including skip key
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1' and dev > 2;
-psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=8 loops=1)
@@ -969,10 +969,10 @@ psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NUL
 -- Index qual row comparison will filter out NULLs in skip key when skip key is a leading column
 -- But for compressed chunks ROW is not pushed into index quals, it is treated as a filter and is not strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev,dev_name) > row(1,'device_1');
-psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=9 loops=1)
@@ -994,10 +994,10 @@ psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NOT NUL
 
 -- Satisfying (dev_name>'device_1') may allow NULLs into dev
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev_name,dev) > row('device_1',1);
-psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=9 loops=1)
@@ -1019,10 +1019,10 @@ psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS L
 
 -- Non-index qual row comparison: row comparison in general is not strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev+1,dev_name) > row(1,'device_1');
-psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
                                                              QUERY PLAN                                                             
 ------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -1052,10 +1052,10 @@ psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS L
 
 -- Different SkipScan column
 :PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev=1 and dev_name IS NOT NULL;
-psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NULL
-psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NULL
-psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NULL
-psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NULL
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev_name NOT NULL)
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -1078,9 +1078,9 @@ psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NUL
 -- Boolean and NOT NULL constraint tests
 -- Boolean column index qual is strict
 :PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b;
-psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on _hyper_7_21_chunk_skip_scan_b_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on _hyper_7_22_chunk_skip_scan_b_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on _hyper_7_23_chunk_skip_scan_b_idx(b NOT NULL)
                                                        QUERY PLAN                                                       
 ------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -1098,9 +1098,9 @@ psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NUL
 (15 rows)
 
 :PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b != true;
-psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on _hyper_7_21_chunk_skip_scan_b_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on _hyper_7_22_chunk_skip_scan_b_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on _hyper_7_23_chunk_skip_scan_b_idx(b NOT NULL)
                                                        QUERY PLAN                                                       
 ------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -1119,9 +1119,9 @@ psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NUL
 
 -- Boolean column predicates could be non-strict filters, below filter can accept NULLs
 :PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b IS NOT true;
-psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on _hyper_7_21_chunk_skip_scan_b_idx(b NULLS LAST)
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on _hyper_7_22_chunk_skip_scan_b_idx(b NULLS LAST)
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on _hyper_7_23_chunk_skip_scan_b_idx(b NULLS LAST)
                                                        QUERY PLAN                                                       
 ------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=2 loops=1)
@@ -1146,9 +1146,9 @@ psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS L
 
 -- dev is declared NOT NULL
 :PREFIX SELECT DISTINCT dev FROM skip_scan_nn;
-psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on _hyper_8_24_chunk_skip_scan_nn_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on _hyper_8_25_chunk_skip_scan_nn_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on _hyper_8_26_chunk_skip_scan_nn_idx(dev NOT NULL)
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -1192,10 +1192,10 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_nn') ch;
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Base queries with regular NULL mode
 :PREFIX SELECT DISTINCT dev FROM :TABLE;
-psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -1216,10 +1216,10 @@ psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan index column 1 is NULLS LA
 (15 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE order by dev DESC;
-psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FIRST
-psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FIRST
-psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FIRST
-psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FIRST
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS FIRST)
                                                                                QUERY PLAN                                                                                
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -1241,10 +1241,10 @@ psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan index column 1 is NULLS FI
 
 -- Index quals except IS NULL discard NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL;
-psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -1269,10 +1269,10 @@ psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan index column 1 is NOT NUL
 (19 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev > 2;
-psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=8 loops=1)
@@ -1297,10 +1297,10 @@ psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan index column 1 is NOT NUL
 (19 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev BETWEEN 1 AND 5;
-psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=5 loops=1)
@@ -1327,10 +1327,10 @@ psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan index column 1 is NOT NUL
 -- next two filters produce small output for which we may select seqscan, don't want it
 set enable_seqscan=0;
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev in (1,2,3);
-psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
@@ -1355,10 +1355,10 @@ psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan index column 1 is NOT NUL
 (19 rows)
 
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NULL;
-psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -1384,10 +1384,10 @@ psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan index column 1 is NULLS L
 
 -- PG is smart enough to convert negation of IS NOT NULL to IS NULL index condition
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE (dev IS NOT NULL) = false;
-psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -1413,10 +1413,10 @@ psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan index column 1 is NULLS L
 
 -- Complex expressions over IS NOT NULL are non-strict filters
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE ((dev is null) = false)::int + 1 > 1;
-psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -1447,10 +1447,10 @@ psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan index column 1 is NULLS L
 reset enable_seqscan;
 -- Strict Index filters discard NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev * 2 < 8;
-psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
@@ -1480,10 +1480,10 @@ psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan index column 1 is NOT NUL
 
 -- OR is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev < 2 OR dev > 0;
-psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -1513,10 +1513,10 @@ psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan index column 1 is NULLS L
 
 -- Coalesce is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,-1) < 1;
-psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -1546,10 +1546,10 @@ psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan index column 1 is NULLS L
 
 -- Strict non-index filters on relation discard NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100;
-psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -1579,10 +1579,10 @@ psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan index column 1 is NOT NUL
 
 -- OR is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100 OR dev > 0;
-psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -1612,10 +1612,10 @@ psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan index column 1 is NULLS L
 
 -- Coalesce is non-strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100;
-psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
@@ -1645,10 +1645,10 @@ psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan index column 1 is NULLS L
 
 -- If at least one filter is strict then it filters out NULLs
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100 and dev + time < 100;
-psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -1678,10 +1678,10 @@ psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan index column 1 is NOT NUL
 
 -- Index qual on a non-skip key: skip key can be NULL
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1';
-psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=9 loops=1)
@@ -1707,10 +1707,10 @@ psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan index column 1 is NULLS L
 
 -- Index quals on several keys including skip key
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1' and dev > 2;
-psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=8 loops=1)
@@ -1737,10 +1737,10 @@ psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan index column 1 is NOT NUL
 -- Index qual row comparison will filter out NULLs in skip key when skip key is a leading column
 -- But for compressed chunks ROW is not pushed into index quals, it is treated as a filter and is not strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev,dev_name) > row(1,'device_1');
-psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=9 loops=1)
@@ -1770,10 +1770,10 @@ psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan index column 1 is NULLS L
 
 -- Satisfying (dev_name>'device_1') may allow NULLs into dev
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev_name,dev) > row('device_1',1);
-psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=9 loops=1)
@@ -1803,10 +1803,10 @@ psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan index column 1 is NULLS L
 
 -- Non-index qual row comparison: row comparison in general is not strict
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev+1,dev_name) > row(1,'device_1');
-psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10 loops=1)
@@ -1836,10 +1836,10 @@ psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan index column 1 is NULLS L
 
 -- Different SkipScan column
 :PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev=1 and dev_name IS NOT NULL;
-psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NULL
-psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NULL
-psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NULL
-psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NULL
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev_name NOT NULL)
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -1866,9 +1866,9 @@ psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan index column 2 is NOT NUL
 -- Boolean and NOT NULL constraint tests
 -- Boolean column index qual is strict
 :PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b;
-psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on compress_hyper_9_27_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on compress_hyper_9_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on compress_hyper_9_29_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
                                                                          QUERY PLAN                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -1889,9 +1889,9 @@ psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan index column 1 is NOT NUL
 (15 rows)
 
 :PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b != true;
-psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on compress_hyper_9_27_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on compress_hyper_9_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on compress_hyper_9_29_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
                                                                          QUERY PLAN                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
@@ -1913,9 +1913,9 @@ psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan index column 1 is NOT NUL
 
 -- Boolean column predicates could be non-strict filters, below filter can accept NULLs
 :PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b IS NOT true;
-psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS LAST
-psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS LAST
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on compress_hyper_9_27_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NULLS LAST)
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on compress_hyper_9_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NULLS LAST)
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on compress_hyper_9_29_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NULLS LAST)
                                                                          QUERY PLAN                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=2 loops=1)
@@ -1940,9 +1940,9 @@ psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan index column 1 is NULLS L
 
 -- dev is declared NOT NULL
 :PREFIX SELECT DISTINCT dev FROM skip_scan_nn;
-psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan index column 1 is NOT NULL
-psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan index column 1 is NOT NULL
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on compress_hyper_10_30_chunk_dev__ts_meta_min_1__ts_meta_max__idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on compress_hyper_10_31_chunk_dev__ts_meta_min_1__ts_meta_max__idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on compress_hyper_10_32_chunk_dev__ts_meta_min_1__ts_meta_max__idx(dev NOT NULL)
                                                                            QUERY PLAN                                                                            
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)

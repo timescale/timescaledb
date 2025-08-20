@@ -1401,15 +1401,16 @@ DEALLOCATE prep;
                      Index Cond: ((dev = skip_scan.dev) AND ("time" > NULL::integer))
 (11 rows)
 
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0;
                                          QUERY PLAN                                          
 ---------------------------------------------------------------------------------------------
  Unique (actual rows=10001 loops=1)
    ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=10001 loops=1)
-         Index Cond: (dev IS NOT NULL)
-(4 rows)
+         Filter: (COALESCE(dev, '-1'::integer) >= 0)
+         Rows Removed by Filter: 21
+(5 rows)
 
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0
 UNION SELECT b.* FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
@@ -1420,7 +1421,8 @@ UNION SELECT b.* FROM
          Sort Key: skip_scan.dev, skip_scan."time"
          ->  Unique (actual rows=10001 loops=1)
                ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan (actual rows=10001 loops=1)
-                     Index Cond: (dev IS NOT NULL)
+                     Filter: (COALESCE(dev, '-1'::integer) >= 0)
+                     Rows Removed by Filter: 21
          ->  Sort (actual rows=10001 loops=1)
                Sort Key: skip_scan_2.dev, skip_scan_2."time"
                Sort Method: quicksort 
@@ -1433,7 +1435,7 @@ UNION SELECT b.* FROM
                            ->  Custom Scan (SkipScan) on skip_scan skip_scan_2 (actual rows=833 loops=12)
                                  ->  Index Only Scan using skip_scan_dev_time_idx on skip_scan skip_scan_2 (actual rows=833 loops=12)
                                        Index Cond: ((dev = skip_scan_1.dev) AND ("time" > NULL::integer))
-(21 rows)
+(22 rows)
 
 -- SkipScan into INSERT
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
@@ -3861,23 +3863,27 @@ DEALLOCATE prep;
                            Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
 (39 rows)
 
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10000 loops=1)
    ->  Merge Append (actual rows=10000 loops=1)
          Sort Key: skip_scan_ht.dev, skip_scan_ht."time"
          ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=2500 loops=1)
-               Index Cond: (dev IS NOT NULL)
+               Filter: (COALESCE(dev, '-1'::integer) >= 0)
+               Rows Removed by Filter: 5
          ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=2500 loops=1)
-               Index Cond: (dev IS NOT NULL)
+               Filter: (COALESCE(dev, '-1'::integer) >= 0)
+               Rows Removed by Filter: 5
          ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=2500 loops=1)
-               Index Cond: (dev IS NOT NULL)
+               Filter: (COALESCE(dev, '-1'::integer) >= 0)
+               Rows Removed by Filter: 5
          ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=2500 loops=1)
-               Index Cond: (dev IS NOT NULL)
-(15 rows)
+               Filter: (COALESCE(dev, '-1'::integer) >= 0)
+               Rows Removed by Filter: 5
+(19 rows)
 
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0
 UNION SELECT b.* FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
@@ -3890,13 +3896,17 @@ UNION SELECT b.* FROM
                ->  Merge Append (actual rows=10000 loops=1)
                      Sort Key: skip_scan_ht.dev, skip_scan_ht."time"
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=2500 loops=1)
-                           Index Cond: (dev IS NOT NULL)
+                           Filter: (COALESCE(dev, '-1'::integer) >= 0)
+                           Rows Removed by Filter: 5
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=2500 loops=1)
-                           Index Cond: (dev IS NOT NULL)
+                           Filter: (COALESCE(dev, '-1'::integer) >= 0)
+                           Rows Removed by Filter: 5
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk (actual rows=2500 loops=1)
-                           Index Cond: (dev IS NOT NULL)
+                           Filter: (COALESCE(dev, '-1'::integer) >= 0)
+                           Rows Removed by Filter: 5
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk (actual rows=2500 loops=1)
-                           Index Cond: (dev IS NOT NULL)
+                           Filter: (COALESCE(dev, '-1'::integer) >= 0)
+                           Rows Removed by Filter: 5
          ->  Sort (actual rows=10000 loops=1)
                Sort Key: skip_scan_ht_2.dev, skip_scan_ht_2."time"
                Sort Method: quicksort 
@@ -3931,7 +3941,7 @@ UNION SELECT b.* FROM
                                  ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=227 loops=11)
                                        ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=227 loops=11)
                                              Index Cond: ((dev = skip_scan_ht_1.dev) AND ("time" > NULL::integer))
-(60 rows)
+(64 rows)
 
 -- SkipScan into INSERT
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;

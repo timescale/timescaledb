@@ -132,6 +132,7 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 #endif
 TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
+TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan = true;
 TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier = 1.0;
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
@@ -672,6 +673,17 @@ _guc_init(void)
 							 "Enable SkipScan for compressed chunks",
 							 "Enable SkipScan for distinct inputs over compressed chunks",
 							 &ts_guc_enable_compressed_skip_scan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_multikey_skipscan"),
+							 "Enable SkipScan for multiple distinct keys",
+							 "Enable SkipScan for multiple distinct inputs",
+							 &ts_guc_enable_multikey_skip_scan,
 							 true,
 							 PGC_USERSET,
 							 0,

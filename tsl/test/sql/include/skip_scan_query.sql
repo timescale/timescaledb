@@ -250,9 +250,9 @@ DEALLOCATE prep;
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
 
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0;
 
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0
 UNION SELECT b.* FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;

@@ -60,6 +60,13 @@ typedef struct SkipKeyInfo
 	AttrNumber scankey_attno;
 	int distinct_typ_len;
 	bool distinct_by_val;
+
+	/* InvalidOid for the last skip key, always invalid for one-key SkipScan
+	 * For N-key SkipScan default quals are (sk1 = p1), (sk2 = p2), .. (sk_n > p_n),
+	 * we'll switch to (sk_i > p_i) when no more values for (sk_i+1 > p_i+1),
+	 * so we will store "=" along with ">" comparator for keys 1..N-1.
+	 */
+	Oid eqcomp;
 } SkipKeyInfo;
 
 typedef struct SkipScanPath
@@ -85,8 +92,8 @@ typedef struct DistinctPathInfo
 static int get_idx_key(IndexOptInfo *idxinfo, AttrNumber attno);
 static List *sort_indexquals(IndexOptInfo *indexinfo, List *quals);
 static OpExpr *fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumber scankey_attno);
-static bool build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path,
-							Var *var);
+static bool build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, Var *var,
+							bool build_eqop);
 static List *build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo,
 						   List *top_pathkeys);
 static Var *get_distinct_var(PlannerInfo *root, Expr *tlexpr, IndexPath *index_path,
@@ -152,13 +159,43 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 	skip_plan->methods = &skip_scan_plan_methods;
 	skip_plan->custom_plans = custom_plans;
 
+	/* Setup for SkipScan debug info */
+	StringInfoData debuginfo;
+	RangeTblEntry *indexed_rte = NULL;
+	char *sep = "";
+	if (ts_guc_debug_skip_scan_info)
+	{
+		initStringInfo(&debuginfo);
+		RelOptInfo *indexed_rel = index_path->path.parent;
+		indexed_rte = planner_rt_fetch(indexed_rel->relid, root);
+		Oid indrelid = InvalidOid;
+		if (IsA(plan, IndexScan))
+		{
+			IndexScan *idx_plan = castNode(IndexScan, plan);
+			indrelid = idx_plan->indexid;
+		}
+		else if (IsA(plan, IndexOnlyScan))
+		{
+			IndexOnlyScan *idx_plan = castNode(IndexOnlyScan, plan);
+			indrelid = idx_plan->indexid;
+		}
+		appendStringInfo(&debuginfo, "SkipScan used on %s(", get_rel_name(indrelid));
+	}
+
 	ListCell *lc, *lv;
+	/* List of N-1 equality op Oids for N-key skipscan, stays NIL for one-key skipscan */
+	List *eqcomps = NIL;
+	/* List of N skipkeyinfo Int lists for N-key skipscan */
+	List *skinfos = NIL;
 	forboth (lc, path->skipkeyinfo, lv, path->dvars)
 	{
 		SkipKeyInfo *skinfo = (SkipKeyInfo *) lfirst(lc);
 		Var *dvar = castNode(Var, lfirst(lv));
 		OpExpr *op =
 			fix_indexqual(index_path->indexinfo, skinfo->skip_clause, skinfo->scankey_attno);
+		if (OidIsValid(skinfo->eqcomp))
+			eqcomps = lappend_oid(eqcomps, skinfo->eqcomp);
+
 		if (IsA(plan, IndexScan))
 		{
 			IndexScan *idx_plan = castNode(IndexScan, plan);
@@ -185,31 +222,49 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 
 		SkipKeyNullStatus sknulls;
 		if (skinfo->notnull)
-			sknulls = SKIPKEY_NOT_NULL;
+			sknulls = SK_NOT_NULL;
 		else
 		{
 			bool nulls_first = index_path->indexinfo->nulls_first[skinfo->scankey_attno - 1];
 			if (index_path->indexscandir == BackwardScanDirection)
 				nulls_first = !nulls_first;
-			sknulls = (nulls_first ? SKIPKEY_NULLS_FIRST : SKIPKEY_NULLS_LAST);
+			sknulls = (nulls_first ? SK_NULLS_FIRST : SK_NULLS_LAST);
 		}
-		skip_plan->custom_private = lappend(skip_plan->custom_private,
-											list_make5_int(tle->resno,
-														   skinfo->distinct_by_val,
-														   skinfo->distinct_typ_len,
-														   sknulls,
-														   skinfo->scankey_attno));
+		skinfos = lappend(skinfos,
+						  list_make5_int(tle->resno,
+										 skinfo->distinct_by_val,
+										 skinfo->distinct_typ_len,
+										 sknulls,
+										 skinfo->scankey_attno));
 		/* Debug info about skip key */
 		if (ts_guc_debug_skip_scan_info)
 		{
-			elog(INFO,
-				 "SkipScan index column %d is %s",
-				 skinfo->scankey_attno,
-				 (sknulls == SKIPKEY_NOT_NULL ?
-					  "NOT NULL" :
-					  (sknulls == SKIPKEY_NULLS_FIRST ? "NULLS FIRST" : "NULLS LAST")));
+			char *attname = get_attname(indexed_rte->relid, skinfo->indexed_column_attno, false);
+			appendStringInfo(&debuginfo,
+							 "%s%s %s",
+							 sep,
+							 attname,
+							 (sknulls == SK_NOT_NULL ?
+								  "NOT NULL" :
+								  (sknulls == SK_NULLS_FIRST ? "NULLS FIRST" : "NULLS LAST")));
+			sep = ", ";
 		}
 	}
+
+	if (ts_guc_debug_skip_scan_info)
+	{
+		appendStringInfoString(&debuginfo, ")");
+		elog(INFO, "%s", debuginfo.data);
+	}
+
+	skip_plan->custom_private = lappend(skip_plan->custom_private, skinfos);
+	/* Don't need equality ops for one-key skipscan */
+	if (eqcomps != NIL)
+	{
+		Assert(list_length(skinfos) > 1);
+		skip_plan->custom_private = lappend(skip_plan->custom_private, eqcomps);
+	}
+
 	return &skip_plan->scan.plan;
 }
 
@@ -271,7 +326,6 @@ static List *
 get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 {
 	ListCell *lc;
-	int num_vars = 0;
 	Expr *tlexpr = NULL;
 	List *result = NULL;
 
@@ -285,16 +339,10 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 #if PG16_GE
 		foreach (lc, root->processed_distinctClause)
 		{
-			if (num_vars > 0)
-				return NULL;
-
 			distinct_clause = (SortGroupClause *) lfirst(lc);
 			tlexpr = get_distint_clause_expr(root, distinct_clause);
 			if (tlexpr)
-			{
-				num_vars++;
 				result = lappend(result, tlexpr);
-			}
 			else
 				return NULL;
 		}
@@ -303,9 +351,6 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 		{
 			foreach (lc, root->distinct_pathkeys)
 			{
-				if (num_vars > 0)
-					return NULL;
-
 				PathKey *pathkey = (PathKey *) lfirst(lc);
 				if (pathkey->pk_eclass->ec_sortref)
 				{
@@ -328,10 +373,7 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 
 				tlexpr = get_distint_clause_expr(root, distinct_clause);
 				if (tlexpr)
-				{
-					num_vars++;
 					result = lappend(result, tlexpr);
-				}
 				else
 					return NULL;
 			}
@@ -344,16 +386,10 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 		{
 			foreach (lc, root->parse->distinctClause)
 			{
-				if (num_vars > 0)
-					return NULL;
-
 				distinct_clause = lfirst_node(SortGroupClause, lc);
 				tlexpr = get_distint_clause_expr(root, distinct_clause);
 				if (tlexpr)
-				{
-					num_vars++;
 					result = lappend(result, tlexpr);
-				}
 				else
 					return NULL;
 			}
@@ -446,21 +482,21 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 			{
 				UpperUniquePath *unique = (UpperUniquePath *) lfirst_node(UpperUniquePath, lc);
 
-				/* currently we do not handle DISTINCT on more than one key. To do so,
-				 * we would need to break down the SkipScan into subproblems: first
+				/* We can handle DISTINCT on more than one key if all keys are guaranteed not-nulls.
+				 * To do so, we break down the SkipScan into subproblems: first
 				 * find the minimal tuple then for each prefix find all unique suffix
 				 * tuples. For instance, if we are searching over (int, int), we would
 				 * first find (0, 0) then find (0, N) for all N in the domain, then
 				 * find (1, N), then (2, N), etc
 				 */
-				if (unique->numkeys > 1)
+				if (!ts_guc_enable_multikey_skip_scan && unique->numkeys > 1)
 					return;
 
 #if PG16_GE
 				/* since PG16+ we no longer create UpperUniquePath with 0 numkeys,
 				 * we create LIMIT path instead, so shouldn't be here with 0 numkeys
 				 */
-				Assert(unique->numkeys == 1);
+				Assert(unique->numkeys >= 1);
 #endif
 				dpinfo->unique_path = (Path *) unique;
 				break;
@@ -475,7 +511,7 @@ obtain_upper_distinct_path(PlannerInfo *root, RelOptInfo *output_rel, DistinctPa
 		if (!ts_guc_enable_skip_scan_for_distinct_aggregates)
 			return;
 
-		/* Cannot apply SkipScan to more than one key */
+		/* Cannot apply SkipScan to distinct aggregates with more than one key */
 		if (list_length(root->group_pathkeys) > 1)
 			return;
 
@@ -903,6 +939,8 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 	skip_scan_path->index_path = index_path;
 
 	ListCell *lc;
+	int sk_no = 0;
+	int num_skipkeys = list_length(dpinfo->distinct_expr);
 	foreach (lc, dpinfo->distinct_expr)
 	{
 		Expr *dexpr = (Expr *) lfirst(lc);
@@ -917,13 +955,18 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 		}
 
 		/* build skip qual this may fail if we cannot look up the operator */
-		if (!build_skip_qual(root, skinfo, index_path, dvar))
+		if (!build_skip_qual(root, skinfo, index_path, dvar, (++sk_no) < num_skipkeys))
 		{
 			pfree(skinfo);
 			return NULL;
 		}
 		if (!skinfo->notnull)
 			check_notnull_skipkey(skinfo, child_path, index_path);
+
+		/* Multikey SkipScan is only supported in not-null mode */
+		if (!skinfo->notnull && num_skipkeys > 1)
+			return NULL;
+
 		skip_scan_path->dvars = lappend(skip_scan_path->dvars, dvar);
 		skip_scan_path->skipkeyinfo = lappend(skip_scan_path->skipkeyinfo, skinfo);
 	}
@@ -994,6 +1037,17 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 		}
 	}
 
+	/* Heuristic for accounting for previous key shifts in multikey SkipScan
+	 * In general, we will have (k_1*k_2*..*k_N + k_1*..*k_N-1 + ... + k_1) shifts
+	 * where numdistinct = k_1*k_2*..*k_N and for each key "k_i" we have "k_i+1" distinct values.
+	 *
+	 * Worst case scenario is when k_1 = numdistinct and the rest =1, then we'll have (numdistinct *
+	 * N) shifts. If it's uniform for each key i.e. numdistinct = k^N we'll have less than
+	 * (numdistinct * 2) shifts. We pick something in the middle to avoid evaluating k_i for each
+	 * key.
+	 */
+	int numkeys_multiplier = 1.0 + (num_skipkeys - 1) * 0.5;
+
 	/* We calculate SkipScan cost as ndistinct * startup_cost + (ndistinct/rows) * total_cost
 	 * ndistinct * startup_cost is to account for the rescans we have to do and since startup
 	 * cost for indexes does not include page access cost we add a fraction of the total cost
@@ -1011,7 +1065,7 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 		skip_scan_path->cpath.path.startup_cost = startup;
 		if (indexscan_rows > 1)
 			skip_scan_path->cpath.path.total_cost =
-				ndistinct * startup + (ndistinct / rows) * total;
+				ndistinct * startup * numkeys_multiplier + (ndistinct / rows) * total;
 		else
 			skip_scan_path->cpath.path.total_cost = startup;
 	}
@@ -1037,7 +1091,8 @@ skip_scan_path_create(PlannerInfo *root, Path *child_path, DistinctPathInfo *dpi
 
 		skip_scan_path->cpath.path.startup_cost = startup;
 		if (indexscan_rows > 1)
-			skip_scan_path->cpath.path.total_cost = startup + (total - startup) * ndistinct;
+			skip_scan_path->cpath.path.total_cost =
+				startup + (total - startup) * ndistinct * numkeys_multiplier;
 		else
 			skip_scan_path->cpath.path.total_cost = startup;
 	}
@@ -1161,7 +1216,8 @@ build_subpath(PlannerInfo *root, List *subpaths, DistinctPathInfo *dpinfo, List 
 }
 
 static bool
-build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, Var *var)
+build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, Var *var,
+				bool build_eqop)
 {
 	IndexOptInfo *info = index_path->indexinfo;
 	Oid column_type = exprType((Node *) var);
@@ -1206,6 +1262,13 @@ build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, V
 	Oid comparator =
 		get_opfamily_member(info->sortopfamily[idx_key], column_type, column_type, strategy);
 
+	Oid eqop = InvalidOid;
+	if (build_eqop)
+		eqop = get_opfamily_member(info->sortopfamily[idx_key],
+								   column_type,
+								   column_type,
+								   BTEqualStrategyNumber);
+
 	/* If there is no exact operator match for the column type we have here check
 	 * if we can coerce to the type of the operator class. */
 	if (!OidIsValid(comparator))
@@ -1216,6 +1279,12 @@ build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, V
 				get_opfamily_member(info->sortopfamily[idx_key], opcintype, opcintype, strategy);
 			if (!OidIsValid(comparator))
 				return false;
+
+			if (build_eqop)
+				eqop = get_opfamily_member(info->sortopfamily[idx_key],
+										   opcintype,
+										   opcintype,
+										   BTEqualStrategyNumber);
 			need_coerce = true;
 		}
 		else
@@ -1250,6 +1319,7 @@ build_skip_qual(PlannerInfo *root, SkipKeyInfo *skinfo, IndexPath *index_path, V
 										  InvalidOid /*opcollid*/,
 										  info->indexcollations[idx_key] /*inputcollid*/);
 	set_opfuncid(castNode(OpExpr, comparison_expr));
+	skinfo->eqcomp = (build_eqop ? get_opcode(eqop) : InvalidOid);
 
 	skinfo->skip_clause = make_simple_restrictinfo(root, comparison_expr);
 
