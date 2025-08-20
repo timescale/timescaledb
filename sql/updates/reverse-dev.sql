@@ -169,3 +169,6 @@ $$;
 UPDATE _timescaledb_catalog.compression_settings
 SET segmentby = NULL
 WHERE segmentby = '{}';
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.index_matches;
+

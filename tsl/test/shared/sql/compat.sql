@@ -32,7 +32,6 @@ SELECT pg_typeof(_timescaledb_internal.get_os_info());
 SELECT _timescaledb_internal.get_partition_for_key(NULL::text);
 SELECT _timescaledb_internal.get_partition_hash(NULL::text);
 SELECT _timescaledb_internal.hypertable_local_size(NULL,NULL);
-SELECT _timescaledb_internal.indexes_local_size(NULL,NULL);
 SELECT _timescaledb_internal.interval_to_usec(NULL);
 SELECT _timescaledb_internal.partialize_agg(NULL::text);
 SELECT _timescaledb_internal.policy_compression_check(NULL);

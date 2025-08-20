@@ -5,6 +5,9 @@
 -- This file contains utility functions to get the relation size
 -- of hypertables, chunks, and indexes on hypertables.
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.index_matches(index1 regclass, index2 regclass) RETURNS BOOLEAN
+AS '@MODULE_PATHNAME@', 'ts_index_matches' LANGUAGE C STRICT IMMUTABLE;
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.relation_size(relation REGCLASS)
 RETURNS TABLE (total_size BIGINT, heap_size BIGINT, index_size BIGINT, toast_size BIGINT)
 AS '@MODULE_PATHNAME@', 'ts_relation_size' LANGUAGE C VOLATILE;
@@ -616,90 +619,20 @@ CREATE OR REPLACE FUNCTION @extschema@.hypertable_columnstore_stats (hypertable 
     SET search_path TO pg_catalog, pg_temp;
 
 -------------Get index size for hypertables -------
---schema_name      - schema_name for hypertable index
--- index_name      - index on hyper table
----note that the query matches against the hypertable's schema name as
--- the input is on the hypertable index and not the chunk index.
-CREATE OR REPLACE FUNCTION _timescaledb_functions.indexes_local_size(
-    schema_name_in             NAME,
-    index_name_in              NAME
-)
-RETURNS TABLE ( hypertable_id INTEGER,
-                total_bytes BIGINT )
-LANGUAGE SQL VOLATILE STRICT AS
-$BODY$
-    WITH chunk_index_size (num_bytes) AS (
-        SELECT
-		    COALESCE(sum(pg_relation_size(c.oid)), 0)::bigint
-        FROM
-            pg_class c,
-            pg_namespace n,
-            _timescaledb_catalog.chunk ch,
-            _timescaledb_catalog.chunk_index ci,
-			_timescaledb_catalog.hypertable h
-         WHERE ch.schema_name = n.nspname
-             AND c.relnamespace = n.oid
-             AND c.relname = ci.index_name
-             AND ch.id = ci.chunk_id
-             AND h.id = ci.hypertable_id
-             AND h.schema_name = schema_name_in
-             AND ci.hypertable_index_name = index_name_in
-    ) SELECT
-	      h.id,
-		  -- Add size of index on all chunks + index size on root table
-		  (SELECT num_bytes FROM chunk_index_size) + pg_relation_size(format('%I.%I', schema_name_in, index_name_in)::regclass)::bigint
-	  FROM
-	      pg_class c, pg_index i, _timescaledb_catalog.hypertable h
-	  WHERE
-	     i.indexrelid = format('%I.%I', schema_name_in, index_name_in)::regclass
-		 AND c.oid = i.indrelid
-		 AND h.schema_name = schema_name_in
-		 AND h.table_name = c.relname;
-$BODY$ SET search_path TO pg_catalog, pg_temp;
-
--- Get sizes of indexes on a hypertable
---
--- index_name           - index on hyper table
---
--- Returns:
--- total_bytes          - size of index on disk
 
 CREATE OR REPLACE FUNCTION @extschema@.hypertable_index_size(
     index_name              REGCLASS
 )
 RETURNS BIGINT
-LANGUAGE PLPGSQL VOLATILE STRICT AS
+LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
-DECLARE
-        ht_index_name       NAME;
-        ht_schema_name      NAME;
-        ht_name      NAME;
-        ht_id INTEGER;
-        index_bytes BIGINT;
-BEGIN
-   SELECT c.relname, cl.relname, nsp.nspname
-   INTO ht_index_name, ht_name, ht_schema_name
-   FROM pg_class c, pg_index cind, pg_class cl,
-        pg_namespace nsp, _timescaledb_catalog.hypertable ht
-   WHERE c.oid = cind.indexrelid AND cind.indrelid = cl.oid
-         AND cl.relnamespace = nsp.oid AND c.oid = index_name
-		 AND ht.schema_name = nsp.nspname ANd ht.table_name = cl.relname;
-
-   IF ht_index_name IS NULL THEN
-       RETURN NULL;
-   END IF;
-
-   -- get the local size or size of access node indexes
-   SELECT il.total_bytes
-   INTO index_bytes
-   FROM _timescaledb_functions.indexes_local_size(ht_schema_name, ht_index_name) il;
-
-   IF index_bytes IS NULL THEN
-       index_bytes = 0;
-   END IF;
-
-   RETURN index_bytes;
-END;
+  SELECT
+  	pg_relation_size(ht_i.indexrelid) + COALESCE(sum(pg_relation_size(ch_i.indexrelid)), 0)
+  FROM pg_index ht_i
+  LEFT JOIN pg_inherits ch on ch.inhparent = ht_i.indrelid
+  LEFT JOIN pg_index ch_i on ch_i.indrelid = ch.inhrelid and _timescaledb_functions.index_matches(ht_i.indexrelid, ch_i.indexrelid)
+  WHERE ht_i.indexrelid = index_name
+  GROUP BY ht_i.indexrelid;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -------------End index size for hypertables -------
