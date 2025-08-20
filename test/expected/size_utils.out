@@ -706,7 +706,7 @@ SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
 SELECT * FROM hypertable_index_size('hypersize_time_idx');
  hypertable_index_size 
 -----------------------
-                      
+                  8192
 (1 row)
 
 SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');

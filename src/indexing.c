@@ -502,6 +502,22 @@ ts_indexing_mark_as_invalid(Oid index_id)
 	return ts_indexing_mark_as(index_id, IndexInvalid);
 }
 
+TS_FUNCTION_INFO_V1(ts_index_matches);
+Datum
+ts_index_matches(PG_FUNCTION_ARGS)
+{
+	Oid index1 = PG_GETARG_OID(0);
+	Oid index2 = PG_GETARG_OID(1);
+	bool result;
+
+	if (!OidIsValid(index1) || !OidIsValid(index2))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid index")));
+
+	result = ts_indexing_compare(index1, index2);
+
+	PG_RETURN_BOOL(result);
+}
+
 /* Returns true if the indexes are equivalent */
 bool
 ts_indexing_compare(Oid index1, Oid index2)

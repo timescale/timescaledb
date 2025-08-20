@@ -108,11 +108,6 @@ WARNING:  function _timescaledb_internal.hypertable_local_size(name,name) is dep
  hypertable_local_size 
 (0 rows)
 
-SELECT _timescaledb_internal.indexes_local_size(NULL,NULL);
-WARNING:  function _timescaledb_internal.indexes_local_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- indexes_local_size 
-(0 rows)
-
 SELECT _timescaledb_internal.interval_to_usec(NULL);
 WARNING:  function _timescaledb_internal.interval_to_usec(interval) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  interval_to_usec 
