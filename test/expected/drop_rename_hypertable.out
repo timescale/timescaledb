@@ -200,6 +200,7 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_catalog  | continuous_aggs_hypertable_invalidation_log
  _timescaledb_catalog  | continuous_aggs_invalidation_threshold
  _timescaledb_catalog  | continuous_aggs_materialization_invalidation_log
+ _timescaledb_catalog  | continuous_aggs_materialization_ranges
  _timescaledb_catalog  | continuous_aggs_watermark
  _timescaledb_catalog  | dimension
  _timescaledb_catalog  | dimension_slice
@@ -212,7 +213,7 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_internal | bgw_policy_chunk_stats
  _timescaledb_internal | compressed_chunk_stats
  _timescaledb_internal | hypertable_chunk_local_size
-(25 rows)
+(26 rows)
 
 -- Test that renaming ordinary table works
 CREATE TABLE renametable (foo int);

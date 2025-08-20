@@ -32,7 +32,6 @@
 /*********************
  * utility functions *
  *********************/
-
 static TimeRange internal_time_range_to_time_range(InternalTimeRange internal);
 static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
 												bool *is_infinite_out);
@@ -51,6 +50,8 @@ typedef enum MaterializationPlanType
 	PLAN_TYPE_EXISTS,
 	PLAN_TYPE_MERGE,
 	PLAN_TYPE_MERGE_DELETE,
+	PLAN_TYPE_RANGES_SELECT,
+	PLAN_TYPE_RANGES_DELETE,
 	_MAX_MATERIALIZATION_PLAN_TYPES
 } MaterializationPlanType;
 
@@ -62,7 +63,10 @@ typedef struct MaterializationContext
 	SchemaAndName materialization_table;
 	NameData *time_column_name;
 	TimeRange materialization_range;
+	InternalTimeRange internal_materialization_range;
 	char *chunk_condition;
+	ItemPointer tupleid;
+	int nargs;
 } MaterializationContext;
 
 typedef char *(*MaterializationCreateStatement)(MaterializationContext *context);
@@ -73,6 +77,7 @@ typedef struct MaterializationPlan
 {
 	SPIPlanPtr plan;
 	bool read_only;
+	bool catalog_security_context;
 	int nargs;
 	MaterializationCreateStatement create_statement;
 	MaterializationEmitError emit_error;
@@ -84,11 +89,15 @@ static char *create_materialization_delete_statement(MaterializationContext *con
 static char *create_materialization_exists_statement(MaterializationContext *context);
 static char *create_materialization_merge_statement(MaterializationContext *context);
 static char *create_materialization_merge_delete_statement(MaterializationContext *context);
+static char *create_materialization_ranges_select_statement(MaterializationContext *context);
+static char *create_materialization_ranges_delete_statement(MaterializationContext *context);
 
 static void emit_materialization_insert_error(MaterializationContext *context);
 static void emit_materialization_delete_error(MaterializationContext *context);
 static void emit_materialization_exists_error(MaterializationContext *context);
 static void emit_materialization_merge_error(MaterializationContext *context);
+static void emit_materialization_ranges_select_error(MaterializationContext *context);
+static void emit_materialization_ranges_delete_error(MaterializationContext *context);
 
 static void emit_materialization_insert_progress(MaterializationContext *context,
 												 uint64 rows_processed);
@@ -118,6 +127,16 @@ static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES
 								 .create_statement = create_materialization_merge_delete_statement,
 								 .emit_error = emit_materialization_delete_error,
 								 .emit_progress = emit_materialization_delete_progress },
+	[PLAN_TYPE_RANGES_SELECT] = { .catalog_security_context = true,
+								  .nargs = 3,
+								  .create_statement =
+									  create_materialization_ranges_select_statement,
+								  .emit_error = emit_materialization_ranges_select_error },
+	[PLAN_TYPE_RANGES_DELETE] = { .catalog_security_context = true,
+								  .nargs = 1,
+								  .create_statement =
+									  create_materialization_ranges_delete_statement,
+								  .emit_error = emit_materialization_ranges_delete_error },
 };
 
 static Oid *create_materialization_plan_argtypes(MaterializationContext *context,
@@ -125,8 +144,8 @@ static Oid *create_materialization_plan_argtypes(MaterializationContext *context
 static MaterializationPlan *create_materialization_plan(MaterializationContext *context,
 														MaterializationPlanType plan_type);
 static void create_materialization_plan_args(MaterializationContext *context,
-											 MaterializationPlanType plan_type, int nargs,
-											 Datum **values, char **nulls);
+											 MaterializationPlanType plan_type, Datum **values,
+											 char **nulls);
 static uint64 execute_materialization_plan(MaterializationContext *context,
 										   MaterializationPlanType plan_type);
 static void free_materialization_plan(MaterializationContext *context,
@@ -151,6 +170,7 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 		.materialization_table = materialization_table,
 		.time_column_name = (NameData *) time_column_name,
 		.materialization_range = internal_time_range_to_time_range(materialization_range),
+		.internal_materialization_range = materialization_range,
 		/*
 		 * chunk_id is valid if the materializaion update should be done only on the given chunk.
 		 * This is used currently for refresh on chunk drop only. In other cases, manual
@@ -505,6 +525,39 @@ create_materialization_merge_delete_statement(MaterializationContext *context)
 	return query.data;
 }
 
+static char *
+create_materialization_ranges_select_statement(MaterializationContext *context)
+{
+	StringInfoData query;
+	initStringInfo(&query);
+
+	appendStringInfo(&query,
+					 "SELECT ctid, lowest_modified_value, greatest_modified_value "
+					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
+					 "WHERE materialization_id = $1 "
+					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
+					 "pg_catalog.int8range($2, $3) "
+					 "ORDER BY lowest_modified_value ASC "
+					 "LIMIT 1 "
+					 "FOR UPDATE SKIP LOCKED ");
+
+	return query.data;
+}
+
+static char *
+create_materialization_ranges_delete_statement(MaterializationContext *context)
+{
+	StringInfoData query;
+	initStringInfo(&query);
+
+	appendStringInfo(&query,
+					 "DELETE "
+					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
+					 "WHERE ctid = $1");
+
+	return query.data;
+}
+
 static void
 emit_materialization_insert_error(MaterializationContext *context)
 {
@@ -537,6 +590,24 @@ emit_materialization_merge_error(MaterializationContext *context)
 {
 	elog(ERROR,
 		 "could not merge old values into materialization table \"%s.%s\"",
+		 NameStr(*context->materialization_table.schema),
+		 NameStr(*context->materialization_table.name));
+}
+
+static void
+emit_materialization_ranges_select_error(MaterializationContext *context)
+{
+	elog(ERROR,
+		 "could not select invalidation entries for materialization table \"%s.%s\"",
+		 NameStr(*context->materialization_table.schema),
+		 NameStr(*context->materialization_table.name));
+}
+
+static void
+emit_materialization_ranges_delete_error(MaterializationContext *context)
+{
+	elog(ERROR,
+		 "could not delete invalidation entries for materialization table \"%s.%s\"",
 		 NameStr(*context->materialization_table.schema),
 		 NameStr(*context->materialization_table.name));
 }
@@ -576,8 +647,24 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 									 MaterializationPlanType plan_type, int nargs)
 {
 	Oid *argtypes = (Oid *) palloc(nargs * sizeof(Oid));
-	argtypes[0] = context->materialization_range.type;
-	argtypes[1] = context->materialization_range.type;
+
+	switch (plan_type)
+	{
+		case PLAN_TYPE_RANGES_SELECT: /* 3 arguments */
+			argtypes[0] = INT4OID;	  /* materialization_id */
+			argtypes[1] = INT8OID;
+			argtypes[2] = INT8OID;
+			break;
+
+		case PLAN_TYPE_RANGES_DELETE: /* 1 argument1 */
+			argtypes[0] = TIDOID;	  /* ctid */
+			break;
+
+		default: /* 2 arguments */
+			argtypes[0] = context->materialization_range.type;
+			argtypes[1] = context->materialization_range.type;
+			break;
+	}
 
 	return argtypes;
 }
@@ -611,14 +698,37 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 
 static void
 create_materialization_plan_args(MaterializationContext *context, MaterializationPlanType plan_type,
-								 int nargs, Datum **values, char **nulls)
+								 Datum **values, char **nulls)
 {
-	*values = (Datum *) palloc(nargs * sizeof(Datum));
-	*nulls = (char *) palloc(nargs * sizeof(char));
-	(*values)[0] = context->materialization_range.start;
-	(*values)[1] = context->materialization_range.end;
-	(*nulls)[0] = false;
-	(*nulls)[1] = false;
+	switch (plan_type)
+	{
+		case PLAN_TYPE_RANGES_SELECT: /* 3 arguments */
+		{
+			(*values)[0] = Int32GetDatum(context->cagg->data.mat_hypertable_id);
+			(*values)[1] = Int64GetDatum(context->internal_materialization_range.start);
+			(*values)[2] = Int64GetDatum(context->internal_materialization_range.end);
+			(*nulls)[0] = false;
+			(*nulls)[1] = false;
+			(*nulls)[2] = false;
+			break;
+		}
+
+		case PLAN_TYPE_RANGES_DELETE: /* 1 argument */
+		{
+			(*values)[0] = ItemPointerGetDatum(context->tupleid);
+			(*nulls)[0] = false;
+			break;
+		}
+
+		default: /* 2 arguments */
+		{
+			(*values)[0] = context->materialization_range.start;
+			(*values)[1] = context->materialization_range.end;
+			(*nulls)[0] = false;
+			(*nulls)[1] = false;
+			break;
+		}
+	}
 }
 
 static uint64
@@ -626,11 +736,19 @@ execute_materialization_plan(MaterializationContext *context, MaterializationPla
 {
 	MaterializationPlan *materialization = create_materialization_plan(context, plan_type);
 
-	Datum *values = NULL;
-	char *nulls = NULL;
-	create_materialization_plan_args(context, plan_type, materialization->nargs, &values, &nulls);
+	Datum *values = (Datum *) palloc(materialization->nargs * sizeof(Datum));
+	char *nulls = (char *) palloc(materialization->nargs * sizeof(char));
+
+	create_materialization_plan_args(context, plan_type, &values, &nulls);
+
+	CatalogSecurityContext sec_ctx;
+	if (materialization->catalog_security_context)
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 
 	int res = SPI_execute_plan(materialization->plan, values, nulls, materialization->read_only, 0);
+
+	if (materialization->catalog_security_context)
+		ts_catalog_restore_user(&sec_ctx);
 
 	if (res < 0)
 	{
@@ -640,6 +758,32 @@ execute_materialization_plan(MaterializationContext *context, MaterializationPla
 
 	if (materialization->emit_progress)
 		materialization->emit_progress(context, SPI_processed);
+
+	if (SPI_processed > 0 && plan_type == PLAN_TYPE_RANGES_SELECT)
+	{
+		bool isnull;
+		Datum dat;
+
+		Assert(SPI_processed == 1);
+
+		/* ctid */
+		dat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+		context->tupleid = DatumGetItemPointer(dat);
+
+		/* lowest_modified_value */
+		dat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
+		context->materialization_range.start =
+			internal_to_time_value_or_infinite(DatumGetInt64(dat),
+											   context->materialization_range.type,
+											   NULL);
+
+		/* greatest_modified_value */
+		dat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 3, &isnull);
+		context->materialization_range.end =
+			internal_to_time_value_or_infinite(DatumGetInt64(dat),
+											   context->materialization_range.type,
+											   NULL);
+	}
 
 	pfree(values);
 	pfree(nulls);
@@ -725,31 +869,37 @@ execute_materializations(MaterializationContext *context)
 
 	PG_TRY();
 	{
-		/* MERGE statement is available starting on PG15 and we'll support it only in the new format
-		 * of CAggs and for non-compressed hypertables */
-		if (ts_guc_enable_merge_on_cagg_refresh && PG_VERSION_NUM >= 150000 &&
-			ContinuousAggIsFinalized(context->cagg) &&
-			!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
+		while (execute_materialization_plan(context, PLAN_TYPE_RANGES_SELECT) > 0)
 		{
-			/* Fallback to INSERT materializations if there are no rows to change on it */
-			if (execute_materialization_plan(context, PLAN_TYPE_EXISTS) == 0)
+			/* MERGE statement is supported only in the new format of CAggs and for non-compressed
+			 * hypertables */
+			if (ts_guc_enable_merge_on_cagg_refresh && ContinuousAggIsFinalized(context->cagg) &&
+				!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
 			{
-				elog(DEBUG2,
-					 "no rows to merge on materialization table \"%s.%s\", falling back to INSERT",
-					 NameStr(*context->materialization_table.schema),
-					 NameStr(*context->materialization_table.name));
-				rows_processed = execute_materialization_plan(context, PLAN_TYPE_INSERT);
+				/* Fallback to INSERT materializations if there are no rows to change on it */
+				if (execute_materialization_plan(context, PLAN_TYPE_EXISTS) == 0)
+				{
+					elog(DEBUG2,
+						 "no rows to merge on materialization table \"%s.%s\", falling back to "
+						 "INSERT",
+						 NameStr(*context->materialization_table.schema),
+						 NameStr(*context->materialization_table.name));
+					rows_processed = execute_materialization_plan(context, PLAN_TYPE_INSERT);
+				}
+				else
+				{
+					rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE);
+					rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
+				}
 			}
 			else
 			{
-				rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE);
-				rows_processed += execute_materialization_plan(context, PLAN_TYPE_MERGE_DELETE);
+				rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
+				rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
 			}
-		}
-		else
-		{
-			rows_processed += execute_materialization_plan(context, PLAN_TYPE_DELETE);
-			rows_processed += execute_materialization_plan(context, PLAN_TYPE_INSERT);
+
+			/* Delete the invalidation entry */
+			rows_processed += execute_materialization_plan(context, PLAN_TYPE_RANGES_DELETE);
 		}
 
 		/* Free all cached plans */

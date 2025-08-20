@@ -229,3 +229,26 @@ GRANT SELECT ON TABLE _timescaledb_catalog.chunk_index TO PUBLIC;
 DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_status_text(regclass);
 DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_status_text(int);
 
+DO
+$$
+DECLARE
+  caggs_to_refresh TEXT;
+BEGIN
+  IF EXISTS (SELECT FROM _timescaledb_catalog.continuous_aggs_materialization_ranges LIMIT 1) THEN
+    SELECT string_agg(format('%I.%I', user_view_schema, user_view_name), ', ' ORDER BY user_view_schema, user_view_name)
+    INTO caggs_to_refresh
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+    JOIN _timescaledb_catalog.continuous_agg ON materialization_id = mat_hypertable_id;
+
+    RAISE EXCEPTION 'cannot downgrade because there are pending CAgg refreshes'
+      USING
+        ERRCODE = 'object_not_in_prerequisite_state',
+        DETAIL = format('Please refresh the CAggs before downgrade: %s.', caggs_to_refresh);
+  END IF;
+END;
+$$;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges;
+
+DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_materialization_ranges;
+

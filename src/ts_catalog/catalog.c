@@ -85,6 +85,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE_NAME,
 	},
+	[CONTINUOUS_AGGS_MATERIALIZATION_RANGES] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_MATERIALIZATION_RANGES_TABLE_NAME,
+	},
 	[COMPRESSION_SETTINGS] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = COMPRESSION_SETTINGS_TABLE_NAME,
@@ -225,6 +229,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_INDEX,
 		.names = (char *[]) {
 			[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX] = "continuous_aggs_materialization_invalidation_log_idx",
+		},
+	},
+	[CONTINUOUS_AGGS_MATERIALIZATION_RANGES] = {
+		.length = _MAX_CONTINUOUS_AGGS_MATERIALIZATION_RANGES_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX] = "continuous_aggs_materialization_ranges_idx",
 		},
 	},
 	[CONTINUOUS_AGGS_WATERMARK] = {
