@@ -213,11 +213,11 @@ m["include"].append(
     )
 )
 
-# test building against PG18beta2
+# test building against PG18beta3
 m["include"].append(
     build_debug_config(
         {
-            "pg": "18beta2",
+            "pg": "18beta3",
             "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
             "tsdb_build_args": "-DEXPERIMENTAL=ON -DWARNINGS_AS_ERRORS=OFF",
             "installcheck": False,
