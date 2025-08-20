@@ -20,6 +20,7 @@
 
 #include "bgw_policy/policies_v2.h"
 #include "continuous_aggs/invalidation_multi.h"
+#include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "guc.h"
@@ -54,10 +55,6 @@ static InternalTimeRange
 compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 										  const InternalTimeRange *const refresh_window,
 										  const int64 bucket_width);
-static InternalTimeRange
-compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
-											  const InternalTimeRange *const refresh_window,
-											  const ContinuousAggBucketFunction *bucket_function);
 static void continuous_agg_refresh_init(ContinuousAggRefreshState *refresh,
 										const ContinuousAgg *cagg,
 										const InternalTimeRange *refresh_window);
@@ -329,7 +326,7 @@ fill_bucket_offset_origin(const ContinuousAgg *cagg, const InternalTimeRange *co
  * The circumscribed behaviour is also used for a refresh on drop, when the refresh is called during
  * dropping chunks manually or as part of retention policy.
  */
-static InternalTimeRange
+InternalTimeRange
 compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 											  const InternalTimeRange *const refresh_window,
 											  const ContinuousAggBucketFunction *bucket_function)
@@ -690,20 +687,25 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
 
-	/* Lock the continuous aggregate's materialized hypertable to protect
-	 * against concurrent refreshes. Only concurrent reads will be
-	 * allowed. This is a heavy lock that serializes all refreshes on the same
-	 * continuous aggregate. We might want to consider relaxing this in the
-	 * future, e.g., we'd like to at least allow concurrent refreshes on the
-	 * same continuous aggregate when they don't have overlapping refresh
-	 * windows.
+	/* Lock the continuous aggregate's materialized hypertable to protect against
+	 * concurrent invalidation log processing.
+	 *
+	 * It will produce rows in the `continuous_aggs_materialization_ranges` table
+	 * to be materialized later either serially or in parallel for non-overlap
+	 * refresh ranges.
+	 *
+	 * This is supposed to be a short transaction and in the future we can consider
+	 * relaxing this lock.
 	 */
-	LockRelationOid(hyper_relid, RowExclusiveLock);
+	LockRelationOid(hyper_relid, ExclusiveLock);
 	invalidations = invalidation_process_cagg_log(cagg,
 												  refresh_window,
 												  ts_guc_cagg_max_individual_materializations,
 												  context,
 												  force);
+	SPI_commit_and_chain();
+
+	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
 
 	if (invalidations != NULL)
 	{
@@ -995,8 +997,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		{
 			elog(LOG,
 				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
-				 "single "
-				 "batch processing",
+				 "single batch processing",
 				 NameStr(cagg->data.user_view_schema),
 				 NameStr(cagg->data.user_view_name));
 			return NIL;

@@ -155,11 +155,11 @@ teardown {
 session "WP"
 step "WP_enable"
 {
-    SELECT debug_waitpoint_enable('clear_cagg_invalidations_for_refresh_lock');
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
 }
 step "WP_release"
 {
-    SELECT debug_waitpoint_release('clear_cagg_invalidations_for_refresh_lock');
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
 }
 
 # Session to refresh the cond_10 continuous aggregate
@@ -233,6 +233,23 @@ setup
 step "R5_refresh"
 {
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
+}
+
+# Check for the materialization ranges
+session "R6"
+step "R6_materialization_ranges"
+{
+    SELECT
+        c.user_view_name,
+        m.lowest_modified_value,
+        m.greatest_modified_value
+    FROM
+        _timescaledb_catalog.continuous_aggs_materialization_ranges m
+        JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
+    WHERE
+        c.user_view_name = 'cond_10'
+    ORDER BY
+        1, 2, 3;
 }
 
 # Define a number of lock sessions to simulate concurrent refreshes
@@ -370,4 +387,4 @@ permutation "R1_refresh" "R12_refresh"
 
 # CAgg invalidation logs processing skipping locks due to
 # the concurrent execution
-permutation "WP_enable" "R1_refresh"("WP_enable") "R5_refresh"("WP_enable") "WP_release" "S1_select" "R3_refresh" "S1_select"
+permutation "WP_enable" "R1_refresh"("WP_enable") "R6_materialization_ranges" "R5_refresh"("WP_enable") "R6_materialization_ranges" "WP_release" "R6_materialization_ranges" "S1_select"
