@@ -39,3 +39,6 @@ wal_level = logical
 # in order to test failures starting bgworkers.
 timescaledb.max_background_workers=26
 timescaledb.enable_compression_ratio_warnings=false
+
+# for debugging purposes
+backtrace_functions = 'simple_table_tuple_delete,simple_table_tuple_delete,simple_heap_update,simple_heap_delete'

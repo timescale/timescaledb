@@ -172,3 +172,15 @@ WHERE segmentby = '{}';
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.index_matches;
 
+DO
+$$
+BEGIN
+  IF EXISTS (SELECT FROM _timescaledb_catalog.continuous_aggs_materialization_queue LIMIT 1) THEN
+    RAISE EXCEPTION 'Cannot downgrade because there are pending CAgg refreshes. Please refresh the caggs before downgrade.';
+  END IF;
+END;
+$$;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_queue;
+
+DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_materialization_queue;

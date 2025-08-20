@@ -48,6 +48,7 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+	CONTINUOUS_AGGS_MATERIALIZATION_QUEUE,
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
@@ -1122,6 +1123,43 @@ typedef enum Anum_continuous_aggs_materialization_invalidation_log_idx
 
 #define Natts_continuous_aggs_materialization_invalidation_log_idx                                 \
 	(_Anum_continuous_aggs_materialization_invalidation_log_idx_max - 1)
+
+/****** CONTINUOUS_AGGS_MATERIALIZATION_QUEUE_TABLE definitions*/
+#define CONTINUOUS_AGGS_MATERIALIZATION_QUEUE_TABLE_NAME "continuous_aggs_materialization_queue"
+typedef enum Anum_continuous_aggs_materialization_queue
+{
+	Anum_continuous_aggs_materialization_queue_materialization_id = 1,
+	Anum_continuous_aggs_materialization_queue_lowest_modified_value,
+	Anum_continuous_aggs_materialization_queue_greatest_modified_value,
+	_Anum_continuous_aggs_materialization_queue_max,
+} Anum_continuous_aggs_materialization_queue;
+
+#define Natts_continuous_aggs_materialization_queue                                                \
+	(_Anum_continuous_aggs_materialization_queue_max - 1)
+
+typedef struct FormData_continuous_aggs_materialization_queue
+{
+	int32 materialization_id;
+	int64 lowest_modified_value;
+	int64 greatest_modified_value;
+} FormData_continuous_aggs_materialization_queue;
+
+typedef FormData_continuous_aggs_materialization_queue *Form_continuous_aggs_materialization_queue;
+
+enum
+{
+	CONTINUOUS_AGGS_MATERIALIZATION_QUEUE_IDX = 0,
+	_MAX_CONTINUOUS_AGGS_MATERIALIZATION_QUEUE_INDEX,
+};
+typedef enum Anum_continuous_aggs_materialization_queue_idx
+{
+	Anum_continuous_aggs_materialization_queue_idx_materialization_id = 1,
+	Anum_continuous_aggs_materialization_queue_idx_lowest_modified_value,
+	_Anum_continuous_aggs_materialization_queue_idx_max,
+} Anum_continuous_aggs_materialization_queue_idx;
+
+#define Natts_continuous_aggs_materialization_queue_idx                                            \
+	(_Anum_continuous_aggs_materialization_queue_idx_max - 1)
 
 /****** CONTINUOUS_AGGS_WATERMARK_TABLE definitions*/
 #define CONTINUOUS_AGGS_WATERMARK_TABLE_NAME "continuous_aggs_watermark"

@@ -241,3 +241,18 @@ WHERE cs.orderby IS NOT NULL AND cardinality(cs.orderby) > 0;
 DROP FUNCTION IF EXISTS _timescaledb_internal.indexes_local_size;
 DROP FUNCTION IF EXISTS _timescaledb_functions.indexes_local_size;
 
+-- cagg materialization queue
+CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_queue (
+  materialization_id integer,
+  lowest_modified_value bigint NOT NULL,
+  greatest_modified_value bigint NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_materialization_queue_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_queue', '');
+
+CREATE INDEX continuous_aggs_materialization_queue_idx ON _timescaledb_catalog.continuous_aggs_materialization_queue (materialization_id, lowest_modified_value ASC);
+
+GRANT SELECT ON TABLE _timescaledb_catalog.continuous_aggs_materialization_queue TO PUBLIC;
+

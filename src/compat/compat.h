@@ -845,3 +845,19 @@ initReadOnlyStringInfo(StringInfo str, char *data, int len)
 						 tmfd,                                                                     \
 						 is_merge_delete)
 #endif
+
+/* PG16 consolidates ItemPointer to datum functions so backported it to PG15
+ * https://github.com/postgres/postgres/commit/bd944884e92a */
+#if PG16_LT
+static inline ItemPointer
+DatumGetItemPointer(Datum X)
+{
+	return (ItemPointer) DatumGetPointer(X);
+}
+
+static inline Datum
+ItemPointerGetDatum(const ItemPointerData *X)
+{
+	return PointerGetDatum(X);
+}
+#endif
