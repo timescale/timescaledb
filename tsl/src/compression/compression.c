@@ -2236,6 +2236,11 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 	size_t input_len = strlen(input);
 	int decoded_len;
 #if PG18_GE
+	/* With version 18 pointer type changed to uint8
+	 * for better readability.
+	 *
+	 * https://github.com/postgres/postgres/commit/b28c59a6
+	 */
 	uint8 *decoded;
 #else
 	char *decoded;
@@ -2272,6 +2277,11 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 	bytea *bytes = DatumGetByteaP(bytes_data);
 	int raw_len = VARSIZE_ANY_EXHDR(bytes);
 #if PG18_GE
+	/* With version 18 pointer type changed to uint8
+	 * for better readability.
+	 *
+	 * https://github.com/postgres/postgres/commit/b28c59a6
+	 */
 	const uint8 *raw_data = (uint8 *) VARDATA(bytes);
 #else
 	const char *raw_data = VARDATA(bytes);
