@@ -421,7 +421,7 @@ ALTER TABLE :drop_chunks_mat_table_u SET SCHEMA public;
 ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET client_min_messages TO NOTICE;
-SELECT * FROM new_name;
+SELECT * FROM new_name ORDER BY 1;
  time_bucket | count 
 -------------+-------
            0 |     3
