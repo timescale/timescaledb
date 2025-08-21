@@ -940,8 +940,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		{
 			elog(LOG,
 				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
-				 "single "
-				 "batch processing",
+				 "single batch processing",
 				 NameStr(cagg->data.user_view_schema),
 				 NameStr(cagg->data.user_view_name));
 			return NIL;
