@@ -553,6 +553,23 @@ ts_indexing_compare(Oid index1, Oid index2)
 								   indexrel2->rd_opfamily,
 								   attmap);
 
+	if (result)
+	{
+		/*
+		 * CompareIndexInfo does not compare indoption, which means it will
+		 * consider two indexes with different ASC/DESC or NULLS FIRST/LAST
+		 * options as equivalent.
+		 */
+		for (int i = 0; i < IndexRelationGetNumberOfKeyAttributes(indexrel1); i++)
+		{
+			if (indexrel1->rd_indoption[i] != indexrel2->rd_indoption[i])
+			{
+				result = false;
+				break;
+			}
+		}
+	}
+
 	index_close(indexrel1, NoLock);
 	index_close(indexrel2, NoLock);
 	table_close(rel1, NoLock);
