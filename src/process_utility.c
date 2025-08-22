@@ -1534,28 +1534,37 @@ process_drop_hypertable_index(ProcessUtilityArgs *args, DropStmt *stmt)
 	{
 		List *object = lfirst(lc);
 		RangeVar *relation = makeRangeVarFromNameList(object);
-		Oid relid;
+		Oid ht_relid, index_relid;
 		Hypertable *ht;
 
 		if (NULL == relation)
 			continue;
 
-		relid = RangeVarGetRelid(relation, NoLock, true);
-		if (!OidIsValid(relid))
+		index_relid = RangeVarGetRelid(relation, NoLock, true);
+		if (!OidIsValid(index_relid))
 			continue;
 
-		relid = IndexGetRelation(relid, true);
-		if (!OidIsValid(relid))
+		ht_relid = IndexGetRelation(index_relid, true);
+		if (!OidIsValid(ht_relid))
 			continue;
 
-		ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
-		if (NULL != ht)
+		ht = ts_hypertable_cache_get_entry(hcache, ht_relid, CACHE_FLAG_MISSING_OK);
+		if (ht)
 		{
-			if (list_length(stmt->objects) != 1)
-				elog(ERROR, "cannot drop a hypertable index along with other objects");
+			List *chunk_indexes = ts_chunk_index_get_mappings(ht, index_relid);
+			ListCell *lc_index;
+			foreach (lc_index, chunk_indexes)
+			{
+				ChunkIndexMapping *mapping = lfirst(lc_index);
+				Oid chunk_relid = mapping->indexoid;
+				char *schema_name = get_namespace_name(get_rel_namespace(chunk_relid));
+				char *index_name = get_rel_name(chunk_relid);
+				stmt->objects =
+					lappend(stmt->objects,
+							list_make2(makeString(schema_name), makeString(index_name)));
+			}
 		}
 	}
-
 	ts_cache_release(&hcache);
 }
 
@@ -2239,7 +2248,7 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 
 	ht = ts_hypertable_cache_get_entry(hcache, tablerelid, CACHE_FLAG_MISSING_OK);
 
-	if (NULL != ht)
+	if (ht)
 	{
 		ts_chunk_index_rename_parent(ht, relid, stmt->newname);
 	}
@@ -2247,7 +2256,7 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(tablerelid, false);
 
-		if (NULL != chunk)
+		if (chunk)
 			ts_chunk_index_rename(chunk, relid, stmt->newname);
 	}
 }
