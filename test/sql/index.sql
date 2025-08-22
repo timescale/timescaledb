@@ -91,8 +91,8 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name, hypertable_index_name;
 
 -- Create index with long name to see how this is handled on chunks
-CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates ON index_test (time, temp);
-CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates_2 ON index_test (time, temp);
+CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates ON index_test (time DESC, temp);
+CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates_2 ON index_test (time DESC, temp DESC);
 
 SELECT * FROM test.show_indexes('index_test');
 SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
