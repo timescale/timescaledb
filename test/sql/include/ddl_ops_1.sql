@@ -48,7 +48,8 @@ VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
 
-SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id, hypertable_index_name, chunk_id;
+SELECT * FROM test.show_indexesp('%.%');
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper_%');
 
 --expect error cases
 \set ON_ERROR_STOP 0

@@ -11,7 +11,6 @@ SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_comp
 \d+ _timescaledb_catalog.dimension
 \d+ _timescaledb_catalog.dimension_slice
 \d+ _timescaledb_catalog.chunk_constraint
-\d+ _timescaledb_catalog.chunk_index
 \d+ _timescaledb_catalog.tablespace
 
 -- since we forgot to add bool and null compression with 2.19.0 to the preinstall
@@ -125,8 +124,6 @@ SELECT chunk_constraint.* FROM _timescaledb_catalog.chunk_constraint
 JOIN _timescaledb_catalog.chunk ON chunk.id = chunk_constraint.chunk_id
 WHERE NOT chunk.dropped
 ORDER BY chunk_constraint.chunk_id, chunk_constraint.dimension_slice_id, chunk_constraint.constraint_name;
-
-SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
 
 -- Show attnum of all regclass objects belonging to our extension
 -- if those are not the same between fresh install/update our update scripts are broken

@@ -3,10 +3,9 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 CREATE OR REPLACE FUNCTION reorder_called(chunk_id INT) RETURNS BOOL AS $$
   SELECT indisclustered
-  FROM _timescaledb_catalog.chunk_index ci
-    INNER JOIN pg_class pgc ON ci.index_name = pgc.relname
-    INNER JOIN pg_index pgi ON pgc.oid = pgi.indexrelid
-  WHERE chunk_id = $1;
+  FROM _timescaledb_catalog.chunk ch
+  JOIN pg_index i on indrelid = format('%I.%I',ch.schema_name,ch.table_name)::regclass
+  WHERE ch.id = chunk_id;
 $$ LANGUAGE SQL;
 CREATE TABLE test_table(time timestamptz, chunk_id int);
 SELECT create_hypertable('test_table', 'time');

@@ -207,44 +207,7 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (1 row)
 
--- Show all index mappings
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                         index_name                         | hypertable_id |           hypertable_index_name           
-----------+------------------------------------------------------------+---------------+-------------------------------------------
-        1 | _hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        2 | _hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        3 | _hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        4 | _hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        1 | 1_1_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
-        2 | 2_2_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
-        3 | 3_3_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
-        4 | 4_4_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
-(32 rows)
-
+-- Show all constraints
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
  chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name     
 ----------+--------------------+---------------------------------------+-----------------------------------
@@ -468,43 +431,6 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 ---------------------+-----------+----------+----------+----------+-------------
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (1 row)
-
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                         index_name                         | hypertable_id |           hypertable_index_name           
-----------+------------------------------------------------------------+---------------+-------------------------------------------
-        1 | _hyper_1_1_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        1 | _hyper_1_1_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        2 | _hyper_1_2_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        2 | _hyper_1_2_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        3 | _hyper_1_3_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        3 | _hyper_1_3_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        4 | _hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx   |             1 | two_Partitions_device_id_timeCustom_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx    |             1 | two_Partitions_timeCustom_series_0_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx    |             1 | two_Partitions_timeCustom_series_1_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_2_idx    |             1 | two_Partitions_timeCustom_series_2_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx |             1 | two_Partitions_timeCustom_series_bool_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_device_id_idx   |             1 | two_Partitions_timeCustom_device_id_idx
-        4 | _hyper_1_4_chunk_two_Partitions_timeCustom_idx             |             1 | two_Partitions_timeCustom_idx
-        1 | 1_1_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
-        2 | 2_2_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
-        3 | 3_3_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
-        4 | 4_4_timecustom_device_id_series_2_key                      |             1 | timecustom_device_id_series_2_key
-(32 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
  chunk_id | dimension_slice_id |            constraint_name            |    hypertable_constraint_name     

@@ -60,32 +60,40 @@ INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, s
 VALUES(1257894000000000000, 'dev1', 30, 70, 1, 2, 3, 100);
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000001, 'dev1', 30, 70, 1, 2, 3, 100);
-SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY hypertable_id, hypertable_index_name, chunk_id;
- chunk_id |                    index_name                    | hypertable_id |      hypertable_index_name      
-----------+--------------------------------------------------+---------------+---------------------------------
-        1 | _hyper_1_1_chunk_Hypertable_1_Device_id_time_idx |             1 | Hypertable_1_Device_id_time_idx
-        1 | _hyper_1_1_chunk_Hypertable_1_time_Device_id_idx |             1 | Hypertable_1_time_Device_id_idx
-        1 | _hyper_1_1_chunk_Hypertable_1_time_idx           |             1 | Hypertable_1_time_idx
-        1 | _hyper_1_1_chunk_Hypertable_1_time_temp_c_idx    |             1 | Hypertable_1_time_temp_c_idx
-        1 | _hyper_1_1_chunk_Unique1                         |             1 | Unique1
-        1 | _hyper_1_1_chunk_ind_humidity                    |             1 | ind_humidity
-        1 | _hyper_1_1_chunk_ind_sensor_1                    |             1 | ind_sensor_1
-        2 | _hyper_2_2_chunk_Hypertable_1_time_Device_id_idx |             2 | Hypertable_1_time_Device_id_idx
-        2 | _hyper_2_2_chunk_Hypertable_1_time_idx           |             2 | Hypertable_1_time_idx
-        2 | _hyper_2_2_chunk_Unique1                         |             2 | Unique1
+SELECT * FROM test.show_indexesp('%.%');
+             Table             |                      Index                       |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
+-------------------------------+--------------------------------------------------+------------------+------+--------+---------+-----------+------------
+ "customSchema"."Hypertable_1" | "customSchema"."Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1" | "customSchema"."Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1" | "customSchema"."Unique1"                         | {time}           |      | t      | f       | f         | 
+(3 rows)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper_%');
+                 Table                  |                                  Index                                   |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+--------------------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_Hypertable_1_Device_id_time_idx" | {Device_id,time} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_Hypertable_1_time_temp_c_idx"    | {time,temp_c}    |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_ind_humidity                      | {time,humidity}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_ind_sensor_1                      | {time,sensor_1}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_Unique1"                         | {time,Device_id} |      | t      | f       | f         | 
+ _timescaledb_internal._hyper_2_2_chunk | _timescaledb_internal."_hyper_2_2_chunk_Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_2_2_chunk | _timescaledb_internal."_hyper_2_2_chunk_Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_2_2_chunk | _timescaledb_internal."_hyper_2_2_chunk_Unique1"                         | {time}           |      | t      | f       | f         | 
 (10 rows)
 
 --expect error cases
 \set ON_ERROR_STOP 0
 INSERT INTO "customSchema"."Hypertable_1"(time, "Device_id", temp_c, humidity, sensor_1, sensor_2, sensor_3, sensor_4)
 VALUES(1257894000000000000, 'dev1', 31, 71, 72, 4, 1, 102);
-psql:include/ddl_ops_1.sql:56: ERROR:  duplicate key value violates unique constraint "_hyper_2_2_chunk_Unique1"
+psql:include/ddl_ops_1.sql:57: ERROR:  duplicate key value violates unique constraint "_hyper_2_2_chunk_Unique1"
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" ("Device_id");
-psql:include/ddl_ops_1.sql:57: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+psql:include/ddl_ops_1.sql:58: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (time);
-psql:include/ddl_ops_1.sql:58: ERROR:  cannot create a unique index without the column "Device_id" (used in partitioning)
+psql:include/ddl_ops_1.sql:59: ERROR:  cannot create a unique index without the column "Device_id" (used in partitioning)
 CREATE UNIQUE INDEX "Unique2" ON PUBLIC."Hypertable_1" (sensor_1);
-psql:include/ddl_ops_1.sql:59: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
+psql:include/ddl_ops_1.sql:60: ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 UPDATE ONLY PUBLIC."Hypertable_1" SET time = 0 WHERE TRUE;
 DELETE FROM ONLY PUBLIC."Hypertable_1" WHERE "Device_id" = 'dev1';
 \set ON_ERROR_STOP 1
@@ -108,7 +116,7 @@ SELECT * FROM test.show_columns('my_ht');
 -- Should error when adding again
 \set ON_ERROR_STOP 0
 ALTER TABLE my_ht ADD COLUMN val2 integer;
-psql:include/ddl_ops_1.sql:72: ERROR:  column "val2" of relation "my_ht" already exists
+psql:include/ddl_ops_1.sql:73: ERROR:  column "val2" of relation "my_ht" already exists
 \set ON_ERROR_STOP 1
 -- Should create
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
@@ -123,7 +131,7 @@ SELECT * FROM test.show_columns('my_ht');
 
 -- Should skip and not error
 ALTER TABLE my_ht ADD COLUMN IF NOT EXISTS val3 integer;
-psql:include/ddl_ops_1.sql:80: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
+psql:include/ddl_ops_1.sql:81: NOTICE:  column "val3" of relation "my_ht" already exists, skipping
 SELECT * FROM test.show_columns('my_ht');
  Column |  Type   | NotNull 
 --------+---------+---------
@@ -145,7 +153,7 @@ SELECT * FROM test.show_columns('my_ht');
 
 -- Should skip and not error
 ALTER TABLE my_ht DROP COLUMN IF EXISTS val3;
-psql:include/ddl_ops_1.sql:88: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
+psql:include/ddl_ops_1.sql:89: NOTICE:  column "val3" of relation "my_ht" does not exist, skipping
 SELECT * FROM test.show_columns('my_ht');
  Column |  Type   | NotNull 
 --------+---------+---------
@@ -330,17 +338,25 @@ FOR EACH STATEMENT EXECUTE FUNCTION empty_trigger_func();
 ALTER TABLE PUBLIC."Hypertable_1" ALTER COLUMN sensor_2_renamed SET DATA TYPE int;
 ALTER INDEX "ind_humidity" RENAME TO "ind_humdity2";
 -- Change should be reflected here
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                    index_name                    | hypertable_id |      hypertable_index_name      
-----------+--------------------------------------------------+---------------+---------------------------------
-        1 | _hyper_1_1_chunk_Hypertable_1_time_Device_id_idx |             1 | Hypertable_1_time_Device_id_idx
-        1 | _hyper_1_1_chunk_Hypertable_1_time_idx           |             1 | Hypertable_1_time_idx
-        1 | _hyper_1_1_chunk_Hypertable_1_Device_id_time_idx |             1 | Hypertable_1_Device_id_time_idx
-        1 | _hyper_1_1_chunk_Unique1                         |             1 | Unique1
-        2 | _hyper_2_2_chunk_Hypertable_1_time_Device_id_idx |             2 | Hypertable_1_time_Device_id_idx
-        2 | _hyper_2_2_chunk_Hypertable_1_time_idx           |             2 | Hypertable_1_time_idx
-        2 | _hyper_2_2_chunk_Unique1                         |             2 | Unique1
-        1 | _hyper_1_1_chunk_ind_humdity2                    |             1 | ind_humdity2
+SELECT * FROM test.show_indexesp('%.%');
+             Table             |                      Index                       |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
+-------------------------------+--------------------------------------------------+------------------+------+--------+---------+-----------+------------
+ "customSchema"."Hypertable_1" | "customSchema"."Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1" | "customSchema"."Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ "customSchema"."Hypertable_1" | "customSchema"."Unique1"                         | {time}           |      | t      | f       | f         | 
+(3 rows)
+
+SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%');
+                 Table                  |                                  Index                                   |     Columns      | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------+--------------------------------------------------------------------------+------------------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_Hypertable_1_Device_id_time_idx" | {Device_id,time} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk_ind_humdity2                      | {time,humidity}  |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk | _timescaledb_internal."_hyper_1_1_chunk_Unique1"                         | {time,Device_id} |      | t      | f       | f         | 
+ _timescaledb_internal._hyper_2_2_chunk | _timescaledb_internal."_hyper_2_2_chunk_Hypertable_1_time_Device_id_idx" | {time,Device_id} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_2_2_chunk | _timescaledb_internal."_hyper_2_2_chunk_Hypertable_1_time_idx"           | {time}           |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_2_2_chunk | _timescaledb_internal."_hyper_2_2_chunk_Unique1"                         | {time}           |      | t      | f       | f         | 
 (8 rows)
 
 --create column with same name as previously renamed one
