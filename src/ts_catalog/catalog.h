@@ -37,7 +37,6 @@ typedef enum CatalogTable
 	DIMENSION_SLICE,
 	CHUNK,
 	CHUNK_CONSTRAINT,
-	CHUNK_INDEX,
 	TABLESPACE,
 	BGW_JOB,
 	BGW_JOB_STAT,
@@ -485,56 +484,6 @@ enum Anum_chunk_constraint_chunk_id_constraint_name_idx
 	Anum_chunk_constraint_chunk_id_constraint_name_idx_chunk_id = 1,
 	Anum_chunk_constraint_chunk_id_constraint_name_idx_constraint_name,
 	_Anum_chunk_constraint_chunk_id_constraint_name_idx_max,
-};
-
-/************************************
- *
- * Chunk index table definitions
- *
- ************************************/
-
-#define CHUNK_INDEX_TABLE_NAME "chunk_index"
-
-enum Anum_chunk_index
-{
-	Anum_chunk_index_chunk_id = 1,
-	Anum_chunk_index_index_name,
-	Anum_chunk_index_hypertable_id,
-	Anum_chunk_index_hypertable_index_name,
-	_Anum_chunk_index_max,
-};
-
-#define Natts_chunk_index (_Anum_chunk_index_max - 1)
-
-typedef struct FormData_chunk_index
-{
-	int32 chunk_id;
-	NameData index_name;
-	int32 hypertable_id;
-	NameData hypertable_index_name;
-} FormData_chunk_index;
-
-typedef FormData_chunk_index *Form_chunk_index;
-
-enum
-{
-	CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX = 0,
-	CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-	_MAX_CHUNK_INDEX_INDEX,
-};
-
-enum Anum_chunk_index_chunk_id_index_name_idx
-{
-	Anum_chunk_index_chunk_id_index_name_idx_chunk_id = 1,
-	Anum_chunk_index_chunk_id_index_name_idx_index_name,
-	_Anum_chunk_index_chunk_id_index_name_idx_max,
-};
-
-enum Anum_chunk_index_hypertable_id_hypertable_index_name_idx
-{
-	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id = 1,
-	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
-	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_max,
 };
 
 /************************************

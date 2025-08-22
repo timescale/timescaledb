@@ -2247,17 +2247,9 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 		return;
 
 	ht = ts_hypertable_cache_get_entry(hcache, tablerelid, CACHE_FLAG_MISSING_OK);
-
 	if (ht)
 	{
-		ts_chunk_index_rename_parent(ht, relid, stmt->newname);
-	}
-	else
-	{
-		Chunk *chunk = ts_chunk_get_by_relid(tablerelid, false);
-
-		if (chunk)
-			ts_chunk_index_rename(chunk, relid, stmt->newname);
+		ts_chunk_index_rename(ht, relid, stmt->newname);
 	}
 }
 
@@ -5219,9 +5211,7 @@ process_drop_constraint_on_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 
 	/* drop both metadata and table; sql_drop won't be called recursively */
 	ts_chunk_constraint_delete_by_hypertable_constraint_name(chunk->fd.id,
-															 hypertable_constraint_name,
-															 true,
-															 true);
+															 hypertable_constraint_name);
 }
 
 static void
@@ -5253,20 +5243,8 @@ process_drop_table_constraint(EventTriggerDropObject *obj)
 		bool found = ts_chunk_get_id(constraint->schema, constraint->table, &chunk_id, true);
 
 		if (found)
-			ts_chunk_constraint_delete_by_constraint_name(chunk_id,
-														  constraint->constraint_name,
-														  true,
-														  false);
+			ts_chunk_constraint_delete_by_constraint_name(chunk_id, constraint->constraint_name);
 	}
-}
-
-static void
-process_drop_index(EventTriggerDropObject *obj)
-{
-	EventTriggerDropRelation *index = (EventTriggerDropRelation *) obj;
-
-	Assert(obj->type == EVENT_TRIGGER_DROP_INDEX);
-	ts_chunk_index_delete_by_name(index->schema, index->name, true);
 }
 
 static void
@@ -5354,9 +5332,6 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 		case EVENT_TRIGGER_DROP_TABLE_CONSTRAINT:
 			process_drop_table_constraint(obj);
 			break;
-		case EVENT_TRIGGER_DROP_INDEX:
-			process_drop_index(obj);
-			break;
 		case EVENT_TRIGGER_DROP_TABLE:
 			process_drop_table(obj);
 			break;
@@ -5371,6 +5346,7 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 			break;
 		case EVENT_TRIGGER_DROP_FOREIGN_TABLE:
 		case EVENT_TRIGGER_DROP_FOREIGN_SERVER:
+		case EVENT_TRIGGER_DROP_INDEX:
 			break;
 	}
 }

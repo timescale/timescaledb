@@ -45,7 +45,6 @@ Referenced by:
     TABLE "_timescaledb_catalog.chunk_column_stats" CONSTRAINT "chunk_column_stats_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
     TABLE "_timescaledb_catalog.chunk" CONSTRAINT "chunk_compressed_chunk_id_fkey" FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
     TABLE "_timescaledb_catalog.chunk_constraint" CONSTRAINT "chunk_constraint_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id)
-    TABLE "_timescaledb_catalog.chunk_index" CONSTRAINT "chunk_index_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
     TABLE "_timescaledb_catalog.compression_chunk_size" CONSTRAINT "compression_chunk_size_chunk_id_fkey" FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
     TABLE "_timescaledb_catalog.compression_chunk_size" CONSTRAINT "compression_chunk_size_compressed_chunk_id_fkey" FOREIGN KEY (compressed_chunk_id) REFERENCES _timescaledb_catalog.chunk(id) ON DELETE CASCADE
 
