@@ -241,3 +241,6 @@ WHERE cs.orderby IS NOT NULL AND cardinality(cs.orderby) > 0;
 DROP FUNCTION IF EXISTS _timescaledb_internal.indexes_local_size;
 DROP FUNCTION IF EXISTS _timescaledb_functions.indexes_local_size;
 
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk_index;
+DROP TABLE IF EXISTS _timescaledb_catalog.chunk_index;
+

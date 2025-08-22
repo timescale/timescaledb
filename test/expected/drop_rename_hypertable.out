@@ -190,7 +190,6 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_catalog  | chunk
  _timescaledb_catalog  | chunk_column_stats
  _timescaledb_catalog  | chunk_constraint
- _timescaledb_catalog  | chunk_index
  _timescaledb_catalog  | compression_algorithm
  _timescaledb_catalog  | compression_chunk_size
  _timescaledb_catalog  | compression_settings
@@ -213,7 +212,7 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_internal | bgw_policy_chunk_stats
  _timescaledb_internal | compressed_chunk_stats
  _timescaledb_internal | hypertable_chunk_local_size
-(26 rows)
+(25 rows)
 
 -- Test that renaming ordinary table works
 CREATE TABLE renametable (foo int);

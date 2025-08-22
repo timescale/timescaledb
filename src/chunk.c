@@ -2879,8 +2879,8 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 		 * We will still need to delete dimension slices for the chunk
 		 */
 		ccs = ts_chunk_constraints_alloc(2, ti->mctx);
-		ts_chunk_constraint_delete_dimensional_constraints(form.id, ccs, true, true);
-		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs, true, !detach);
+		ts_chunk_constraint_delete_dimensional_constraints(form.id, ccs);
+		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs, !detach);
 
 		/* Check for dimension slices that are orphaned by the chunk deletion */
 		for (i = 0; i < ccs->num_constraints; i++)
@@ -2948,8 +2948,6 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 	 */
 	if (detach)
 		ts_chunk_drop_referencing_fk_by_chunk_id(form.id);
-	/* Do not drop any index if detaching */
-	ts_chunk_index_delete_by_chunk_id(form.id, !detach);
 	ts_compression_chunk_size_delete(form.id);
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */

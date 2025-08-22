@@ -36,13 +36,9 @@
 #include "scanner.h"
 #include "ts_catalog/catalog.h"
 
-static bool chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hypertable_id,
-							   const char *hypertable_index);
 static Oid ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_indexrel,
 												 Relation chunkrel, IndexInfo *indexinfo,
 												 bool isconstraint, Oid index_tablespace);
-static bool ts_chunk_index_get_by_indexrelid(const Chunk *chunk, Oid chunk_indexrelid,
-											 ChunkIndexMapping *cim_out);
 
 static List *
 create_index_colnames(Relation indexrel)
@@ -309,64 +305,6 @@ ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_ind
 	return chunk_indexrelid;
 }
 
-static bool
-chunk_index_insert_relation(Relation rel, int32 chunk_id, const char *chunk_index,
-							int32 hypertable_id, const char *parent_index)
-{
-	TupleDesc desc = RelationGetDescr(rel);
-	Datum values[Natts_chunk_index];
-	bool nulls[Natts_chunk_index] = { false };
-	CatalogSecurityContext sec_ctx;
-
-	values[AttrNumberGetAttrOffset(Anum_chunk_index_chunk_id)] = Int32GetDatum(chunk_id);
-	values[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] =
-		DirectFunctionCall1(namein, CStringGetDatum(chunk_index));
-	values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_id)] = Int32GetDatum(hypertable_id);
-	values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] =
-		DirectFunctionCall1(namein, CStringGetDatum(parent_index));
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
-
-	return true;
-}
-
-/*
- * Add an parent-child index mapping to the catalog.
- */
-static bool
-chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hypertable_id,
-				   const char *hypertable_index)
-{
-	Catalog *catalog = ts_catalog_get();
-	Relation rel;
-	bool result;
-
-	rel = table_open(catalog_get_table_id(catalog, CHUNK_INDEX), RowExclusiveLock);
-	result =
-		chunk_index_insert_relation(rel, chunk_id, chunk_index, hypertable_id, hypertable_index);
-	table_close(rel, RowExclusiveLock);
-
-	return result;
-}
-
-void
-ts_chunk_index_create_from_constraint(int32 hypertable_id, Oid hypertable_constraint,
-									  int32 chunk_id, Oid chunk_constraint)
-{
-	Oid chunk_indexrelid = get_constraint_index(chunk_constraint);
-	Oid hypertable_indexrelid = get_constraint_index(hypertable_constraint);
-
-	Assert(OidIsValid(chunk_indexrelid));
-	Assert(OidIsValid(hypertable_indexrelid));
-
-	chunk_index_insert(chunk_id,
-					   get_rel_name(chunk_indexrelid),
-					   hypertable_id,
-					   get_rel_name(hypertable_indexrelid));
-}
-
 static Oid
 chunk_index_find_matching(Relation chunk_rel, Oid ht_indexoid)
 {
@@ -375,11 +313,7 @@ chunk_index_find_matching(Relation chunk_rel, Oid ht_indexoid)
 	foreach (lc, indexlist)
 	{
 		Oid indexoid = lfirst_oid(lc);
-		ChunkIndexMapping cim;
-		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(chunk_rel), true);
-
-		if (ts_indexing_compare(indexoid, ht_indexoid) &&
-			ts_chunk_index_get_by_indexrelid(chunk, indexoid, &cim) == 0)
+		if (ts_indexing_compare(indexoid, ht_indexoid))
 			return indexoid;
 	}
 	list_free(indexlist);
@@ -417,11 +351,6 @@ chunk_index_create(Relation hypertable_rel, int32 hypertable_id, Relation hypert
 													   false,
 													   index_tblspc);
 	}
-
-	chunk_index_insert(chunk_id,
-					   get_rel_name(chunk_indexrelid),
-					   hypertable_id,
-					   get_rel_name(RelationGetRelid(hypertable_idxrel)));
 }
 
 void
@@ -429,17 +358,12 @@ ts_chunk_index_create_from_adjusted_index_info(int32 hypertable_id, Relation hyp
 											   int32 chunk_id, Relation chunkrel,
 											   IndexInfo *indexinfo)
 {
-	Oid chunk_indexrelid = ts_chunk_index_create_post_adjustment(hypertable_id,
-																 hypertable_idxrel,
-																 chunkrel,
-																 indexinfo,
-																 false,
-																 false);
-
-	chunk_index_insert(chunk_id,
-					   get_rel_name(chunk_indexrelid),
-					   hypertable_id,
-					   get_rel_name(RelationGetRelid(hypertable_idxrel)));
+	ts_chunk_index_create_post_adjustment(hypertable_id,
+										  hypertable_idxrel,
+										  chunkrel,
+										  indexinfo,
+										  false,
+										  false);
 }
 
 /*
@@ -500,54 +424,6 @@ ts_chunk_index_create_all(int32 hypertable_id, Oid hypertable_relid, int32 chunk
 	table_close(htrel, AccessShareLock);
 }
 
-static int
-chunk_index_scan(int indexid, ScanKeyData scankey[], int nkeys, tuple_found_func tuple_found,
-				 tuple_filter_func tuple_filter, void *data, LOCKMODE lockmode)
-{
-	Catalog *catalog = ts_catalog_get();
-	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, CHUNK_INDEX),
-		.index = catalog_get_index(catalog, CHUNK_INDEX, indexid),
-		.nkeys = nkeys,
-		.scankey = scankey,
-		.tuple_found = tuple_found,
-		.filter = tuple_filter,
-		.data = data,
-		.lockmode = lockmode,
-		.scandirection = ForwardScanDirection,
-	};
-
-	return ts_scanner_scan(&scanctx);
-}
-
-#define chunk_index_scan_update(idxid, scankey, nkeys, tuple_found, tuple_filter, data)            \
-	chunk_index_scan(idxid, scankey, nkeys, tuple_found, tuple_filter, data, RowExclusiveLock)
-
-static ChunkIndexMapping *
-chunk_index_mapping_from_tuple(TupleInfo *ti, ChunkIndexMapping *cim)
-{
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
-	Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, true);
-	Oid nspoid_chunk = get_rel_namespace(chunk->table_id);
-	Oid nspoid_hyper = get_rel_namespace(chunk->hypertable_relid);
-
-	if (cim == NULL)
-		cim = MemoryContextAllocZero(ti->mctx, sizeof(ChunkIndexMapping));
-
-	cim->chunkoid = chunk->table_id;
-	cim->indexoid = get_relname_relid(NameStr(chunk_index->index_name), nspoid_chunk);
-	cim->parent_indexoid =
-		get_relname_relid(NameStr(chunk_index->hypertable_index_name), nspoid_hyper);
-	cim->hypertableoid = chunk->hypertable_relid;
-
-	if (should_free)
-		heap_freetuple(tuple);
-
-	return cim;
-}
-
 List *
 ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 {
@@ -578,319 +454,6 @@ ts_chunk_index_get_mappings(Hypertable *ht, Oid hypertable_indexrelid)
 	return mappings;
 }
 
-typedef struct ChunkIndexDeleteData
-{
-	const char *index_name;
-	const char *schema;
-	bool drop_index;
-} ChunkIndexDeleteData;
-
-/*
- * Lock object.
- *
- * In particular, we need to ensure that we lock the table of an index before
- * locking the index, or run the risk of ending up in a deadlock since the
- * normal locking order is table first, index second. Since we're not a
- * concurrent delete, we take a strong lock for this.
- *
- * It is also necessary that the parent table is locked first, but we have
- * already done that at this stage, so it does not need to be done explicitly.
- */
-static bool
-chunk_lock_object_for_deletion(const ObjectAddress *obj)
-{
-	/*
-	 * If we're locking an index, we need to lock the table first. See
-	 * RangeVarCallbackForDropRelation() in tablecmds.c. We can ignore
-	 * partition indexes since we're not using that.
-	 */
-	char relkind = get_rel_relkind(obj->objectId);
-
-	/*
-	 * If we cannot find the object, it might have been concurrently deleted
-	 * (we do not have locks on objects yet).
-	 */
-	if (relkind == '\0')
-		return false;
-	if (relkind == RELKIND_INDEX)
-	{
-		Oid heapOid = IndexGetRelation(obj->objectId, true);
-		if (OidIsValid(heapOid))
-			LockRelationOid(heapOid, AccessExclusiveLock);
-	}
-
-	LockRelationOid(obj->objectId, AccessExclusiveLock);
-	return true;
-}
-
-/*
- * Find all internal dependencies to be able to delete all the objects in one
- * go. We do this by scanning the dependency table and keeping all the tables
- * in our internal schema.
- *
- * We also lock the objects in the correct order (meaning table first, index
- * second) here to make sure that we do not end up with deadlocks.
- *
- * We return 'true' if we added any objects, and 'false' otherwise.
- */
-static bool
-chunk_collect_and_lock_objects_for_deletion(const ObjectAddress *relobj, ObjectAddresses *objects)
-{
-	Relation deprel = table_open(DependRelationId, RowExclusiveLock);
-	ScanKeyData scankey[2];
-	SysScanDesc scan;
-	HeapTuple tup;
-
-	/*
-	 * If the object disappeared before we managed to get a lock on it, there
-	 * is nothing more to do so just return early and indicate that there are
-	 * no objects to delete.
-	 */
-	if (!chunk_lock_object_for_deletion(relobj))
-		return false;
-
-	add_exact_object_address(relobj, objects);
-
-	ScanKeyInit(&scankey[0],
-				Anum_pg_depend_classid,
-				BTEqualStrategyNumber,
-				F_OIDEQ,
-				ObjectIdGetDatum(RelationRelationId));
-	ScanKeyInit(&scankey[1],
-				Anum_pg_depend_objid,
-				BTEqualStrategyNumber,
-				F_OIDEQ,
-				ObjectIdGetDatum(relobj->objectId));
-
-	scan = systable_beginscan(deprel,
-							  DependDependerIndexId,
-							  true,
-							  NULL,
-							  sizeof(scankey) / sizeof(*scankey),
-							  scankey);
-
-	while (HeapTupleIsValid(tup = systable_getnext(scan)))
-	{
-		Form_pg_depend record = (Form_pg_depend) GETSTRUCT(tup);
-		ObjectAddress refobj = { .classId = record->refclassid, .objectId = record->refobjid };
-		if (record->deptype == DEPENDENCY_INTERNAL && chunk_lock_object_for_deletion(&refobj))
-			add_exact_object_address(&refobj, objects);
-	}
-
-	systable_endscan(scan);
-	table_close(deprel, RowExclusiveLock);
-	return true;
-}
-
-static ScanTupleResult
-chunk_index_tuple_delete(TupleInfo *ti, void *data)
-{
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
-	Oid schemaid = ts_chunk_get_schema_id(chunk_index->chunk_id, true);
-	ChunkIndexDeleteData *cid = data;
-
-	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-
-	if (cid->drop_index)
-	{
-		ObjectAddress idxobj = {
-			.classId = RelationRelationId,
-			.objectId = get_relname_relid(NameStr(chunk_index->index_name), schemaid),
-		};
-
-		if (OidIsValid(idxobj.objectId))
-		{
-			/*
-			 * If we use performDeletion() here it will fail if there are
-			 * internal dependencies on the object since we are restricting
-			 * the cascade.
-			 *
-			 * If we automatically cascade here, we might drop user-defined
-			 * dependencies, which we do not want, so instead we collect the
-			 * internal dependencies and use the function
-			 * performMultipleDeletions.
-			 *
-			 * We lock the objects to delete first to make sure that the lock
-			 * order is correct. This is done inside RemoveRelations and
-			 * performMultipleDeletions() expect these locks to be taken
-			 * first. If not, it will take very rudimentary locks, which will
-			 * cause deadlocks in some cases because the lock order is not
-			 * correct.
-			 *
-			 * Since we do not have any locks on any objects at this point,
-			 * the relations might have disappeared before we had a chance to
-			 * lock them. In this case it is not necessary to do an explicit
-			 * call to performMultipleDeletions().
-			 *
-			 * The function performMultipleDeletions() accept a list of
-			 * objects and if there are dependencies between any of the
-			 * objects given to the function, it will not generate an error
-			 * for that but rather proceed with the deletion. If there are any
-			 * dependencies (internal or not) outside this set of objects, it
-			 * will still abort the deletion and print an error.
-			 */
-			ObjectAddresses *objects = new_object_addresses();
-			if (chunk_collect_and_lock_objects_for_deletion(&idxobj, objects))
-				performMultipleDeletions(objects, DROP_RESTRICT, 0);
-			free_object_addresses(objects);
-		}
-	}
-
-	if (should_free)
-		heap_freetuple(tuple);
-
-	return SCAN_CONTINUE;
-}
-
-static ScanFilterResult
-chunk_index_name_and_schema_filter(const TupleInfo *ti, void *data)
-{
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(tuple);
-	ChunkIndexDeleteData *cid = data;
-	ScanFilterResult result = SCAN_EXCLUDE;
-
-	if (namestrcmp(&chunk_index->index_name, cid->index_name) == 0)
-	{
-		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, false);
-
-		if (NULL != chunk && namestrcmp(&chunk->fd.schema_name, cid->schema) == 0)
-		{
-			result = SCAN_INCLUDE;
-			goto end_filter;
-		}
-	}
-
-	if (namestrcmp(&chunk_index->hypertable_index_name, cid->index_name) == 0)
-	{
-		Hypertable *ht;
-
-		ht = ts_hypertable_get_by_id(chunk_index->hypertable_id);
-
-		if (NULL != ht && namestrcmp(&ht->fd.schema_name, cid->schema) == 0)
-		{
-			result = SCAN_INCLUDE;
-			goto end_filter;
-		}
-	}
-
-end_filter:
-	if (should_free)
-		heap_freetuple(tuple);
-
-	return result;
-}
-
-int
-ts_chunk_index_delete(int32 chunk_id, const char *indexname, bool drop_index)
-{
-	ScanKeyData scankey[2];
-	ChunkIndexDeleteData data = {
-		.drop_index = drop_index,
-	};
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk_id));
-	ScanKeyInit(&scankey[1],
-				Anum_chunk_index_chunk_id_index_name_idx_index_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				CStringGetDatum(indexname));
-
-	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-								   scankey,
-								   2,
-								   chunk_index_tuple_delete,
-								   NULL,
-								   &data);
-}
-
-void
-ts_chunk_index_delete_by_name(const char *schema, const char *index_name, bool drop_index)
-{
-	ChunkIndexDeleteData data = {
-		.index_name = index_name,
-		.drop_index = drop_index,
-		.schema = schema,
-	};
-
-	chunk_index_scan_update(INVALID_INDEXID,
-							NULL,
-							0,
-							chunk_index_tuple_delete,
-							chunk_index_name_and_schema_filter,
-							&data);
-}
-
-int
-ts_chunk_index_delete_by_chunk_id(int32 chunk_id, bool drop_index)
-{
-	ScanKeyData scankey[1];
-	ChunkIndexDeleteData data = {
-		.drop_index = drop_index,
-	};
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk_id));
-
-	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-								   scankey,
-								   1,
-								   chunk_index_tuple_delete,
-								   NULL,
-								   &data);
-}
-
-static ScanTupleResult
-chunk_index_tuple_found(TupleInfo *ti, void *const data)
-{
-	ChunkIndexMapping *const cim = data;
-
-	chunk_index_mapping_from_tuple(ti, cim);
-	return SCAN_DONE;
-}
-
-bool
-ts_chunk_index_get_by_indexrelid(const Chunk *chunk, Oid chunk_indexrelid,
-								 ChunkIndexMapping *cim_out)
-{
-	int tuples_found;
-	ScanKeyData scankey[2];
-	const char *indexname = get_rel_name(chunk_indexrelid);
-
-	Assert(cim_out != NULL);
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk->fd.id));
-	ScanKeyInit(&scankey[1],
-				Anum_chunk_index_chunk_id_index_name_idx_index_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				CStringGetDatum(indexname));
-
-	tuples_found = chunk_index_scan(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-									scankey,
-									2,
-									chunk_index_tuple_found,
-									NULL,
-									cim_out,
-									AccessShareLock);
-
-	return tuples_found > 0;
-}
-
 TSDLLEXPORT Oid
 ts_chunk_index_get_by_hypertable_indexrelid(Relation chunk_rel, Oid ht_indexoid)
 {
@@ -912,190 +475,38 @@ ts_chunk_index_get_by_hypertable_indexrelid(Relation chunk_rel, Oid ht_indexoid)
 	return chunk_index_oid;
 }
 
-typedef struct ChunkIndexRenameInfo
+void
+ts_chunk_index_rename(Hypertable *ht, Oid hypertable_indexrelid, const char *ht_name)
 {
-	const char *oldname, *newname;
-	bool isparent;
-} ChunkIndexRenameInfo;
-
-static ScanTupleResult
-chunk_index_tuple_rename(TupleInfo *ti, void *data)
-{
-	ChunkIndexRenameInfo *info = data;
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	HeapTuple new_tuple = heap_copytuple(tuple);
-	FormData_chunk_index *chunk_index = (FormData_chunk_index *) GETSTRUCT(new_tuple);
-
-	if (should_free)
-		heap_freetuple(tuple);
-
-	if (info->isparent)
+	ListCell *lc;
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.id);
+	foreach (lc, chunks)
 	{
-		/*
-		 * If the renaming is for a hypertable index, we also rename all
-		 * corresponding chunk indexes
-		 */
-		Chunk *chunk = ts_chunk_get_by_id(chunk_index->chunk_id, true);
-		Oid chunk_schemaoid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
-		const char *chunk_index_name =
-			chunk_index_choose_name(NameStr(chunk->fd.table_name), info->newname, chunk_schemaoid);
-		Oid chunk_indexrelid = get_relname_relid(NameStr(chunk_index->index_name), chunk_schemaoid);
+		Chunk *chunk = lfirst(lc);
+		if (!OidIsValid(chunk->table_id))
+			continue;
 
-		ts_chunk_constraint_adjust_meta(chunk->fd.id,
-										info->newname,
-										NameStr(chunk_index->index_name),
-										chunk_index_name);
+		Relation chunk_rel = table_open(chunk->table_id, AccessExclusiveLock);
+		Oid chunk_indexrelid =
+			ts_chunk_index_get_by_hypertable_indexrelid(chunk_rel, hypertable_indexrelid);
+		table_close(chunk_rel, NoLock);
 
-		/* Update the metadata */
-		namestrcpy(&chunk_index->index_name, chunk_index_name);
-		namestrcpy(&chunk_index->hypertable_index_name, info->newname);
+		/* If there is no matching index on the chunk, skip it */
+		if (OidIsValid(chunk_indexrelid))
+		{
+			Oid chunk_schemaoid = get_namespace_oid(NameStr(chunk->fd.schema_name), false);
+			const char *chunk_old_name = get_rel_name(chunk_indexrelid);
+			const char *chunk_new_name =
+				chunk_index_choose_name(NameStr(chunk->fd.table_name), ht_name, chunk_schemaoid);
 
-		/* Rename the chunk index */
-		RenameRelationInternal(chunk_indexrelid, chunk_index_name, false, true);
+			/*
+			 * Index might also have a constraint which we track separately in our catalog
+			 * and needs to be updated too
+			 */
+			ts_chunk_constraint_adjust_meta(chunk->fd.id, ht_name, chunk_old_name, chunk_new_name);
+			RenameRelationInternal(chunk_indexrelid, chunk_new_name, false, true);
+		}
 	}
-	else
-		namestrcpy(&chunk_index->index_name, info->newname);
-
-	ts_catalog_update(ti->scanrel, new_tuple);
-	heap_freetuple(new_tuple);
-
-	if (info->isparent)
-		return SCAN_CONTINUE;
-
-	return SCAN_DONE;
-}
-
-static void
-init_scan_by_chunk_id_index_name(ScanIterator *iterator, int32 chunk_id, const char *index_name)
-{
-	iterator->ctx.index =
-		catalog_get_index(ts_catalog_get(), CHUNK_INDEX, CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX);
-
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_chunk_index_chunk_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(chunk_id));
-	ts_scan_iterator_scan_key_init(iterator,
-								   Anum_chunk_index_index_name,
-								   BTEqualStrategyNumber,
-								   F_NAMEEQ,
-								   CStringGetDatum(index_name));
-}
-
-/*
- * Adjust internal metadata after index/constraint rename
- */
-int
-ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char *old_name,
-						   const char *new_name)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CHUNK_INDEX, RowExclusiveLock, CurrentMemoryContext);
-	int count = 0;
-
-	init_scan_by_chunk_id_index_name(&iterator, chunk_id, old_name);
-
-	ts_scanner_foreach(&iterator)
-	{
-		bool nulls[Natts_chunk_index];
-		bool doReplace[Natts_chunk_index] = { false };
-		Datum values[Natts_chunk_index];
-		bool should_free;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-		HeapTuple new_tuple;
-
-		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls);
-
-		/*
-		 * The constraint names are of Postgres type 'name' which is fixed-width
-		 * 64-byte type. The input strings might not have the necessary padding
-		 * after them.
-		 */
-		NameData ht_index_namedata;
-		namestrcpy(&ht_index_namedata, ht_index_name);
-		NameData new_namedata;
-		namestrcpy(&new_namedata, new_name);
-
-		values[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] =
-			NameGetDatum(&ht_index_namedata);
-		doReplace[AttrNumberGetAttrOffset(Anum_chunk_index_hypertable_index_name)] = true;
-		values[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = NameGetDatum(&new_namedata);
-		doReplace[AttrNumberGetAttrOffset(Anum_chunk_index_index_name)] = true;
-
-		new_tuple =
-			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, nulls, doReplace);
-
-		ts_catalog_update(ti->scanrel, new_tuple);
-		heap_freetuple(new_tuple);
-
-		if (should_free)
-			heap_freetuple(tuple);
-
-		count++;
-	}
-	return count;
-}
-
-int
-ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *new_name)
-{
-	ScanKeyData scankey[2];
-	const char *indexname = get_rel_name(chunk_indexrelid);
-	ChunkIndexRenameInfo renameinfo = {
-		.oldname = indexname,
-		.newname = new_name,
-	};
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_index_chunk_id_index_name_idx_chunk_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk->fd.id));
-	ScanKeyInit(&scankey[1],
-				Anum_chunk_index_chunk_id_index_name_idx_index_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				CStringGetDatum(indexname));
-
-	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
-								   scankey,
-								   2,
-								   chunk_index_tuple_rename,
-								   NULL,
-								   &renameinfo);
-}
-
-int
-ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char *new_name)
-{
-	ScanKeyData scankey[2];
-	const char *indexname = get_rel_name(hypertable_indexrelid);
-	ChunkIndexRenameInfo renameinfo = {
-		.oldname = indexname,
-		.newname = new_name,
-		.isparent = true,
-	};
-
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(ht->fd.id));
-	ScanKeyInit(&scankey[1],
-				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
-				BTEqualStrategyNumber,
-				F_NAMEEQ,
-				CStringGetDatum(indexname));
-
-	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
-								   scankey,
-								   2,
-								   chunk_index_tuple_rename,
-								   NULL,
-								   &renameinfo);
 }
 
 void
