@@ -76,14 +76,6 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         5 |                    | 5_2_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key
 (5 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                           index_name                            | hypertable_id |                      hypertable_index_name                      
-----------+-----------------------------------------------------------------+---------------+-----------------------------------------------------------------
-        3 | _hyper_1_3_chunk_hyper_time_idx                                 |             1 | hyper_time_idx
-        4 | 4_1_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time |             2 | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key
-        5 | 5_2_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time |             2 | hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key
-(3 rows)
-
 SELECT * FROM test.show_constraints('hyper');
       Constraint      | Type |  Columns   | Index |            Expr             | Deferrable | Deferred | Validated 
 ----------------------+------+------------+-------+-----------------------------+------------+----------+-----------
@@ -116,13 +108,6 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         4 |                  4 | constraint_4    | 
         5 |                  5 | constraint_5    | 
 (3 rows)
-
--- The index should also have been removed
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |           index_name            | hypertable_id | hypertable_index_name 
-----------+---------------------------------+---------------+-----------------------
-        3 | _hyper_1_3_chunk_hyper_time_idx |             1 | hyper_time_idx
-(1 row)
 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
                            Constraint                            | Type |  Columns   | Index |                                           Expr                                           | Deferrable | Deferred | Validated 

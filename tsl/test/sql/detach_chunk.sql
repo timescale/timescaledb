@@ -63,8 +63,6 @@ SELECT count(*) > 0 FROM :CHUNK_NAME;
 -- Verify catalog cleanup
 SELECT count(*) = 0 FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID';
 
-SELECT count(*) = 0 FROM _timescaledb_catalog.chunk_index WHERE chunk_id = :'CHUNK_ID';
-
 SELECT count(*) = 0 FROM _timescaledb_catalog.dimension_slice ds
 JOIN _timescaledb_catalog.chunk_constraint cc ON cc.dimension_slice_id = ds.id
 WHERE cc.chunk_id = :'CHUNK_ID';
