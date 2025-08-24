@@ -101,3 +101,79 @@ EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
 ROLLBACK;
 
+-- test chunk status handling
+CREATE TABLE metrics_status(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time');
+
+-- normal insert should result in chunk status 0
+INSERT INTO metrics_status SELECT '2025-01-01';
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
+
+BEGIN;
+-- compressed copy into uncompressed chunk should result in chunk status 11 (compressed,partial,unordered)
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.enable_direct_compress_copy_client_sorted = false;
+COPY metrics_status FROM STDIN;
+2025-01-01
+\.
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
+ROLLBACK;
+
+BEGIN;
+-- compressed sorted copy into uncompressed chunk should result in chunk status 9 (compressed,partial)
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.enable_direct_compress_copy_client_sorted = true;
+COPY metrics_status FROM STDIN;
+2025-01-01
+\.
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
+ROLLBACK;
+
+TRUNCATE metrics_status;
+
+BEGIN;
+-- compressed copy into new chunk should result in chunk status 3 (compressed,unordered)
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.enable_direct_compress_copy_client_sorted = false;
+COPY metrics_status FROM STDIN;
+2025-01-01
+\.
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
+ROLLBACK;
+
+BEGIN;
+-- compressed sorted copy into new chunk should result in chunk status 1 (compressed)
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.enable_direct_compress_copy_client_sorted = true;
+COPY metrics_status FROM STDIN;
+2025-01-01
+\.
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
+ROLLBACK;
+
+SET timescaledb.enable_direct_compress_copy = false;
+SET timescaledb.enable_direct_compress_copy_client_sorted = false;
+INSERT INTO metrics_status SELECT '2025-01-01';
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
+SELECT compress_chunk(show_chunks('metrics_status'));
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
+
+BEGIN;
+-- compressed copy into fully compressed chunk should result in chunk status 3 (compressed,unordered)
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.enable_direct_compress_copy_client_sorted = false;
+COPY metrics_status FROM STDIN;
+2025-01-01
+\.
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
+ROLLBACK;
+
+BEGIN;
+-- compressed copy new chunk should result in chunk status 1 (compressed)
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.enable_direct_compress_copy_client_sorted = true;
+COPY metrics_status FROM STDIN;
+2025-01-01
+\.
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
+ROLLBACK;
+

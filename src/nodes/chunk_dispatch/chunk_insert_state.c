@@ -582,7 +582,15 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 {
 	ResultRelInfo *rri = state->result_relation_info;
 
-	if (state->chunk_compressed && !state->chunk_partial)
+	/*
+	 * Check if we need to mark the chunk as partial.
+	 * We need to change chunk status to partial in the following cases:
+	 * - rowstore insert into compressed chunk
+	 * - columnstore insert into uncompressed chunk that is not a new chunk (flagged as
+	 * needs_partial in chunk_tuple_routing.c)
+	 */
+	if (state->chunk_compressed && !state->chunk_partial &&
+		(!state->columnstore_insert || state->needs_partial))
 	{
 		Oid chunk_relid = RelationGetRelid(state->result_relation_info->ri_RelationDesc);
 		Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
