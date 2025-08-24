@@ -1572,3 +1572,66 @@ SELECT * FROM test_view_part_few WHERE ts BETWEEN '2024-01-04 00:00:00+00'AND '2
          15 | Thu Jan 04 21:55:12 2024 PST
 (14 rows)
 
+-- Test chunk_status_text function
+CREATE TABLE chunk_status_test(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=false);
+INSERT INTO chunk_status_test VALUES ('2025-01-01'),('2025-02-01'),('2025-03-01');
+SELECT _timescaledb_functions.chunk_status_text(i) FROM generate_series(0,15) i;
+           chunk_status_text           
+---------------------------------------
+ {}
+ {COMPRESSED}
+ {UNORDERED}
+ {COMPRESSED,UNORDERED}
+ {FROZEN}
+ {COMPRESSED,FROZEN}
+ {UNORDERED,FROZEN}
+ {COMPRESSED,UNORDERED,FROZEN}
+ {PARTIAL}
+ {COMPRESSED,PARTIAL}
+ {UNORDERED,PARTIAL}
+ {COMPRESSED,UNORDERED,PARTIAL}
+ {FROZEN,PARTIAL}
+ {COMPRESSED,FROZEN,PARTIAL}
+ {UNORDERED,FROZEN,PARTIAL}
+ {COMPRESSED,UNORDERED,FROZEN,PARTIAL}
+(16 rows)
+
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('chunk_status_test') chunk;
+                   chunk                   | chunk_status_text 
+-------------------------------------------+-------------------
+ _timescaledb_internal._hyper_18_218_chunk | {}
+ _timescaledb_internal._hyper_18_219_chunk | {}
+ _timescaledb_internal._hyper_18_220_chunk | {}
+(3 rows)
+
+SELECT _timescaledb_functions.chunk_status_text(NULL::int);
+ chunk_status_text 
+-------------------
+ 
+(1 row)
+
+SELECT _timescaledb_functions.chunk_status_text(NULL::regclass);
+ chunk_status_text 
+-------------------
+ 
+(1 row)
+
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.chunk_status_text(-1);
+ERROR:  invalid chunk status -1
+SELECT _timescaledb_functions.chunk_status_text(16);
+ERROR:  invalid chunk status 16
+SELECT _timescaledb_functions.chunk_status_text(1000);
+ERROR:  invalid chunk status 1000
+SELECT _timescaledb_functions.chunk_status_text(0::regclass);
+ERROR:  invalid Oid
+SELECT _timescaledb_functions.chunk_status_text('pg_class'::regclass);
+ERROR:  chunk not found
+\set ON_ERROR_STOP 1
+-- Test that function exists and returns an array type
+SELECT pg_typeof(_timescaledb_functions.chunk_status_text(0));
+ pg_typeof 
+-----------
+ text[]
+(1 row)
+

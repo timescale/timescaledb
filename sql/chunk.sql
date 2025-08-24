@@ -25,6 +25,13 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.calculate_chunk_interval(
 CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_status(REGCLASS) RETURNS INT
 AS '@MODULE_PATHNAME@', 'ts_chunk_status' LANGUAGE C;
 
+-- Get the status of the chunk as text array
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_status_text(chunk_status int) RETURNS TEXT[]
+AS '@MODULE_PATHNAME@', 'ts_chunk_status_text' LANGUAGE C STRICT IMMUTABLE PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_status_text(chunk regclass) RETURNS TEXT[]
+AS $$ SELECT _timescaledb_functions.chunk_status_text(_timescaledb_functions.chunk_status($1)); $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE SET search_path TO pg_catalog, pg_temp;;
+
 --given a chunk's relid, return the id. Error out if not a chunk relid.
 CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_id_from_relid(relid OID) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_chunk_id_from_relid' LANGUAGE C STABLE STRICT PARALLEL SAFE;
