@@ -66,7 +66,6 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 {
 	Chunk *chunk = NULL;
 	ChunkInsertState *cis = NULL;
-
 	cis = ts_subspace_store_get(ctr->subspace, point);
 
 	/*
@@ -77,6 +76,9 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 	if (!cis)
 	{
+		bool chunk_created = false;
+		bool needs_partial = false;
+
 		/*
 		 * Normally, for every row of the chunk except the first one, we expect
 		 * the chunk to exist already. The "create" function would take a lock
@@ -116,7 +118,10 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		}
 
 		if (!chunk)
+		{
 			chunk = ts_hypertable_create_chunk_for_point(ctr->hypertable, point);
+			chunk_created = true;
+		}
 
 		Ensure(chunk, "no chunk found or created");
 
@@ -137,10 +142,15 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 				Chunk *compressed_chunk =
 					ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
 				ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
+
+				/* mark chunk as partial unless completely new chunk */
+				if (!chunk_created)
+					needs_partial = true;
 			}
 		}
 
 		cis = chunk_insert_state_create(chunk->table_id, ctr);
+		cis->needs_partial = needs_partial;
 		ts_subspace_store_add(ctr->subspace, chunk->cube, cis, destroy_chunk_insert_state);
 	}
 
