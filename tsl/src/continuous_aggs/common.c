@@ -23,7 +23,7 @@ static void process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunct
 										  bool process_checks, bool is_cagg_create,
 										  AttrNumber htpartcolno);
 static void caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause,
-									List *targetList, bool is_cagg_create);
+									List *targetList, List *rtable, bool is_cagg_create);
 static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 								 const bool finalized);
 static Datum get_bucket_width_datum(ContinuousAggTimeBucketInfo bucket_info);
@@ -384,7 +384,7 @@ process_timebucket_parameters(FuncExpr *fe, ContinuousAggBucketFunction *bf, boo
  */
 static void
 caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause, List *targetList,
-						bool is_cagg_create)
+						List *rtable, bool is_cagg_create)
 {
 	ListCell *l;
 	bool found = false;
@@ -394,14 +394,41 @@ caggtimebucket_validate(ContinuousAggTimeBucketInfo *tbinfo, List *groupClause, 
 	Assert(tbinfo->bf->bucket_time_timezone == NULL);
 	Assert(TIMESTAMP_NOT_FINITE(tbinfo->bf->bucket_time_origin));
 
-	foreach (l, groupClause)
-	{
-		SortGroupClause *sgc = (SortGroupClause *) lfirst(l);
-		TargetEntry *tle = get_sortgroupclause_tle(sgc, targetList);
+	List *group_exprs = get_sortgrouplist_exprs(groupClause, targetList);
 
-		if (IsA(tle->expr, FuncExpr))
+#if PG18_GE
+	/* PG18 introduced RTEs for group clauses so
+	 * we need to take those into account as well.
+	 *
+	 * https://github.com/postgres/postgres/commit/247dea89
+	 */
+	List *group_rte_exprs = NIL;
+	foreach (l, group_exprs)
+	{
+		Node *expr = (Node *) lfirst(l);
+
+		if (IsA(expr, Var))
 		{
-			FuncExpr *fe = castNode(FuncExpr, tle->expr);
+			Var *var = castNode(Var, expr);
+			Assert((int) var->varattno <= list_length(rtable));
+			RangeTblEntry *rte = list_nth(rtable, var->varattno - 1);
+			if (rte->rtekind == RTE_GROUP)
+			{
+				group_rte_exprs = list_concat(group_rte_exprs, rte->groupexprs);
+			}
+		}
+	}
+
+	group_exprs = group_rte_exprs;
+#endif
+
+	foreach (l, group_exprs)
+	{
+		Expr *expr = (Expr *) lfirst(l);
+
+		if (IsA(expr, FuncExpr))
+		{
+			FuncExpr *fe = castNode(FuncExpr, expr);
 
 			/* Filter any non bucketing functions */
 			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
@@ -915,7 +942,11 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	 * column of the hypertable
 	 */
 	Assert(query->groupClause);
-	caggtimebucket_validate(&bucket_info, query->groupClause, query->targetList, is_cagg_create);
+	caggtimebucket_validate(&bucket_info,
+							query->groupClause,
+							query->targetList,
+							query->rtable,
+							is_cagg_create);
 
 	/* Check row security settings for the table. */
 	if (ts_has_row_security(rte->relid))
@@ -941,6 +972,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		caggtimebucket_validate(&bucket_info_parent,
 								prev_query->groupClause,
 								prev_query->targetList,
+								prev_query->rtable,
 								is_cagg_create);
 
 		/* Cannot create cagg with fixed bucket on top of variable bucket. */
