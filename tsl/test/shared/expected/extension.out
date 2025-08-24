@@ -55,6 +55,8 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.chunk_constraint_add_table_constraint(_timescaledb_catalog.chunk_constraint)
  _timescaledb_functions.chunk_id_from_relid(oid)
  _timescaledb_functions.chunk_status(regclass)
+ _timescaledb_functions.chunk_status_text(integer)
+ _timescaledb_functions.chunk_status_text(regclass)
  _timescaledb_functions.chunks_local_size(name,name)
  _timescaledb_functions.compressed_chunk_local_stats(name,name)
  _timescaledb_functions.compressed_data_has_nulls(_timescaledb_internal.compressed_data)

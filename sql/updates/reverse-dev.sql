@@ -226,3 +226,6 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.temp_index_keycolumns(oid);
 
 GRANT SELECT ON TABLE _timescaledb_catalog.chunk_index TO PUBLIC;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_status_text(regclass);
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_status_text(int);
+
