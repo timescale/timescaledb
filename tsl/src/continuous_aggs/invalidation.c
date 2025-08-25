@@ -117,14 +117,14 @@ typedef struct HypertableInvalidationState
 	Snapshot snapshot;
 } HypertableInvalidationState;
 
-typedef enum LogType
+typedef enum ContinuousAggTableType
 {
-	LOG_HYPER,
-	LOG_CAGG,
-	LOG_CAGG_QUEUE,
-} LogType;
+	HYPER_INVALIDATION_LOG,
+	CAGG_INVALIDATION_LOG,
+	CAGG_MATERIALIZATION_QUEUE,
+} ContinuousAggTableType;
 
-static Relation open_invalidation_log(LogType type, LOCKMODE lockmode);
+static Relation open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
 static HeapTuple create_materialization_queue_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
@@ -167,12 +167,12 @@ static void continuous_agg_process_hypertable_invalidations_single(Oid hypertabl
 static void continuous_agg_process_hypertable_invalidations_multi(ArrayType *hypertable_array);
 
 static Relation
-open_invalidation_log(LogType type, LOCKMODE lockmode)
+open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode)
 {
 	static const CatalogTable logmappings[] = {
-		[LOG_HYPER] = CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
-		[LOG_CAGG] = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
-		[LOG_CAGG_QUEUE] = CONTINUOUS_AGGS_MATERIALIZATION_QUEUE,
+		[HYPER_INVALIDATION_LOG] = CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
+		[CAGG_INVALIDATION_LOG] = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+		[CAGG_MATERIALIZATION_QUEUE] = CONTINUOUS_AGGS_MATERIALIZATION_QUEUE,
 	};
 	Catalog *catalog = ts_catalog_get();
 	Oid relid = catalog_get_table_id(catalog, logmappings[type]);
@@ -222,7 +222,7 @@ create_invalidation_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 star
 void
 invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end)
 {
-	Relation rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
+	Relation rel = open_cagg_table(CAGG_INVALIDATION_LOG, RowExclusiveLock);
 	CatalogSecurityContext sec_ctx;
 	HeapTuple tuple;
 
@@ -238,7 +238,7 @@ invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end)
 void
 invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
 {
-	Relation rel = open_invalidation_log(LOG_HYPER, RowExclusiveLock);
+	Relation rel = open_cagg_table(HYPER_INVALIDATION_LOG, RowExclusiveLock);
 	CatalogSecurityContext sec_ctx;
 	Datum values[Natts_continuous_aggs_hypertable_invalidation_log];
 	bool nulls[Natts_continuous_aggs_hypertable_invalidation_log] = { false };
@@ -1038,8 +1038,8 @@ static void
 cagg_invalidation_state_init(ContinuousAggInvalidationState *state, const ContinuousAgg *cagg)
 {
 	state->cagg = cagg;
-	state->cagg_log_rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
-	state->cagg_queue_rel = open_invalidation_log(LOG_CAGG_QUEUE, RowExclusiveLock);
+	state->cagg_log_rel = open_cagg_table(CAGG_INVALIDATION_LOG, RowExclusiveLock);
+	state->cagg_queue_rel = open_cagg_table(CAGG_MATERIALIZATION_QUEUE, RowExclusiveLock);
 	state->per_tuple_mctx = AllocSetContextCreate(CurrentMemoryContext,
 												  "Materialization invalidations",
 												  ALLOCSET_DEFAULT_SIZES);
@@ -1062,7 +1062,7 @@ hypertable_invalidation_state_init(HypertableInvalidationState *state, int32 hyp
 	state->hypertable_id = hypertable_id;
 	state->dimtype = dimtype;
 	state->all_caggs = all_caggs;
-	state->cagg_log_rel = open_invalidation_log(LOG_CAGG, RowExclusiveLock);
+	state->cagg_log_rel = open_cagg_table(CAGG_INVALIDATION_LOG, RowExclusiveLock);
 	state->per_tuple_mctx = AllocSetContextCreate(CurrentMemoryContext,
 												  "Hypertable invalidations",
 												  ALLOCSET_DEFAULT_SIZES);
