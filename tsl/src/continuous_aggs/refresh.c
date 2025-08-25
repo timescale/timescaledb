@@ -685,7 +685,20 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   bool force)
 {
 	InvalidationStore *invalidations;
+	Catalog *catalog = ts_catalog_get();
+	Oid relid = catalog_get_table_id(catalog, CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG);
 
+	/* Lock the continuous aggregate's materialization invalidation log to protect
+	 * against concurrent invalidation log processing.
+	 *
+	 * It will produce rows in the `continuous_aggs_materialization_queue` table
+	 * to be materialized later either serially or in parallel for non-overlap
+	 * refresh ranges.
+	 *
+	 * This is supposed to be a short transaction and in the future we can consider
+	 * relaxing this lock.
+	 */
+	LockRelationOid(relid, ExclusiveLock);
 	invalidations = invalidation_process_cagg_log(cagg,
 												  refresh_window,
 												  ts_guc_cagg_max_individual_materializations,
