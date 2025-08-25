@@ -685,16 +685,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   bool force)
 {
 	InvalidationStore *invalidations;
-	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
 
-	/* Lock the continuous aggregate's materialized hypertable to protect
-	 * against concurrent invalidation log processing.
-	 *
-	 * It will produce rows in the `continuous_aggs_materialization_queue` table
-	 * to be materialized later either serially or in parallel for non-overlap
-	 * refresh ranges.
-	 */
-	LockRelationOid(hyper_relid, ExclusiveLock);
 	invalidations = invalidation_process_cagg_log(cagg,
 												  refresh_window,
 												  ts_guc_cagg_max_individual_materializations,

@@ -929,6 +929,25 @@ cut_cagg_invalidation_and_compute_remainder(const ContinuousAggInvalidationState
 	return remainder;
 }
 
+static ScanTupleResult
+clear_cagg_invalidations_for_refresh_scan(TupleInfo *ti, void *data)
+{
+	ContinuousAggInvalidationState *state = (ContinuousAggInvalidationState *) data;
+
+	/* If the tuple was modified concurrently, retry the operation and use a new snapshot
+	 * to see the updated tuple. */
+	if (ti->lockresult == TM_Updated || ti->lockresult == TM_Deleted)
+		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
+
+	Ensure(ti->lockresult == TM_Ok,
+		   "unable to lock watermark tuple for cagg \"%s.%s\" (lock result %d)",
+		   NameStr(state->cagg->data.user_view_schema),
+		   NameStr(state->cagg->data.user_view_name),
+		   ti->lockresult);
+
+	return SCAN_DONE;
+}
+
 /*
  * Clear all cagg invalidations that match a refresh window.
  *
@@ -959,6 +978,8 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 	invalidation_entry_reset(&mergedentry);
 	invalidation_entry_reset(&remainder);
 	cagg_invalidations_scan_by_hypertable_init(&iterator, cagg_hyper_id, RowExclusiveLock);
+	iterator.ctx.tuple_found = clear_cagg_invalidations_for_refresh_scan;
+	iterator.ctx.data = &state;
 	iterator.ctx.snapshot = state->snapshot;
 	ScanTupLock scantuplock = {
 		.waitpolicy = LockWaitBlock,

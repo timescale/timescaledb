@@ -245,18 +245,13 @@ cagg_watermark_update_scan_internal(TupleInfo *ti, void *data)
 
 	/* If the tuple was modified concurrently, retry the operation and use a new snapshot
 	 * to see the updated tuple. */
-	if (ti->lockresult == TM_Updated)
+	if (ti->lockresult == TM_Updated || ti->lockresult == TM_Deleted)
 		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
 
-	if (ti->lockresult != TM_Ok)
-	{
-		elog(ERROR,
-			 "unable to lock watermark tuple for cagg %d (lock result %d)",
-			 watermark_update->ht_relid,
-			 ti->lockresult);
-
-		pg_unreachable();
-	}
+	Ensure(ti->lockresult == TM_Ok,
+		   "unable to lock watermark tuple for cagg %d (lock result %d)",
+		   watermark_update->ht_relid,
+		   ti->lockresult);
 
 	if (watermark_update->watermark > form->watermark || watermark_update->force_update)
 	{
