@@ -245,7 +245,7 @@ cagg_watermark_update_scan_internal(TupleInfo *ti, void *data)
 
 	/* If the tuple was modified concurrently, retry the operation and use a new snapshot
 	 * to see the updated tuple. */
-	if (ti->lockresult == TM_Updated || ti->lockresult == TM_Deleted)
+	if (ti->lockresult == TM_Updated)
 		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
 
 	Ensure(ti->lockresult == TM_Ok,
