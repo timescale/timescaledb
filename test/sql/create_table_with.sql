@@ -26,7 +26,7 @@ CREATE TABLE t2(time int2 NOT NULL, device text, value float) WITH (tsdb.hyperta
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes='time');
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=2);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=-1);
-CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=true);
 CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore,tsdb.hypertable,tsdb.partition_column='time');
 -- Test error hint for invalid timescaledb options during CREATE TABLE
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.invalid_option = true);
@@ -40,6 +40,7 @@ CREATE TABLE t3(time timestamptz NOT NULL, device text, value float) WITH (tsdb.
 CREATE TABLE t4(time timestamp, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,timescaledb.partition_column='time');
 CREATE TABLE t5(time date, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time',autovacuum_enabled);
 CREATE TABLE t6(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore=false,timescaledb.hypertable,tsdb.partition_column='time');
+CREATE TABLE t7(time timestamptz, device text, value float) WITH (timescaledb.hypertable,tsdb.partition_column='time');
 
 SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
 ROLLBACK;
