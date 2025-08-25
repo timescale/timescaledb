@@ -286,10 +286,11 @@ lock_cagg
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
-
+ <waiting ...>
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
+step R1_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10
@@ -347,14 +348,16 @@ lock_cagg
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
-
-R2: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+ <waiting ...>
 step R2_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 35, 62);
-
+ <waiting ...>
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
+step R1_refresh: <... completed>
+R2: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+step R2_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10
@@ -412,13 +415,15 @@ lock_cagg
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
-
+ <waiting ...>
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
-
+ <waiting ...>
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
+step R1_refresh: <... completed>
+step R3_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10
@@ -479,13 +484,14 @@ lock_cagg
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
-
+ <waiting ...>
 step R4_refresh: 
     CALL refresh_continuous_aggregate('cond_20', 39, 84);
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
 
+step R3_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
     FROM cond_10

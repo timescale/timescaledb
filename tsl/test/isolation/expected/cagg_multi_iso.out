@@ -109,10 +109,11 @@ lock_mattable
 (1 row)
 
 step I2: INSERT INTO ts_continuous_test SELECT 40, 1000 ;
-R1: NOTICE:  continuous aggregate "continuous_view_1" is already up-to-date
-step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30);
+step Refresh1: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 30); <waiting ...>
 step Refresh2: CALL refresh_continuous_aggregate('continuous_view_2', NULL, NULL);
 step UnlockMat1: ROLLBACK;
+R1: NOTICE:  continuous aggregate "continuous_view_1" is already up-to-date
+step Refresh1: <... completed>
 step Refresh1_sel: select * from continuous_view_1 where bkt = 0 or bkt > 30
 bkt|cnt
 ---+---
