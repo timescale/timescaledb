@@ -42,7 +42,7 @@ HINT:  tsdb.create_default_indexes must be a valid bool
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=-1);
 ERROR:  invalid value for tsdb.create_default_indexes '-1'
 HINT:  tsdb.create_default_indexes must be a valid bool
-CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=true);
 ERROR:  functionality not supported under the current "apache" license. Learn more at https://tsdb.co/pdbir1r3
 HINT:  To access all features and the best time-series experience, try out Timescale Cloud.
 CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore,tsdb.hypertable,tsdb.partition_column='time');
@@ -62,6 +62,7 @@ CREATE TABLE t3(time timestamptz NOT NULL, device text, value float) WITH (tsdb.
 CREATE TABLE t4(time timestamp, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,timescaledb.partition_column='time');
 CREATE TABLE t5(time date, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time',autovacuum_enabled);
 CREATE TABLE t6(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore=false,timescaledb.hypertable,tsdb.partition_column='time');
+CREATE TABLE t7(time timestamptz, device text, value float) WITH (timescaledb.hypertable,tsdb.partition_column='time');
 SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  hypertable_name 
 -----------------
@@ -69,7 +70,8 @@ SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  t4
  t5
  t6
-(4 rows)
+ t7
+(5 rows)
 
 ROLLBACK;
 -- IF NOT EXISTS
@@ -221,8 +223,8 @@ INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
             relname             
 --------------------------------
- _hyper_20_1_chunk
- _hyper_20_1_chunk_t11_time_idx
+ _hyper_21_1_chunk
+ _hyper_21_1_chunk_t11_time_idx
 (2 rows)
 
 ROLLBACK;
@@ -239,8 +241,8 @@ INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc2'::regnamespace ORDER BY 1;
             relname             
 --------------------------------
- _hyper_21_2_chunk
- _hyper_21_2_chunk_t11_time_idx
+ _hyper_22_2_chunk
+ _hyper_22_2_chunk_t11_time_idx
 (2 rows)
 
 ROLLBACK;
@@ -250,7 +252,7 @@ CREATE TABLE t12(time timestamptz NOT NULL, device text, value float) WITH (tsdb
 SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_name = 't12';
  associated_table_prefix 
 -------------------------
- _hyper_22
+ _hyper_23
 (1 row)
 
 ROLLBACK;

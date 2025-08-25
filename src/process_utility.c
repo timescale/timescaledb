@@ -71,6 +71,7 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "indexing.h"
+#include "license_guc.h"
 #include "partitioning.h"
 #include "process_utility.h"
 #include "scan_iterator.h"
@@ -3739,7 +3740,15 @@ process_create_table_end(Node *parsetree)
 											   NULL, /* associated_table_prefix */
 										   csi))
 		{
-			if (DatumGetBool(create_table_info.with_clauses[CreateTableFlagColumnstore].parsed))
+			bool enable_columnstore;
+			if (ts_license_is_apache() &&
+				create_table_info.with_clauses[CreateTableFlagColumnstore].is_default)
+				enable_columnstore = false;
+			else
+				enable_columnstore =
+					DatumGetBool(create_table_info.with_clauses[CreateTableFlagColumnstore].parsed);
+
+			if (enable_columnstore)
 			{
 				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
 				ts_cm_functions->compression_enable(ht, create_table_info.with_clauses);
