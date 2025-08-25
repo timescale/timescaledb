@@ -235,16 +235,16 @@ step "R5_refresh"
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
 }
 
-# Check for the materialization queue
+# Check for the materialization ranges
 session "R6"
-step "R6_materialization_queue"
+step "R6_materialization_ranges"
 {
     SELECT
         c.user_view_name,
         m.lowest_modified_value,
         m.greatest_modified_value
     FROM
-        _timescaledb_catalog.continuous_aggs_materialization_queue m
+        _timescaledb_catalog.continuous_aggs_materialization_ranges m
         JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
     WHERE
         c.user_view_name = 'cond_10'
@@ -387,4 +387,4 @@ permutation "R1_refresh" "R12_refresh"
 
 # CAgg invalidation logs processing skipping locks due to
 # the concurrent execution
-permutation "WP_enable" "R1_refresh"("WP_enable") "R6_materialization_queue" "R5_refresh"("WP_enable") "R6_materialization_queue" "WP_release" "R6_materialization_queue" "S1_select"
+permutation "WP_enable" "R1_refresh"("WP_enable") "R6_materialization_ranges" "R5_refresh"("WP_enable") "R6_materialization_ranges" "WP_release" "R6_materialization_ranges" "S1_select"

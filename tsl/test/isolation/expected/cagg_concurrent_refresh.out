@@ -545,7 +545,7 @@ step R12_refresh:
     CALL refresh_continuous_aggregate('cond2_10', 25, 70);
 
 
-starting permutation: WP_enable R1_refresh R6_materialization_queue R5_refresh R6_materialization_queue WP_release R6_materialization_queue S1_select
+starting permutation: WP_enable R1_refresh R6_materialization_ranges R5_refresh R6_materialization_ranges WP_release R6_materialization_ranges S1_select
 R5: LOG:  statement: 
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
@@ -565,13 +565,13 @@ debug_waitpoint_enable
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
  <waiting ...>
-step R6_materialization_queue: 
+step R6_materialization_ranges: 
     SELECT
         c.user_view_name,
         m.lowest_modified_value,
         m.greatest_modified_value
     FROM
-        _timescaledb_catalog.continuous_aggs_materialization_queue m
+        _timescaledb_catalog.continuous_aggs_materialization_ranges m
         JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
     WHERE
         c.user_view_name = 'cond_10'
@@ -589,13 +589,13 @@ R5: LOG:  statement:
 step R5_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
  <waiting ...>
-step R6_materialization_queue: 
+step R6_materialization_ranges: 
     SELECT
         c.user_view_name,
         m.lowest_modified_value,
         m.greatest_modified_value
     FROM
-        _timescaledb_catalog.continuous_aggs_materialization_queue m
+        _timescaledb_catalog.continuous_aggs_materialization_ranges m
         JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
     WHERE
         c.user_view_name = 'cond_10'
@@ -621,13 +621,13 @@ R5: DEBUG:  continuous aggregate refresh (individual invalidation) on "cond_10" 
 R5: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
 R5: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
 step R5_refresh: <... completed>
-step R6_materialization_queue: 
+step R6_materialization_ranges: 
     SELECT
         c.user_view_name,
         m.lowest_modified_value,
         m.greatest_modified_value
     FROM
-        _timescaledb_catalog.continuous_aggs_materialization_queue m
+        _timescaledb_catalog.continuous_aggs_materialization_ranges m
         JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
     WHERE
         c.user_view_name = 'cond_10'

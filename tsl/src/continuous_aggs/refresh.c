@@ -690,7 +690,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	/* Lock the continuous aggregate's materialized hypertable to protect against
 	 * concurrent invalidation log processing.
 	 *
-	 * It will produce rows in the `continuous_aggs_materialization_queue` table
+	 * It will produce rows in the `continuous_aggs_materialization_ranges` table
 	 * to be materialized later either serially or in parallel for non-overlap
 	 * refresh ranges.
 	 *

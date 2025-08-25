@@ -442,18 +442,18 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 
 CREATE INDEX continuous_aggs_materialization_invalidation_log_idx ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
 
--- cagg materialization queue
-CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_queue (
+-- cagg materialization ranges
+CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
   materialization_id integer,
   lowest_modified_value bigint NOT NULL,
   greatest_modified_value bigint NOT NULL,
   -- table constraints
-  CONSTRAINT continuous_aggs_materialization_queue_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+  CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
 );
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_queue', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_ranges', '');
 
-CREATE INDEX continuous_aggs_materialization_queue_idx ON _timescaledb_catalog.continuous_aggs_materialization_queue (materialization_id, lowest_modified_value ASC);
+CREATE INDEX continuous_aggs_materialization_ranges_idx ON _timescaledb_catalog.continuous_aggs_materialization_ranges (materialization_id, lowest_modified_value ASC);
 
 /* the source of this data is the enum from the source code that lists
  *  the algorithms. This table is NOT dumped.

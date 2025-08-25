@@ -121,17 +121,17 @@ typedef enum ContinuousAggTableType
 {
 	HYPER_INVALIDATION_LOG,
 	CAGG_INVALIDATION_LOG,
-	CAGG_MATERIALIZATION_QUEUE,
+	CAGG_MATERIALIZATION_RANGES,
 } ContinuousAggTableType;
 
 static Relation open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
-static HeapTuple create_materialization_queue_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
-												  int64 start, int64 end);
-static void insert_new_cagg_materialization_queue(const ContinuousAggInvalidationState *state,
-												  const InternalTimeRange refresh_window,
-												  int32 cagg_hyper_id);
+static HeapTuple create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
+												   int64 start, int64 end);
+static void insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *state,
+												   const InternalTimeRange refresh_window,
+												   int32 cagg_hyper_id);
 static bool save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 										  const Invalidation *invalidation);
 static void set_remainder_after_cut(Invalidation *remainder, int32 hyper_id,
@@ -172,7 +172,7 @@ open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode)
 	static const CatalogTable logmappings[] = {
 		[HYPER_INVALIDATION_LOG] = CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
 		[CAGG_INVALIDATION_LOG] = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
-		[CAGG_MATERIALIZATION_QUEUE] = CONTINUOUS_AGGS_MATERIALIZATION_QUEUE,
+		[CAGG_MATERIALIZATION_RANGES] = CONTINUOUS_AGGS_MATERIALIZATION_RANGES,
 	};
 	Catalog *catalog = ts_catalog_get();
 	Oid relid = catalog_get_table_id(catalog, logmappings[type]);
@@ -295,31 +295,32 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 }
 
 static HeapTuple
-create_materialization_queue_tup(TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end)
+create_materialization_ranges_tup(TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end)
 {
-	Datum values[Natts_continuous_aggs_materialization_queue] = { 0 };
-	bool isnull[Natts_continuous_aggs_materialization_queue] = { false };
+	Datum values[Natts_continuous_aggs_materialization_ranges] = { 0 };
+	bool isnull[Natts_continuous_aggs_materialization_ranges] = { false };
 
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_materialization_queue_materialization_id)] =
+	values[AttrNumberGetAttrOffset(
+		Anum_continuous_aggs_materialization_ranges_materialization_id)] =
 		Int32GetDatum(cagg_hyper_id);
 	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_materialization_queue_lowest_modified_value)] = Int64GetDatum(start);
+		Anum_continuous_aggs_materialization_ranges_lowest_modified_value)] = Int64GetDatum(start);
 	values[AttrNumberGetAttrOffset(
-		Anum_continuous_aggs_materialization_queue_greatest_modified_value)] = Int64GetDatum(end);
+		Anum_continuous_aggs_materialization_ranges_greatest_modified_value)] = Int64GetDatum(end);
 
 	return heap_form_tuple(tupdesc, values, isnull);
 }
 
 static void
-insert_new_cagg_materialization_queue(const ContinuousAggInvalidationState *state,
-									  const InternalTimeRange refresh_window, int32 cagg_hyper_id)
+insert_new_cagg_materialization_ranges(const ContinuousAggInvalidationState *state,
+									   const InternalTimeRange refresh_window, int32 cagg_hyper_id)
 {
 	CatalogSecurityContext sec_ctx;
 	TupleDesc tupdesc = RelationGetDescr(state->cagg_queue_rel);
-	HeapTuple tuple = create_materialization_queue_tup(tupdesc,
-													   cagg_hyper_id,
-													   refresh_window.start,
-													   refresh_window.end);
+	HeapTuple tuple = create_materialization_ranges_tup(tupdesc,
+														cagg_hyper_id,
+														refresh_window.start,
+														refresh_window.end);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_only(state->cagg_queue_rel, tuple);
@@ -367,7 +368,7 @@ save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 													  &refresh_window,
 													  state->cagg->bucket_function);
 
-	insert_new_cagg_materialization_queue(state, bucketed_refresh_window, cagg_hyper_id);
+	insert_new_cagg_materialization_ranges(state, bucketed_refresh_window, cagg_hyper_id);
 
 	return true;
 }
@@ -1039,7 +1040,7 @@ cagg_invalidation_state_init(ContinuousAggInvalidationState *state, const Contin
 {
 	state->cagg = cagg;
 	state->cagg_log_rel = open_cagg_table(CAGG_INVALIDATION_LOG, RowExclusiveLock);
-	state->cagg_queue_rel = open_cagg_table(CAGG_MATERIALIZATION_QUEUE, RowExclusiveLock);
+	state->cagg_queue_rel = open_cagg_table(CAGG_MATERIALIZATION_RANGES, RowExclusiveLock);
 	state->per_tuple_mctx = AllocSetContextCreate(CurrentMemoryContext,
 												  "Materialization invalidations",
 												  ALLOCSET_DEFAULT_SIZES);

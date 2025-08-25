@@ -50,8 +50,8 @@ typedef enum MaterializationPlanType
 	PLAN_TYPE_EXISTS,
 	PLAN_TYPE_MERGE,
 	PLAN_TYPE_MERGE_DELETE,
-	PLAN_TYPE_QUEUE_SELECT,
-	PLAN_TYPE_QUEUE_DELETE,
+	PLAN_TYPE_RANGES_SELECT,
+	PLAN_TYPE_RANGES_DELETE,
 	_MAX_MATERIALIZATION_PLAN_TYPES
 } MaterializationPlanType;
 
@@ -89,15 +89,15 @@ static char *create_materialization_delete_statement(MaterializationContext *con
 static char *create_materialization_exists_statement(MaterializationContext *context);
 static char *create_materialization_merge_statement(MaterializationContext *context);
 static char *create_materialization_merge_delete_statement(MaterializationContext *context);
-static char *create_materialization_queue_select_statement(MaterializationContext *context);
-static char *create_materialization_queue_delete_statement(MaterializationContext *context);
+static char *create_materialization_ranges_select_statement(MaterializationContext *context);
+static char *create_materialization_ranges_delete_statement(MaterializationContext *context);
 
 static void emit_materialization_insert_error(MaterializationContext *context);
 static void emit_materialization_delete_error(MaterializationContext *context);
 static void emit_materialization_exists_error(MaterializationContext *context);
 static void emit_materialization_merge_error(MaterializationContext *context);
-static void emit_materialization_queue_select_error(MaterializationContext *context);
-static void emit_materialization_queue_delete_error(MaterializationContext *context);
+static void emit_materialization_ranges_select_error(MaterializationContext *context);
+static void emit_materialization_ranges_delete_error(MaterializationContext *context);
 
 static void emit_materialization_insert_progress(MaterializationContext *context,
 												 uint64 rows_processed);
@@ -127,14 +127,16 @@ static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES
 								 .create_statement = create_materialization_merge_delete_statement,
 								 .emit_error = emit_materialization_delete_error,
 								 .emit_progress = emit_materialization_delete_progress },
-	[PLAN_TYPE_QUEUE_SELECT] = { .catalog_security_context = true,
-								 .nargs = 3,
-								 .create_statement = create_materialization_queue_select_statement,
-								 .emit_error = emit_materialization_queue_select_error },
-	[PLAN_TYPE_QUEUE_DELETE] = { .catalog_security_context = true,
-								 .nargs = 1,
-								 .create_statement = create_materialization_queue_delete_statement,
-								 .emit_error = emit_materialization_queue_delete_error },
+	[PLAN_TYPE_RANGES_SELECT] = { .catalog_security_context = true,
+								  .nargs = 3,
+								  .create_statement =
+									  create_materialization_ranges_select_statement,
+								  .emit_error = emit_materialization_ranges_select_error },
+	[PLAN_TYPE_RANGES_DELETE] = { .catalog_security_context = true,
+								  .nargs = 1,
+								  .create_statement =
+									  create_materialization_ranges_delete_statement,
+								  .emit_error = emit_materialization_ranges_delete_error },
 };
 
 static Oid *create_materialization_plan_argtypes(MaterializationContext *context,
@@ -524,14 +526,14 @@ create_materialization_merge_delete_statement(MaterializationContext *context)
 }
 
 static char *
-create_materialization_queue_select_statement(MaterializationContext *context)
+create_materialization_ranges_select_statement(MaterializationContext *context)
 {
 	StringInfoData query;
 	initStringInfo(&query);
 
 	appendStringInfo(&query,
 					 "SELECT ctid, lowest_modified_value, greatest_modified_value "
-					 "FROM _timescaledb_catalog.continuous_aggs_materialization_queue "
+					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
 					 "WHERE materialization_id = $1 "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
@@ -543,14 +545,14 @@ create_materialization_queue_select_statement(MaterializationContext *context)
 }
 
 static char *
-create_materialization_queue_delete_statement(MaterializationContext *context)
+create_materialization_ranges_delete_statement(MaterializationContext *context)
 {
 	StringInfoData query;
 	initStringInfo(&query);
 
 	appendStringInfo(&query,
 					 "DELETE "
-					 "FROM _timescaledb_catalog.continuous_aggs_materialization_queue "
+					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
 					 "WHERE ctid = $1");
 
 	return query.data;
@@ -593,7 +595,7 @@ emit_materialization_merge_error(MaterializationContext *context)
 }
 
 static void
-emit_materialization_queue_select_error(MaterializationContext *context)
+emit_materialization_ranges_select_error(MaterializationContext *context)
 {
 	elog(ERROR,
 		 "could not select invalidation entries for materialization table \"%s.%s\"",
@@ -602,7 +604,7 @@ emit_materialization_queue_select_error(MaterializationContext *context)
 }
 
 static void
-emit_materialization_queue_delete_error(MaterializationContext *context)
+emit_materialization_ranges_delete_error(MaterializationContext *context)
 {
 	elog(ERROR,
 		 "could not delete invalidation entries for materialization table \"%s.%s\"",
@@ -648,14 +650,14 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 
 	switch (plan_type)
 	{
-		case PLAN_TYPE_QUEUE_SELECT: /* 3 arguments */
-			argtypes[0] = INT4OID;	 /* materialization_id */
+		case PLAN_TYPE_RANGES_SELECT: /* 3 arguments */
+			argtypes[0] = INT4OID;	  /* materialization_id */
 			argtypes[1] = INT8OID;
 			argtypes[2] = INT8OID;
 			break;
 
-		case PLAN_TYPE_QUEUE_DELETE: /* 1 argument1 */
-			argtypes[0] = TIDOID;	 /* ctid */
+		case PLAN_TYPE_RANGES_DELETE: /* 1 argument1 */
+			argtypes[0] = TIDOID;	  /* ctid */
 			break;
 
 		default: /* 2 arguments */
@@ -700,7 +702,7 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 {
 	switch (plan_type)
 	{
-		case PLAN_TYPE_QUEUE_SELECT: /* 3 arguments */
+		case PLAN_TYPE_RANGES_SELECT: /* 3 arguments */
 		{
 			(*values)[0] = Int32GetDatum(context->cagg->data.mat_hypertable_id);
 			(*values)[1] = Int64GetDatum(context->internal_materialization_range.start);
@@ -711,7 +713,7 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 			break;
 		}
 
-		case PLAN_TYPE_QUEUE_DELETE: /* 1 argument */
+		case PLAN_TYPE_RANGES_DELETE: /* 1 argument */
 		{
 			(*values)[0] = ItemPointerGetDatum(context->tupleid);
 			(*nulls)[0] = false;
@@ -757,7 +759,7 @@ execute_materialization_plan(MaterializationContext *context, MaterializationPla
 	if (materialization->emit_progress)
 		materialization->emit_progress(context, SPI_processed);
 
-	if (SPI_processed > 0 && plan_type == PLAN_TYPE_QUEUE_SELECT)
+	if (SPI_processed > 0 && plan_type == PLAN_TYPE_RANGES_SELECT)
 	{
 		bool isnull;
 		Datum dat;
@@ -867,7 +869,7 @@ execute_materializations(MaterializationContext *context)
 
 	PG_TRY();
 	{
-		while (execute_materialization_plan(context, PLAN_TYPE_QUEUE_SELECT) > 0)
+		while (execute_materialization_plan(context, PLAN_TYPE_RANGES_SELECT) > 0)
 		{
 			/* MERGE statement is supported only in the new format of CAggs and for non-compressed
 			 * hypertables */
@@ -897,7 +899,7 @@ execute_materializations(MaterializationContext *context)
 			}
 
 			/* Delete the invalidation entry */
-			rows_processed += execute_materialization_plan(context, PLAN_TYPE_QUEUE_DELETE);
+			rows_processed += execute_materialization_plan(context, PLAN_TYPE_RANGES_DELETE);
 		}
 
 		/* Free all cached plans */
