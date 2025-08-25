@@ -127,7 +127,7 @@ typedef enum LogType
 static Relation open_invalidation_log(LogType type, LOCKMODE lockmode);
 static void hypertable_invalidation_scan_init(ScanIterator *iterator, int32 hyper_id,
 											  LOCKMODE lockmode);
-static HeapTuple create_materialization_queue_tup(const TupleDesc tupdesc, int32 cagg_hyper_id,
+static HeapTuple create_materialization_queue_tup(TupleDesc tupdesc, int32 cagg_hyper_id,
 												  int64 start, int64 end);
 static void insert_new_cagg_materialization_queue(const ContinuousAggInvalidationState *state,
 												  const InternalTimeRange refresh_window,
@@ -295,8 +295,7 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 }
 
 static HeapTuple
-create_materialization_queue_tup(const TupleDesc tupdesc, int32 cagg_hyper_id, int64 start,
-								 int64 end)
+create_materialization_queue_tup(TupleDesc tupdesc, int32 cagg_hyper_id, int64 start, int64 end)
 {
 	Datum values[Natts_continuous_aggs_materialization_queue] = { 0 };
 	bool isnull[Natts_continuous_aggs_materialization_queue] = { false };

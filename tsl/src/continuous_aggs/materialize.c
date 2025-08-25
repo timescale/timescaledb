@@ -142,8 +142,8 @@ static Oid *create_materialization_plan_argtypes(MaterializationContext *context
 static MaterializationPlan *create_materialization_plan(MaterializationContext *context,
 														MaterializationPlanType plan_type);
 static void create_materialization_plan_args(MaterializationContext *context,
-											 MaterializationPlanType plan_type, int nargs,
-											 Datum **values, char **nulls);
+											 MaterializationPlanType plan_type, Datum **values,
+											 char **nulls);
 static uint64 execute_materialization_plan(MaterializationContext *context,
 										   MaterializationPlanType plan_type);
 static void free_materialization_plan(MaterializationContext *context,
@@ -696,11 +696,8 @@ create_materialization_plan(MaterializationContext *context, MaterializationPlan
 
 static void
 create_materialization_plan_args(MaterializationContext *context, MaterializationPlanType plan_type,
-								 int nargs, Datum **values, char **nulls)
+								 Datum **values, char **nulls)
 {
-	*values = (Datum *) palloc(nargs * sizeof(Datum));
-	*nulls = (char *) palloc(nargs * sizeof(char));
-
 	switch (plan_type)
 	{
 		case PLAN_TYPE_QUEUE_SELECT: /* 3 arguments */
@@ -737,9 +734,10 @@ execute_materialization_plan(MaterializationContext *context, MaterializationPla
 {
 	MaterializationPlan *materialization = create_materialization_plan(context, plan_type);
 
-	Datum *values = NULL;
-	char *nulls = NULL;
-	create_materialization_plan_args(context, plan_type, materialization->nargs, &values, &nulls);
+	Datum *values = (Datum *) palloc(materialization->nargs * sizeof(Datum));
+	char *nulls = (char *) palloc(materialization->nargs * sizeof(char));
+
+	create_materialization_plan_args(context, plan_type, &values, &nulls);
 
 	CatalogSecurityContext sec_ctx;
 	if (materialization->catalog_security_context)
