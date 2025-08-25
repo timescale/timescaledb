@@ -10,10 +10,19 @@
 
 typedef enum SkipKeyNullStatus
 {
-	SKIPKEY_NOT_NULL = 0,
-	SKIPKEY_NULLS_FIRST,
-	SKIPKEY_NULLS_LAST
+	SK_NOT_NULL = 0,
+	SK_NULLS_FIRST,
+	SK_NULLS_LAST
 } SkipKeyNullStatus;
+
+typedef enum
+{
+	SK_DistinctColAttno = 0,
+	SK_DistinctByVal = 1,
+	SK_DistinctTypeLen = 2,
+	SK_NullStatus = 3,
+	SK_IndexKeyAttno = 4
+} SkipScanPrivateIndex;
 
 extern void tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel,
 									RelOptInfo *output_rel, UpperRelationKind stage);
