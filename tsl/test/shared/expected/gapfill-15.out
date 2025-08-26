@@ -3490,3 +3490,72 @@ FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
 (3 rows)
 
 RESET timezone;
+CREATE TABLE uuid_events (id UUID NOT NULL, device INT, temp FLOAT);
+SELECT table_name FROM create_hypertable('uuid_events', 'id');
+ table_name  
+ uuid_events
+(1 row)
+
+INSERT INTO uuid_events VALUES
+       ('0194214e-cd00-7000-a9a7-63f1416dab45', 2, 2.0),
+       ('01942117-de80-7000-8121-f12b2b69dd96', 1, 1.0),
+       ('01942bd2-7380-7000-9bc4-5f97443907b8', 5, 5.0),
+       ('01942d52-f900-7000-866e-07d6404d53c1', 6, 6.0);
+SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id)
+FROM uuid_events;
+   timestamptz_from_uuid_v7   
+ Wed Jan 01 02:00:00 2025 PST
+ Wed Jan 01 01:00:00 2025 PST
+ Fri Jan 03 03:00:00 2025 PST
+ Fri Jan 03 10:00:00 2025 PST
+(4 rows)
+
+\set ON_ERROR_STOP 0
+SELECT time_bucket_gapfill('1 day',  id) AS day,
+    locf(avg(temp)) AS temp
+    FROM uuid_events
+    WHERE id > _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('2025-01-01 PST') AND
+          id <= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('2025-01-04 PST')
+    GROUP BY day
+    ORDER BY day DESC;
+ERROR:  function time_bucket_gapfill(unknown, uuid) does not exist
+LINE 1: SELECT time_bucket_gapfill('1 day',  id) AS day,
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+SELECT time_bucket_gapfill('1 day',  _timescaledb_functions.timestamptz_from_uuid_v7(id)) AS day,
+    locf(avg(temp)) AS temp
+    FROM uuid_events
+    WHERE id > _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('2025-01-01 PST') AND
+          id <= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('2025-01-04 PST')
+    GROUP BY day
+    ORDER BY day DESC;
+ERROR:  invalid time_bucket_gapfill argument: ts needs to refer to a single column if no start or finish is supplied
+HINT:  Specify start and finish as arguments or in the WHERE clause.
+\set ON_ERROR_STOP 1
+-- Query works on a table where UUID is converted to timestamp
+CREATE TABLE time_events AS
+SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id) AS time, device temp FROM uuid_events;
+SELECT table_name FROM create_hypertable('time_events', 'time', migrate_data=>true);
+NOTICE:  migrating data to chunks
+DETAIL:  Migration might take a while depending on the amount of data.
+ table_name  
+ time_events
+(1 row)
+
+SELECT time_bucket_gapfill('1 day',  time) AS day,
+    locf(avg(temp)) AS temp
+    FROM time_events
+    WHERE time > '2025-01-01 PST' AND
+          time <= '2025-01-04 PST'
+    GROUP BY day
+    ORDER BY day DESC;
+             day              |        temp        
+------------------------------+--------------------
+ Fri Jan 03 16:00:00 2025 PST | 5.5000000000000000
+ Thu Jan 02 16:00:00 2025 PST | 5.5000000000000000
+ Wed Jan 01 16:00:00 2025 PST | 1.5000000000000000
+ Tue Dec 31 16:00:00 2024 PST | 1.5000000000000000
+(4 rows)
+
+DROP TABLE time_events;
+DROP TABLE uuid_events;
