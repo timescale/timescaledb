@@ -8,8 +8,11 @@ SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
 SET timezone TO PST8PDT;
 
+SELECT _timescaledb_functions.invalidation_plugin_name() AS plugin_name \gset
+
 CREATE VIEW invalidation_slots AS
-SELECT * FROM pg_replication_slots WHERE plugin = 'timescaledb-invalidations';
+SELECT * FROM pg_replication_slots
+ WHERE plugin = :'plugin_name';
 
 -- START OF USAGE TEST --
 
@@ -492,7 +495,7 @@ SELECT hypertable_name, view_name, invalidate_using
  WHERE view_name like 'magic_\_summary%';
 
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
 
 DROP MATERIALIZED VIEW magic2_summary1_wal;
@@ -500,7 +503,7 @@ DROP MATERIALIZED VIEW magic2_summary1_wal;
 -- Slot should be there. We have another hypertable using WAL-based
 -- invalidation collection.
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
 
 DROP MATERIALIZED VIEW magic1_summary1_wal;
@@ -508,7 +511,7 @@ DROP MATERIALIZED VIEW magic1_summary1_wal;
 -- Slot should be there. We have yet another continuous aggregate for
 -- the hypertable using WAL-based invalidation collection.
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
 
 DROP MATERIALIZED VIEW magic1_summary2_wal;
@@ -516,7 +519,7 @@ DROP MATERIALIZED VIEW magic1_summary2_wal;
 -- Now slot should be gone and we should not have any continuous
 -- aggregates using WAL-based invalidation collection.
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
 
 SELECT hypertable_name, view_name, invalidate_using

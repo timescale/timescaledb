@@ -8,6 +8,8 @@ SELECT _timescaledb_functions.stop_background_workers();
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
 
+SELECT _timescaledb_functions.invalidation_plugin_name() AS plugin_name \gset
+
 CREATE VIEW hypertable_invalidation_thresholds AS
 SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
        watermark AS threshold
@@ -29,12 +31,11 @@ SELECT ca.user_view_name AS aggregate_name,
 
 CREATE VIEW invalidation_slots AS
 SELECT replace(slot_name::text, dboid::text, 'DBOID') AS slot_name,
-       plugin,
        slot_type,
        database
  FROM pg_replication_slots,
       (select oid from pg_database where current_database() = datname) t(dboid)
-WHERE plugin = 'timescaledb-invalidations';
+WHERE plugin = :'plugin_name';
 
 CREATE TABLE conditions (time bigint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
