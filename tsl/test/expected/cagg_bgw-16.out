@@ -517,15 +517,6 @@ last_run_duration |
 \x off
 -- test merged refresh (change data in two chunks)
 UPDATE test_continuous_agg_table SET data = 11;
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-ALTER SYSTEM SET timescaledb.materializations_per_refresh_window = 0;
-SELECT pg_reload_conf();
- pg_reload_conf 
-----------------
- t
-(1 row)
-
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 --advance time by 1day so that job runs one more time
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '1day')::bigint * 1000000, true);
  ts_bgw_params_reset_time 
@@ -590,15 +581,6 @@ SELECT * FROM sorted_bgw_log;
      14 | 86400000000 | Refresh Continuous Aggregate Policy [1001] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_3"
 (46 rows)
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-ALTER SYSTEM RESET timescaledb.materializations_per_refresh_window;
-SELECT pg_reload_conf();
- pg_reload_conf 
-----------------
- t
-(1 row)
-
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP MATERIALIZED VIEW test_continuous_agg_view;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
 --create a view with a function that it has no permission to execute

@@ -929,25 +929,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-	/*
-	 * Define the limit on number of invalidation-based refreshes we allow per
-	 * refresh call. If this limit is exceeded, fall back to a single refresh that
-	 * covers the range decided by the min and max invalidated time.
-	 */
-	DefineCustomIntVariable(MAKE_EXTOPTION("materializations_per_refresh_window"),
-							"Max number of materializations per cagg refresh window",
-							"The maximal number of individual refreshes per cagg refresh. If more "
-							"refreshes need to be performed, they are merged into a larger "
-							"single refresh.",
-							&ts_guc_cagg_max_individual_materializations,
-							10,
-							0,
-							INT_MAX,
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
 
 	DefineCustomIntVariable(MAKE_EXTOPTION("cagg_processing_wal_batch_size"),
 							"Batch size when processing WAL entries.",
