@@ -257,9 +257,15 @@ ORDER BY id DESC;
  Wed Jan 01 01:00:00 2025 PST |      1 |    1
 (4 rows)
 
--- Insert non-v7 UUIDs
 \set ON_ERROR_STOP 0
+-- Insert non-v7 UUIDs
 INSERT INTO uuid_events SELECT 'a8961135-cd89-4c4b-aa05-79df642407dd', 5, 5.0;
 ERROR:  a8961135-cd89-4c4b-aa05-79df642407dd is not a version 7 UUID
+-- Time bucket directly on UUID column
+SELECT
+  time_bucket('1 day', id),
+  SUM(temp)
+FROM uuid_events;
+ERROR:  function time_bucket(unknown, uuid) does not exist at character 10
 \set ON_ERROR_STOP 1
 DROP TABLE uuid_events;
