@@ -7,6 +7,11 @@ RETURNS bool
 AS '@MODULE_PATHNAME@', 'ts_bloom1_contains'
 LANGUAGE C IMMUTABLE PARALLEL SAFE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.bloom1, anyarray)
+RETURNS bool
+AS '@MODULE_PATHNAME@', 'ts_bloom1_contains_any'
+LANGUAGE C IMMUTABLE PARALLEL SAFE;
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.jsonb_get_matching_index_entry(
     config jsonb,
     attr_name text,
