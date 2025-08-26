@@ -15,6 +15,7 @@
 #include <parser/parser.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <utils/lsyscache.h>
 #include <utils/typcache.h>
 
@@ -129,14 +130,30 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 					 quote_identifier(NameStr(hypertable->fd.table_name)),
 					 inpstr);
 
+	const MemoryContext oldcontext = CurrentMemoryContext;
+
 	PG_TRY();
 	{
 		parsed = raw_parser(buf.data, RAW_PARSE_DEFAULT);
 	}
 	PG_CATCH();
 	{
-		throw_segment_by_error(inpstr);
-		PG_RE_THROW();
+		/* We do this fandango to avoid exhausting the error stack if we get
+		 * anything else but a syntax error, for example, an out of memory
+		 * error. */
+		ErrorData *edata;
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+		FlushErrorState();
+		if (edata->sqlerrcode == ERRCODE_SYNTAX_ERROR)
+		{
+			edata->cursorpos = edata->internalpos = 0;
+			edata->detail = edata->message;
+			edata->message = psprintf("unable to parse segmenting option \"%s\"", inpstr);
+			edata->hint = psprintf("The option timescaledb.compress_segmentby must be a set of "
+								   "columns separated by commas.");
+		}
+		ReThrowError(edata);
 	}
 	PG_END_TRY();
 
@@ -235,14 +252,31 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 					 quote_identifier(NameStr(hypertable->fd.table_name)),
 					 inpstr);
 
+	const MemoryContext oldcontext = CurrentMemoryContext;
+
 	PG_TRY();
 	{
 		parsed = raw_parser(buf.data, RAW_PARSE_DEFAULT);
 	}
 	PG_CATCH();
 	{
-		throw_order_by_error(inpstr);
-		PG_RE_THROW();
+		/* We do this fandango to avoid exhausting the error stack if we get
+		 * anything else but a syntax error, for example, an out of memory
+		 * error. */
+		ErrorData *edata;
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+		FlushErrorState();
+		if (edata->sqlerrcode == ERRCODE_SYNTAX_ERROR)
+		{
+			edata->cursorpos = edata->internalpos = 0;
+			edata->detail = edata->message;
+			edata->message = psprintf("unable to parse ordering option \"%s\"", inpstr);
+			edata->hint = psprintf("The timescaledb.compress_orderby option must be a set of column"
+								   " names with sort options, separated by commas."
+								   " It is the same format as an ORDER BY clause.");
+		}
+		ReThrowError(edata);
 	}
 	PG_END_TRY();
 
@@ -505,14 +539,28 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 	/* parse the sparse index list exactly how you would targetlist */
 	appendStringInfo(&buf, "SELECT %s", inpstr);
 
+	const MemoryContext oldcontext = CurrentMemoryContext;
+
 	PG_TRY();
 	{
 		parsed = raw_parser(buf.data, RAW_PARSE_DEFAULT);
 	}
 	PG_CATCH();
 	{
-		throw_sparse_index_error(inpstr);
-		PG_RE_THROW();
+		/* We do this fandango to avoid exhausting the error stack if we get
+		 * anything else but a syntax error, for example, an out of memory
+		 * error. */
+		ErrorData *edata;
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
+		FlushErrorState();
+		if (edata->sqlerrcode == ERRCODE_SYNTAX_ERROR)
+		{
+			edata->cursorpos = edata->internalpos = 0;
+			edata->detail = edata->message;
+			edata->message = psprintf("unable to parse sparse index option \"%s\"", inpstr);
+		}
+		ReThrowError(edata);
 	}
 	PG_END_TRY();
 
