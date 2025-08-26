@@ -1990,8 +1990,38 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 			 * probably Postgres expects to see the parent relation first in the
 			 * EMs.
 			 */
+#if PG18_LT
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
 			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
+#else
+			/* In PG18, child ems are not added to ec_members
+			 * but need to be maintained in separate Lists.
+			 *
+			 * https://github.com/postgres/postgres/commit/d69d45a5
+			 */
+			/* copied from add_child_eq_member */
+			/*
+			 * Allocate the array to store child members; an array of Lists indexed by
+			 * relid, or expand the existing one, if necessary.
+			 */
+			if (unlikely(cur_ec->ec_childmembers_size < root->simple_rel_array_size))
+			{
+				cur_ec->ec_relids =
+					bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
+				if (cur_ec->ec_childmembers == NULL)
+					cur_ec->ec_childmembers = palloc0_array(List *, root->simple_rel_array_size);
+				else
+					cur_ec->ec_childmembers = repalloc0_array(cur_ec->ec_childmembers,
+															  List *,
+															  cur_ec->ec_childmembers_size,
+															  root->simple_rel_array_size);
+				cur_ec->ec_childmembers_size = root->simple_rel_array_size;
+			}
+
+			/* add member to the ec_childmembers List for the given child_relid */
+			cur_ec->ec_childmembers[info->compressed_rel->relid] =
+				lappend(cur_ec->ec_childmembers[info->compressed_rel->relid], em);
+#endif
 
 			/*
 			 * Cache the matching EquivalenceClass and EquivalenceMember for
