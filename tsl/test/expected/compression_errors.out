@@ -113,24 +113,31 @@ ERROR:  column "d" does not exist
 HINT:  The timescaledb.compress_orderby option must reference a valid column.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls');
 ERROR:  unable to parse ordering option "c desc nulls"
+DETAIL:  syntax error at or near "nulls"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls thirsty');
 ERROR:  unable to parse ordering option "c desc nulls thirsty"
+DETAIL:  syntax error at or near "nulls"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c climb nulls first');
 ERROR:  unable to parse ordering option "c climb nulls first"
+DETAIL:  syntax error at or near "climb"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c nulls first asC');
 ERROR:  unable to parse ordering option "c nulls first asC"
+DETAIL:  syntax error at or near "asC"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc nulls first asc');
 ERROR:  unable to parse ordering option "c desc nulls first asc"
+DETAIL:  syntax error at or near "asc"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c desc hurry');
 ERROR:  unable to parse ordering option "c desc hurry"
+DETAIL:  syntax error at or near "hurry"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c descend');
 ERROR:  unable to parse ordering option "c descend"
+DETAIL:  syntax error at or near "descend"
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'c; SELECT 1');
 ERROR:  unable to parse ordering option "c; SELECT 1"
@@ -155,9 +162,11 @@ ERROR:  unable to parse ordering option "t COLLATE "en_US""
 HINT:  The timescaledb.compress_orderby option must be a set of column names with sort options, separated by commas. It is the same format as an ORDER BY clause.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c asc' , timescaledb.compress_orderby = 'c');
 ERROR:  unable to parse segmenting option "c asc"
+DETAIL:  syntax error at or near "asc"
 HINT:  The option timescaledb.compress_segmentby must be a set of columns separated by commas.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c nulls last');
 ERROR:  unable to parse segmenting option "c nulls last"
+DETAIL:  syntax error at or near "nulls"
 HINT:  The option timescaledb.compress_segmentby must be a set of columns separated by commas.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + 1');
 ERROR:  unable to parse segmenting option "c + 1"
