@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set EXPLAIN 'EXPLAIN (costs off, timing off, summary off, analyze)'
+\set EXPLAIN 'EXPLAIN (buffers off, costs off, timing off, summary off, analyze)'
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
@@ -517,7 +517,7 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE time = 1 AND val = 2;
 (1 row)
 
 -- delete rows with time = 1 AND val = 2
-EXPLAIN (costs off, verbose) DELETE FROM sample_table WHERE time = 1 AND 2 = val;
+EXPLAIN (buffers off, costs off, verbose) DELETE FROM sample_table WHERE time = 1 AND 2 = val;
                                     QUERY PLAN                                    
 ----------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -1856,7 +1856,7 @@ SELECT count(*) FROM tab1 WHERE device_id = 1;
 (1 row)
 
 ANALYZE tab1;
-EXPLAIN (costs off) DELETE FROM public.tab1 WHERE public.tab1.device_id = 1;
+EXPLAIN (buffers off, costs off) DELETE FROM public.tab1 WHERE public.tab1.device_id = 1;
                                                  QUERY PLAN                                                 
 ------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -1901,7 +1901,7 @@ SELECT count(*) FROM tab1 WHERE device_id = 1;
 ANALYZE tab1;
 SET enable_seqscan = off;
 SET enable_indexscan = off;
-EXPLAIN (costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
+EXPLAIN (buffers off, costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -1938,7 +1938,7 @@ CREATE TABLE join_table AS SELECT repeat('t', d) FROM generate_series(1,3,1) d;
 ANALYZE tab1;
 SET enable_seqscan = off;
 SET enable_indexscan = off;
-EXPLAIN (costs off) UPDATE tab1
+EXPLAIN (buffers off, costs off) UPDATE tab1
 SET v0 = 0 FROM
 	(SELECT repeat, count(*)
 	FROM join_table
@@ -2196,7 +2196,7 @@ INSERT INTO index_scan_test(time,device_id,value) SELECT time, device_id, device
 BEGIN;
 SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 \gset
 CREATE INDEX ON index_scan_test(device_id);
-EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2;
+EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2;
                                                                  QUERY PLAN                                                                  
 ---------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -2234,7 +2234,7 @@ ROLLBACK;
 BEGIN;
 SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
 CREATE INDEX ON index_scan_test(device_id, time);
-EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
                                                                        QUERY PLAN                                                                        
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -2272,7 +2272,7 @@ ROLLBACK;
 BEGIN;
 SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
 CREATE INDEX ON index_scan_test(device_id);
-EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
                                                                  QUERY PLAN                                                                  
 ---------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -2804,7 +2804,7 @@ SELECT compress_chunk(show_chunks('test_partials'));
 
 VACUUM ANALYZE test_partials;
 -- fully compressed
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
                                                   QUERY PLAN                                                  
 --------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
@@ -2838,7 +2838,7 @@ SELECT * FROM test_partials ORDER BY time;
 
 -- check that DML causes transparent decompression and that
 -- data gets shifted to the uncompressed parts
-EXPLAIN (costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
+EXPLAIN (buffers off, costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -2870,7 +2870,7 @@ EXPLAIN (costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from
 DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
 VACUUM ANALYZE test_partials;
 -- All 3 chunks will now become partially compressed chunks
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
@@ -2920,7 +2920,7 @@ SELECT compress_chunk(show_chunks('test_partials'));
 
 VACUUM ANALYZE test_partials;
 -- fully compressed
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
                                                   QUERY PLAN                                                  
 --------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
@@ -2956,7 +2956,7 @@ SELECT compress_chunk(show_chunks('test_meta_filters'));
  _timescaledb_internal._hyper_37_74_chunk
 (1 row)
 
-EXPLAIN (analyze, timing off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
+EXPLAIN (analyze, timing off, buffers off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
                                                  QUERY PLAN                                                 
 ------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable) (actual rows=0 loops=1)

@@ -226,7 +226,7 @@ INSERT INTO foo VALUES(1,  '2005-10-19 10:23:54', repeat('I am a tall big giraff
 INSERT INTO foo values( 1, '2005-01-01 00:00:00+00', NULL);
 INSERT INTO foo values( 2, '2005-01-01 00:00:00+00', NULL);
 create or replace  view v1(a, partialb, partialtv) as select a, _timescaledb_functions.partialize_agg( max(b) ), _timescaledb_functions.partialize_agg( min(toastval)) from foo group by a;
-EXPLAIN (VERBOSE, COSTS OFF)
+EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)
 create table t1 as select * from v1;
                                                                   QUERY PLAN                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------
@@ -405,7 +405,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 
 SET parallel_setup_cost = 0;
 -- Materialize partials from execution of parallel query plan
-EXPLAIN (VERBOSE, COSTS OFF)
+EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)
   SELECT
     _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
     _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,
@@ -837,7 +837,7 @@ CREATE MATERIALIZED VIEW issue4922_partials_parallel AS
   FROM public.issue4922;
 -- Materialize partials from execution of non-parallel query plan
 SET max_parallel_workers_per_gather = 0;
-EXPLAIN (VERBOSE, COSTS OFF)
+EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)
   SELECT
     _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
     _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,

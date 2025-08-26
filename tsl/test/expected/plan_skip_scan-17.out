@@ -114,7 +114,7 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select
 -- adjusted statistics
 alter table skip_scan_htcl set (autovacuum_enabled = off);
 -- we want to run with analyze here so we can see counts in the nodes
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 \set TABLE skip_scan
 \ir include/skip_scan_query.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -4180,7 +4180,7 @@ DROP INDEX _timescaledb_internal._hyper_1_1_chunk_skip_scan_ht_dev_idx;
 (11 rows)
 
 -- IndexPath without pathkeys doesnt use SkipScan
-EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT 1 FROM pg_rewrite;
+EXPLAIN (buffers off, costs off, timing off, summary off) SELECT DISTINCT 1 FROM pg_rewrite;
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Limit
@@ -8376,7 +8376,7 @@ DEALLOCATE prep;
 RESET max_parallel_workers_per_gather;
 RESET enable_seqscan;
 -- try one query with EXPLAIN only for coverage
-EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan;
+EXPLAIN (buffers off, costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan;
                               QUERY PLAN                               
 -----------------------------------------------------------------------
  Unique
@@ -8385,7 +8385,7 @@ EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_n
                Index Cond: (dev_name > NULL::text)
 (4 rows)
 
-EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan_ht;
+EXPLAIN (buffers off, costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_name FROM skip_scan_ht;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
  Unique
@@ -8414,7 +8414,7 @@ SELECT table_name FROM create_hypertable('i3629', 'time');
 (1 row)
 
 INSERT INTO i3629 SELECT i, '2020-04-01'::date-10-i from generate_series(1,20) i;
-EXPLAIN (SUMMARY OFF, COSTS OFF) SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
+EXPLAIN (SUMMARY OFF, BUFFERS OFF, COSTS OFF) SELECT DISTINCT ON (a) * FROM i3629 WHERE a in (2) ORDER BY a ASC, time DESC;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
  Limit

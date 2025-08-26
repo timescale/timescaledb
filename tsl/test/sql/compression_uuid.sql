@@ -228,7 +228,7 @@ WHERE
 -- The EXPLAIN shows how the immutable "zeroed" function can be
 -- constified for better performance, unlike the parameter version of
 -- the function doing the same thing:
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT
   count(*) AS count_total,
   count(*) FILTER (WHERE u < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Jun 25 08:16:46.348 2025 PDT')) AS count_below_on_uuid,
@@ -289,7 +289,7 @@ SELECT count(*) FROM uuid_part
 WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
       id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
 
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT count(*) FROM uuid_part
 WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
       id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
@@ -305,7 +305,7 @@ WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2
 
 -- Check that chunk exclusion still works and that filters are pushed
 -- down to a min-max scan on the compressed chunk.
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT count(*) FROM uuid_part
 WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
       id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');

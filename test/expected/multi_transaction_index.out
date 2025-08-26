@@ -216,7 +216,7 @@ INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, 1);
 INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, 2);
 SET enable_seqscan TO false;
 SET enable_bitmapscan TO false;
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM index_expr_test WHERE meta = 1;
                                               QUERY PLAN                                              
 ------------------------------------------------------------------------------------------------------
@@ -276,7 +276,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 -- this caused an assertion failure when a MergeAppend node contained unsorted children
 SET enable_seqscan TO false;
 SET enable_bitmapscan TO false;
-EXPLAIN (verbose, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
+EXPLAIN (verbose, buffers off, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -316,7 +316,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 -------+-------+---------+------+--------+---------+-----------+------------
 (0 rows)
 
-EXPLAIN (verbose, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
+EXPLAIN (verbose, buffers off, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
                               QUERY PLAN                              
 ----------------------------------------------------------------------
  Limit

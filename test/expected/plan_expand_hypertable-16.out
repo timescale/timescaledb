@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
-\set PREFIX 'EXPLAIN (costs off) '
+\set PREFIX 'EXPLAIN (buffers off, costs off) '
 \ir include/plan_expand_hypertable_load.sql
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -3480,7 +3480,7 @@ SELECT table_name FROM create_hypertable('t','time');
 (1 row)
 
 INSERT INTO t VALUES ('2000-01-01'), ('2010-01-01'), ('2020-01-01');
-EXPLAIN (costs off) SELECT * FROM t t1 INNER JOIN t t2 ON t1.time = t2.time WHERE t1.time < timestamptz '2010-01-01';
+EXPLAIN (buffers off, costs off) SELECT * FROM t t1 INNER JOIN t t2 ON t1.time = t2.time WHERE t1.time < timestamptz '2010-01-01';
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
  Merge Join
@@ -3501,7 +3501,7 @@ EXPLAIN (costs off) SELECT * FROM t t1 INNER JOIN t t2 ON t1.time = t2.time WHER
 (15 rows)
 
 SET timescaledb.enable_qual_propagation TO false;
-EXPLAIN (costs off) SELECT * FROM t t1 INNER JOIN t t2 ON t1.time = t2.time WHERE t1.time < timestamptz '2010-01-01';
+EXPLAIN (buffers off, costs off) SELECT * FROM t t1 INNER JOIN t t2 ON t1.time = t2.time WHERE t1.time < timestamptz '2010-01-01';
                                                  QUERY PLAN                                                  
 -------------------------------------------------------------------------------------------------------------
  Merge Join
@@ -3534,7 +3534,7 @@ RETURNS SETOF test LANGUAGE SQL STABLE PARALLEL SAFE
 AS $f$
    SELECT DISTINCT ON (a) * FROM test WHERE time >= _ts ORDER BY a, time DESC
 $f$;
-EXPLAIN (costs off) SELECT * FROM test_f(now());
+EXPLAIN (buffers off, costs off) SELECT * FROM test_f(now());
                    QUERY PLAN                    
 -------------------------------------------------
  Unique
@@ -3544,7 +3544,7 @@ EXPLAIN (costs off) SELECT * FROM test_f(now());
                Chunks excluded during startup: 4
 (5 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_f(now());
+EXPLAIN (buffers off, costs off) SELECT * FROM test_f(now());
                    QUERY PLAN                    
 -------------------------------------------------
  Unique
@@ -3592,7 +3592,7 @@ CREATE OR REPLACE FUNCTION f_t1_2(_b int) RETURNS SETOF t1 LANGUAGE SQL STABLE P
 AS $function$
    SELECT DISTINCT ON (j.a) jt.* FROM t1 j, f_t1(j.a, _b) jt
 $function$;
-EXPLAIN (costs off) SELECT * FROM f_t1_2(10);
+EXPLAIN (buffers off, costs off) SELECT * FROM f_t1_2(10);
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Subquery Scan on f_t1_2
@@ -3607,7 +3607,7 @@ EXPLAIN (costs off) SELECT * FROM f_t1_2(10);
                                  Filter: (a = j.a)
 (10 rows)
 
-EXPLAIN (costs off) SELECT * FROM f_t1_2(10) sc, f_t2(sc.a, 10);
+EXPLAIN (buffers off, costs off) SELECT * FROM f_t1_2(10) sc, f_t2(sc.a, 10);
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Nested Loop

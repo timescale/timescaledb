@@ -57,8 +57,8 @@ select distinct on (device) device, time from :CHUNK order by 1, 2;
 SET timescaledb.enable_skipscan_for_distinct_aggregates TO false;
 
 -- check that the indexes are used
-explain (costs off) select count(distinct tag) from :CHUNK;
-explain (costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
+explain (buffers off, costs off) select count(distinct tag) from :CHUNK;
+explain (buffers off, costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
 
 RESET timescaledb.enable_skipscan_for_distinct_aggregates;
 drop table ht_metrics_compressed;

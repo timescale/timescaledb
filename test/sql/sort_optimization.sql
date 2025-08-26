@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (COSTS OFF) '
+\set PREFIX 'EXPLAIN (BUFFERS OFF, COSTS OFF) '
 
 CREATE TABLE order_test(time int NOT NULL, device_id int, value float);
 CREATE INDEX ON order_test(time,device_id);

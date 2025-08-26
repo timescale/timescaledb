@@ -7,7 +7,7 @@ CREATE TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH 
 -- first try without the GUCs
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 100 | xargs -II date -d "2025-01-01 + I hour" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                          QUERY PLAN                          
 -------------------------------------------------------------
  Append (actual rows=100 loops=1)
@@ -22,7 +22,7 @@ SET timescaledb.enable_direct_compress_copy_client_sorted = false;
 -- simple test with compressed copy enabled
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                                    QUERY PLAN                                    
 ---------------------------------------------------------------------------------
  Append (actual rows=3000 loops=1)
@@ -42,7 +42,7 @@ ROLLBACK;
 -- simple test with compressed copy enabled and reversed order
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_7_chunk (actual rows=3000 loops=1)
@@ -60,7 +60,7 @@ SET timescaledb.enable_direct_compress_copy_sort_batches = false;
 -- simple test with compressed copy enabled and without batch sorting
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                                     QUERY PLAN                                    
 ----------------------------------------------------------------------------------
  Append (actual rows=3000 loops=1)
@@ -80,7 +80,7 @@ ROLLBACK;
 -- simple test with compressed copy enabled and reversed order and no batch sorting
 BEGIN;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                                  QUERY PLAN                                 
 ----------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_13_chunk (actual rows=3000 loops=1)
@@ -103,7 +103,7 @@ COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" 
 SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 + I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                                     QUERY PLAN                                    
 ----------------------------------------------------------------------------------
  Append (actual rows=6000 loops=1)
@@ -127,7 +127,7 @@ BEGIN;
 SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                                  QUERY PLAN                                 
 ----------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_19_chunk (actual rows=3000 loops=1)
@@ -147,7 +147,7 @@ BEGIN;
 SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = false;
 COPY metrics FROM PROGRAM 'seq 3000 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                                  QUERY PLAN                                 
 ----------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_21_chunk (actual rows=3000 loops=1)
@@ -168,7 +168,7 @@ ALTER TABLE metrics SET (tsdb.segmentby = 'device');
 SET timescaledb.enable_direct_compress_copy = true;
 SET timescaledb.enable_direct_compress_copy_client_sorted = true;
 COPY metrics FROM PROGRAM 'seq 0 0.2 9.8 | sed -e ''s!.[0-9]$!!'' | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,dI,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                                 QUERY PLAN                                
 --------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_23_chunk (actual rows=50 loops=1)
@@ -189,7 +189,7 @@ BEGIN;
 SET timescaledb.enable_direct_compress_copy = true;
 ALTER TABLE metrics ADD CONSTRAINT unique_time_device UNIQUE (time, device);
 COPY metrics FROM PROGRAM 'seq 100 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                        QUERY PLAN                        
 ---------------------------------------------------------
  Seq Scan on _hyper_1_25_chunk (actual rows=100 loops=1)

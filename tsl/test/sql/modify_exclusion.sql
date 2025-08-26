@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (ANALYZE,VERBOSE,SUMMARY OFF,TIMING OFF,COSTS OFF)'
+\set PREFIX 'EXPLAIN (ANALYZE,VERBOSE,SUMMARY OFF,TIMING OFF,BUFFERS OFF, COSTS OFF)'
 
 \i include/modify_exclusion_load.sql
 

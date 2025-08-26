@@ -359,7 +359,7 @@ ALTER TABLE index_expr_test DROP COLUMN id;
 CREATE INDEX ON index_expr_test ((meta ->> 'field')) ;
 INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, '{"field": "value1"}');
 INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, '{"field": "value2"}');
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM index_expr_test WHERE meta ->> 'field' = 'value1';
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------

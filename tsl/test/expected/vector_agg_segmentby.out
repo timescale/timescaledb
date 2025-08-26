@@ -146,7 +146,7 @@ select s, sum(t), count(*) from svagg group by s order by s;
 (10 rows)
 
 -- another example that we used not to vectorize because of the projection.
-explain (costs off)
+explain (buffers off, costs off)
 select sum(t), s, count(*) from svagg group by s order by s;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------

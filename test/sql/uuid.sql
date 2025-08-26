@@ -121,7 +121,7 @@ LIMIT 1 OFFSET 1 \gset
 SELECT :'chunk_range_start',  _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_start');
 
 -- Exclude all but one chunk
-EXPLAIN (verbose, costs off, timing off)
+EXPLAIN (verbose, buffers off, costs off, timing off)
 SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
 FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_start');
 
@@ -129,7 +129,7 @@ SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
 FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_start');
 
 -- Exclude only one chunk. Add ordering (DESC)
-EXPLAIN (verbose, costs off, timing off)
+EXPLAIN (verbose, buffers off, costs off, timing off)
 SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
 FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_end')
 ORDER BY id DESC;

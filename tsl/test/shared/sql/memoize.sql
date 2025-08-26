@@ -11,7 +11,7 @@ SELECT format('\! diff -u --label "Unmemoized results" --label "Memoized results
 \gset
 
 -- get EXPLAIN output for all variations
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 SET work_mem TO '64MB';
 SET enable_memoize TO on;

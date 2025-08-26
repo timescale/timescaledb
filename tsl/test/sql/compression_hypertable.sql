@@ -77,12 +77,12 @@ SELECT DISTINCT attname, attstattarget
 
 -- Test that the GUC to disable bulk decompression works.
 vacuum analyze test1;
-explain (analyze, verbose, timing off, costs off, summary off)
+explain (analyze, verbose, timing off, buffers off, costs off, summary off)
 select * from _timescaledb_internal._hyper_1_10_chunk;
 
 set timescaledb.enable_bulk_decompression to false;
 
-explain (analyze, verbose, timing off, costs off, summary off)
+explain (analyze, verbose, timing off, buffers off, costs off, summary off)
 select * from _timescaledb_internal._hyper_1_10_chunk;
 
 reset timescaledb.enable_bulk_decompression;

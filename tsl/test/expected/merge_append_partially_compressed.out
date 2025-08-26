@@ -7,7 +7,7 @@
 -- We're testing the MergeAppend here which is not compatible with parallel plans.
 set max_parallel_workers_per_gather = 0;
 set timescaledb.enable_decompression_sorted_merge = off;
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float);
 SELECT create_hypertable('ht_metrics_compressed','time');
          create_hypertable          
@@ -1723,7 +1723,7 @@ SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, 
  Thu Jan 02 00:00:00 2025 PST | 
 (3 rows)
 
-EXPLAIN (costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
+EXPLAIN (buffers off, costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Group (actual rows=3 loops=1)

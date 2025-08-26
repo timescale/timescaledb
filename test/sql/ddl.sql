@@ -10,7 +10,7 @@ CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER
 
 SELECT * FROM PUBLIC."Hypertable_1";
 SELECT * FROM ONLY PUBLIC."Hypertable_1";
-EXPLAIN (costs off) SELECT * FROM ONLY PUBLIC."Hypertable_1";
+EXPLAIN (buffers off, costs off) SELECT * FROM ONLY PUBLIC."Hypertable_1";
 
 SELECT * FROM test.show_columns('PUBLIC."Hypertable_1"');
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
@@ -39,7 +39,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_9_%chunk');
 -- metadata table
 SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
 
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT * FROM alter_test WHERE time > '2017-05-20T10:00:01';
 
 -- rename column and change its type
@@ -62,7 +62,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_9_%chunk');
 SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
 
 -- constraint exclusion should still work with updated column
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT * FROM alter_test WHERE time_us > '2017-05-20T10:00:01';
 
 \set ON_ERROR_STOP 0

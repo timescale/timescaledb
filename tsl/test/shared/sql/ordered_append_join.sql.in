@@ -18,8 +18,8 @@ SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed res
 \gset
 
 -- get EXPLAIN output for all variations
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
-\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off, verbose)'
 
 set work_mem to '64MB';
 set max_parallel_workers_per_gather to 0;
@@ -77,7 +77,7 @@ SELECT table_name FROM create_hypertable('i4418_2','time');
 INSERT INTO i4418_1 SELECT time, 'device 1' FROM generate_series('2022-08-01'::timestamptz, '2022-08-20'::timestamptz,'3min'::interval) g(time);
 INSERT INTO i4418_2 SELECT * FROM i4418_1;
 
-EXPLAIN (analyze,costs off,timing off,summary off) SELECT time_bucket('1d', tbl1.time), count(*)
+EXPLAIN (analyze,buffers off, costs off,timing off,summary off) SELECT time_bucket('1d', tbl1.time), count(*)
 FROM i4418_1 tbl1
 INNER JOIN i4418_2 tbl2
 ON tbl1.device = tbl2.device AND tbl1.time = tbl2.time

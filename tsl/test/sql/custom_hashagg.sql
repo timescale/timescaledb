@@ -31,7 +31,7 @@ insert into foo values
 
 set timescaledb.enable_custom_hashagg to true;
 analyze foo;
-explain (costs off)
+explain (buffers off, costs off)
 select date_trunc('hour', b) bucket, sum(a) from foo group by bucket;
 select date_trunc('hour', b) bucket, sum(a) from foo group by bucket;
 

@@ -10,7 +10,7 @@
 -- * attach_foreign_table_chunk
 -- * hypertable_osm_range_update
 
-\set EXPLAIN 'EXPLAIN (COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (BUFFERS OFF, COSTS OFF)'
 
 CREATE OR REPLACE VIEW chunk_view AS
   SELECT
@@ -499,7 +499,7 @@ DO $$
 DECLARE
     r RECORD;
 BEGIN
-	EXPLAIN (COSTS OFF) UPDATE ht_try SET value = 2
+	EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE ht_try SET value = 2
 	WHERE acq_id = 10 AND timec > now() - '15 years'::interval INTO r;
 END
 $$ LANGUAGE plpgsql;
@@ -556,7 +556,7 @@ SELECT FROM _timescaledb_catalog.dimension_slice WHERE id = :osm_dimension_slice
 \d+ ht_try
 
 -- verify that still can read from the table after catalog manipulations
-EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
 ROLLBACK;
 
 -- TEST error out when trying to drop an OSM chunk from a hypertable that

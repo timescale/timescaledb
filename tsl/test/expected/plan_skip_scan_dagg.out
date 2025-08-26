@@ -114,7 +114,7 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select
 -- adjusted statistics
 alter table skip_scan_htcl set (autovacuum_enabled = off);
 -- we want to run with analyze here so we can see counts in the nodes
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 \set TABLE skip_scan
 \ir include/skip_scan_dagg_query.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -3193,7 +3193,7 @@ CREATE INDEX ON :TABLE(time);
 -- To test scenarios with SkipScan/no SkipScan over a mix of uncompressed and compressed chunks
 SET timescaledb.enable_compressed_skipscan TO false;
 -- IndexPath without pathkeys doesnt use SkipScan
-EXPLAIN (costs off, timing off, summary off) SELECT count(DISTINCT 1) FROM pg_rewrite;
+EXPLAIN (buffers off, costs off, timing off, summary off) SELECT count(DISTINCT 1) FROM pg_rewrite;
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Aggregate

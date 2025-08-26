@@ -37,7 +37,7 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
  (2,public,many_partitions_test_1m,t)
 (1 row)
 
-EXPLAIN (verbose on, costs off)
+EXPLAIN (verbose on, buffers off, costs off)
 INSERT INTO many_partitions_test_1m(time, temp, device)
 SELECT time_bucket('1 minute', time) AS period, avg(temp), device
 FROM many_partitions_test

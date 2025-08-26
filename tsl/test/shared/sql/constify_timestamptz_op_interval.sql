@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (costs off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off)'
 -- we disable ChunkAppend and ConstraintAwareAppend here to make the exclusion easier to spot
 -- otherwise those would remove the chunks from the plan during execution
 

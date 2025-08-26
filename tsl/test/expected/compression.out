@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 SET timescaledb.enable_transparent_decompression to OFF;
 SET timezone TO 'America/Los_Angeles';
-\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 \ir include/rand_generator.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -572,7 +572,7 @@ EXECUTE prep_plan;
      2
 (1 row)
 
-EXPLAIN (COSTS OFF) EXECUTE prep_plan;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE prep_plan;
                             QUERY PLAN                             
 -------------------------------------------------------------------
  Finalize Aggregate
@@ -621,7 +621,7 @@ SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch LIMIT 2;
 
 VACUUM ANALYZE test_collation;
 --segment bys are pushed down correctly
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE device_id < 'a';
                       QUERY PLAN                       
 -------------------------------------------------------
  Append
@@ -649,7 +649,7 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
          Filter: (device_id < 'a'::text)
 (23 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "POSIX";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "POSIX";
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Append
@@ -678,14 +678,14 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "
 (23 rows)
 
 \set ON_ERROR_STOP 0
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id COLLATE "POSIX" < device_id_2 COLLATE "C";
-ERROR:  collation mismatch between explicit collations "POSIX" and "C" at character 96
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE device_id COLLATE "POSIX" < device_id_2 COLLATE "C";
+ERROR:  collation mismatch between explicit collations "POSIX" and "C" at character 109
 SELECT device_id < device_id_2  FROM test_collation;
 ERROR:  could not determine which collation to use for string comparison
 \set ON_ERROR_STOP 1
 --segment meta on order bys pushdown
 --should work
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
                       QUERY PLAN                       
 -------------------------------------------------------
  Append
@@ -715,7 +715,7 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
          Filter: (val_1 < 'a'::text)
 (25 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
                       QUERY PLAN                       
 -------------------------------------------------------
  Append
@@ -745,7 +745,7 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
          Filter: (val_2 < 'a'::text)
 (25 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
                            QUERY PLAN                           
 ----------------------------------------------------------------
  Append
@@ -775,7 +775,7 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
          Filter: (val_1 < 'a'::text COLLATE "C")
 (25 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSIX";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSIX";
                              QUERY PLAN                             
 --------------------------------------------------------------------
  Append
@@ -806,7 +806,7 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSI
 (25 rows)
 
 --cannot pushdown when op collation does not match column's collation since min/max used different collation than what op needs
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSIX";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSIX";
                       QUERY PLAN                       
 -------------------------------------------------------
  Append
@@ -834,7 +834,7 @@ EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSI
          Filter: (val_1 < 'a'::text COLLATE "POSIX")
 (23 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "C";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "C";
                       QUERY PLAN                       
 -------------------------------------------------------
  Append
@@ -1739,7 +1739,7 @@ SHOW max_parallel_workers;
  8
 (1 row)
 
-\set explain 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set explain 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 -- We disable enable_parallel_append here to ensure
 -- that we create the same query plan in all PG 14.X versions
 SET enable_parallel_append = false;

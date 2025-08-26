@@ -4,7 +4,7 @@
 --parallel queries require big-ish tables so collect them all here
 --so that we need to generate queries only once.
 -- output with analyze is not stable because it depends on worker assignment
-\set PREFIX 'EXPLAIN (costs off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off)'
 \set CHUNK1 _timescaledb_internal._hyper_1_1_chunk
 \set CHUNK2 _timescaledb_internal._hyper_1_2_chunk
 CREATE TABLE test (i int, j double precision, ts timestamp);
@@ -28,7 +28,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost TO 0;
-EXPLAIN (costs off) SELECT first(i, j) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT first(i, j) FROM "test";
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Finalize Aggregate
@@ -46,7 +46,7 @@ SELECT first(i, j) FROM "test";
      0
 (1 row)
 
-EXPLAIN (costs off) SELECT last(i, j) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT last(i, j) FROM "test";
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Finalize Aggregate
@@ -64,7 +64,7 @@ SELECT last(i, j) FROM "test";
  999990
 (1 row)
 
-EXPLAIN (costs off) SELECT time_bucket('1 second', ts) sec, last(i, j)
+EXPLAIN (buffers off, costs off) SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
 GROUP BY sec
 ORDER BY sec
@@ -132,7 +132,7 @@ LIMIT 5;
 (5 rows)
 
 --test variants of histogram
-EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Finalize Aggregate
@@ -150,7 +150,7 @@ SELECT histogram(i, 1, 1000000, 2) FROM "test";
  {1,50000,49999,0}
 (1 row)
 
-EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Finalize Aggregate
@@ -168,7 +168,7 @@ SELECT histogram(i, 1, 1000001, 10) FROM "test";
  {1,10000,10000,10000,10000,10000,10000,10000,10000,10000,9999,0}
 (1 row)
 
-EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT histogram(i, 0,100000,5) FROM "test";
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Finalize Aggregate
@@ -186,7 +186,7 @@ SELECT histogram(i, 0, 100000, 5) FROM "test";
  {0,2000,2000,2000,2000,2000,90000}
 (1 row)
 
-EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT histogram(i, 10,100000,5) FROM "test";
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Finalize Aggregate
@@ -204,7 +204,7 @@ SELECT histogram(i, 10, 100000, 5) FROM "test";
  {1,2000,2000,2000,2000,1999,90000}
 (1 row)
 
-EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
+EXPLAIN (buffers off, costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
  Finalize Aggregate

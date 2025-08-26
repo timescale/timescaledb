@@ -7,7 +7,7 @@
 \ir include/skip_scan_load.sql
 
 -- we want to run with analyze here so we can see counts in the nodes
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 -- test SkipScan NOT NULL mode
 -- also sets up "skip_scan_b" table with a bool column and a not null column

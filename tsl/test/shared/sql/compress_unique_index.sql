@@ -21,10 +21,10 @@ INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-01');
 \set ON_ERROR_STOP 1
 
 -- should only decompress 1 batch
-EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-02');
+EXPLAIN (analyze,buffers off, costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-02');
 
 -- should decompress no batches
-EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c3','2000-01-02');
+EXPLAIN (analyze,buffers off, costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c3','2000-01-02');
 
 SELECT * FROM compress_unique ORDER BY compress_unique;
 

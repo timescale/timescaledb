@@ -2028,7 +2028,7 @@ SELECT * FROM mat_m1;
 (4 rows)
 
 -- Merge Append
-EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1;
                                                           QUERY PLAN                                                          
 ------------------------------------------------------------------------------------------------------------------------------
  Merge Append
@@ -2065,7 +2065,7 @@ SELECT * FROM mat_m1 ORDER BY count;
  Sun Dec 27 16:00:00 2009 PST |     5 | 330
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
                                                              QUERY PLAN                                                             
 ------------------------------------------------------------------------------------------------------------------------------------
  Sort
@@ -2118,7 +2118,7 @@ SELECT * FROM mat_m1;
 (3 rows)
 
 -- Merge Append
-EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1;
                                                        QUERY PLAN                                                       
 ------------------------------------------------------------------------------------------------------------------------
  Merge Append
@@ -2136,7 +2136,7 @@ SELECT * FROM mat_m1 ORDER BY count;
  Sun Dec 27 16:00:00 2009 PST |     5 | 330
 (3 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
                                                           QUERY PLAN                                                          
 ------------------------------------------------------------------------------------------------------------------------------
  Sort
@@ -2277,7 +2277,7 @@ SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
 -- Parallel planning
-EXPLAIN (COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket >= '2023-07-01';
+EXPLAIN (BUFFERS OFF, COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket >= '2023-07-01';
                                                                                            QUERY PLAN                                                                                           
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append

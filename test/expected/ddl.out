@@ -280,7 +280,7 @@ SELECT * FROM ONLY PUBLIC."Hypertable_1";
 ------+-----------+--------+----------+----------+----------+----------+----------
 (0 rows)
 
-EXPLAIN (costs off) SELECT * FROM ONLY PUBLIC."Hypertable_1";
+EXPLAIN (buffers off, costs off) SELECT * FROM ONLY PUBLIC."Hypertable_1";
          QUERY PLAN         
 ----------------------------
  Seq Scan on "Hypertable_1"
@@ -442,7 +442,7 @@ SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
  14 |             9 | time        | timestamp with time zone | t       |            |                          |                    |   2628000000000 |                          |                         | 
 (2 rows)
 
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT * FROM alter_test WHERE time > '2017-05-20T10:00:01';
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
@@ -497,7 +497,7 @@ SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
 (2 rows)
 
 -- constraint exclusion should still work with updated column
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT * FROM alter_test WHERE time_us > '2017-05-20T10:00:01';
                                      QUERY PLAN                                      
 -------------------------------------------------------------------------------------

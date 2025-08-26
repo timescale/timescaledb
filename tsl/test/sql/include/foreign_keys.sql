@@ -521,7 +521,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should cascade
 UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 BEGIN;
@@ -532,7 +532,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should cascade
 UPDATE fk_cascade SET fk_cascade = 'fk_cascade_updated';
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 -- ON DELETE CASCADE
@@ -555,7 +555,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should cascade
 DELETE FROM fk_cascade;
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 BEGIN;
@@ -566,7 +566,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should cascade
 DELETE FROM fk_cascade;
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 RESET timescaledb.enable_compressed_direct_batch_delete;
@@ -580,7 +580,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should cascade
 DELETE FROM fk_cascade;
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 BEGIN;
@@ -591,7 +591,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should cascade
 DELETE FROM fk_cascade;
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 -- SET NULL
@@ -616,7 +616,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should set column to null
 UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 BEGIN;
@@ -627,7 +627,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should set column to null
 UPDATE fk_set_null SET fk_set_null = 'fk_set_null_updated';
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 -- ON DELETE SET NULL
@@ -648,7 +648,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should set column to null
 DELETE FROM fk_set_null;
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 BEGIN;
@@ -659,7 +659,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 -- should set column to null
 DELETE FROM fk_set_null;
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 -- SET DEFAULT
@@ -684,7 +684,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 SELECT * FROM ht;
 UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 BEGIN;
@@ -695,7 +695,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 SELECT * FROM ht;
 UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 -- ON DELETE SET DEFAULT
@@ -715,7 +715,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 SELECT * FROM ht;
 DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 BEGIN;
@@ -726,7 +726,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
 SELECT * FROM ht;
 DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
 SELECT * FROM ht;
-EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+EXPLAIN (analyze, buffers off, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
 -- #7226

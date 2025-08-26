@@ -39,7 +39,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
 
 \d+ :chunk
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where value = md5(7248::text);
 
 select count(*) from bloom where value = md5(7248::text);
@@ -50,7 +50,7 @@ set enable_mergejoin to off;
 set enable_hashjoin to off;
 set enable_material to off;
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 with query(value) as materialized (values (md5(3516::text)), (md5(9347::text)),
     (md5(5773::text)))
 select count(*) from bloom natural join query;
@@ -69,7 +69,7 @@ reset enable_material;
 -- Stable expression that yields null
 set timescaledb.enable_chunk_append to off;
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where value =
     case when now() < '1970-01-01' then md5(2345::text) else null end
 ;
@@ -78,14 +78,14 @@ reset timescaledb.enable_chunk_append;
 
 
 -- Stable expression that yields not null
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where value =
     case when now() < '1970-01-01' then md5(2345::text) else md5(5837::text) end
 ;
 
 
 -- Stable expression on minmax index
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where x <
     case when now() < '1970-01-01' then 1 else 1000 end
 ;
@@ -97,7 +97,7 @@ set plan_cache_mode to 'force_generic_plan';
 prepare p as
 select count(*) from bloom where x < $1;
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 execute p(1000);
 
 deallocate p;
@@ -107,11 +107,11 @@ deallocate p;
 prepare p as
 select count(*) from bloom where value = $1;
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 execute p(md5('2345'));
 
 -- Null parameter on bloom index
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 execute p(null);
 
 reset timescaledb.enable_chunk_append;
@@ -123,7 +123,7 @@ deallocate p;
 prepare p as
 select count(*) from bloom where value = md5($1);
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 execute p('2345');
 
 deallocate p;
@@ -133,26 +133,26 @@ reset timescaledb.enable_chunk_append;
 
 
 -- Scalar array operations are not yet supported
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where x < any(array[1000, 2000]::int[]);
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where value = any(array[md5('1000'), md5('2000')]);
 
 
 -- UUID uses bloom
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcab';
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcac';
 
 
 -- Timestamp uses minmax
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where ts between '2021-01-07' and '2021-01-14';
 
 
@@ -180,29 +180,29 @@ select count(compress_chunk(x)) from show_chunks('corner') x;
 
 vacuum full analyze corner;
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = 'short';
 
 -- Cross-type equality operator.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = 'short'::name;
 
 -- Comparison with segmentby.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = s;
 
 -- Can push down only some parts of the expression but not the others, so the
 -- pushdown shouldn't work in this case.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = s or c = random()::text;
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = 'test'
     or c = case when now() > '1970-01-01' then 'test2' else random()::text end
 ;
 
 -- Unsupported operator
-explain (costs off)
+explain (buffers off, costs off)
 select * from corner where c > s;
 
 
@@ -328,7 +328,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
 \d+ :chunk
 
 -- Check index pushdown with one value.
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
 
 
@@ -336,7 +336,7 @@ select * from badtable where b = 1000::int8::badint;
 -- shape is a little weird to achieve the parameterized compressed scan, for
 -- joins it doesn't work at the moment due to general problem with parameterized
 -- DecompressChunk there.
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
     (pow(2, 32) * 2), (pow(2, 32) * 1024)),
 v_badint as materialized (select b::int8::badint from v_int)
@@ -365,10 +365,10 @@ select count(compress_chunk(x)) from show_chunks('badtable') x;
 
 vacuum full analyze badtable;
 
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
 
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
     (pow(2, 32) * 2), (pow(2, 32) * 1024)),
 v_badint as materialized (select b::int8::badint from v_int)
@@ -397,7 +397,7 @@ insert into byref select x, float8tomacaddr8(mix(x)) from generate_series(1, 100
 select count(compress_chunk(x)) from show_chunks('byref') x;
 vacuum analyze byref;
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from byref where x = float8tomacaddr8(mix(1));
 
 
@@ -418,7 +418,7 @@ alter table arraybloom set (timescaledb.compress,
 select count(compress_chunk(x)) from show_chunks('arraybloom') x;
 vacuum full analyze arraybloom;
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from arraybloom where value = array[7248::int];
 
 select count(*) from arraybloom where value = array[7248::int];

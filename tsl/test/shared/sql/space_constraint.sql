@@ -6,7 +6,7 @@ SET timescaledb.enable_chunk_append TO false;
 SET timescaledb.enable_constraint_aware_append TO false;
 SET timescaledb.current_timestamp_mock TO '1990-01-01';
 
-\set PREFIX 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
+\set PREFIX 'EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)'
 
 
 -- test SELECT FOR UPDATE
@@ -67,7 +67,7 @@ SELECT t,s1,s2,s3,0.12345 FROM
   (VALUES (1.23),(4.56)) v3(s2),
   (VALUES (1),(2)) v4(s3);
 
-\set PREFIX 'EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)'
+\set PREFIX 'EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)'
 
 BEGIN;
 :PREFIX DELETE FROM space_constraint WHERE s1 = 's1_2';

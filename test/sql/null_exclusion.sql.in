@@ -14,7 +14,7 @@ select * from metrics
 where ts >= (select max(ts) from metrics);
 
 -- two non-const conditions
-explain (analyze, costs off, summary off, timing off)
+explain (analyze, buffers off, costs off, summary off, timing off)
 select * from metrics
 where ts >= (select max(ts) from metrics)
     and id = 1;
