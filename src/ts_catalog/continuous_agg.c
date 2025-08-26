@@ -50,7 +50,17 @@
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
 
+TS_FUNCTION_INFO_V1(ts_invalidation_plugin_name);
 TS_FUNCTION_INFO_V1(ts_has_invalidation_trigger);
+
+/*
+ * Return the full name of the invalidation plugin, with version and all.
+ */
+Datum
+ts_invalidation_plugin_name(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_TEXT_P(cstring_to_text(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME));
+}
 
 Datum
 ts_has_invalidation_trigger(PG_FUNCTION_ARGS)

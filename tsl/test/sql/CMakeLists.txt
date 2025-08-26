@@ -220,8 +220,7 @@ set(SOLO_TESTS
     # https://github.com/postgres/postgres/commit/d87d07b7ad3b782cb74566cd771ecdb2823adf6a
     cagg_invalidation
     cagg_invalidation_multi
-    cagg_plugin
-    cagg_invalidation_multi)
+    cagg_plugin)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

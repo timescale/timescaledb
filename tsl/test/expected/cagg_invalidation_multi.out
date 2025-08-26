@@ -11,6 +11,7 @@ SELECT _timescaledb_functions.stop_background_workers();
 
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
+SELECT _timescaledb_functions.invalidation_plugin_name() AS plugin_name \gset
 CREATE VIEW hypertable_invalidation_thresholds AS
 SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass AS hypertable,
        watermark AS threshold
@@ -29,12 +30,11 @@ SELECT ca.user_view_name AS aggregate_name,
     ON materialization_id = ht.id;
 CREATE VIEW invalidation_slots AS
 SELECT replace(slot_name::text, dboid::text, 'DBOID') AS slot_name,
-       plugin,
        slot_type,
        database
  FROM pg_replication_slots,
       (select oid from pg_database where current_database() = datname) t(dboid)
-WHERE plugin = 'timescaledb-invalidations';
+WHERE plugin = :'plugin_name';
 CREATE TABLE conditions (time bigint NOT NULL, device int, temp float);
 SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
     create_hypertable    
@@ -88,8 +88,8 @@ SELECT * FROM conditions ORDER BY time DESC, device LIMIT 10;
 (10 rows)
 
 SELECT * FROM invalidation_slots;
- slot_name | plugin | slot_type | database 
------------+--------+-----------+----------
+ slot_name | slot_type | database 
+-----------+-----------+----------
 (0 rows)
 
 -- Create two continuous aggregates on the same hypertable to test
@@ -156,9 +156,9 @@ INSERT INTO measurements VALUES
 INSERT INTO measurements VALUES
        (20, 4, 23.7), (140, 5, 23.8), (200, 3, 23.6);
 SELECT * FROM invalidation_slots;
-   slot_name   |          plugin           | slot_type |          database          
----------------+---------------------------+-----------+----------------------------
- ts_DBOID_cagg | timescaledb-invalidations | logical   | db_cagg_invalidation_multi
+   slot_name   | slot_type |          database          
+---------------+-----------+----------------------------
+ ts_DBOID_cagg | logical   | db_cagg_invalidation_multi
 (1 row)
 
 CALL _timescaledb_functions.process_hypertable_invalidations(
