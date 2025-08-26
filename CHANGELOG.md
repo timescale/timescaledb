@@ -4,6 +4,75 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.22.0 (2025-09-02)
+
+This release contains performance improvements and bug fixes since the 2.21.3 release. We recommend that you upgrade at the next available opportunity.
+
+**Highlighted features in TimescaleDB v2.22.0**
+* [#8247](https://github.com/timescale/timescaledb/pull/8247) Add configurable alter settings for sparse indexes
+
+**Removal of the hypercore access method**
+We made the decision to deprecate hypercore access method (TAM) with the 2.21.0 release. It was an experiment, which did not show the signals we hoped for and is removed with this release. Upgrading to 2.22.0 and higher will be blocked if TAM is still in use. Since TAM’s inception in [2.18.0](https://github.com/timescale/timescaledb/releases/tag/2.18.0), we learned that btrees were not the right architecture. The recent advancements in the columnstore—such as more performant backfilling, SkipScan, adding check constraints, and faster point queries—put the [columnstore](https://www.timescale.com/blog/hypercore-a-hybrid-row-storage-engine-for-real-time-analytics) close to or on par with TAM without the storage from the additional index. We apologize for the inconvenience this action potentially causes and are here to assist you during the migration process.
+
+Migration path
+
+```
+do $$
+declare
+   relid regclass;
+begin
+   for relid in
+       select cl.oid from pg_class cl
+       join pg_am am on (am.oid = cl.relam)
+       where am.amname = 'hypercore'
+   loop
+       raise notice 'converting % to heap', relid::regclass;
+       execute format('alter table %s set access method heap', relid);
+   end loop;
+end
+$$;
+```
+
+**Features**
+* [#8247](https://github.com/timescale/timescaledb/pull/8247) Add configurable alter settings for sparse indexes
+* [#8306](https://github.com/timescale/timescaledb/pull/8306) Add option for invalidation collection using WAL for continuous aggregates
+* [#8340](https://github.com/timescale/timescaledb/pull/8340) Improve selectivity estimates for sparse minmax indexes, so that an index scan on compressed table is chosen more often when it's beneficial.
+* [#8360](https://github.com/timescale/timescaledb/pull/8360) Continuous aggregate multi-hypertable invalidation processing
+* [#8364](https://github.com/timescale/timescaledb/pull/8364) Remove hypercore table access method
+* [#8371](https://github.com/timescale/timescaledb/pull/8371) Show available timescaledb ALTER options when encountering unsupported options
+* [#8376](https://github.com/timescale/timescaledb/pull/8376) Change DecompressChunk custom node name to ColumnarScan
+* [#8385](https://github.com/timescale/timescaledb/pull/8385) UUID v7 functions for testing pre PG18
+* [#8393](https://github.com/timescale/timescaledb/pull/8393) Add specialized compression for UUIDs. Best suited for UUID v7, but still works with other UUID versions. This is experimental at the moment and backward compatibility is not guaranteed.
+* [#8398](https://github.com/timescale/timescaledb/pull/8398) Set default compression settings at compress time
+* [#8401](https://github.com/timescale/timescaledb/pull/8401) Support ALTER TABLE RESET for compression settings
+* [#8414](https://github.com/timescale/timescaledb/pull/8414) Vectorised filtering of UUID Eq and Ne filters, plus bulk decompression of UUIDs
+* [#8424](https://github.com/timescale/timescaledb/pull/8424) Block downgrade when orderby setting is NULL
+* [#8454](https://github.com/timescale/timescaledb/pull/8454) Remove internal unused index helper functions
+* [#8494](https://github.com/timescale/timescaledb/pull/8494) Improve job stat history retention policy
+* [#8496](https://github.com/timescale/timescaledb/pull/8496) Fix dropping chunks with foreign keys
+* [#8505](https://github.com/timescale/timescaledb/pull/8505) Add support for partitioning on UUIDv7
+* [#8513](https://github.com/timescale/timescaledb/pull/8513) Support multikey SkipScan when all keys are guaranteed to be non-null
+* [#8514](https://github.com/timescale/timescaledb/pull/8514) Concurrent Continuous Aggregates improvements
+* [#8528](https://github.com/timescale/timescaledb/pull/8528) Add _timescaledb_functions.chunk_status_text helper function
+* [#8529](https://github.com/timescale/timescaledb/pull/8529) Optimize direct compress status handling
+
+**Bugfixes**
+* [#8422](https://github.com/timescale/timescaledb/pull/8422) Don't require columnstore=false when using apache licensed version
+* [#8493](https://github.com/timescale/timescaledb/pull/8493) Change log level of not null constraint message
+* [#8500](https://github.com/timescale/timescaledb/pull/8500) Fix uniqueness check with generated columns and hypercore
+
+**GUCs**
+* `enable_multikey_skipscan`: Enable SkipScan for multiple distinct keys, default: on
+* `enable_uuid_compression`: Enable uuid compression functionality, default: off
+* `cagg_processing_wal_batch_size`: Batch size when processing WAL entries, default: 10000
+* `cagg_processing_low_work_mem`: Low working memory limit for continuous aggregate invalidation processing, default: 38.4MB
+* `cagg_processing_high_work_mem`: High working memory limit for continuous aggregate invalidation processing, default: 51.2MB
+
+**Thanks**
+* @CodeTherapist for reporting the issue with FK checks not working after several insert statements
+* @Zaczero for reporting a bug with CREATE TABLE WITH when using apache licensed version
+* @pierreforstmann for fixing a bug when dropping chunks with foreign keys
+
 ## 2.21.3 (2025-08-12)
 
 This release contains performance improvements and bug fixes since the 2.21.2 release. We recommend that you upgrade at the next available opportunity.

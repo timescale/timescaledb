@@ -1,1 +1,0 @@
-Implements: #8340 Improve selectivity estimates for sparse minmax indexes, so that an index scan on compressed table is chosen more often when it's beneficial.
