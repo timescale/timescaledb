@@ -25,12 +25,12 @@ END;
 $BODY$;
 
 -- ConstraintAwareAppend applied for SELECT
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
 
 -- ConstraintAwareAppend NOT applied for DELETE
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
 

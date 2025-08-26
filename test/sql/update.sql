@@ -19,12 +19,12 @@ END;
 $BODY$;
 
 -- ConstraintAwareAppend applied for SELECT
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT FROM "one_Partition"
 WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
 
 -- ConstraintAwareAppend NOT applied for UPDATE
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 UPDATE "one_Partition"
 SET series_1 = 8
 WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());

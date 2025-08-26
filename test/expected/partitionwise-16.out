@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
-\set PREFIX 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set PREFIX 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 -- Create a two dimensional hypertable
 CREATE TABLE hyper (time timestamptz, device int, temp float);
 SELECT * FROM create_hypertable('hyper', 'time', 'device', 2);

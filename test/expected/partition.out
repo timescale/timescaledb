@@ -34,7 +34,7 @@ BEGIN;
 -- For plan stability between versions
 SET LOCAL enable_bitmapscan = false;
 SET LOCAL enable_indexscan = false;
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_legacy WHERE device = 1;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -78,7 +78,7 @@ BEGIN;
 -- For plan stability between versions
 SET LOCAL enable_bitmapscan = false;
 SET LOCAL enable_indexscan = false;
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_new WHERE device = 1;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -443,7 +443,7 @@ FROM test.show_subtables('part_time_func');
 -- Check that constraint exclusion works with time partitioning
 -- function (scan only one chunk)
 -- No exclusion
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_time_func;
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
@@ -455,7 +455,7 @@ SELECT * FROM part_time_func;
 (5 rows)
 
 -- Exclude using the function on time
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_time_func WHERE time_partfunc(time) < '2018-07-01';
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
@@ -466,7 +466,7 @@ SELECT * FROM part_time_func WHERE time_partfunc(time) < '2018-07-01';
 
 -- Exclude using the same date but as a UNIX timestamp. Won't do an
 -- index scan since the index is on the time function expression
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_time_func WHERE time < 1530403200.0;
 NOTICE:  time value for 1530403200 is Sun Jul 01 00:00:00 2018
                                        QUERY PLAN                                        

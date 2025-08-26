@@ -9,7 +9,7 @@
 set work_mem to '64MB';
 set enable_hashagg to off;
 
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 CREATE TABLE ht_metrics_partially_compressed(time timestamptz, device int, value float);
 SELECT create_hypertable('ht_metrics_partially_compressed','time');

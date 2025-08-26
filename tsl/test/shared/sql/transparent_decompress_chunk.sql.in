@@ -2,10 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
-\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
-\set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, costs off)'
-\set PREFIX_NO_VERBOSE 'EXPLAIN (costs off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off, verbose)'
+\set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, buffers off, costs off)'
+\set PREFIX_NO_VERBOSE 'EXPLAIN (buffers off, costs off)'
 
 -- Some tweaks to get less flaky test
 SET parallel_leader_participation TO off;

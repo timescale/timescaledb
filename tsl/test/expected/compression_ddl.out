@@ -1421,7 +1421,7 @@ VACUUM ANALYZE compression_insert;
 -- this check basically makes sure that the indexes are built properly
 -- and there are no issues in attribute mappings while building them
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -1506,7 +1506,7 @@ AND time <= '2000-01-11 23:55:00+0';
 VACUUM ANALYZE compression_insert;
 -- force index scans to check index mapping
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -1593,7 +1593,7 @@ AND time <= '2000-01-19 23:55:00+0';
 VACUUM ANALYZE compression_insert;
 -- force index scans to check index mapping
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -1683,7 +1683,7 @@ AND time <= '2000-01-26 23:55:00+0';
 VACUUM ANALYZE compression_insert;
 -- force index scans to check index mapping
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -1776,7 +1776,7 @@ AND time <= '2000-02-01 23:55:00+0';
 VACUUM ANALYZE compression_insert;
 -- force index scans to check index mapping
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -1899,7 +1899,7 @@ select count(*) from test_partials group by tableoid order by count(*) desc;
 (3 rows)
 
 -- fully compressed
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
                              QUERY PLAN                             
 --------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
@@ -1930,7 +1930,7 @@ select count(*) from test_partials group by tableoid order by count(*) desc;
      3
 (3 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
@@ -1987,7 +1987,7 @@ select count(*) from test_partials group by tableoid order by count(*) desc;
      3
 (3 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
@@ -2051,7 +2051,7 @@ select count(*) from test_partials group by tableoid order by count(*) desc;
      2
 (4 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
@@ -2108,7 +2108,7 @@ select count(*) from test_partials group by tableoid order by count(*) desc;
      2
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM test_partials ORDER BY time;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
@@ -2152,7 +2152,7 @@ select count(*) from test_partials group by tableoid order by count(*) desc;
      1
 (5 rows)
 
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
@@ -2264,7 +2264,7 @@ SELECT add_dimension('space_part', 'a', number_partitions => 5);
 (1 row)
 
 -- plan is still the same
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
@@ -2291,7 +2291,7 @@ INSERT INTO space_part VALUES
 ('2022-01-01 00:03', 2, 1, 1);
 VACUUM ANALYZE space_part;
 -- plan still ok
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
@@ -2326,7 +2326,7 @@ NOTICE:  chunk "_hyper_35_134_chunk" is already converted to columnstore
 
 VACUUM ANALYZE space_part;
 -- plan still ok
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
@@ -2356,7 +2356,7 @@ insert into space_part values
 ('2022-01-01 00:02', 2, 1, 1),
 ('2022-01-01 00:02', 2, 1, 1);
 VACUUM ANALYZE space_part;
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
@@ -2386,7 +2386,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 INSERT INTO space_part VALUES
 ('2022-01-01 00:02', 1, 1, 1);
 VACUUM ANALYZE space_part;
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
@@ -2448,8 +2448,8 @@ select decompress_chunk(show_chunks('mytab'));
 (1 row)
 
 vacuum analyze mytab;
-\set EXPLAIN 'EXPLAIN (costs off,timing off,summary off)'
-\set EXPLAIN_ANALYZE 'EXPLAIN (analyze,costs off,timing off,summary off)'
+\set EXPLAIN 'EXPLAIN (buffers off, costs off,timing off,summary off)'
+\set EXPLAIN_ANALYZE 'EXPLAIN (analyze,buffers off, costs off,timing off,summary off)'
 -- do index scan on uncompressed, should give correct results
 set enable_seqscan = off;
 set enable_indexscan = on;

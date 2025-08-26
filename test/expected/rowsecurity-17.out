@@ -262,7 +262,7 @@ SELECT * FROM document TABLESAMPLE BERNOULLI(50) REPEATABLE(0)
 -----+-----+--------+---------+--------
 (0 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
                              QUERY PLAN                             
 --------------------------------------------------------------------
  Custom Scan (ChunkAppend) on document
@@ -286,7 +286,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
          Filter: ((dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (19 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
                                 QUERY PLAN                                
 --------------------------------------------------------------------------
  Hash Join
@@ -354,7 +354,7 @@ NOTICE:  f_leak => awesome technology book
   33 |  10 |      2 | regress_rls_dave  | awesome technology book | technology
 (7 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on document
@@ -378,7 +378,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
          Filter: ((cid <> 44) AND (cid <> 44) AND (cid < 50) AND (dlevel <= (InitPlan 1).col1) AND f_leak(dtitle))
 (19 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
                                                           QUERY PLAN                                                           
 -------------------------------------------------------------------------------------------------------------------------------
  Hash Join
@@ -476,7 +476,7 @@ NOTICE:  f_leak => great manga
   44 |   8 |      1 | regress_rls_carol | great manga           | manga
 (3 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Custom Scan (ChunkAppend) on document
@@ -497,7 +497,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
          Filter: ((dauthor = CURRENT_USER) AND f_leak(dtitle))
 (16 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Nested Loop
@@ -742,7 +742,7 @@ SELECT * FROM t1;
  2 | yyy
 (5 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
           QUERY PLAN           
 -------------------------------
  Append
@@ -769,7 +769,7 @@ NOTICE:  f_leak => yyy
  2 | yyy
 (5 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
                   QUERY PLAN                   
 -----------------------------------------------
  Append
@@ -792,7 +792,7 @@ SELECT ctid, * FROM t1;
  (0,2) | 2 | yyy
 (5 rows)
 
-EXPLAIN (COSTS OFF) SELECT *, t1 FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT *, t1 FROM t1;
           QUERY PLAN           
 -------------------------------
  Append
@@ -815,7 +815,7 @@ SELECT *, t1 FROM t1;
  2 | yyy | (2,yyy)
 (5 rows)
 
-EXPLAIN (COSTS OFF) SELECT *, t1 FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT *, t1 FROM t1;
           QUERY PLAN           
 -------------------------------
  Append
@@ -838,7 +838,7 @@ SELECT * FROM t1 FOR SHARE;
  2 | yyy
 (5 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1 FOR SHARE;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 FOR SHARE;
              QUERY PLAN              
 -------------------------------------
  LockRows
@@ -866,7 +866,7 @@ NOTICE:  f_leak => yyy
  2 | yyy
 (5 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b) FOR SHARE;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b) FOR SHARE;
                      QUERY PLAN                      
 -----------------------------------------------------
  LockRows
@@ -890,7 +890,7 @@ SELECT a, b, ctid FROM t2 UNION ALL SELECT a, b, ctid FROM t3;
  3 | zzz | (0,3)
 (5 rows)
 
-EXPLAIN (COSTS OFF) SELECT a, b, ctid FROM t2 UNION ALL SELECT a, b, ctid FROM t3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT a, b, ctid FROM t2 UNION ALL SELECT a, b, ctid FROM t3;
           QUERY PLAN           
 -------------------------------
  Append
@@ -929,7 +929,7 @@ NOTICE:  f_leak => zzz
  3 | zzz
 (11 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
         QUERY PLAN         
 ---------------------------
  Append
@@ -971,7 +971,7 @@ NOTICE:  f_leak => zzz
  3 | zzz
 (11 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
         QUERY PLAN         
 ---------------------------
  Append
@@ -1074,7 +1074,7 @@ NOTICE:  f_leak => awesome science fiction
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
                              QUERY PLAN                             
 --------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
@@ -1125,7 +1125,7 @@ NOTICE:  f_leak => awesome technology book
   10 |  99 |      2 | regress_rls_dave  | awesome technology book
 (10 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
                              QUERY PLAN                             
 --------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
@@ -1164,7 +1164,7 @@ NOTICE:  f_leak => awesome science fiction
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
@@ -1254,7 +1254,7 @@ NOTICE:  f_leak => awesome science fiction
    9 |  11 |      1 | regress_rls_dave  | awesome science fiction
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
@@ -1307,7 +1307,7 @@ NOTICE:  f_leak => awesome technology book
   10 |  99 |      2 | regress_rls_dave  | awesome technology book
 (11 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
                              QUERY PLAN                             
 --------------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
@@ -1368,7 +1368,7 @@ NOTICE:  f_leak => great satire
    8 |  55 |      2 | regress_rls_carol | great satire
 (3 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Custom Scan (ChunkAppend) on hyper_document
@@ -1508,7 +1508,7 @@ DETAIL:  policy d1 on table dependent depends on table dependee
 HINT:  Use DROP ... CASCADE to drop the dependent objects too.
 DROP TABLE dependee CASCADE;
 NOTICE:  drop cascades to policy d1 on table dependent
-EXPLAIN (COSTS OFF) SELECT * FROM dependent; -- After drop, should be unqualified
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM dependent; -- After drop, should be unqualified
       QUERY PLAN       
 -----------------------
  Seq Scan on dependent
@@ -1617,7 +1617,7 @@ NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
  4 | a87ff679a2f3e71d9181a67b7542122c
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
                            QUERY PLAN                            
 -----------------------------------------------------------------
  Seq Scan on s1
@@ -1654,7 +1654,7 @@ NOTICE:  f_leak => 1679091c5a880faf6fb5e6087eb1b2dc
   6 | 1679091c5a880faf6fb5e6087eb1b2dc
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
                               QUERY PLAN                               
 -----------------------------------------------------------------------
  Custom Scan (ChunkAppend) on s1
@@ -1711,7 +1711,7 @@ SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
   2 |  2 | c81e728d9d4c2f636f067f89cc14862c
 (3 rows)
 
-EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Result
@@ -1795,7 +1795,7 @@ EXECUTE p1(2);
  2 | yyy
 (3 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE p1(2);
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1(2);
                   QUERY PLAN                  
 ----------------------------------------------
  Append
@@ -1837,7 +1837,7 @@ NOTICE:  f_leak => zzz
  3 | zzz
 (11 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
         QUERY PLAN         
 ---------------------------
  Append
@@ -1861,7 +1861,7 @@ EXECUTE p1(2);
  2 | yyy
 (6 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE p1(2);
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1(2);
         QUERY PLAN         
 ---------------------------
  Append
@@ -1882,7 +1882,7 @@ EXECUTE p2(2);
  2 | yyy
 (3 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE p2(2);
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p2(2);
         QUERY PLAN         
 ---------------------------
  Append
@@ -1905,7 +1905,7 @@ EXECUTE p2(2);
  2 | yyy
 (3 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE p2(2);
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p2(2);
                  QUERY PLAN                  
 ---------------------------------------------
  Append
@@ -1921,7 +1921,7 @@ EXPLAIN (COSTS OFF) EXECUTE p2(2);
 -- UPDATE / DELETE and Row-level security
 --
 SET SESSION AUTHORIZATION regress_rls_bob;
-EXPLAIN (COSTS OFF) UPDATE t1 SET b = b || b WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t1 SET b = b || b WHERE f_leak(b);
                         QUERY PLAN                         
 -----------------------------------------------------------
  Update on t1
@@ -1944,7 +1944,7 @@ NOTICE:  f_leak => dad
 NOTICE:  f_leak => bcd
 NOTICE:  f_leak => def
 NOTICE:  f_leak => yyy
-EXPLAIN (COSTS OFF) UPDATE only t1 SET b = b || '_updt' WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE only t1 SET b = b || '_updt' WHERE f_leak(b);
                   QUERY PLAN                   
 -----------------------------------------------
  Update on t1
@@ -1996,7 +1996,7 @@ NOTICE:  f_leak => yyyyyy
 (5 rows)
 
 -- updates with from clause
-EXPLAIN (COSTS OFF) UPDATE t2 SET b=t2.b FROM t3
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t2 SET b=t2.b FROM t3
 WHERE t2.a = 3 and t3.a = 2 AND f_leak(t2.b) AND f_leak(t3.b);
                            QUERY PLAN                            
 -----------------------------------------------------------------
@@ -2012,7 +2012,7 @@ UPDATE t2 SET b=t2.b FROM t3
 WHERE t2.a = 3 and t3.a = 2 AND f_leak(t2.b) AND f_leak(t3.b);
 NOTICE:  f_leak => cde
 NOTICE:  f_leak => yyyyyy
-EXPLAIN (COSTS OFF) UPDATE t1 SET b=t1.b FROM t2
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t1 SET b=t1.b FROM t2
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
                               QUERY PLAN                               
 -----------------------------------------------------------------------
@@ -2035,7 +2035,7 @@ WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
 UPDATE t1 SET b=t1.b FROM t2
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
 NOTICE:  f_leak => cde
-EXPLAIN (COSTS OFF) UPDATE t2 SET b=t2.b FROM t1
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t2 SET b=t2.b FROM t1
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
                               QUERY PLAN                               
 -----------------------------------------------------------------------
@@ -2056,7 +2056,7 @@ UPDATE t2 SET b=t2.b FROM t1
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
 NOTICE:  f_leak => cde
 -- updates with from clause self join
-EXPLAIN (COSTS OFF) UPDATE t2 t2_1 SET b = t2_2.b FROM t2 t2_2
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t2 t2_1 SET b = t2_2.b FROM t2 t2_2
 WHERE t2_1.a = 3 AND t2_2.a = t2_1.a AND t2_2.b = t2_1.b
 AND f_leak(t2_1.b) AND f_leak(t2_2.b) RETURNING *, t2_1, t2_2;
                            QUERY PLAN                            
@@ -2080,7 +2080,7 @@ NOTICE:  f_leak => cde
  3 | cde | 3.3 | 3 | cde | 3.3 | (3,cde,3.3) | (3,cde,3.3)
 (1 row)
 
-EXPLAIN (COSTS OFF) UPDATE t1 t1_1 SET b = t1_2.b FROM t1 t1_2
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t1 t1_1 SET b = t1_2.b FROM t1 t1_2
 WHERE t1_1.a = 4 AND t1_2.a = t1_1.a AND t1_2.b = t1_1.b
 AND f_leak(t1_1.b) AND f_leak(t1_2.b) RETURNING *, t1_1, t1_2;
                                  QUERY PLAN                                  
@@ -2141,7 +2141,7 @@ SELECT * FROM t1 ORDER BY a,b;
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO ON;
-EXPLAIN (COSTS OFF) DELETE FROM only t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) DELETE FROM only t1 WHERE f_leak(b);
                   QUERY PLAN                   
 -----------------------------------------------
  Delete on t1
@@ -2149,7 +2149,7 @@ EXPLAIN (COSTS OFF) DELETE FROM only t1 WHERE f_leak(b);
          Filter: (((a % 2) = 0) AND f_leak(b))
 (3 rows)
 
-EXPLAIN (COSTS OFF) DELETE FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) DELETE FROM t1 WHERE f_leak(b);
                      QUERY PLAN                      
 -----------------------------------------------------
  Delete on t1
@@ -2204,7 +2204,7 @@ SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE VIEW bv1 WITH (security_barrier) AS SELECT * FROM b1 WHERE a > 0 WITH CHECK OPTION;
 GRANT ALL ON bv1 TO regress_rls_carol;
 SET SESSION AUTHORIZATION regress_rls_carol;
-EXPLAIN (COSTS OFF) SELECT * FROM bv1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM bv1 WHERE f_leak(b);
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
  Subquery Scan on bv1
@@ -2252,7 +2252,7 @@ ERROR:  new row violates row-level security policy for table "b1"
 INSERT INTO bv1 VALUES (11, 'xxx'); -- should fail RLS check
 ERROR:  new row violates row-level security policy for table "b1"
 INSERT INTO bv1 VALUES (12, 'xxx'); -- ok
-EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -2268,7 +2268,7 @@ EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 
 UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 NOTICE:  f_leak => a87ff679a2f3e71d9181a67b7542122c
-EXPLAIN (COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -2481,7 +2481,7 @@ NOTICE:  f_leak => dad
  4 | dad
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -2497,7 +2497,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
 (10 rows)
 
 PREPARE plancache_test AS SELECT * FROM z1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -2513,7 +2513,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test;
 (10 rows)
 
 PREPARE plancache_test2 AS WITH q AS MATERIALIZED (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
                       QUERY PLAN                       
 -------------------------------------------------------
  Nested Loop
@@ -2534,7 +2534,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
 (15 rows)
 
 PREPARE plancache_test4 AS WITH q AS (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
                       QUERY PLAN                       
 -------------------------------------------------------
  Nested Loop
@@ -2555,7 +2555,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
 (15 rows)
 
 PREPARE plancache_test6 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test6;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test6;
                       QUERY PLAN                       
 -------------------------------------------------------
  Nested Loop
@@ -2576,7 +2576,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test6;
 (15 rows)
 
 PREPARE plancache_test3 AS WITH q AS MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
                         QUERY PLAN                         
 -----------------------------------------------------------
  Nested Loop
@@ -2597,7 +2597,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
 (15 rows)
 
 PREPARE plancache_test5 AS WITH q AS (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
-EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
                         QUERY PLAN                         
 -----------------------------------------------------------
  Nested Loop
@@ -2616,7 +2616,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
 (13 rows)
 
 PREPARE plancache_test7 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
-EXPLAIN (COSTS OFF) EXECUTE plancache_test7;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test7;
                         QUERY PLAN                         
 -----------------------------------------------------------
  Nested Loop
@@ -2644,7 +2644,7 @@ NOTICE:  f_leak => dad
  4 | dad
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -2659,7 +2659,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
          Filter: (((a % 2) = 0) AND f_leak(b))
 (10 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -2674,7 +2674,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test;
          Filter: (((a % 2) = 0) AND f_leak(b))
 (10 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
                       QUERY PLAN                       
 -------------------------------------------------------
  Nested Loop
@@ -2694,7 +2694,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
          ->  Seq Scan on z2
 (15 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
                       QUERY PLAN                       
 -------------------------------------------------------
  Nested Loop
@@ -2714,7 +2714,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
          ->  Seq Scan on z2
 (15 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
                         QUERY PLAN                         
 -----------------------------------------------------------
  Nested Loop
@@ -2734,7 +2734,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                      Filter: (((a % 2) = 0) AND f_leak(b))
 (15 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
                         QUERY PLAN                         
 -----------------------------------------------------------
  Nested Loop
@@ -2762,7 +2762,7 @@ NOTICE:  f_leak => ccc
  3 | ccc
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -2777,7 +2777,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
          Filter: (((a % 2) = 1) AND f_leak(b))
 (10 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -2792,7 +2792,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test;
          Filter: (((a % 2) = 1) AND f_leak(b))
 (10 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
                       QUERY PLAN                       
 -------------------------------------------------------
  Nested Loop
@@ -2812,7 +2812,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
          ->  Seq Scan on z2
 (15 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
                       QUERY PLAN                       
 -------------------------------------------------------
  Nested Loop
@@ -2832,7 +2832,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
          ->  Seq Scan on z2
 (15 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
                         QUERY PLAN                         
 -----------------------------------------------------------
  Nested Loop
@@ -2852,7 +2852,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                      Filter: (((a % 2) = 1) AND f_leak(b))
 (15 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
                         QUERY PLAN                         
 -----------------------------------------------------------
  Nested Loop
@@ -2880,7 +2880,7 @@ NOTICE:  f_leak => ccc
  3 | ccc
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -2895,7 +2895,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
          Filter: (((a % 2) = 1) AND f_leak(b))
 (10 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -2910,7 +2910,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test;
          Filter: (((a % 2) = 1) AND f_leak(b))
 (10 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
                       QUERY PLAN                       
 -------------------------------------------------------
  Nested Loop
@@ -2930,7 +2930,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
          ->  Seq Scan on z2
 (15 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
                       QUERY PLAN                       
 -------------------------------------------------------
  Nested Loop
@@ -2950,7 +2950,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
          ->  Seq Scan on z2
 (15 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
                         QUERY PLAN                         
 -----------------------------------------------------------
  Nested Loop
@@ -2970,7 +2970,7 @@ EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
                      Filter: (((a % 2) = 1) AND f_leak(b))
 (15 rows)
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
                         QUERY PLAN                         
 -----------------------------------------------------------
  Nested Loop
@@ -3010,7 +3010,7 @@ NOTICE:  f_leak => dad
  4 | dad
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
                 QUERY PLAN                
 ------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -3040,7 +3040,7 @@ NOTICE:  f_leak => dad
  4 | dad
 (4 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
                 QUERY PLAN                
 ------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -3072,7 +3072,7 @@ NOTICE:  f_leak => dad
  4 | dad
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -3099,7 +3099,7 @@ NOTICE:  f_leak => dad
  4 | dad
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -3118,7 +3118,7 @@ EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM rls_view; --fail - permission denied.
 ERROR:  permission denied for view rls_view
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view; --fail - permission denied.
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view; --fail - permission denied.
 ERROR:  permission denied for view rls_view
 -- Query as role that is not the owner of the table or view with permissions.
 SET SESSION AUTHORIZATION regress_rls_bob;
@@ -3132,7 +3132,7 @@ NOTICE:  f_leak => dad
  4 | dad
 (2 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
                   QUERY PLAN                   
 -----------------------------------------------
  Custom Scan (ChunkAppend) on z1
@@ -3297,7 +3297,7 @@ ALTER TABLE y2 ENABLE ROW LEVEL SECURITY;
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on y1
@@ -3314,7 +3314,7 @@ DROP VIEW rls_sbv;
 SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on y1
@@ -3368,7 +3368,7 @@ NOTICE:  f_leak => 98f13708210194c475687be6106a3b84
  20 | 98f13708210194c475687be6106a3b84
 (14 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM y2 WHERE f_leak(b);
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on y2
@@ -3442,7 +3442,7 @@ NOTICE:  f_leak => abc
  20 | 98f13708210194c475687be6106a3b84
 (14 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak('abc');
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM y2 WHERE f_leak('abc');
                                          QUERY PLAN                                          
 ---------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on y2
@@ -3484,7 +3484,7 @@ NOTICE:  f_leak => def
 ---+---+-----
 (0 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(abc);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(abc);
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Hash Join
@@ -3538,7 +3538,7 @@ NOTICE:  f_leak => 98f13708210194c475687be6106a3b84
 ---+---+-----
 (0 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(b);
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
  Hash Join
@@ -3597,7 +3597,7 @@ ALTER TABLE t1 ENABLE ROW LEVEL SECURITY;
 SET ROLE regress_rls_bob;
 PREPARE role_inval AS SELECT * FROM t1;
 -- Check plan
-EXPLAIN (COSTS OFF) EXECUTE role_inval;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE role_inval;
        QUERY PLAN        
 -------------------------
  Seq Scan on t1
@@ -3607,7 +3607,7 @@ EXPLAIN (COSTS OFF) EXECUTE role_inval;
 -- Change to regress_rls_carol
 SET ROLE regress_rls_carol;
 -- Check plan- should be different
-EXPLAIN (COSTS OFF) EXECUTE role_inval;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE role_inval;
        QUERY PLAN        
 -------------------------
  Seq Scan on t1
@@ -3617,7 +3617,7 @@ EXPLAIN (COSTS OFF) EXECUTE role_inval;
 -- Change back to regress_rls_bob
 SET ROLE regress_rls_bob;
 -- Check plan- should be back to original
-EXPLAIN (COSTS OFF) EXECUTE role_inval;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE role_inval;
        QUERY PLAN        
 -------------------------
  Seq Scan on t1
@@ -3668,7 +3668,7 @@ NOTICE:  f_leak => 98f13708210194c475687be6106a3b84
  20 | 98f13708210194c475687be6106a3b84
 (11 rows)
 
-EXPLAIN (COSTS OFF) WITH cte1 AS (SELECT * FROM t1 WHERE f_leak(b)) SELECT * FROM cte1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) WITH cte1 AS (SELECT * FROM t1 WHERE f_leak(b)) SELECT * FROM cte1;
                       QUERY PLAN                       
 -------------------------------------------------------
  CTE Scan on cte1
@@ -3764,7 +3764,7 @@ SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
 (1 row)
 
 INSERT INTO t2 (SELECT * FROM t1);
-EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
+EXPLAIN (BUFFERS OFF, COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
                           QUERY PLAN                          
 --------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -3814,7 +3814,7 @@ SELECT * FROM t2;
  20 | Success
 (12 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t2;
                  QUERY PLAN                 
 --------------------------------------------
  Append
@@ -3976,7 +3976,7 @@ SELECT * FROM t1;
  20 | Success
 (22 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
                  QUERY PLAN                 
 --------------------------------------------
  Append
@@ -4023,7 +4023,7 @@ SELECT * FROM t1;
  20 | Success
 (22 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
                  QUERY PLAN                 
 --------------------------------------------
  Append
@@ -4049,7 +4049,7 @@ SELECT * FROM t1;
 ---+---
 (0 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
         QUERY PLAN        
 --------------------------
  Result
@@ -4062,7 +4062,7 @@ SELECT * FROM t1;
 ---+---
 (0 rows)
 
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
         QUERY PLAN        
 --------------------------
  Result
@@ -4312,7 +4312,7 @@ SELECT * FROM current_check;
 (2 rows)
 
 -- Plan should be a subquery TID scan
-EXPLAIN (COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF current_check_cursor;
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF current_check_cursor;
                             QUERY PLAN                             
 -------------------------------------------------------------------
  Custom Scan (ModifyHypertable)

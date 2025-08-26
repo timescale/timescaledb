@@ -349,7 +349,7 @@ INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 VACUUM ANALYZE mytab_prep;
 -- plan should be invalidated to return results from the uncompressed chunk also
 set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
-EXPLAIN (COSTS OFF) EXECUTE p1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
                            QUERY PLAN                           
 ----------------------------------------------------------------
  Sort
@@ -378,7 +378,7 @@ INFO:  Using index "compress_hyper_10_11_chunk_a_c__ts_meta_min_1__ts_meta_max__
 (1 row)
 
 VACUUM ANALYZE mytab_prep;
-EXPLAIN (COSTS OFF) EXECUTE p1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
                                                                                   QUERY PLAN                                                                                  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
@@ -450,7 +450,7 @@ INFO:  Using index "compress_hyper_12_13_chunk_a_c__ts_meta_min_1__ts_meta_max__
 VACUUM ANALYZE mytab;
 -- make sure we are hitting the index and that the index contains the tuples
 SET enable_seqscan TO off;
-EXPLAIN (COSTS OFF) SELECT count(*) FROM mytab where a = 2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT count(*) FROM mytab where a = 2;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
  Aggregate

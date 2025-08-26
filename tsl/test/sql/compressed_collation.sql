@@ -38,7 +38,7 @@ create index on :CHUNK (name);
 
 set enable_seqscan to off;
 
-explain (costs off)
+explain (buffers off, costs off)
 select * from compressed_collation_ht order by name;
 
 select * from compressed_collation_ht order by name;

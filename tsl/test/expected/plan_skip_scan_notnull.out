@@ -114,7 +114,7 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select
 -- adjusted statistics
 alter table skip_scan_htcl set (autovacuum_enabled = off);
 -- we want to run with analyze here so we can see counts in the nodes
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 -- test SkipScan NOT NULL mode
 -- also sets up "skip_scan_b" table with a bool column and a not null column
 \ir include/skip_scan_notnull_setup.sql

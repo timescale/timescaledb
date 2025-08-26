@@ -4,8 +4,8 @@
 
 SET timezone TO 'America/Los_Angeles';
 
-\set PREFIX 'EXPLAIN (costs off, summary off, timing off) '
-\set ANALYZE  'EXPLAIN (analyze, costs off, summary off, timing off) '
+\set PREFIX 'EXPLAIN (buffers off, costs off, summary off, timing off) '
+\set ANALYZE  'EXPLAIN (analyze, buffers off, costs off, summary off, timing off) '
 CREATE TABLE test1 (timec timestamptz , i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');

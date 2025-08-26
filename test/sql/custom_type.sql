@@ -75,8 +75,8 @@ SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval =
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
-EXPLAIN (costs off) SELECT * FROM customtype_test;
+EXPLAIN (buffers off, costs off) SELECT * FROM customtype_test;
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:23'::customtype, 11);
-EXPLAIN (costs off) SELECT * FROM customtype_test;
+EXPLAIN (buffers off, costs off) SELECT * FROM customtype_test;
 
 SELECT * FROM customtype_test;

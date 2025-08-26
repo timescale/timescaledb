@@ -5,7 +5,7 @@
 -- will be penalized for segmentby cardinalities larger than 100, where it is
 -- still faster than sort.
 SET work_mem to '16MB';
-\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 CREATE TABLE test1 (
 time timestamptz NOT NULL,
     x1 integer,
@@ -822,7 +822,7 @@ SELECT time,x3 FROM test1 ORDER BY time DESC;
 (4 rows)
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                  
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result
@@ -847,7 +847,7 @@ SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
 (4 rows)
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                  
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result

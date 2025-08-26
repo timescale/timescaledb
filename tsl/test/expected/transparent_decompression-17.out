@@ -182,9 +182,9 @@ SET enable_incremental_sort TO off;
 \set PREFIX_VERBOSE ''
 \set PREFIX_NO_ANALYZE ''
 \set ECHO none
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
-\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
-\set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, costs off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off, verbose)'
+\set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, buffers off, costs off)'
 -- we disable parallelism here otherwise EXPLAIN ANALYZE output
 -- will be not stable and differ depending on worker assignment
 SET max_parallel_workers_per_gather TO 0;
@@ -7895,7 +7895,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('readings') ch;
 (1 row)
 
 VACUUM ANALYZE readings;
-EXPLAIN (costs off) SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
+EXPLAIN (buffers off, costs off) SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
 FROM tags t
 INNER JOIN LATERAL(SELECT tags_id, fuel_consumption FROM readings r WHERE r.tags_id = t.id ) r ON true
 GROUP BY fleet;
@@ -9322,7 +9322,7 @@ SET max_parallel_workers_per_gather TO 4;
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
 SET min_parallel_table_scan_size TO '0';
-EXPLAIN (costs off) SELECT * FROM metrics ORDER BY time, device_id;
+EXPLAIN (buffers off, costs off) SELECT * FROM metrics ORDER BY time, device_id;
                                QUERY PLAN                               
 ------------------------------------------------------------------------
  Gather Merge
@@ -9337,7 +9337,7 @@ EXPLAIN (costs off) SELECT * FROM metrics ORDER BY time, device_id;
                ->  Parallel Seq Scan on _hyper_1_2_chunk
 (10 rows)
 
-EXPLAIN (costs off) SELECT time_bucket('10 minutes', time) bucket, avg(v0) avg_v0 FROM metrics GROUP BY bucket;
+EXPLAIN (buffers off, costs off) SELECT time_bucket('10 minutes', time) bucket, avg(v0) avg_v0 FROM metrics GROUP BY bucket;
                                          QUERY PLAN                                         
 --------------------------------------------------------------------------------------------
  Finalize HashAggregate
@@ -9358,7 +9358,7 @@ EXPLAIN (costs off) SELECT time_bucket('10 minutes', time) bucket, avg(v0) avg_v
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
 (16 rows)
 
-EXPLAIN (costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
+EXPLAIN (buffers off, costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
                                QUERY PLAN                               
 ------------------------------------------------------------------------
  Gather Merge
@@ -9388,7 +9388,7 @@ RESET parallel_tuple_cost;
 SET enable_seqscan TO false;
 -- should order compressed chunks using index
 -- (we only EXPLAIN here b/c the resulting order is too inconsistent)
-EXPLAIN (costs off) SELECT * FROM metrics WHERE time > '2000-01-08' ORDER BY device_id;
+EXPLAIN (buffers off, costs off) SELECT * FROM metrics WHERE time > '2000-01-08' ORDER BY device_id;
                                                         QUERY PLAN                                                         
 ---------------------------------------------------------------------------------------------------------------------------
  Merge Append
@@ -9403,7 +9403,7 @@ EXPLAIN (costs off) SELECT * FROM metrics WHERE time > '2000-01-08' ORDER BY dev
                Index Cond: (_ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (10 rows)
 
-EXPLAIN (costs off) SELECT * FROM metrics_space WHERE time > '2000-01-08' ORDER BY device_id;
+EXPLAIN (buffers off, costs off) SELECT * FROM metrics_space WHERE time > '2000-01-08' ORDER BY device_id;
                                                         QUERY PLAN                                                         
 ---------------------------------------------------------------------------------------------------------------------------
  Merge Append

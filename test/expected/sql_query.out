@@ -51,7 +51,7 @@ SELECT * FROM PUBLIC."two_Partitions";
  1257894000000000000 | dev2      |      1.5 |        2 |          | 
 (12 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions";
+EXPLAIN (verbose ON, buffers off, costs off) SELECT * FROM PUBLIC."two_Partitions";
                                                                                         QUERY PLAN                                                                                        
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Append
@@ -67,7 +67,7 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions";
 
 \echo "The following queries should NOT scan two_Partitions._hyper_1_1_chunk"
 "The following queries should NOT scan two_Partitions._hyper_1_1_chunk"
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev2';
+EXPLAIN (verbose ON, buffers off, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev2';
                                                                                      QUERY PLAN                                                                                     
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Index Scan using "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx" on _timescaledb_internal._hyper_1_4_chunk
@@ -75,7 +75,7 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE devi
    Index Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
 (3 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'2';
+EXPLAIN (verbose ON, buffers off, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE device_id = 'dev'||'2';
                                                                                      QUERY PLAN                                                                                     
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Index Scan using "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx" on _timescaledb_internal._hyper_1_4_chunk
@@ -83,7 +83,7 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE devi
    Index Cond: (_hyper_1_4_chunk.device_id = 'dev2'::text)
 (3 rows)
 
-EXPLAIN (verbose ON, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'2' = device_id;
+EXPLAIN (verbose ON, buffers off, costs off) SELECT * FROM PUBLIC."two_Partitions" WHERE 'dev'||'2' = device_id;
                                                                                      QUERY PLAN                                                                                     
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Index Scan using "_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx" on _timescaledb_internal._hyper_1_4_chunk
@@ -133,7 +133,7 @@ SELECT * FROM "int_part" WHERE time = NULL;
 (0 rows)
 
 --make sure this touches only one partititon
-EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
+EXPLAIN (verbose ON, buffers off, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
  Index Scan using _hyper_2_5_chunk_int_part_object_id_time_idx on _timescaledb_internal._hyper_2_5_chunk
@@ -142,10 +142,10 @@ EXPLAIN (verbose ON, costs off) SELECT * FROM "int_part" WHERE object_id = 1;
 (3 rows)
 
 --Need to verify space partitions are currently pruned in this query
---EXPLAIN (verbose ON, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev2', 'dev21');
+--EXPLAIN (verbose ON, buffers off, costs off) SELECT * FROM "two_Partitions" WHERE device_id IN ('dev2', 'dev21');
 \echo "The following shows non-aggregated queries with time desc using merge append"
 "The following shows non-aggregated queries with time desc using merge append"
-EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" ORDER BY "timeCustom" DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, buffers off, costs off)SELECT * FROM PUBLIC."two_Partitions" ORDER BY "timeCustom" DESC NULLS LAST limit 2;
                                                                                               QUERY PLAN                                                                                              
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -168,7 +168,7 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" ORDER BY "t
 (17 rows)
 
 --shows that more specific indexes are used if the WHERE clauses "match", uses the series_1 index here.
-EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE series_1 IS NOT NULL ORDER BY "timeCustom" DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, buffers off, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE series_1 IS NOT NULL ORDER BY "timeCustom" DESC NULLS LAST limit 2;
                                                                                               QUERY PLAN                                                                                              
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -191,7 +191,7 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE serie
 (17 rows)
 
 --here the "match" is implication series_1 > 1 => series_1 IS NOT NULL
-EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE series_1 > 1 ORDER BY "timeCustom" DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, buffers off, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE series_1 > 1 ORDER BY "timeCustom" DESC NULLS LAST limit 2;
                                                                                               QUERY PLAN                                                                                              
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -218,7 +218,7 @@ EXPLAIN (verbose ON, costs off)SELECT * FROM PUBLIC."two_Partitions" WHERE serie
 (21 rows)
 
 --note that without time transform things work too
-EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, buffers off, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
                                                                   QUERY PLAN                                                                   
 -----------------------------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -245,7 +245,7 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom" t, min(series_0) FROM PUBLIC.
 
 --The query should still use the index on timeCustom, even though the GROUP BY/ORDER BY is on the transformed time 't'.
 --However, current query plans show that it does not.
-EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, buffers off, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
  Limit
@@ -269,7 +269,7 @@ EXPLAIN (verbose ON, costs off)SELECT "timeCustom"/10 t, min(series_0) FROM PUBL
                                  Output: _hyper_1_4_chunk."timeCustom", _hyper_1_4_chunk.series_0
 (19 rows)
 
-EXPLAIN (verbose ON, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
+EXPLAIN (verbose ON, buffers off, costs off)SELECT "timeCustom"%10 t, min(series_0) FROM PUBLIC."two_Partitions" GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
  Limit

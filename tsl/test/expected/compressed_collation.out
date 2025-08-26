@@ -37,7 +37,7 @@ FROM _timescaledb_catalog.hypertable ht
         AND ht.table_name = 'compressed_collation_ht' \gset
 create index on :CHUNK (name);
 set enable_seqscan to off;
-explain (costs off)
+explain (buffers off, costs off)
 select * from compressed_collation_ht order by name;
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------
