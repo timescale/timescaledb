@@ -486,7 +486,6 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 	ListCell *lc;
 	SelectStmt *select;
 	RawStmt *raw;
-	ArrayType *collist = NULL;
 	JsonbParseState *parse_state = NULL;
 
 	/* sparse index can have empty input. Return [{"source":"config"}] jsonb */
@@ -536,6 +535,7 @@ parse_sparse_index_config_list(char *inpstr, Hypertable *hypertable)
 	 */
 	pushJsonbValue(&parse_state, WJB_BEGIN_ARRAY, NULL);
 
+	ArrayType *collist = NULL;
 	foreach (lc, select->targetList)
 	{
 		ResTarget *target = lfirst_node(ResTarget, lc);
