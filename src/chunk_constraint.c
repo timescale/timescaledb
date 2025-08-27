@@ -1291,8 +1291,9 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 	TableScanDesc scandesc;
 	bool isnull;
 
+	PushActiveSnapshot(GetLatestSnapshot());
 	rel = table_open(chunk_relid, AccessShareLock);
-	scandesc = table_beginscan(rel, GetLatestSnapshot(), 0, NULL);
+	scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
 	slot = table_slot_create(rel, NULL);
 
 	while (table_scan_getnextslot(scandesc, ForwardScanDirection, slot))
@@ -1323,6 +1324,7 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 	ExecDropSingleTupleTableSlot(slot);
 	table_endscan(scandesc);
 	table_close(rel, NoLock);
+	PopActiveSnapshot();
 }
 
 /*
