@@ -32,9 +32,9 @@ SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
  constraint_1         | c    | {id}    | -                                            | ((id >= '00000000-0000-0000-0000-000000000000'::uuid) AND (id < '00000526-5c00-0000-0000-000000000000'::uuid)) | f          | f        | t
 (2 rows)
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
+SELECT uuid_timestamp(id), device, temp
 FROM uuid_events ORDER BY id;
-   timestamptz_from_uuid_v7   | device | temp 
+        uuid_timestamp        | device | temp 
 ------------------------------+--------+------
  Wed Dec 31 16:00:00 1969 PST |      1 |    1
 (1 row)
@@ -43,11 +43,11 @@ FROM uuid_events ORDER BY id;
 -- constraint. Currently we don't prevent this "loophole".
 UPDATE uuid_events SET id = '00000000-0001-4000-8000-000000000000'
 WHERE id = '00000000-0000-7000-8000-000000000000';
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
+SELECT uuid_timestamp(id), device, temp
 FROM uuid_events ORDER BY id;
- timestamptz_from_uuid_v7 | device | temp 
---------------------------+--------+------
-                          |      1 |    1
+ uuid_timestamp | device | temp 
+----------------+--------+------
+                |      1 |    1
 (1 row)
 
 -- Update v7 UUID to a v4 that violates the chunk constraint:
@@ -150,9 +150,9 @@ SELECT id, device, temp FROM uuid_events;
  01942d52-f900-7000-866e-07d6404d53c1 |      6 |    6
 (6 rows)
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
+SELECT uuid_timestamp(id), device, temp
 FROM uuid_events;
-   timestamptz_from_uuid_v7   | device | temp 
+        uuid_timestamp        | device | temp 
 ------------------------------+--------+------
  Wed Jan 01 02:00:00 2025 PST |      2 |    2
  Wed Jan 01 01:00:00 2025 PST |      1 |    1
@@ -162,9 +162,9 @@ FROM uuid_events;
  Fri Jan 03 10:00:00 2025 PST |      6 |    6
 (6 rows)
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
+SELECT uuid_timestamp(id), device, temp
 FROM uuid_events ORDER BY id;
-   timestamptz_from_uuid_v7   | device | temp 
+        uuid_timestamp        | device | temp 
 ------------------------------+--------+------
  Wed Jan 01 01:00:00 2025 PST |      1 |    1
  Wed Jan 01 02:00:00 2025 PST |      2 |    2
@@ -197,42 +197,42 @@ JOIN _timescaledb_catalog.hypertable h ON (d.hypertable_id = h.id)
 WHERE h.table_name = 'uuid_events'
 LIMIT 1 OFFSET 1 \gset
 -- Test that chunk exclusion on uuidv7 column works
-SELECT :'chunk_range_start',  _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_start');
-           ?column?           |   uuid_v7_from_timestamptz_zeroed    
+SELECT :'chunk_range_start',  to_uuidv7_boundary(:'chunk_range_start');
+           ?column?           |          to_uuidv7_boundary          
 ------------------------------+--------------------------------------
  Wed Jan 01 16:00:00 2025 PST | 0194244f-d800-7000-8000-000000000000
 (1 row)
 
 -- Exclude all but one chunk
-EXPLAIN (verbose, costs off, timing off)
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
-FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_start');
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+EXPLAIN (verbose, buffers off, costs off, timing off)
+SELECT uuid_timestamp(id), device, temp
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
+                                          QUERY PLAN                                           
+-----------------------------------------------------------------------------------------------
  Result
-   Output: _timescaledb_functions.timestamptz_from_uuid_v7(_hyper_1_6_chunk.id), _hyper_1_6_chunk.device, _hyper_1_6_chunk.temp
+   Output: uuid_timestamp(_hyper_1_6_chunk.id), _hyper_1_6_chunk.device, _hyper_1_6_chunk.temp
    ->  Index Scan using "6_6_uuid_events_pkey" on _timescaledb_internal._hyper_1_6_chunk
          Output: _hyper_1_6_chunk.id, _hyper_1_6_chunk.device, _hyper_1_6_chunk.temp
          Index Cond: (_hyper_1_6_chunk.id < '0194244f-d800-7000-8000-000000000000'::uuid)
 (5 rows)
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
-FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_start');
-   timestamptz_from_uuid_v7   | device | temp 
+SELECT uuid_timestamp(id), device, temp
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
+        uuid_timestamp        | device | temp 
 ------------------------------+--------+------
  Wed Jan 01 01:00:00 2025 PST |      1 |    1
  Wed Jan 01 02:00:00 2025 PST |      2 |    2
 (2 rows)
 
 -- Exclude only one chunk. Add ordering (DESC)
-EXPLAIN (verbose, costs off, timing off)
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
-FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_end')
+EXPLAIN (verbose, buffers off, costs off, timing off)
+SELECT uuid_timestamp(id), device, temp
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 ORDER BY id DESC;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Result
-   Output: _timescaledb_functions.timestamptz_from_uuid_v7(uuid_events.id), uuid_events.device, uuid_events.temp, uuid_events.id
+   Output: uuid_timestamp(uuid_events.id), uuid_events.device, uuid_events.temp, uuid_events.id
    ->  Custom Scan (ChunkAppend) on public.uuid_events
          Output: uuid_events.id, uuid_events.device, uuid_events.temp
          Order: uuid_events.id DESC
@@ -246,10 +246,10 @@ ORDER BY id DESC;
                Index Cond: (_hyper_1_6_chunk.id < '01942976-3400-7000-8000-000000000000'::uuid)
 (13 rows)
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
-FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_end')
+SELECT uuid_timestamp(id), device, temp
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 ORDER BY id DESC;
-   timestamptz_from_uuid_v7   | device | temp 
+        uuid_timestamp        | device | temp 
 ------------------------------+--------+------
  Thu Jan 02 02:00:00 2025 PST |      4 |    4
  Thu Jan 02 01:00:00 2025 PST |      3 |    3

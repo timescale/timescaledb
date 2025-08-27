@@ -57,13 +57,20 @@ ts_uuid_generate(PG_FUNCTION_ARGS)
 	PG_RETURN_UUID_P(ts_uuid_create());
 }
 
+/*
+ * Create a UUIDv7 from a unix timestamp in microseconds.
+ *
+ * Optionally produce a boundary UUID with all otherwise random bits set to
+ * zero that can be used in range queries. The version can also be set to zero
+ * in order to produce partition ranges that excludes the UUID version.
+ */
 pg_uuid_t *
-ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool zeroed, bool set_version)
+ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool boundary, bool set_version)
 {
 	pg_uuid_t *uuid;
 	uint64_t timestamp_be = pg_hton64((unixtime_us / 1000) << 16);
 
-	if (zeroed)
+	if (boundary)
 	{
 		uuid = (pg_uuid_t *) palloc0(UUID_LEN);
 	}
@@ -100,12 +107,12 @@ ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool zeroed, bool set_vers
 }
 
 pg_uuid_t *
-ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool zeroed)
+ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool boundary)
 {
 	int64 epoch_diff_us = ((int64) (POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY);
 	int64 unixtime_us = ts + epoch_diff_us;
 
-	return ts_create_uuid_v7_from_unixtime_us(unixtime_us, zeroed, true);
+	return ts_create_uuid_v7_from_unixtime_us(unixtime_us, boundary, true);
 }
 
 TS_FUNCTION_INFO_V1(ts_uuid_generate_v7);
@@ -122,15 +129,14 @@ Datum
 ts_uuid_v7_from_timestamptz(PG_FUNCTION_ARGS)
 {
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
-	bool zero = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 
-	PG_RETURN_UUID_P(ts_create_uuid_v7_from_timestamptz(timestamp, zero));
+	PG_RETURN_UUID_P(ts_create_uuid_v7_from_timestamptz(timestamp, false));
 }
 
-TS_FUNCTION_INFO_V1(ts_uuid_v7_from_timestamptz_zeroed);
+TS_FUNCTION_INFO_V1(ts_uuid_v7_from_timestamptz_boundary);
 
 Datum
-ts_uuid_v7_from_timestamptz_zeroed(PG_FUNCTION_ARGS)
+ts_uuid_v7_from_timestamptz_boundary(PG_FUNCTION_ARGS)
 {
 	TimestampTz timestamp = PG_GETARG_TIMESTAMPTZ(0);
 

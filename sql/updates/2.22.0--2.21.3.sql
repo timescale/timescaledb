@@ -254,3 +254,11 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_mate
 DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 DROP FUNCTION _timescaledb_functions.job_history_bsearch(TIMESTAMPTZ);
+
+DROP FUNCTION IF EXISTS @extschema@.generate_uuidv7();
+DROP FUNCTION IF EXISTS @extschema@.to_uuidv7(timestamptz);
+DROP FUNCTION IF EXISTS @extschema@.to_uuidv7_boundary(timestamptz);
+DROP FUNCTION IF EXISTS @extschema@.uuid_timestamp(uuid);
+DROP FUNCTION IF EXISTS @extschema@.uuid_timestamp_micros(uuid);
+DROP FUNCTION IF EXISTS @extschema@.uuid_version(uuid);
+

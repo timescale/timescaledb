@@ -160,15 +160,15 @@ ORDER BY
 
 -- The next 3 items are generated with the new functions
 BEGIN;
-INSERT INTO uuids VALUES (101, _timescaledb_functions.uuid_v7_from_timestamptz('2025-07-02:03:04:05'::timestamptz));
-INSERT INTO uuids VALUES (102, _timescaledb_functions.uuid_v7_from_timestamptz('2029-01-02:03:04:05'::timestamptz));
-INSERT INTO uuids VALUES (103, _timescaledb_functions.uuid_v7_from_timestamptz('2059-02-03:04:05:06'::timestamptz));
-INSERT INTO uuids VALUES (104, _timescaledb_functions.uuid_v7_from_timestamptz('2100-07-08:09:10:11'::timestamptz));
+INSERT INTO uuids VALUES (101, to_uuidv7('2025-07-02:03:04:05'::timestamptz));
+INSERT INTO uuids VALUES (102, to_uuidv7('2029-01-02:03:04:05'::timestamptz));
+INSERT INTO uuids VALUES (103, to_uuidv7('2059-02-03:04:05:06'::timestamptz));
+INSERT INTO uuids VALUES (104, to_uuidv7('2100-07-08:09:10:11'::timestamptz));
 COMMIT;
 
 SELECT
-  to_char(_timescaledb_functions.timestamptz_from_uuid_v7(u), 'YYYY-MM-DD:HH24:MI:SS'),
-  _timescaledb_functions.uuid_version(u),
+  to_char(uuid_timestamp(u), 'YYYY-MM-DD:HH24:MI:SS'),
+  uuid_version(u),
   count(*)
 FROM
   uuids
@@ -182,15 +182,15 @@ INSERT INTO uuids VALUES (106, _timescaledb_functions.generate_uuid());
 INSERT INTO uuids VALUES (107, _timescaledb_functions.generate_uuid());
 
 -- Add some random v7 timestamps too
-INSERT INTO uuids VALUES (108, _timescaledb_functions.generate_uuid_v7());
-INSERT INTO uuids VALUES (109, _timescaledb_functions.generate_uuid_v7());
-INSERT INTO uuids VALUES (110, _timescaledb_functions.generate_uuid_v7());
+INSERT INTO uuids VALUES (108, generate_uuidv7());
+INSERT INTO uuids VALUES (109, generate_uuidv7());
+INSERT INTO uuids VALUES (110, generate_uuidv7());
 COMMIT;
 
 -- There is a test flakyness that I want to debug with this:
 SELECT
   i,
-  _timescaledb_functions.uuid_version(u)
+  uuid_version(u)
 FROM
   uuids
 WHERE
@@ -199,7 +199,7 @@ ORDER BY 1;
 
 -- The version numbers should make sense
 SELECT
-  _timescaledb_functions.uuid_version(u),
+  uuid_version(u),
   count(*)
 FROM
   uuids
@@ -207,8 +207,8 @@ WHERE
 -- The filters are here just to test, they don't blow up with random data from v4
 -- NOTE that we have v4 and v7 data in the table so the timestamp filter alone makes
 -- the test flaky
-  _timescaledb_functions.timestamptz_from_uuid_v7(u) > '2000-01-01:01:01:01'::timestamptz OR
-  _timescaledb_functions.uuid_version(u) >= 1
+  uuid_timestamp(u) > '2000-01-01:01:01:01'::timestamptz OR
+  uuid_version(u) >= 1
 GROUP BY 1
 ORDER BY 1;
 
@@ -216,29 +216,28 @@ ORDER BY 1;
 -- extracted timestamp. Both methods should yield the same count.
 SELECT
   count(*) AS count_total,
-  count(*) FILTER (WHERE u < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Jun 25 08:16:46.348 2025 PDT')) AS count_below_on_uuid,
-  count(*) FILTER (WHERE _timescaledb_functions.timestamptz_from_uuid_v7(u) < 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_below_on_time,
-  count(*) FILTER (WHERE u >= _timescaledb_functions.uuid_v7_from_timestamptz('Wed Jun 25 08:16:46.348 2025 PDT', true)) AS count_above_on_uuid,
-  count(*) FILTER (WHERE _timescaledb_functions.timestamptz_from_uuid_v7(u) >= 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_above_on_time
+  count(*) FILTER (WHERE u < to_uuidv7_boundary('Wed Jun 25 08:16:46.348 2025 PDT')) AS count_below_on_uuid,
+  count(*) FILTER (WHERE uuid_timestamp(u) < 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_below_on_time,
+  count(*) FILTER (WHERE u >= to_uuidv7_boundary('Wed Jun 25 08:16:46.348 2025 PDT')) AS count_above_on_uuid,
+  count(*) FILTER (WHERE uuid_timestamp(u) >= 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_above_on_time
 FROM
   uuids
 WHERE
-  _timescaledb_functions.uuid_version(u) = 7;
+  uuid_version(u) = 7;
 
 -- The EXPLAIN shows how the immutable "zeroed" function can be
--- constified for better performance, unlike the parameter version of
--- the function doing the same thing:
-EXPLAIN (verbose, costs off)
+-- constified for better performance.
+EXPLAIN (verbose, buffers off, costs off)
 SELECT
   count(*) AS count_total,
-  count(*) FILTER (WHERE u < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Jun 25 08:16:46.348 2025 PDT')) AS count_below_on_uuid,
-  count(*) FILTER (WHERE _timescaledb_functions.timestamptz_from_uuid_v7(u) < 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_below_on_time,
-  count(*) FILTER (WHERE u >= _timescaledb_functions.uuid_v7_from_timestamptz('Wed Jun 25 08:16:46.348 2025 PDT', true)) AS count_above_on_uuid,
-  count(*) FILTER (WHERE _timescaledb_functions.timestamptz_from_uuid_v7(u) >= 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_above_on_time
+  count(*) FILTER (WHERE u < to_uuidv7_boundary('Wed Jun 25 08:16:46.348 2025 PDT')) AS count_below_on_uuid,
+  count(*) FILTER (WHERE uuid_timestamp(u) < 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_below_on_time,
+  count(*) FILTER (WHERE u >= to_uuidv7_boundary('Wed Jun 25 08:16:46.348 2025 PDT')) AS count_above_on_uuid,
+  count(*) FILTER (WHERE uuid_timestamp(u) >= 'Wed Jun 25 08:16:46.348 2025 PDT') AS count_above_on_time
 FROM
   uuids
 WHERE
-  _timescaledb_functions.uuid_version(u) = 7;
+  uuid_version(u) = 7;
 
 -- Sub ms timestamp test:
 --   generate all microseconds timestamps between the two dates below and
@@ -247,7 +246,7 @@ WHERE
 --   compare the timestamp to the original one
 --   1 microsecond difference is allowed due to scaling of decimals to binaries
 --
-CREATE TABLE subms AS SELECT _timescaledb_functions.uuid_v7_from_timestamptz(x) u, x ts
+CREATE TABLE subms AS SELECT to_uuidv7(x) u, x ts
 FROM
   generate_series('2025-01-01:00:00:00'::timestamptz, '2025-01-01:00:00:03'::timestamptz, '1 microsecond'::interval) x;
 
@@ -255,7 +254,7 @@ SELECT u, ts, ts2
 FROM
   (
     SELECT
-      u, ts, _timescaledb_functions.timestamptz_from_uuid_v7_with_microseconds(u) ts2
+      u, ts, uuid_timestamp_micros(u) ts2
     FROM
       subms
   ) x
@@ -272,13 +271,13 @@ SELECT create_hypertable('uuid_part', by_range('id', interval '1 month'));
 
 -- Insert the static UUIDs
 INSERT INTO uuid_part SELECT u, i FROM uuids
-WHERE _timescaledb_functions.uuid_version(u) = 7 AND i <= 104;
+WHERE uuid_version(u) = 7 AND i <= 104;
 
 -- Insert some outlier values to filter for
 INSERT INTO uuid_part (value, id) VALUES
-       (105, _timescaledb_functions.uuid_v7_from_timestamptz('2025-08-13 03:03:04 PDT'::timestamptz)),
-       (106, _timescaledb_functions.uuid_v7_from_timestamptz('2025-08-14 03:04:05 PDT'::timestamptz)),
-       (107, _timescaledb_functions.uuid_v7_from_timestamptz('2025-08-15 04:05:06 PDT'::timestamptz));
+       (105, to_uuidv7('2025-08-13 03:03:04 PDT'::timestamptz)),
+       (106, to_uuidv7('2025-08-14 03:04:05 PDT'::timestamptz)),
+       (107, to_uuidv7('2025-08-15 04:05:06 PDT'::timestamptz));
 
 SELECT * FROM show_chunks('uuid_part');
 ALTER TABLE uuid_part SET (timescaledb.compress, timescaledb.compress_orderby = 'id');
@@ -286,13 +285,13 @@ ALTER TABLE uuid_part SET (timescaledb.compress, timescaledb.compress_orderby = 
 -- Show how data is spread across chunks
 SELECT tableoid::regclass, count(*) FROM uuid_part GROUP BY tableoid ORDER BY tableoid;
 SELECT count(*) FROM uuid_part
-WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
-      id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
 
 EXPLAIN (verbose, costs off)
 SELECT count(*) FROM uuid_part
-WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
-      id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
 
 -- Compress
 SELECT compress_chunk(ch) FROM show_chunks('uuid_part') ch;
@@ -300,15 +299,15 @@ SELECT compress_chunk(ch) FROM show_chunks('uuid_part') ch;
 -- Check that chunk exclusion and filtering works as expected on
 -- compressed UUID data.
 SELECT count(*) FROM uuid_part
-WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
-      id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
 
 -- Check that chunk exclusion still works and that filters are pushed
 -- down to a min-max scan on the compressed chunk.
 EXPLAIN (verbose, costs off)
 SELECT count(*) FROM uuid_part
-WHERE id >= _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 13 2025 PDT') AND
-      id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed('Wed Aug 16 2025 PDT');
+WHERE id >= to_uuidv7_boundary('Wed Aug 13 2025 PDT') AND
+      id < to_uuidv7_boundary('Wed Aug 16 2025 PDT');
 
 -- Cleanup
 DROP TABLE t;
