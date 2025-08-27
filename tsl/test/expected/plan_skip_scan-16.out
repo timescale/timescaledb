@@ -1202,6 +1202,27 @@ WHERE CLAUSES
          One-Time Filter: false
 (5 rows)
 
+-- test distinct PathKey with sortref not aligning with targets sortrefs in PG15 due to Window function
+:PREFIX SELECT DISTINCT
+    case when false then c10 else c10 end as c0,
+    max(c8) over (partition by c10 order by c6) as c1
+FROM (SELECT time as c6, val as c8, dev as c10 FROM :TABLE WHERE false) subq WHERE false;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Unique (actual rows=0 loops=1)
+   ->  Incremental Sort (actual rows=0 loops=1)
+         Sort Key: skip_scan.dev, (max(skip_scan.val) OVER (?))
+         Presorted Key: skip_scan.dev
+         Full-sort Groups: 1  Sort Method: quicksort 
+         ->  WindowAgg (actual rows=0 loops=1)
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: skip_scan.dev, skip_scan."time"
+                     Sort Method: quicksort 
+                     ->  Result (actual rows=0 loops=1)
+                           One-Time Filter: (false AND false)
+                           ->  Seq Scan on skip_scan (never executed)
+(12 rows)
+
 -- test multiple distincts with all but one pinned: #7998
 :PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
                                            QUERY PLAN                                            
@@ -3500,6 +3521,23 @@ WHERE CLAUSES
    ->  Result (actual rows=0 loops=1)
          One-Time Filter: false
 (5 rows)
+
+-- test distinct PathKey with sortref not aligning with targets sortrefs in PG15 due to Window function
+:PREFIX SELECT DISTINCT
+    case when false then c10 else c10 end as c0,
+    max(c8) over (partition by c10 order by c6) as c1
+FROM (SELECT time as c6, val as c8, dev as c10 FROM :TABLE WHERE false) subq WHERE false;
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ HashAggregate (actual rows=0 loops=1)
+   Group Key: skip_scan_ht.dev, max(skip_scan_ht.val) OVER (?)
+   ->  WindowAgg (actual rows=0 loops=1)
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: skip_scan_ht.dev, skip_scan_ht."time"
+               Sort Method: quicksort 
+               ->  Result (actual rows=0 loops=1)
+                     One-Time Filter: false
+(9 rows)
 
 -- test multiple distincts with all but one pinned: #7998
 :PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;

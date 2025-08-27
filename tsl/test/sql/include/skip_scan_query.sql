@@ -197,6 +197,12 @@ CREATE INDEX ON :TABLE(time,dev,val);
 -- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
 :PREFIX SELECT DISTINCT sq.dev FROM (SELECT dev FROM :TABLE) sq JOIN :TABLE ref ON (sq.dev = ref.dev) WHERE 1 > 2;
 
+-- test distinct PathKey with sortref not aligning with targets sortrefs in PG15 due to Window function
+:PREFIX SELECT DISTINCT
+    case when false then c10 else c10 end as c0,
+    max(c8) over (partition by c10 order by c6) as c1
+FROM (SELECT time as c6, val as c8, dev as c10 FROM :TABLE WHERE false) subq WHERE false;
+
 -- test multiple distincts with all but one pinned: #7998
 :PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
 :PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
