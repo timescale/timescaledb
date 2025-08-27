@@ -2302,11 +2302,23 @@ static void
 alter_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	AlterTableCmd *cmd = (AlterTableCmd *) arg;
-	Constraint *cmd_constraint;
 	char *hypertable_constraint_name;
 
+#if PG18_LT
+	Constraint *cmd_constraint;
 	Assert(IsA(cmd->def, Constraint));
 	cmd_constraint = (Constraint *) cmd->def;
+#else
+	/* PG18 adds ATAlterConstraint struct which is used
+	 * instead of Constraint struct
+	 *
+	 * https://github.com/postgres/postgres/commit/80d7f990
+	 */
+	ATAlterConstraint *cmd_constraint;
+	Assert(IsA(cmd->def, ATAlterConstraint));
+	cmd_constraint = (ATAlterConstraint *) cmd->def;
+#endif
+
 	hypertable_constraint_name = cmd_constraint->conname;
 
 	cmd_constraint->conname =
