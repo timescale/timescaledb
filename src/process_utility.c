@@ -3373,6 +3373,7 @@ process_index_start(ProcessUtilityArgs *args)
 								   &info);
 
 	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 	MemoryContextSwitchTo(info.mctx);
 
 	if (multitransaction_create_index_mark_valid(info))
@@ -3384,6 +3385,7 @@ process_index_start(ProcessUtilityArgs *args)
 		CacheInvalidateRelcacheByRelid(info.obj.objectId);
 	}
 
+	PopActiveSnapshot();
 	CommitTransactionCommand();
 	StartTransactionCommand();
 
