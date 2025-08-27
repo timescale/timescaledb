@@ -99,12 +99,12 @@ _timescaledb_functions.policy_compression_execute(
   useam               BOOLEAN = NULL)
 AS $$ BEGIN END $$ LANGUAGE PLPGSQL;
 
-DROP FUNCTION IF EXISTS _timescaledb_functions.generate_uuid_v7;
-DROP FUNCTION IF EXISTS _timescaledb_functions.uuid_v7_from_timestamptz;
-DROP FUNCTION IF EXISTS _timescaledb_functions.uuid_v7_from_timestamptz_zeroed;
-DROP FUNCTION IF EXISTS _timescaledb_functions.timestamptz_from_uuid_v7;
-DROP FUNCTION IF EXISTS _timescaledb_functions.timestamptz_from_uuid_v7_with_microseconds;
-DROP FUNCTION IF EXISTS _timescaledb_functions.uuid_version;
+DROP FUNCTION IF EXISTS @extschema@.generate_uuidv7();
+DROP FUNCTION IF EXISTS @extschema@.to_uuidv7(timestamptz);
+DROP FUNCTION IF EXISTS @extschema@.to_uuidv7_boundary(timestamptz);
+DROP FUNCTION IF EXISTS @extschema@.uuid_timestamp(uuid);
+DROP FUNCTION IF EXISTS @extschema@.uuid_timestamp_micros(uuid);
+DROP FUNCTION IF EXISTS @extschema@.uuid_version(uuid);
 
 DELETE FROM _timescaledb_catalog.compression_algorithm WHERE id = 7 AND version = 1 AND name = 'COMPRESSION_ALGORITHM_UUID';
 

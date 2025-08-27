@@ -26,7 +26,7 @@ SELECT create_hypertable('uuid_events', 'id', chunk_time_interval => interval '1
 BEGIN;
 INSERT INTO uuid_events VALUES ('00000000-0000-7000-8000-000000000000', 1, 1.0);
 SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
+SELECT uuid_timestamp(id), device, temp
 FROM uuid_events ORDER BY id;
 
 -- Update v7 UUID to a v4 UUID that doesn't violate the chunk's range
@@ -34,7 +34,7 @@ FROM uuid_events ORDER BY id;
 UPDATE uuid_events SET id = '00000000-0001-4000-8000-000000000000'
 WHERE id = '00000000-0000-7000-8000-000000000000';
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
+SELECT uuid_timestamp(id), device, temp
 FROM uuid_events ORDER BY id;
 
 -- Update v7 UUID to a v4 that violates the chunk constraint:
@@ -94,10 +94,10 @@ SELECT * FROM show_chunks('uuid_events');
 SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
 SELECT id, device, temp FROM uuid_events;
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
+SELECT uuid_timestamp(id), device, temp
 FROM uuid_events;
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
+SELECT uuid_timestamp(id), device, temp
 FROM uuid_events ORDER BY id;
 
 SELECT
@@ -118,24 +118,24 @@ WHERE h.table_name = 'uuid_events'
 LIMIT 1 OFFSET 1 \gset
 
 -- Test that chunk exclusion on uuidv7 column works
-SELECT :'chunk_range_start',  _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_start');
+SELECT :'chunk_range_start',  to_uuidv7_boundary(:'chunk_range_start');
 
 -- Exclude all but one chunk
 EXPLAIN (verbose, buffers off, costs off, timing off)
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
-FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_start');
+SELECT uuid_timestamp(id), device, temp
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
-FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_start');
+SELECT uuid_timestamp(id), device, temp
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
 
 -- Exclude only one chunk. Add ordering (DESC)
 EXPLAIN (verbose, buffers off, costs off, timing off)
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
-FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_end')
+SELECT uuid_timestamp(id), device, temp
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 ORDER BY id DESC;
 
-SELECT _timescaledb_functions.timestamptz_from_uuid_v7(id), device, temp
-FROM uuid_events WHERE id < _timescaledb_functions.uuid_v7_from_timestamptz_zeroed(:'chunk_range_end')
+SELECT uuid_timestamp(id), device, temp
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 ORDER BY id DESC;
 
 -- Insert non-v7 UUIDs
