@@ -52,7 +52,8 @@ ts_cagg_watermark_get(int32 hypertable_id)
 	 * watermark must be done using the transaction snapshot in order to ensure that the view on the
 	 * watermark and the materialized part of the CAGG match.
 	 */
-	iterator.ctx.snapshot = GetTransactionSnapshot();
+
+	iterator.ctx.snapshot = RegisterSnapshot(GetTransactionSnapshot());
 	Assert(iterator.ctx.snapshot != NULL);
 
 	cagg_watermark_init_scan_by_mat_hypertable_id(&iterator, hypertable_id);
@@ -65,6 +66,7 @@ ts_cagg_watermark_get(int32 hypertable_id)
 		count++;
 	}
 	Assert(count <= 1);
+	UnregisterSnapshot(iterator.ctx.snapshot);
 	ts_scan_iterator_close(&iterator);
 
 	if (value_isnull)
@@ -304,7 +306,7 @@ cagg_watermark_update_internal(int32 mat_hypertable_id, Oid ht_relid, int64 new_
 	cagg_watermark_init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 	iterator.ctx.tuple_found = cagg_watermark_update_scan_internal;
 	iterator.ctx.data = &data;
-	iterator.ctx.snapshot = GetLatestSnapshot();
+	iterator.ctx.snapshot = RegisterSnapshot(GetLatestSnapshot());
 	ScanTupLock scantuplock = {
 		.waitpolicy = LockWaitBlock,
 		.lockmode = LockTupleExclusive,
@@ -315,6 +317,8 @@ cagg_watermark_update_internal(int32 mat_hypertable_id, Oid ht_relid, int64 new_
 
 	bool watermark_updated =
 		ts_scanner_scan_one(&iterator.ctx, false, "continuous aggregate watermark");
+	ts_scan_iterator_close(&iterator);
+	UnregisterSnapshot(iterator.ctx.snapshot);
 
 	if (!watermark_updated)
 	{

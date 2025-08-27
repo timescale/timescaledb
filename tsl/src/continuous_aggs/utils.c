@@ -737,8 +737,9 @@ get_direct_view_oid(int32 mat_hypertable_id)
 						   Int32GetDatum(mat_hypertable_id));
 
 	/* Prepare index scan */
+	PushActiveSnapshot(GetTransactionSnapshot());
 	IndexScanDesc indexscan =
-		index_beginscan_compat(cagg_rel, cagg_idx_rel, GetTransactionSnapshot(), NULL, 1, 0);
+		index_beginscan_compat(cagg_rel, cagg_idx_rel, GetActiveSnapshot(), NULL, 1, 0);
 	index_rescan(indexscan, scankeys, 1, NULL, 0);
 
 	/* Read tuple from relation */
@@ -784,6 +785,7 @@ get_direct_view_oid(int32 mat_hypertable_id)
 	ExecDropSingleTupleTableSlot(slot);
 	relation_close(cagg_rel, AccessShareLock);
 	relation_close(cagg_idx_rel, AccessShareLock);
+	PopActiveSnapshot();
 
 	/* Get Oid of user view */
 	Oid direct_view_oid =

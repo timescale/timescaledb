@@ -483,8 +483,14 @@ ts_scanner_scan(ScannerCtx *ctx)
 			{
 				ts_scanner_end_scan(ctx);
 				ctx->internal.tinfo.count = 0;
-				ctx->snapshot = GetLatestSnapshot();
+				ctx->snapshot = RegisterSnapshot(GetLatestSnapshot());
 				ts_scanner_start_scan(ctx);
+				/* Since we register the snapshot manually above,
+				 * we need to mark it as registered in the scanner but only after we
+				 * start the scan since the scanner resets this flag and sets it only
+				 * if the snapshot gets registered during scan preparation phase.
+				 */
+				ctx->internal.registered_snapshot = true;
 			}
 		}
 	}
