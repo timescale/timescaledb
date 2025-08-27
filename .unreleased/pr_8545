@@ -1,0 +1,2 @@
+Fixes: #8545 Error in LOCF/Interpolate with out-of-order and repeated columns
+Thanks: @moodgorning for reporting a bug in queries with LOCF/Interpolate using out-of-order columns

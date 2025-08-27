@@ -1420,6 +1420,7 @@ gapfill_adjust_varnos(GapFillState *state, Expr *expr)
 			if (IsA(tle->expr, Var) && castNode(Var, tle->expr)->varattno == var->varattno)
 			{
 				var->varattno = tle->resno;
+				break;
 			}
 		}
 	}
