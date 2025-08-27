@@ -73,7 +73,7 @@ $$
 LANGUAGE plpgsql SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_job_stat_history_retention(job_id integer, config JSONB) RETURNS integer
-LANGUAGE PLPGSQL AS
+LANGUAGE PLPGSQL SECURITY DEFINER AS
 $BODY$
 DECLARE
     numrows INTEGER;
