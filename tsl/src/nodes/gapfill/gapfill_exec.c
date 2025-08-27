@@ -66,10 +66,11 @@ static bool gapfill_state_is_new_group(GapFillState *state, TupleTableSlot *slot
 static void gapfill_state_set_next(GapFillState *state, TupleTableSlot *subslot);
 static TupleTableSlot *gapfill_state_return_subplan_slot(GapFillState *state);
 static TupleTableSlot *gapfill_fetch_next_tuple(GapFillState *state);
-static void gapfill_state_initialize_columns(GapFillState *state);
+static void gapfill_state_initialize_columns(GapFillState *state, List *exec_tlist);
 static GapFillColumnState *gapfill_column_state_create(GapFillColumnType ctype, Oid typeid);
 static bool gapfill_is_group_column(GapFillState *state, TargetEntry *tle);
 static Node *gapfill_aggref_mutator(Node *node, void *context);
+static void gapfill_fix_gby_vars(Node *entry, List *orig_tlist, List *exec_tlist);
 
 static CustomExecMethods gapfill_state_methods = {
 	.BeginCustomScan = gapfill_begin,
@@ -717,10 +718,8 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 	FuncExpr *func = linitial(cscan->custom_private);
 	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
 	List *targetlist = copyObject(state->csstate.ss.ps.plan->targetlist);
-	Node *entry;
 	bool isnull;
 	Datum arg_value;
-	int i;
 
 	state->gapfill_typid = func->funcresulttype;
 	state->state = FETCHED_NONE;
@@ -802,27 +801,11 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 		state->gapfill_end = gapfill_datum_get_internal(arg_value, func->funcresulttype);
 	}
 
-	gapfill_state_initialize_columns(state);
+	gapfill_state_initialize_columns(state, targetlist);
 
 	/*
 	 * Build ProjectionInfo that will be used for gap filled tuples only.
-	 *
-	 * For every NULL_COLUMN we take the original expression tree from the
-	 * subplan and replace Aggref nodes with Const NULL nodes. This is
-	 * necessary because the expression might be evaluated below the
-	 * aggregation so we need to pull up expression from subplan into
-	 * projection for gapfilled tuples so expressions like COALESCE work
-	 * correctly for gapfilled tuples.
 	 */
-	for (i = 0; i < state->ncolumns; i++)
-	{
-		if (state->columns[i]->ctype == NULL_COLUMN)
-		{
-			entry = copyObject(list_nth(cscan->custom_scan_tlist, i));
-			entry = gapfill_aggref_mutator(entry, NULL);
-			lfirst(list_nth_cell(targetlist, i)) = entry;
-		}
-	}
 	state->pi = ExecBuildProjectionInfo(targetlist,
 										state->csstate.ss.ps.ps_ExprContext,
 										MakeSingleTupleTableSlot(tupledesc, &TTSOpsVirtual),
@@ -1205,7 +1188,7 @@ gapfill_fetch_next_tuple(GapFillState *state)
  * Initialize column meta data
  */
 static void
-gapfill_state_initialize_columns(GapFillState *state)
+gapfill_state_initialize_columns(GapFillState *state, List *exec_tlist)
 {
 	TupleDesc tupledesc = state->csstate.ss.ps.ps_ResultTupleSlot->tts_tupleDescriptor;
 	CustomScan *cscan = castNode(CustomScan, state->csstate.ss.ps.plan);
@@ -1278,12 +1261,47 @@ gapfill_state_initialize_columns(GapFillState *state)
 		 * column so we treat those similar to GROUP BY column for gapfill
 		 * purposes.
 		 */
-		if (!contain_agg_clause((Node *) expr) && contain_var_clause((Node *) expr))
+		bool column_contains_aggs = contain_agg_clause((Node *) expr);
+		if (!column_contains_aggs && contain_var_clause((Node *) expr))
 		{
 			state->columns[i] =
 				gapfill_column_state_create(DERIVED_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
 			state->multigroup = true;
 			state->groups_initialized = false;
+			continue;
+		}
+
+		/*
+		 * For every column with Aggrefs we take the original expression tree from the
+		 * subplan and replace Aggref nodes with Const NULL nodes. This is
+		 * necessary because the expression might be evaluated below the
+		 * aggregation so we need to pull up expression from subplan into
+		 * projection for gapfilled tuples so expressions like COALESCE work
+		 * correctly for gapfilled tuples.
+		 */
+		if (column_contains_aggs)
+		{
+			Node *entry = copyObject((Node *) tle);
+			entry = gapfill_aggref_mutator(entry, NULL);
+
+			/* Fix for #4894 when we have expressions like (agg + gby_var):
+			 * after replacing aggs with NULLs recheck column for gby vars,
+			 * fix those gby vars to refer to exec vars and mark the column DERIVED
+			 */
+			if (contain_var_clause(entry))
+			{
+				gapfill_fix_gby_vars(entry, cscan->custom_scan_tlist, exec_tlist);
+				state->columns[i] =
+					gapfill_column_state_create(DERIVED_COLUMN,
+												TupleDescAttr(tupledesc, i)->atttypid);
+				state->multigroup = true;
+				state->groups_initialized = false;
+			}
+			else
+				state->columns[i] =
+					gapfill_column_state_create(NULL_COLUMN, TupleDescAttr(tupledesc, i)->atttypid);
+
+			lfirst(list_nth_cell(exec_tlist, i)) = entry;
 			continue;
 		}
 
@@ -1425,4 +1443,42 @@ gapfill_adjust_varnos(GapFillState *state, Expr *expr)
 		}
 	}
 	return expr;
+}
+
+/* When we have original target entries like (agg + gby_var)
+ * we will replace agg with NULL and put resulting expression into exec-fixed "targetlist",
+ * but we need to fix "gby_var" to refer to exec targetlist gby var rather than the original one.
+ * Only then we can safely put (NULL + gby_var_exec) entry into exec-fixed targetlist.
+ *
+ * This method will extract original gby vars from agg expression "entry"
+ * and replace them with exec-fixed gby vars.
+ */
+static void
+gapfill_fix_gby_vars(Node *entry, List *orig_tlist, List *exec_tlist)
+{
+	ListCell *lc_var, *lc_orig_tle, *lc_exec_tle;
+	List *vars = pull_var_clause(entry, 0);
+
+	foreach (lc_var, vars)
+	{
+		Var *var = lfirst(lc_var);
+		/* Look through exec targetlist for GBY vars matching this var.
+		 * As we have an Agg expression, only GBY vars can be used outside of Aggs in the target
+		 * list, i.e. if we see a var in a targetlist it has to be a GBY var.
+		 */
+		forboth (lc_orig_tle, orig_tlist, lc_exec_tle, exec_tlist)
+		{
+			TargetEntry *orig_tle = lfirst(lc_orig_tle);
+			TargetEntry *exec_tle = lfirst(lc_exec_tle);
+			/* replace original GBY var with exec GBY var at the same position in the target list*/
+			if (IsA(orig_tle->expr, Var) && orig_tle->ressortgroupref &&
+				((Var *) orig_tle->expr)->varno == var->varno &&
+				((Var *) orig_tle->expr)->varattno == var->varattno)
+			{
+				Var *exec_var = castNode(Var, exec_tle->expr);
+				var->varno = exec_var->varno;
+				var->varattno = exec_var->varattno;
+			}
+		}
+	}
 }
