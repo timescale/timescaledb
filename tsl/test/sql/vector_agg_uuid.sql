@@ -107,8 +107,8 @@ alter table uuid_table add column ver int;
 alter table uuid_table add column uuid_ts timestamptz;
 
 update uuid_table set
-  ver = _timescaledb_functions.uuid_version(u) ,
-  uuid_ts = _timescaledb_functions.timestamptz_from_uuid_v7_with_microseconds(u)
+  ver = uuid_version(u) ,
+  uuid_ts = uuid_timestamp_micros(u)
 where u is not null;
 
 select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
