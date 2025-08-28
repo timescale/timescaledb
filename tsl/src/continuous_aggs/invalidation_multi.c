@@ -24,6 +24,7 @@
 #include <postgres.h>
 
 #include <access/tupdesc.h>
+#include <catalog/pg_class_d.h>
 #include <catalog/pg_type_d.h>
 #include <common/int.h>
 #include <executor/spi.h>
@@ -32,6 +33,7 @@
 #include <nodes/pg_list.h>
 #include <postgres_ext.h>
 #include <replication/logicalproto.h>
+#include <storage/lockdefs.h>
 #include <utils/array.h>
 #include <utils/elog.h>
 #include <utils/memutils.h>
@@ -42,6 +44,7 @@
 #include "continuous_aggs/invalidation.h"
 #include "continuous_aggs/invalidation_record.h"
 #include "continuous_aggs/invalidation_threshold.h"
+#include "debug_point.h"
 #include "guc.h"
 #include "ts_catalog/continuous_agg.h"
 
@@ -646,7 +649,18 @@ multi_invalidation_process_hypertable_log(List *hypertables)
 	foreach (lc, hypertables)
 		(void) multi_invalidation_state_hypertable_entry_get_for_update(&state, lfirst_int(lc));
 
+	/*
+	 * Lock WAL to coordinate refreshes.
+	 *
+	 * We use LockDatabaseObject() on the materialization log relation since
+	 * that will not conflict with relation locks on the relation (it is an
+	 * database object lock), only with other "database object lockers" on the
+	 * relation.
+	 */
+	LockDatabaseObject(RelationRelationId, state.logrel->rd_id, 0, AccessExclusiveLock);
+	DEBUG_WAITPOINT("multi_invalidation_process_invalidations");
 	multi_invalidation_move_invalidations(&state);
+	UnlockDatabaseObject(RelationRelationId, state.logrel->rd_id, 0, AccessExclusiveLock);
 
 	multi_invalidation_state_cleanup(&state);
 }
