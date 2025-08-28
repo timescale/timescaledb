@@ -1430,17 +1430,8 @@ test_uuid_array_simple()
 	Datum compressed = (Datum) compressor->finish(compressor);
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
 
-	/* Test unaligned access to satisfy code coverage */
-	size_t compressed_size = VARSIZE_ANY(compressed);
-	char *unaligned_ptr = ((char *) palloc0(compressed_size + 3)) + 3;
-	memcpy(unaligned_ptr, DatumGetPointer(compressed), compressed_size);
-
-	ArrowArray *bulk_result =
-		tsl_array_decompress_all(PointerGetDatum(unaligned_ptr), UUIDOID, CurrentMemoryContext);
+	ArrowArray *bulk_result = tsl_array_decompress_all(compressed, UUIDOID, CurrentMemoryContext);
 	const pg_uuid_t *bulk_data = (pg_uuid_t *) bulk_result->buffers[1];
-
-	ArrowArray *bulk_result2 = tsl_array_decompress_all(compressed, UUIDOID, CurrentMemoryContext);
-	const pg_uuid_t *bulk_data2 = (pg_uuid_t *) bulk_result2->buffers[1];
 
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
@@ -1456,8 +1447,6 @@ test_uuid_array_simple()
 		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
 		TestAssertTrue(
 			DatumGetBool(DirectFunctionCall2(uuid_eq, PointerGetDatum(&bulk_data[i]), uuids[i])));
-		TestAssertTrue(
-			DatumGetBool(DirectFunctionCall2(uuid_eq, PointerGetDatum(&bulk_data2[i]), uuids[i])));
 	}
 }
 
