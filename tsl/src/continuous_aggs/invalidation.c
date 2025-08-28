@@ -29,6 +29,7 @@
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
 
+#include "cache.h"
 #include "continuous_aggs/invalidation_multi.h"
 #include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
@@ -1241,6 +1242,17 @@ continuous_agg_process_hypertable_invalidations_single(Oid hypertable_relid)
 	invalidation_process_hypertable_log(hypertable_id, dimtype);
 }
 
+static void
+append_string_info_relid(StringInfo info, ListCell *lc)
+{
+	Oid relid = lfirst_oid(lc);
+	const char *name = get_rel_name(relid);
+	if (name)
+		appendStringInfo(info, "\"%s\"", name);
+	else
+		appendStringInfo(info, "%d", relid);
+}
+
 /*
  * PostgreSQL function to move hypertable invalidations to materialization
  * invalidation log.
@@ -1250,21 +1262,59 @@ continuous_agg_process_hypertable_invalidations_multi(ArrayType *hypertable_arra
 {
 	ArrayIterator array_iterator = array_create_iterator(hypertable_array, 0, NULL);
 	List *hypertables = NIL;
+	List *bad_objects = NIL;
 
 	Datum value;
 	bool isnull;
 	while (array_iterate(array_iterator, &value, &isnull))
 	{
+		/* Function signature only allow OIDs, so we will always have an OID. */
 		Oid hypertable_relid = DatumGetObjectId(value);
-		int32 hypertable_id = ts_hypertable_relid_to_id(hypertable_relid);
-		TS_DEBUG_LOG("add relation \"%s\" to list: hypertable_id=%d",
-					 get_rel_name(hypertable_relid),
-					 hypertable_id);
-		ts_hypertable_permissions_check(hypertable_relid, GetUserId());
-		hypertables = lappend_int(hypertables, hypertable_id);
+		Cache *hcache;
+		Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(hypertable_relid,
+																 CACHE_FLAG_MISSING_OK,
+																 &hcache);
+		if (ht)
+		{
+			int32 hypertable_id = ht->fd.id;
+			TS_DEBUG_LOG("add relation \"%s\" to list: hypertable_id=%d",
+						 get_rel_name(hypertable_relid),
+						 hypertable_id);
+			ts_hypertable_permissions_check(hypertable_relid, GetUserId());
+			hypertables = lappend_int(hypertables, hypertable_id);
+		}
+		else
+		{
+			TS_DEBUG_LOG("relation \"%s\" is not a hypertable", get_rel_name(hypertable_relid));
+			bad_objects = lappend_oid(bad_objects, hypertable_relid);
+		}
+		ts_cache_release(&hcache);
 	}
 
 	array_free_iterator(array_iterator);
+
+	const int bad_count = list_length(bad_objects);
+	if (bad_count == 1)
+	{
+		const Oid relid = linitial_oid(bad_objects);
+		const char *name = get_rel_name(relid);
+		if (name)
+			ereport(ERROR,
+					errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					errmsg("table \"%s\" is not a hypertable", name));
+		else
+			ereport(ERROR,
+					errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					errmsg("OID %d is not a hypertable", relid));
+	}
+	else if (bad_count > 1)
+	{
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("%d objects in list are not hypertables", bad_count),
+				errdetail("Bad objects are %s.",
+						  ts_list_to_string(bad_objects, append_string_info_relid)));
+	}
 
 	multi_invalidation_process_hypertable_log(hypertables);
 }
