@@ -1400,3 +1400,72 @@ SELECT timescaledb_experimental.add_policies('cagg');
  f
 (1 row)
 
+-- Issue #6902
+-- Fix timestamp out of range in a refresh policy when setting `end_offset=>NULL`
+-- for a CAgg with variable sized bucket (i.e: using `time_bucket` with timezone)
+CREATE TABLE issue_6902 (
+  ts  TIMESTAMPTZ NOT NULL,
+  temperature NUMERIC
+) WITH (
+  timescaledb.hypertable,
+  timescaledb.partition_column='ts',
+  timescaledb.chunk_interval='1 day',
+  timescaledb.compress='off'
+);
+INSERT INTO issue_6902
+SELECT t, 1 FROM generate_series(now() - interval '3 hours', now(), interval '1 minute') AS t;
+CREATE MATERIALIZED VIEW issue_6902_by_hour
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket(INTERVAL '1 hour', ts, 'America/Sao_Paulo') AS bucket, -- using timezone
+  MAX(temperature),
+  MIN(temperature),
+  COUNT(*)
+FROM issue_6902
+GROUP BY 1
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy (
+  'issue_6902_by_hour',
+  start_offset => INTERVAL '3 hours',
+  end_offset => NULL,
+  schedule_interval => INTERVAL '12 hour',
+  initial_start => now() + INTERVAL '12 hour'
+) AS job_id \gset
+-- 181 rows
+CALL run_job(:job_id);
+SELECT count(*) FROM issue_6902;
+ count 
+-------
+   181
+(1 row)
+
+-- run again without any change, remain 181 rows
+CALL run_job(:job_id);
+SELECT count(*) FROM issue_6902;
+ count 
+-------
+   181
+(1 row)
+
+-- change existing data
+UPDATE issue_6902
+SET temperature = temperature + 1;
+-- run again without any change, remain 181 rows
+CALL run_job(:job_id);
+SELECT count(*) FROM issue_6902;
+ count 
+-------
+   181
+(1 row)
+
+-- insert more data
+INSERT INTO issue_6902
+SELECT t, 1 FROM generate_series(now() - interval '3 hours', now(), interval '1 minute') AS t;
+-- run again without and should have 362 rows
+CALL run_job(:job_id);
+SELECT count(*) FROM issue_6902;
+ count 
+-------
+   362
+(1 row)
+

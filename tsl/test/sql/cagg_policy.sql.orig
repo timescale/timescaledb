@@ -678,8 +678,11 @@ AS SELECT time_bucket(1, a), sum(b)
 SELECT timescaledb_experimental.add_policies('cagg');
 
 -- Issue #6902
--- Fix timestamp out of range in a refresh policy when setting `end_offset=>NULL`
+<<<<<<< HEAD
+-- Fix timestamp out of range in a refresh policy when setting `end_offset=>NULL` 
 -- for a CAgg with variable sized bucket (i.e: using `time_bucket` with timezone)
+=======
+>>>>>>> cda33125c (Fix timestamp out of range in CAgg refresh policy)
 CREATE TABLE issue_6902 (
   ts  TIMESTAMPTZ NOT NULL,
   temperature NUMERIC
