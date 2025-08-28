@@ -137,7 +137,7 @@ policy_refresh_cagg_get_refresh_end(const Dimension *dim, const Jsonb *config, b
 	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_END_OFFSET, end_isnull);
 
 	if (*end_isnull)
-		return ts_time_get_end_or_max(ts_dimension_get_partition_type(dim));
+		return ts_time_get_noend_or_max(ts_dimension_get_partition_type(dim));
 	return res;
 }
 
