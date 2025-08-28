@@ -32,6 +32,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     cagg_concurrent_move.spec
+    cagg_concurrent_process_wal.spec
     cagg_concurrent_invalidation.spec
     cagg_concurrent_refresh.spec
     compression_chunk_race.spec
