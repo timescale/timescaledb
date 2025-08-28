@@ -4,7 +4,6 @@
 CREATE TABLE  many_partitions_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('many_partitions_test', 'time', 'device', 1000);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable         
 -----------------------------------
  (1,public,many_partitions_test,t)
@@ -33,28 +32,27 @@ SELECT count(*) FROM  many_partitions_test;
 CREATE TABLE many_partitions_test_1m (time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('many_partitions_test_1m', 'time', 'device', 1000);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
  (2,public,many_partitions_test_1m,t)
 (1 row)
 
-EXPLAIN (verbose on, costs off)
+EXPLAIN (verbose on, buffers off, costs off)
 INSERT INTO many_partitions_test_1m(time, temp, device)
 SELECT time_bucket('1 minute', time) AS period, avg(temp), device
 FROM many_partitions_test
 GROUP BY period, device;
-                                                                  QUERY PLAN                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on public.many_partitions_test_1m
          ->  Custom Scan (ChunkDispatch)
                Output: "*SELECT*".period, "*SELECT*".avg, "*SELECT*".device
                ->  HashAggregate
-                     Output: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")), avg(_hyper_1_1_chunk.temp), _hyper_1_1_chunk.device
-                     Group Key: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device
+                     Output: (time_bucket('@ 1 min'::interval, many_partitions_test."time")), avg(many_partitions_test.temp), many_partitions_test.device
+                     Group Key: time_bucket('@ 1 min'::interval, many_partitions_test."time"), many_partitions_test.device
                      ->  Result
-                           Output: time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
+                           Output: time_bucket('@ 1 min'::interval, many_partitions_test."time"), many_partitions_test.device, many_partitions_test.temp
                            ->  Append
                                  ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
                                        Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.temp, _hyper_1_1_chunk.device

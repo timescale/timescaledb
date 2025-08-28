@@ -13,24 +13,31 @@ SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS
 CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
-
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev  NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_time_idx;
 
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 GROUP BY dev;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL GROUP BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 
 -- hash index is not ordered so can't use skipscan
@@ -100,6 +107,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 
 -- DISTINCT aggs grouped on their TEXT args
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_11' FROM :TABLE WHERE dev_name IS NOT NULL GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_2', NULL FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev_name;

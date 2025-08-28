@@ -14,7 +14,6 @@ create table compressed_collation_ht(time timestamp, name text collate :"COLLATI
     value float);
 select create_hypertable('compressed_collation_ht', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
  (1,public,compressed_collation_ht,t)
@@ -38,7 +37,7 @@ FROM _timescaledb_catalog.hypertable ht
         AND ht.table_name = 'compressed_collation_ht' \gset
 create index on :CHUNK (name);
 set enable_seqscan to off;
-explain (costs off)
+explain (buffers off, costs off)
 select * from compressed_collation_ht order by name;
                                       QUERY PLAN                                      
 --------------------------------------------------------------------------------------

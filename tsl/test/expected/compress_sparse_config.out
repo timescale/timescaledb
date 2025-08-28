@@ -7,7 +7,6 @@ CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings 
 create table test_settings(x int, value text, u uuid, ts timestamp);
 select create_hypertable('test_settings', 'x');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "x"
      create_hypertable      
 ----------------------------
  (1,public,test_settings,t)
@@ -165,7 +164,6 @@ drop table test_settings;
 create table test_sparse_index(x int, value text, u uuid, ts timestamp, data jsonb);
 select create_hypertable('test_sparse_index', 'x');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "x"
        create_hypertable        
 --------------------------------
  (3,public,test_sparse_index,t)
@@ -231,7 +229,7 @@ Indexes:
 Options: toast_tuple_target=128
 
 -- UUID uses bloom
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
                                                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -248,7 +246,7 @@ select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6
 (10 rows)
 
 -- Timestamp uses minmax
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
                                                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -271,7 +269,6 @@ create table test_sparse_index(x int, value text, u uuid, ts timestamp) with (
     tsdb.partition_column='x',
     tsdb.order_by='x',
     tsdb.index='bloom("u"),minmax("ts")');
-NOTICE:  adding not-null constraint to column "x"
 select * from settings;
        relid       | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                 index                                                                                  
 -------------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -316,7 +313,7 @@ Options: toast_tuple_target=128
 
 -- these tests show that despite column having multiple sparse indexes, the appropriate one is selected by the planner
 -- UUID uses bloom
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
                                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                                   
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -333,7 +330,7 @@ select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6
 (10 rows)
 
 -- Timestamp uses minmax
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
                                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                                   
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

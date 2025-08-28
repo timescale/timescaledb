@@ -5,7 +5,7 @@
 -- will be penalized for segmentby cardinalities larger than 100, where it is
 -- still faster than sort.
 SET work_mem to '16MB';
-\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 CREATE TABLE test1 (
 time timestamptz NOT NULL,
     x1 integer,
@@ -822,7 +822,7 @@ SELECT time,x3 FROM test1 ORDER BY time DESC;
 (4 rows)
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                  
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result
@@ -847,7 +847,7 @@ SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
 (4 rows)
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
                                                                                                                                                                                                                                                  QUERY PLAN                                                                                                                                                                                                                                                  
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result
@@ -1125,7 +1125,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
    Startup Exclusion: false
    Runtime Exclusion: false
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
+         Sort Key: test1."time"
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4 loops=1)
                Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5, _hyper_1_1_chunk.c1, _hyper_1_1_chunk.c2
                Batch Sorted Merge: true
@@ -1463,7 +1463,6 @@ WARNING:  column type "character varying" used for "block" does not follow best 
 WARNING:  column type "character varying" used for "message_name" does not follow best practices
 WARNING:  column type "character varying" used for "signal_name" does not follow best practices
 WARNING:  column type "character varying" used for "signal_string_value" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------
  (11,public,bugtab,t)
@@ -1524,7 +1523,6 @@ CREATE TABLE test (
 );
 SELECT create_hypertable('test', 'dttm');
 WARNING:  column type "timestamp without time zone" used for "dttm" does not follow best practices
-NOTICE:  adding not-null constraint to column "dttm"
  create_hypertable  
 --------------------
  (13,public,test,t)

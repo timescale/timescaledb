@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 SET max_parallel_workers_per_gather TO 0;
-\set PREFIX 'EXPLAIN (costs off) '
+\set PREFIX 'EXPLAIN (buffers off, costs off) '
 \ir include/plan_hashagg_load.sql
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -25,7 +25,7 @@ INSERT INTO hyper SELECT t,  EXTRACT(EPOCH FROM t), (EXTRACT(EPOCH FROM t)::int 
 INSERT INTO regular(time, time_int, time_date, metricid, value)
   SELECT t,  EXTRACT(EPOCH FROM t), t::date, (EXTRACT(EPOCH FROM t)::int % 10) + 1, 1.0 FROM generate_series('2001-01-01', '2001-01-02', INTERVAL '1 second') t;
 --test some queries before analyze;
-EXPLAIN (costs off) SELECT time_bucket('1 minute', time) AS MetricMinuteTs, AVG(value) as avg
+EXPLAIN (buffers off, costs off) SELECT time_bucket('1 minute', time) AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
@@ -41,7 +41,7 @@ ORDER BY MetricMinuteTs DESC;
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
 (7 rows)
 
-EXPLAIN (costs off) SELECT date_trunc('minute', time) AS MetricMinuteTs, AVG(value) as avg
+EXPLAIN (buffers off, costs off) SELECT date_trunc('minute', time) AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs

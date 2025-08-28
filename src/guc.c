@@ -64,7 +64,9 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 };
 
 #define GUC_CAGG_LOW_WORK_MEM_NAME "cagg_processing_low_work_mem"
+#define GUC_CAGG_LOW_WORK_MEM_VALUE (0.6 * 65536)
 #define GUC_CAGG_HIGH_WORK_MEM_NAME "cagg_processing_high_work_mem"
+#define GUC_CAGG_HIGH_WORK_MEM_VALUE (0.8 * 65536)
 
 bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
@@ -89,8 +91,8 @@ TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 TSDLLEXPORT int ts_guc_cagg_wal_batch_size = 10000;
-TSDLLEXPORT int ts_guc_cagg_low_work_mem = 0.6 * 65536;
-TSDLLEXPORT int ts_guc_cagg_high_work_mem = 0.8 * 65536;
+TSDLLEXPORT int ts_guc_cagg_low_work_mem = GUC_CAGG_LOW_WORK_MEM_VALUE;
+TSDLLEXPORT int ts_guc_cagg_high_work_mem = GUC_CAGG_HIGH_WORK_MEM_VALUE;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
@@ -115,6 +117,7 @@ TSDLLEXPORT int ts_guc_compression_batch_size_limit = 1000;
 TSDLLEXPORT bool ts_guc_compression_enable_compressor_batch_limit = false;
 TSDLLEXPORT CompressTruncateBehaviour ts_guc_compress_truncate_behaviour = COMPRESS_TRUNCATE_ONLY;
 bool ts_guc_enable_event_triggers = false;
+bool ts_guc_debug_skip_scan_info = false;
 
 /* Only settable in debug mode for testing */
 TSDLLEXPORT bool ts_guc_enable_null_compression = true;
@@ -129,6 +132,7 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
 #endif
 TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan = true;
+TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan = true;
 TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier = 1.0;
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
@@ -676,6 +680,17 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_multikey_skipscan"),
+							 "Enable SkipScan for multiple distinct keys",
+							 "Enable SkipScan for multiple distinct inputs",
+							 &ts_guc_enable_multikey_skip_scan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomRealVariable(MAKE_EXTOPTION("skip_scan_run_cost_multiplier"),
 							 "Multiplier for SkipScan run cost as an option to make the cost "
 							 "smaller so that SkipScan can be chosen",
@@ -685,6 +700,17 @@ _guc_init(void)
 							 1.0,
 							 0.0,
 							 1.0,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("debug_skip_scan_info"),
+							 "Print debug info about SkipScan",
+							 "Print debug info about SkipScan distinct columns",
+							 &ts_guc_debug_skip_scan_info,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -903,25 +929,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-	/*
-	 * Define the limit on number of invalidation-based refreshes we allow per
-	 * refresh call. If this limit is exceeded, fall back to a single refresh that
-	 * covers the range decided by the min and max invalidated time.
-	 */
-	DefineCustomIntVariable(MAKE_EXTOPTION("materializations_per_refresh_window"),
-							"Max number of materializations per cagg refresh window",
-							"The maximal number of individual refreshes per cagg refresh. If more "
-							"refreshes need to be performed, they are merged into a larger "
-							"single refresh.",
-							&ts_guc_cagg_max_individual_materializations,
-							10,
-							0,
-							INT_MAX,
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
 
 	DefineCustomIntVariable(MAKE_EXTOPTION("cagg_processing_wal_batch_size"),
 							"Batch size when processing WAL entries.",
@@ -943,7 +950,7 @@ _guc_init(void)
 							"The low working memory limit for the continuous aggregate "
 							"invalidation processing.",
 							&ts_guc_cagg_low_work_mem,
-							0.6 * maintenance_work_mem,
+							GUC_CAGG_LOW_WORK_MEM_VALUE,
 							64,
 							MAX_KILOBYTES,
 							PGC_USERSET,
@@ -958,7 +965,7 @@ _guc_init(void)
 							"The high working memory limit for the continuous aggregate "
 							"invalidation processing.",
 							&ts_guc_cagg_high_work_mem,
-							0.8 * maintenance_work_mem,
+							GUC_CAGG_HIGH_WORK_MEM_VALUE,
 							64,
 							MAX_KILOBYTES,
 							PGC_USERSET,

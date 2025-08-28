@@ -70,7 +70,7 @@ WITH insert_cte as (
 	RETURNING *)
 SELECT * FROM insert_cte;
 
-EXPLAIN (analyze, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
+EXPLAIN (analyze, buffers off, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
 WITH insert_cte as (
 	INSERT INTO one_space_test VALUES
 		('2001-01-01 01:03:01', 1.0, 'device')
@@ -78,16 +78,16 @@ WITH insert_cte as (
 SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
 
 -- INSERTs can exclude chunks based on constraints
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
 INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
 
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
 INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
 INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
 INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
@@ -98,13 +98,13 @@ SELECT create_hypertable('timestamp_inf', 'time');
 
 INSERT INTO timestamp_inf VALUES ('2018/01/02'), ('2019/01/02');
 
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time < 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time >= 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time <= '-infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time > '-infinity' LIMIT 1;
 
 CREATE TABLE date_inf(time DATE);
@@ -112,13 +112,13 @@ SELECT create_hypertable('date_inf', 'time');
 
 INSERT INTO date_inf VALUES ('2018/01/02'), ('2019/01/02');
 
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time < 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time >= 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time <= '-infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time > '-infinity' LIMIT 1;
 
 -- test INSERT with cached plans / plpgsql functions
@@ -164,7 +164,7 @@ SELECT create_hypertable(
 	if_not_exists => TRUE,
 	migrate_data => TRUE
 );
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 INSERT INTO readings
 SELECT '2020-05-09 10:34:35.296288+00', 1, 0
 WHERE NOT EXISTS (

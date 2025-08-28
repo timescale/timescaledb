@@ -17,7 +17,8 @@ set(TEST_FILES
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
     cagg_plugin.sql
-    cagg_refresh.sql
+    cagg_refresh_using_trigger.sql
+    cagg_refresh_using_wal.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
@@ -63,6 +64,7 @@ set(TEST_FILES
     merge_compress.sql
     modify_exclusion.sql
     move.sql
+    plan_skip_scan_notnull.sql
     policy_generalization.sql
     reorder.sql
     size_utils_tsl.sql
@@ -217,8 +219,8 @@ set(SOLO_TESTS
     # See
     # https://github.com/postgres/postgres/commit/d87d07b7ad3b782cb74566cd771ecdb2823adf6a
     cagg_invalidation
-    cagg_plugin
-    cagg_invalidation_multi)
+    cagg_invalidation_multi
+    cagg_plugin)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

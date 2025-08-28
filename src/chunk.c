@@ -2879,8 +2879,8 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 		 * We will still need to delete dimension slices for the chunk
 		 */
 		ccs = ts_chunk_constraints_alloc(2, ti->mctx);
-		ts_chunk_constraint_delete_dimensional_constraints(form.id, ccs, true, true);
-		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs, true, !detach);
+		ts_chunk_constraint_delete_dimensional_constraints(form.id, ccs);
+		ts_chunk_constraint_delete_by_chunk_id(form.id, ccs, !detach);
 
 		/* Check for dimension slices that are orphaned by the chunk deletion */
 		for (i = 0; i < ccs->num_constraints; i++)
@@ -2948,8 +2948,6 @@ chunk_tuple_delete(TupleInfo *ti, Oid relid, DropBehavior behavior, bool preserv
 	 */
 	if (detach)
 		ts_chunk_drop_referencing_fk_by_chunk_id(form.id);
-	/* Do not drop any index if detaching */
-	ts_chunk_index_delete_by_chunk_id(form.id, !detach);
 	ts_compression_chunk_size_delete(form.id);
 
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
@@ -4566,6 +4564,7 @@ ts_chunk_create(PG_FUNCTION_ARGS)
  * @see CHUNK_STATUS_COMPRESSED
  * @see CHUNK_STATUS_COMPRESSED_UNORDERED
  * @see CHUNK_STATUS_FROZEN
+ * @see CHUNK_STATUS_COMPRESSED_PARTIAL
  */
 Datum
 ts_chunk_status(PG_FUNCTION_ARGS)
@@ -4573,6 +4572,52 @@ ts_chunk_status(PG_FUNCTION_ARGS)
 	Oid chunk_relid = PG_GETARG_OID(0);
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, /* fail_if_not_found */ true);
 	PG_RETURN_INT32(chunk->fd.status);
+}
+
+TS_FUNCTION_INFO_V1(ts_chunk_status_text);
+
+Datum
+ts_chunk_status_text(PG_FUNCTION_ARGS)
+{
+	int32 status = PG_GETARG_INT32(0);
+
+	ArrayBuildState *astate = initArrayResult(TEXTOID, CurrentMemoryContext, false);
+
+	if (status & CHUNK_STATUS_COMPRESSED)
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("COMPRESSED"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+
+	if (status & CHUNK_STATUS_COMPRESSED_UNORDERED)
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("UNORDERED"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+
+	if (status & CHUNK_STATUS_FROZEN)
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("FROZEN"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+
+	if (status & CHUNK_STATUS_COMPRESSED_PARTIAL)
+		astate = accumArrayResult(astate,
+								  CStringGetTextDatum("PARTIAL"),
+								  false,
+								  TEXTOID,
+								  CurrentMemoryContext);
+
+	if (status < 0 || status > (CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_UNORDERED |
+								CHUNK_STATUS_FROZEN | CHUNK_STATUS_COMPRESSED_PARTIAL))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid chunk status %d", status)));
+
+	PG_RETURN_DATUM(makeArrayResult(astate, CurrentMemoryContext));
 }
 
 /*

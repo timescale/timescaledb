@@ -45,10 +45,6 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CHUNK_CONSTRAINT_TABLE_NAME,
 	},
-	[CHUNK_INDEX] = {
-		.schema_name = CATALOG_SCHEMA_NAME,
-		.table_name = CHUNK_INDEX_TABLE_NAME,
-	},
 	[TABLESPACE] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = TABLESPACE_TABLE_NAME,
@@ -88,6 +84,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE_NAME,
+	},
+	[CONTINUOUS_AGGS_MATERIALIZATION_RANGES] = {
+		.schema_name = CATALOG_SCHEMA_NAME,
+		.table_name = CONTINUOUS_AGGS_MATERIALIZATION_RANGES_TABLE_NAME,
 	},
 	[COMPRESSION_SETTINGS] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
@@ -166,13 +166,6 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CHUNK_CONSTRAINT_DIMENSION_SLICE_ID_IDX] = "chunk_constraint_dimension_slice_id_idx",
 		},
 	},
-	[CHUNK_INDEX] = {
-		.length = _MAX_CHUNK_INDEX_INDEX,
-		.names = (char *[]) {
-			[CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX] = "chunk_index_chunk_id_index_name_key",
-			[CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX] = "chunk_index_hypertable_id_hypertable_index_name_idx",
-		},
-	},
 	[TABLESPACE] = {
 		.length = _MAX_TABLESPACE_INDEX,
 		.names = (char *[]) {
@@ -238,6 +231,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX] = "continuous_aggs_materialization_invalidation_log_idx",
 		},
 	},
+	[CONTINUOUS_AGGS_MATERIALIZATION_RANGES] = {
+		.length = _MAX_CONTINUOUS_AGGS_MATERIALIZATION_RANGES_INDEX,
+		.names = (char *[]) {
+			[CONTINUOUS_AGGS_MATERIALIZATION_RANGES_IDX] = "continuous_aggs_materialization_ranges_idx",
+		},
+	},
 	[CONTINUOUS_AGGS_WATERMARK] = {
 		.length = _MAX_CONTINUOUS_AGGS_WATERMARK_INDEX,
 		.names = (char *[]) {
@@ -271,7 +270,6 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[DIMENSION_SLICE] = CATALOG_SCHEMA_NAME ".dimension_slice_id_seq",
 	[CHUNK] = CATALOG_SCHEMA_NAME ".chunk_id_seq",
 	[CHUNK_CONSTRAINT] = CATALOG_SCHEMA_NAME ".chunk_constraint_name",
-	[CHUNK_INDEX] = NULL,
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
 	[BGW_JOB_STAT] = NULL,
@@ -743,7 +741,6 @@ ts_catalog_invalidate_cache(Oid catalog_relid, CmdType operation)
 			relid = ts_catalog_get_cache_proxy_id(catalog, CACHE_TYPE_BGW_JOB);
 			CacheInvalidateRelcacheByRelid(relid);
 			break;
-		case CHUNK_INDEX:
 		default:
 			break;
 	}

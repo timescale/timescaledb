@@ -75,11 +75,13 @@ EXCEPT SELECT hypertable_constraint_name FROM _timescaledb_catalog.chunk_constra
 ----------------------------
 (0 rows)
 
-SELECT hypertable_index_name FROM _timescaledb_catalog.chunk_index WHERE chunk_id = :'CHUNK_ID'
-EXCEPT SELECT hypertable_index_name FROM _timescaledb_catalog.chunk_index WHERE chunk_id = :'ATTACHED_CHUNK';
- hypertable_index_name 
------------------------
-(0 rows)
+SELECT * FROM test.show_indexesp('regular_table_to_attach');
+          Table          |                    Index                     |  Columns  | Expr | Unique | Primary | Exclusion | Tablespace 
+-------------------------+----------------------------------------------+-----------+------+--------+---------+-----------+------------
+ regular_table_to_attach | regular_table_device_idx                     | {device}  |      | f      | f       | f         | 
+ regular_table_to_attach | pre_attach_id_time_unique                    | {id,time} |      | t      | f       | f         | 
+ regular_table_to_attach | regular_table_to_attach_attach_test_time_idx | {time}    |      | f      | f       | f         | 
+(3 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ds
 JOIN _timescaledb_catalog.chunk_constraint cc ON ds.id = cc.dimension_slice_id
@@ -153,14 +155,6 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID'
         5 |                  2 | constraint_2                   | 
         5 |                  7 | constraint_7                   | 
 (4 rows)
-
-SELECT * FROM _timescaledb_catalog.chunk_index WHERE chunk_id = :'CHUNK_ID';
- chunk_id |               index_name                | hypertable_id |   hypertable_index_name    
-----------+-----------------------------------------+---------------+----------------------------
-        5 | 1_2_attach_test_id_time_unique          |             1 | attach_test_id_time_unique
-        5 | _hyper_1_1_chunk_attach_test_device_idx |             1 | attach_test_device_idx
-        5 | _hyper_1_1_chunk_attach_test_time_idx   |             1 | attach_test_time_idx
-(3 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ds
 JOIN _timescaledb_catalog.chunk_constraint cc ON ds.id = cc.dimension_slice_id

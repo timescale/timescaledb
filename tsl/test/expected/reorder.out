@@ -7,7 +7,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 CREATE TABLE cluster_test(time INTEGER, temp float, location int, value TEXT);
 SELECT create_hypertable('cluster_test', 'time', chunk_time_interval => 5);
-psql:include/cluster_test_setup.sql:7: NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (1,public,cluster_test,t)
@@ -21,7 +20,7 @@ $BODY$
             SET LOCAL enable_seqscan=%1$s;
             SET LOCAL enable_indexscan=%2$s;
             SET LOCAL enable_bitmapscan=%3$s;
-            EXPLAIN (costs off) SELECT * FROM %4$I WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM %4$I WHERE time=7
         $INNER$, seqscan, indexscan, bitmapscan, table_name) as a,
         format($INNER$
             WITH T1 as (SELECT * FROM %1$I WHERE time=7),
@@ -40,7 +39,7 @@ $BODY$
             SET LOCAL enable_seqscan=%1$s;
             SET LOCAL enable_indexscan=%2$s;
             SET LOCAL enable_bitmapscan=%3$s;
-            EXPLAIN (costs off) SELECT * FROM %4$I WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM %4$I WHERE time=6
         $INNER$, seqscan, indexscan, bitmapscan, table_name) as a,
         format($INNER$
             WITH T1 as (SELECT * FROM %1$I WHERE time=7),
@@ -108,7 +107,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
           QUERY PLAN          
 ------------------------------
@@ -134,7 +133,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -160,7 +159,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -210,7 +209,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
           QUERY PLAN          
 ------------------------------
@@ -236,7 +235,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -262,7 +261,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -300,7 +299,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
           QUERY PLAN          
 ------------------------------
@@ -326,7 +325,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -352,7 +351,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -390,7 +389,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
           QUERY PLAN          
 ------------------------------
@@ -416,7 +415,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -442,7 +441,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -480,7 +479,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
           QUERY PLAN          
 ------------------------------
@@ -506,7 +505,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -532,7 +531,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -581,7 +580,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
           QUERY PLAN          
 ------------------------------
@@ -607,7 +606,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -633,7 +632,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -694,7 +693,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
           QUERY PLAN          
 ------------------------------
@@ -720,7 +719,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -746,7 +745,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -784,7 +783,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
           QUERY PLAN          
 ------------------------------
@@ -810,7 +809,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -836,7 +835,7 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=7
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -888,7 +887,7 @@ BEGIN;
 SET LOCAL enable_seqscan=false;
 SET LOCAL enable_indexscan=true;
 SET LOCAL enable_bitmapscan=false;
-EXPLAIN (costs off) SELECT * FROM cluster_test WHERE location < 6;
+EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE location < 6;
                                       QUERY PLAN                                       
 ---------------------------------------------------------------------------------------
  Append
@@ -923,7 +922,7 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
           QUERY PLAN          
 ------------------------------
@@ -947,7 +946,7 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -971,7 +970,7 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -1006,7 +1005,7 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
           QUERY PLAN          
 ------------------------------
@@ -1030,7 +1029,7 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -1054,7 +1053,7 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -1116,7 +1115,7 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_seqscan=t;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
           QUERY PLAN          
 ------------------------------
@@ -1140,7 +1139,7 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=t;
             SET LOCAL enable_bitmapscan=f;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -1164,7 +1163,7 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_seqscan=f;
             SET LOCAL enable_indexscan=f;
             SET LOCAL enable_bitmapscan=t;
-            EXPLAIN (costs off) SELECT * FROM cluster_test WHERE time=6
+            EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
                             QUERY PLAN                             
 -------------------------------------------------------------------
@@ -1214,7 +1213,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY time;
 
 CREATE TABLE ct2(time INTEGER, val BIGINT);
 SELECT create_hypertable('ct2', 'time', chunk_time_interval => 5);
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (2,public,ct2,t)

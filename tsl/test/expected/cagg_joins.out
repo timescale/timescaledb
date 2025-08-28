@@ -32,8 +32,6 @@ INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-27', 'Moscow', 31,3);
 CREATE TABLE conditions_dup AS SELECT * FROM conditions;
 SELECT table_name FROM create_hypertable('conditions_dup', 'day', chunk_time_interval => INTERVAL '1 day', migrate_data => true);
-NOTICE:  adding not-null constraint to column "day"
-DETAIL:  Dimensions cannot have NULL values.
 NOTICE:  migrating data to chunks
 DETAIL:  Migration might take a while depending on the amount of data.
    table_name   

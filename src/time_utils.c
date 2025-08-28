@@ -199,6 +199,8 @@ ts_time_datum_get_min(Oid timetype)
 			return Int32GetDatum(PG_INT32_MIN);
 		case INT8OID:
 			return Int64GetDatum(PG_INT64_MIN);
+		case UUIDOID:
+			return Int64GetDatum(TS_TIME_UUID_MIN);
 		default:
 			break;
 	}
@@ -229,6 +231,7 @@ ts_time_datum_get_end(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "END is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -255,7 +258,8 @@ ts_time_datum_get_max(Oid timetype)
 			return Int32GetDatum(PG_INT32_MAX);
 		case INT8OID:
 			return Int64GetDatum(PG_INT64_MAX);
-			break;
+		case UUIDOID:
+			return Int64GetDatum(TS_TIME_UUID_MAX);
 		default:
 			break;
 	}
@@ -277,6 +281,7 @@ ts_time_datum_get_nobegin(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "NOBEGIN is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -309,6 +314,7 @@ ts_time_datum_get_noend(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "NOEND is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -338,6 +344,8 @@ ts_time_get_min(Oid timetype)
 			return PG_INT32_MIN;
 		case INT8OID:
 			return PG_INT64_MIN;
+		case UUIDOID:
+			return TS_TIME_UUID_MIN;
 		default:
 			break;
 	}
@@ -365,6 +373,8 @@ ts_time_get_max(Oid timetype)
 			return PG_INT32_MAX;
 		case INT8OID:
 			return PG_INT64_MAX;
+		case UUIDOID:
+			return TS_TIME_UUID_MAX;
 		default:
 			break;
 	}
@@ -391,6 +401,7 @@ ts_time_get_end(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "END is not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -426,6 +437,7 @@ ts_time_get_nobegin(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "-Infinity not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:
@@ -456,6 +468,7 @@ ts_time_get_noend(Oid timetype)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
+		case UUIDOID:
 			elog(ERROR, "+Infinity not defined for \"%s\"", format_type_be(timetype));
 			break;
 		default:

@@ -3141,7 +3141,6 @@ SELECT setval('_timescaledb_catalog.dimension_slice_id_seq', 999, true);
 (1 row)
 
 SELECT create_hypertable('space_partitioning', 'time', chunk_time_interval=>'1 hour'::interval);
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable          
 ------------------------------------
  (1000,public,space_partitioning,t)

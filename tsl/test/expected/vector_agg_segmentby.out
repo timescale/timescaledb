@@ -6,7 +6,6 @@
 \set GROUPING_CARDINALITY 10::int
 create table svagg(t int, f int, s int);
 select create_hypertable('svagg', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
-NOTICE:  adding not-null constraint to column "s"
  create_hypertable  
 --------------------
  (1,public,svagg,t)
@@ -147,7 +146,7 @@ select s, sum(t), count(*) from svagg group by s order by s;
 (10 rows)
 
 -- another example that we used not to vectorize because of the projection.
-explain (costs off)
+explain (buffers off, costs off)
 select sum(t), s, count(*) from svagg group by s order by s;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------

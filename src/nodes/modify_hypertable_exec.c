@@ -601,6 +601,7 @@ ExecInsert(ModifyTableContext *context,
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	OnConflictAction onconflict = node->onConflictAction;
 	MemoryContext oldContext;
+	bool skip_generated_column_computations = false;
 
 	Assert(!mtstate->mt_partition_tuple_routing);
 
@@ -616,6 +617,8 @@ ExecInsert(ModifyTableContext *context,
 									   resultRelInfo, slot,
 									   &partRelInfo);
 		resultRelInfo = partRelInfo;
+
+		skip_generated_column_computations = cds->cis->skip_generated_column_computations;
 	}
 
 	ExecMaterializeSlot(slot);
@@ -766,9 +769,14 @@ ExecInsert(ModifyTableContext *context,
 
 		/*
 		 * Compute stored generated columns
+		 * NOTE: we are skipping generation if we detect that we went through
+		 * compressed chunk uniqueness check which would have already
+		 * triggered generating the columns.
 		 */
 		if (resultRelationDesc->rd_att->constr &&
-			resultRelationDesc->rd_att->constr->has_generated_stored)
+			resultRelationDesc->rd_att->constr->has_generated_stored &&
+			!skip_generated_column_computations
+		)
 			ExecComputeStoredGenerated(resultRelInfo, estate, slot,
 									   CMD_INSERT);
 
@@ -1147,9 +1155,10 @@ ExecDeletePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		if (context->estate->es_insert_pending_result_relations != NIL)
 			ExecPendingInserts(context->estate);
 
-		return ExecBRDeleteTriggers(context->estate, context->epqstate,
+		return ExecBRDeleteTriggersCompat(context->estate, context->epqstate,
 									resultRelInfo, tupleid, oldtuple,
-									epqreturnslot, result, &context->tmfd);
+									epqreturnslot, result, &context->tmfd,
+									context->mtstate->operation == CMD_MERGE);
 	}
 
 	return true;
@@ -1572,9 +1581,10 @@ ExecUpdatePrologue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		if (context->estate->es_insert_pending_result_relations != NIL)
 			ExecPendingInserts(context->estate);
 
-		return ExecBRUpdateTriggers(context->estate, context->epqstate,
+		return ExecBRUpdateTriggersCompat(context->estate, context->epqstate,
 									resultRelInfo, tupleid, oldtuple, slot,
-									result, &context->tmfd);
+									result, &context->tmfd,
+									context->mtstate->operation == CMD_MERGE);
 	}
 
 	return true;

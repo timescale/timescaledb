@@ -191,7 +191,6 @@ SELECT * FROM ONLY "two_Partitions";
 CREATE TABLE error_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('error_test', 'time', 'device', 2);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (2,public,error_test,t)
@@ -242,7 +241,6 @@ SELECT * FROM tick_character;
 
 CREATE TABLE  date_col_test(time date, temp float8, device text NOT NULL);
 SELECT create_hypertable('date_col_test', 'time', 'device', 1000, chunk_time_interval => INTERVAL '1 Day');
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (4,public,date_col_test,t)
@@ -264,7 +262,6 @@ SELECT * FROM date_col_test WHERE time > '2001-01-01';
 set timescaledb.max_open_chunks_per_insert=1;
 CREATE TABLE chunk_assert_fail(i bigint, j bigint);
 SELECT create_hypertable('chunk_assert_fail', 'i', 'j', 1000, chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "i"
        create_hypertable        
 --------------------------------
  (5,public,chunk_assert_fail,t)
@@ -282,7 +279,6 @@ select * from chunk_assert_fail;
 CREATE TABLE one_space_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('one_space_test', 'time', 'device', 1);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (6,public,one_space_test,t)
@@ -309,7 +305,7 @@ SELECT * FROM insert_cte;
  Mon Jan 01 01:02:01 2001 |    1 | device
 (1 row)
 
-EXPLAIN (analyze, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
+EXPLAIN (analyze, buffers off, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
 WITH insert_cte as (
 	INSERT INTO one_space_test VALUES
 		('2001-01-01 01:03:01', 1.0, 'device')
@@ -326,7 +322,7 @@ SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
 (8 rows)
 
 -- INSERTs can exclude chunks based on constraints
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -338,7 +334,7 @@ EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_
                      ->  Index Only Scan using _hyper_5_13_chunk_chunk_assert_fail_j_i_idx on _hyper_5_13_chunk
 (7 rows)
 
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
                  QUERY PLAN                 
 --------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -348,7 +344,7 @@ EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_
                      One-Time Filter: false
 (5 rows)
 
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -361,7 +357,7 @@ EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_
                            Index Cond: (i = 1)
 (8 rows)
 
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -372,7 +368,7 @@ EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_
 (5 rows)
 
 INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -386,7 +382,7 @@ EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHER
                                  Index Cond: ("time" < 'infinity'::timestamp without time zone)
 (9 rows)
 
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -397,7 +393,7 @@ EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHER
                            One-Time Filter: false
 (6 rows)
 
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -408,7 +404,7 @@ EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHER
                            One-Time Filter: false
 (6 rows)
 
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
@@ -429,14 +425,13 @@ INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity'
 CREATE TABLE timestamp_inf(time TIMESTAMP);
 SELECT create_hypertable('timestamp_inf', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (7,public,timestamp_inf,t)
 (1 row)
 
 INSERT INTO timestamp_inf VALUES ('2018/01/02'), ('2019/01/02');
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time < 'infinity' LIMIT 1;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
@@ -451,7 +446,7 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
                                  Index Cond: ("time" < 'infinity'::timestamp without time zone)
 (9 rows)
 
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time >= 'infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
@@ -463,7 +458,7 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
                            One-Time Filter: false
 (6 rows)
 
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time <= '-infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
@@ -475,7 +470,7 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
                            One-Time Filter: false
 (6 rows)
 
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time > '-infinity' LIMIT 1;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
@@ -492,14 +487,13 @@ EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
 
 CREATE TABLE date_inf(time DATE);
 SELECT create_hypertable('date_inf', 'time');
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (8,public,date_inf,t)
 (1 row)
 
 INSERT INTO date_inf VALUES ('2018/01/02'), ('2019/01/02');
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time < 'infinity' LIMIT 1;
                                                   QUERY PLAN                                                  
 --------------------------------------------------------------------------------------------------------------
@@ -514,7 +508,7 @@ EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
                                  Index Cond: ("time" < 'infinity'::date)
 (9 rows)
 
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time >= 'infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
@@ -526,7 +520,7 @@ EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
                            One-Time Filter: false
 (6 rows)
 
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time <= '-infinity' LIMIT 1;
                     QUERY PLAN                    
 --------------------------------------------------
@@ -538,7 +532,7 @@ EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
                            One-Time Filter: false
 (6 rows)
 
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time > '-infinity' LIMIT 1;
                                                   QUERY PLAN                                                  
 --------------------------------------------------------------------------------------------------------------
@@ -608,7 +602,7 @@ SELECT create_hypertable(
  (11,public,readings,t)
 (1 row)
 
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 INSERT INTO readings
 SELECT '2020-05-09 10:34:35.296288+00', 1, 0
 WHERE NOT EXISTS (

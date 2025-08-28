@@ -6,6 +6,7 @@ DROP PROCEDURE _timescaledb_functions.process_hypertable_invalidations(REGCLASS[
 DROP PROCEDURE _timescaledb_functions.process_hypertable_invalidations(NAME);
 DROP FUNCTION _timescaledb_functions.cagg_parse_invalidation_record(BYTEA);
 DROP FUNCTION _timescaledb_functions.has_invalidation_trigger(regclass);
+DROP FUNCTION _timescaledb_functions.invalidation_plugin_name();
 
 CREATE FUNCTION ts_hypercore_handler(internal) RETURNS table_am_handler
 AS '@MODULE_PATHNAME@', 'ts_hypercore_handler' LANGUAGE C;
@@ -100,7 +101,9 @@ AS $$ BEGIN END $$ LANGUAGE PLPGSQL;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.generate_uuid_v7;
 DROP FUNCTION IF EXISTS _timescaledb_functions.uuid_v7_from_timestamptz;
+DROP FUNCTION IF EXISTS _timescaledb_functions.uuid_v7_from_timestamptz_zeroed;
 DROP FUNCTION IF EXISTS _timescaledb_functions.timestamptz_from_uuid_v7;
+DROP FUNCTION IF EXISTS _timescaledb_functions.timestamptz_from_uuid_v7_with_microseconds;
 DROP FUNCTION IF EXISTS _timescaledb_functions.uuid_version;
 
 DELETE FROM _timescaledb_catalog.compression_algorithm WHERE id = 7 AND version = 1 AND name = 'COMPRESSION_ALGORITHM_UUID';
@@ -167,3 +170,87 @@ $$;
 UPDATE _timescaledb_catalog.compression_settings
 SET segmentby = NULL
 WHERE segmentby = '{}';
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.index_matches;
+
+CREATE TABLE _timescaledb_catalog.chunk_index (
+  chunk_id integer NOT NULL,
+  index_name name NOT NULL,
+  hypertable_id integer NOT NULL,
+  hypertable_index_name name NOT NULL,
+  -- table constraints
+  CONSTRAINT chunk_index_chunk_id_index_name_key UNIQUE (chunk_id, index_name),
+  CONSTRAINT chunk_index_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
+  CONSTRAINT chunk_index_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+);
+
+CREATE INDEX chunk_index_hypertable_id_hypertable_index_name_idx ON _timescaledb_catalog.chunk_index (hypertable_id, hypertable_index_name);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.temp_index_keycolumns(oid)
+RETURNS text[] AS $$
+  SELECT array_agg(att.attname ORDER BY array_position(idx.indkey, att.attnum)) AS index_columns
+  FROM pg_index AS idx
+  JOIN pg_attribute AS att ON att.attrelid = idx.indrelid
+  WHERE idx.indexrelid = $1 AND att.attnum = ANY(idx.indkey);
+$$ LANGUAGE SQL IMMUTABLE SET search_path TO pg_catalog, pg_temp;
+
+INSERT INTO _timescaledb_catalog.chunk_index (chunk_id, index_name, hypertable_id, hypertable_index_name)
+SELECT
+  ch.id,
+  ch_ci.relname,
+  h.id,
+  ht_ci.relname
+FROM _timescaledb_catalog.hypertable h
+JOIN pg_index ht_i ON ht_i.indrelid = format('%I.%I',h.schema_name,h.table_name)::regclass
+JOIN pg_class ht_ci ON ht_ci.oid=ht_i.indexrelid
+JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id=h.id
+JOIN pg_index ch_i ON
+  ch_i.indrelid=format('%I.%I',ch.schema_name,ch.table_name)::regclass AND
+  ht_i.indnatts = ch_i.indnatts AND
+  ht_i.indnkeyatts = ch_i.indnkeyatts AND
+  ht_i.indisunique = ch_i.indisunique AND
+  ht_i.indnullsnotdistinct = ch_i.indnullsnotdistinct AND
+  ht_i.indisprimary = ch_i.indisprimary AND
+  ht_i.indisexclusion = ch_i.indisexclusion AND
+  ht_i.indimmediate = ch_i.indimmediate AND
+  ht_i.indcollation=ch_i.indcollation AND
+  ht_i.indclass=ch_i.indclass AND
+  ht_i.indoption = ch_i.indoption AND
+  ht_i.indexprs IS NOT DISTINCT FROM ch_i.indexprs AND
+  ht_i.indpred IS NOT DISTINCT FROM ch_i.indpred AND
+  _timescaledb_functions.temp_index_keycolumns(ht_i.indexrelid) = _timescaledb_functions.temp_index_keycolumns(ch_i.indexrelid)
+JOIN pg_class ch_ci ON ch_ci.oid=ch_i.indexrelid;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.temp_index_keycolumns(oid);
+
+GRANT SELECT ON TABLE _timescaledb_catalog.chunk_index TO PUBLIC;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_status_text(regclass);
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_status_text(int);
+
+DO
+$$
+DECLARE
+  caggs_to_refresh TEXT;
+BEGIN
+  IF EXISTS (SELECT FROM _timescaledb_catalog.continuous_aggs_materialization_ranges LIMIT 1) THEN
+    SELECT string_agg(format('%I.%I', user_view_schema, user_view_name), ', ' ORDER BY user_view_schema, user_view_name)
+    INTO caggs_to_refresh
+    FROM _timescaledb_catalog.continuous_aggs_materialization_ranges
+    JOIN _timescaledb_catalog.continuous_agg ON materialization_id = mat_hypertable_id;
+
+    RAISE EXCEPTION 'cannot downgrade because there are pending CAgg refreshes'
+      USING
+        ERRCODE = 'object_not_in_prerequisite_state',
+        DETAIL = format('Please refresh the CAggs before downgrade: %s.', caggs_to_refresh);
+  END IF;
+END;
+$$;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges;
+
+DROP TABLE IF EXISTS _timescaledb_catalog.continuous_aggs_materialization_ranges;
+
+DROP FUNCTION _timescaledb_functions.job_history_bsearch(TIMESTAMPTZ);

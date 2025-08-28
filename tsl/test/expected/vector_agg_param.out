@@ -4,7 +4,6 @@
 -- Test parameterized vector aggregation plans.
 create table pvagg(s int, a int);
 select create_hypertable('pvagg', 'a', chunk_time_interval => 1000);
-NOTICE:  adding not-null constraint to column "a"
  create_hypertable  
 --------------------
  (1,public,pvagg,t)
@@ -24,7 +23,7 @@ analyze pvagg;
 -- aggregation. When you change this test, recheck the results against the
 -- Postgres aggregation by uncommenting the below GUC.
 -- set timescaledb.enable_vectorized_aggregation to off;
-explain (verbose, costs off)
+explain (verbose, buffers off, costs off)
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
                                                                                                         QUERY PLAN                                                                                                         
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -65,17 +64,17 @@ select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg
  2 | 1498500
 (3 rows)
 
-explain (verbose, costs off)
+explain (verbose, buffers off, costs off)
 select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a + x) from pvagg) xx;
                                                                                                         QUERY PLAN                                                                                                         
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop
-   Output: x.x, (sum((_hyper_1_1_chunk.a + x.x)))
+   Output: x.x, (sum((pvagg.a + x.x)))
    ->  Function Scan on pg_catalog.unnest x
          Output: x.x
          Function Call: unnest('{0,1,2}'::integer[])
    ->  Finalize Aggregate
-         Output: sum((_hyper_1_1_chunk.a + x.x))
+         Output: sum((pvagg.a + x.x))
          ->  Append
                ->  Partial Aggregate
                      Output: PARTIAL sum((_hyper_1_1_chunk.a + x.x))

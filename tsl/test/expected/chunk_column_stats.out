@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set PREFIX 'EXPLAIN (costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off, timing off, summary off)'
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
@@ -826,7 +826,6 @@ SELECT * FROM _timescaledb_catalog.chunk_column_stats;
 -- Check min/max ranges for partial chunks with segmentby columns get recalculated correctly by seementwise recompression
 CREATE TABLE chunk_skipping(time timestamptz,device text, updated_at timestamptz)
 WITH (tsdb.hypertable, tsdb.partition_column='time',tsdb.segmentby='device');
-NOTICE:  adding not-null constraint to column "time"
 SELECT enable_chunk_skipping('chunk_skipping', 'updated_at');
  enable_chunk_skipping 
 -----------------------

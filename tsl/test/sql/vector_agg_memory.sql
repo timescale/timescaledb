@@ -36,7 +36,7 @@ vacuum analyze mvagg;
 create table log(n int, bytes int, a bigint, b bigint, c bigint, d bigint, e bigint, f bigint);
 
 -- First, ensure that the underlying decompression has constant memory usage.
-explain (costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,
+explain (buffers off, costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,
         s0, s1, t
     from mvagg where t >= -1 and t < 1000000 order by s0, s1, t desc;
 
@@ -67,7 +67,7 @@ set timescaledb.debug_require_vector_agg = 'require';
 set enable_sort to off;
 
 -- We should reliably see HashAggregate here because of the tweaks we made above.
-explain (costs off) select ts_debug_allocated_bytes() bytes,
+explain (buffers off, costs off) select ts_debug_allocated_bytes() bytes,
         count(*) a, count(t) b, sum(t) c, avg(t) d, min(t) e, max(t) f
             from mvagg where t >= -1 and t < 1000000 group by s1;
 

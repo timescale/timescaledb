@@ -78,7 +78,7 @@ SELECT compress_chunk(ch) FROM show_chunks('merge_sort') ch LIMIT 1;
 
 VACUUM ANALYZE merge_sort;
 -- this should have a MergeAppend with children wrapped in Sort nodes
-EXPLAIN (analyze,costs off,timing off,summary off) SELECT
+EXPLAIN (analyze,buffers off, costs off,timing off,summary off) SELECT
   last(time, time) as time,
   device_id,
   measure_id,
@@ -94,7 +94,7 @@ GROUP BY 2, 3;
          Hypertable: merge_sort
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=535681 loops=1)
-               Sort Key: _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.measure_id
+               Sort Key: merge_sort.device_id, merge_sort.measure_id
                ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=86400 loops=1)
                      Vectorized Filter: ("time" < "timestamp"(now()))
                      ->  Index Scan using compress_hyper_4_10_chunk_device_id_measure_id__ts_meta_min_idx on compress_hyper_4_10_chunk (actual rows=87 loops=1)
@@ -122,7 +122,7 @@ GROUP BY 2, 3;
 (31 rows)
 
 -- this should exclude the decompressed chunk
-EXPLAIN (analyze,costs off,timing off,summary off) SELECT
+EXPLAIN (analyze,buffers off, costs off,timing off,summary off) SELECT
   last(time, time) as time,
   device_id,
   measure_id,
@@ -138,7 +138,7 @@ GROUP BY 2, 3;
          Hypertable: merge_sort
          Chunks excluded during startup: 1
          ->  Merge Append (actual rows=380160 loops=1)
-               Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
+               Sort Key: merge_sort.device_id, merge_sort.measure_id
                ->  Sort (actual rows=51839 loops=1)
                      Sort Key: _hyper_3_6_chunk.device_id, _hyper_3_6_chunk.measure_id
                      Sort Method: quicksort 
@@ -187,7 +187,7 @@ WHERE check_equal_228(rtt) ORDER BY ts;
        8890 | 001407000001DD2E | 228 | Fri Dec 20 02:52:05.863 2019
 (2 rows)
 
-EXPLAIN (analyze,costs off,timing off,summary off)
+EXPLAIN (analyze,buffers off, costs off,timing off,summary off)
 SELECT * from test_chartab
 WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
                                                QUERY PLAN                                               

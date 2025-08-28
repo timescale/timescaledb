@@ -112,32 +112,33 @@ compression_settings_fill_from_tuple(CompressionSettings *settings, TupleInfo *t
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)])
 		fd->segmentby = NULL;
 	else
-		fd->segmentby = DatumGetArrayTypeP(
+		fd->segmentby = DatumGetArrayTypePCopy(
 			values[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby)])
 		fd->orderby = NULL;
 	else
-		fd->orderby =
-			DatumGetArrayTypeP(values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby)]);
+		fd->orderby = DatumGetArrayTypePCopy(
+			values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_desc)])
 		fd->orderby_desc = NULL;
 	else
-		fd->orderby_desc = DatumGetArrayTypeP(
+		fd->orderby_desc = DatumGetArrayTypePCopy(
 			values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_desc)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_nullsfirst)])
 		fd->orderby_nullsfirst = NULL;
 	else
-		fd->orderby_nullsfirst = DatumGetArrayTypeP(
+		fd->orderby_nullsfirst = DatumGetArrayTypePCopy(
 			values[AttrNumberGetAttrOffset(Anum_compression_settings_orderby_nullsfirst)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_index)])
 		fd->index = NULL;
 	else
 		fd->index =
-			DatumGetJsonbP(values[AttrNumberGetAttrOffset(Anum_compression_settings_index)]);
+			DatumGetJsonbPCopy(values[AttrNumberGetAttrOffset(Anum_compression_settings_index)]);
+
 	MemoryContextSwitchTo(old);
 
 	if (should_free)

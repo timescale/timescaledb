@@ -31,12 +31,15 @@
 #include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/date.h>
+#include <utils/elog.h>
 #include <utils/fmgroids.h>
 #include <utils/fmgrprotos.h>
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/timestamp.h>
+#include <utils/uuid.h>
 
 #include "compat/compat.h"
 #include "chunk.h"
@@ -47,6 +50,7 @@
 #include "jsonb_utils.h"
 #include "time_utils.h"
 #include "utils.h"
+#include "uuid.h"
 
 typedef struct
 {
@@ -148,7 +152,7 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 		elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
 	}
 
-	if (IS_INTEGER_TYPE(type_oid))
+	if (IS_INTEGER_TYPE(type_oid) || IS_UUID_TYPE(type_oid))
 	{
 		/* Integer time types have no distinction between min, max and
 		 * infinity. We don't want min and max to be turned into infinity for
@@ -189,6 +193,30 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 			res = DirectFunctionCall1(ts_pg_timestamp_to_unix_microseconds, tz);
 
 			return DatumGetInt64(res);
+		case UUIDOID:
+		{
+			uint64 unixtime_ms = 0;
+
+			/*
+			 * Extract the unix timestamp from the UUID. Note that we cannot
+			 * use the (optional) sub-milliseconds part because there is no
+			 * way to know whether it represents time or is random.
+			 *
+			 * If the UUID is not v7, error out.
+			 */
+			if (!ts_uuid_v7_extract_unixtime(DatumGetUUIDP(time_val), &unixtime_ms, NULL))
+			{
+				ereport(ERROR,
+						errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("%s is not a version 7 UUID",
+							   DatumGetCString(DirectFunctionCall1(uuid_out, time_val))),
+						errdetail(
+							"UUID \"time\" partitioning columns only support version 7 UUIDs."));
+			}
+
+			/* Convert to microseconds */
+			return unixtime_ms * 1000;
+		}
 		default:
 			elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
 			return -1;
@@ -338,6 +366,17 @@ ts_internal_to_time_value(int64 value, Oid type)
 			return DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value));
 		case DATEOID:
 			return DirectFunctionCall1(ts_pg_unix_microseconds_to_date, Int64GetDatum(value));
+		case UUIDOID:
+		{
+			/*
+			 * Convert the internal unixtime in ms to a UUID with the
+			 * non-timestamp bits set to zero. We do not set the version
+			 * either, because for ranges we only care about the prefix in
+			 * order to divide the whole UUID space into a set of slices.
+			 */
+			const pg_uuid_t *uuid = ts_create_uuid_v7_from_unixtime_us(value, true, false);
+			return UUIDPGetDatum(uuid);
+		}
 		default:
 			if (ts_type_is_int8_binary_compatible(type))
 				return Int64GetDatum(value);
@@ -365,6 +404,7 @@ ts_internal_to_time_int64(int64 value, Oid type)
 			return value;
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
+		case UUIDOID:
 			/* we continue ts_time_value_to_internal's incorrect handling of TIMESTAMPs for
 			 * compatibility */
 			return DatumGetInt64(

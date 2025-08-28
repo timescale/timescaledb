@@ -163,11 +163,11 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
 \d+ :chunk
 
 -- UUID uses bloom
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
 
 -- Timestamp uses minmax
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
 
 drop table test_sparse_index;
@@ -200,11 +200,11 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
 
 -- these tests show that despite column having multiple sparse indexes, the appropriate one is selected by the planner
 -- UUID uses bloom
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
 
 -- Timestamp uses minmax
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-01-14';
 
 -- Test rename column

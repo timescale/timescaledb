@@ -104,7 +104,6 @@ end_ts_internal_date        | 294247-01-02
 --Suitable constraints should be created on chunks
 CREATE TABLE smallint_table(time smallint);
 SELECT table_name FROM create_hypertable('smallint_table', 'time', chunk_time_interval=>10);
-NOTICE:  adding not-null constraint to column "time"
 -[ RECORD 1 ]--------------
 table_name | smallint_table
 
@@ -120,7 +119,6 @@ pg_get_constraintdef | CHECK (("time" >= '32760'::smallint))
 
 CREATE TABLE int_table(time int);
 SELECT table_name FROM create_hypertable('int_table', 'time', chunk_time_interval=>10);
-NOTICE:  adding not-null constraint to column "time"
 -[ RECORD 1 ]---------
 table_name | int_table
 
@@ -136,7 +134,6 @@ pg_get_constraintdef | CHECK (("time" >= 2147483640))
 
 CREATE TABLE bigint_table(time bigint);
 SELECT table_name FROM create_hypertable('bigint_table', 'time', chunk_time_interval=>10);
-NOTICE:  adding not-null constraint to column "time"
 -[ RECORD 1 ]------------
 table_name | bigint_table
 
@@ -152,7 +149,6 @@ pg_get_constraintdef | CHECK (("time" >= '9223372036854775800'::bigint))
 
 CREATE TABLE date_table(time date);
 SELECT table_name FROM create_hypertable('date_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
 -[ RECORD 1 ]----------
 table_name | date_table
 
@@ -176,7 +172,6 @@ pg_get_constraintdef | CHECK (("time" >= '294246-12-31'::date))
 CREATE TABLE timestamp_table(time timestamp);
 SELECT table_name FROM create_hypertable('timestamp_table', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
 -[ RECORD 1 ]---------------
 table_name | timestamp_table
 
@@ -201,7 +196,6 @@ pg_get_constraintdef | CHECK (("time" >= '294246-12-31 00:00:00'::timestamp with
 CREATE TABLE timestamptz_table(time timestamp);
 SELECT table_name FROM create_hypertable('timestamptz_table', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
 -[ RECORD 1 ]-----------------
 table_name | timestamptz_table
 

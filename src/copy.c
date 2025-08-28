@@ -289,6 +289,7 @@ TSCopyMultiInsertBufferInit(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cis
 				if (!ts_chunk_is_unordered(chunk))
 					ts_chunk_set_unordered(chunk);
 			}
+			cis->columnstore_insert = true;
 			break;
 		}
 	}

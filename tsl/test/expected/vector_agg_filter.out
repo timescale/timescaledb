@@ -16,7 +16,6 @@ create function stable_abs(x int4) returns int4 as 'int4abs' language internal s
 create table aggfilter(t int, s int,
     cint2 int2, dropped int4, cint4 int4);
 select create_hypertable('aggfilter', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
-NOTICE:  adding not-null constraint to column "s"
    create_hypertable    
 ------------------------
  (1,public,aggfilter,t)
@@ -130,7 +129,7 @@ select
             function, variable)
 from
     unnest(array[
-        'explain (costs off) ',
+        'explain (buffers off, costs off) ',
         null]) explain,
     unnest(array[
         's',

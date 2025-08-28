@@ -31,7 +31,11 @@ SELECT * FROM _timescaledb_internal.get_git_commit();
 SELECT * FROM _timescaledb_catalog.hypertable;
 
 \echo 'List of chunk indexes'
-SELECT * FROM _timescaledb_catalog.chunk_index;
+SELECT ch.id AS chunk_id, ci.indexrelid::regclass::text AS index_name, h.id AS hypertable_id
+FROM _timescaledb_catalog.hypertable h
+JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = h.id
+JOIN pg_index ci ON ci.indrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+ORDER BY h.id, ch.id, ci.indrelid::regclass::text;
 
 \echo 'Size of hypertables'
 SELECT hypertable,
@@ -109,19 +113,13 @@ SELECT *,
 ) sub2;
 
 \echo 'Hypertable index sizes'
-SELECT h.schema_name || '.' || h.table_name AS hypertable,
-       h.schema_name || '.' || ci.hypertable_index_name AS index_name,
-       sum(pg_relation_size(c.oid))::bigint AS index_bytes
-FROM
-pg_class c,
-pg_namespace n,
-_timescaledb_catalog.hypertable h,
-_timescaledb_catalog.chunk ch,
-_timescaledb_catalog.chunk_index ci
-WHERE ch.schema_name = n.nspname
-      AND c.relnamespace = n.oid
-      AND c.relname = ci.index_name
-      AND ch.id = ci.chunk_id
-      AND h.id = ci.hypertable_id
-GROUP BY h.schema_name, h.table_name, ci.hypertable_index_name
-ORDER BY h.schema_name, h.table_name, ci.hypertable_index_name;
+SET search_path TO pg_catalog, pg_temp;
+SELECT
+  i.indrelid::regclass AS hypertable,
+  i.indexrelid::regclass AS index_name,
+  public.hypertable_index_size(i.indexrelid::regclass) AS index_bytes
+FROM _timescaledb_catalog.hypertable h
+JOIN pg_index i ON i.indrelid = format('%I.%I',h.schema_name,h.table_name)::regclass
+ORDER BY i.indrelid::regclass::text, i.indexrelid::regclass::text;
+RESET search_path;
+

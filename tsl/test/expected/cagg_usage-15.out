@@ -6,8 +6,10 @@
 SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
 SET timezone TO PST8PDT;
+SELECT _timescaledb_functions.invalidation_plugin_name() AS plugin_name \gset
 CREATE VIEW invalidation_slots AS
-SELECT * FROM pg_replication_slots WHERE plugin = 'timescaledb-invalidations';
+SELECT * FROM pg_replication_slots
+ WHERE plugin = :'plugin_name';
 -- START OF USAGE TEST --
 --First create your hypertable
 CREATE TABLE device_readings (
@@ -246,7 +248,6 @@ $BODY$
 $BODY$;
 CREATE TABLE device_readings_int(time int, value float);
 SELECT create_hypertable('device_readings_int','time',chunk_time_interval:=10);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (6,public,device_readings_int,t)
@@ -436,7 +437,6 @@ DROP TABLE sensor_data;
 -- END OF BASIC USAGE TESTS --
 CREATE TABLE metrics(time timestamptz, device TEXT, value float);
 SELECT table_name FROM create_hypertable('metrics','time');
-NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  metrics
@@ -606,7 +606,7 @@ ORDER BY 1;
 (2 rows)
 
 \set ON_ERROR_STOP 1
-SELECT count(*) FROM invalidation_slots;
+SELECT count(*) FROM invalidation_slots WHERE database = current_database();
  count 
 -------
      0
@@ -757,7 +757,7 @@ SELECT hypertable_name, view_name, invalidate_using
 (3 rows)
 
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
  count 
 -------
@@ -769,7 +769,7 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_36_chunk
 -- Slot should be there. We have another hypertable using WAL-based
 -- invalidation collection.
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
  count 
 -------
@@ -781,7 +781,7 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_34_chunk
 -- Slot should be there. We have yet another continuous aggregate for
 -- the hypertable using WAL-based invalidation collection.
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
  count 
 -------
@@ -793,7 +793,7 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_35_chunk
 -- Now slot should be gone and we should not have any continuous
 -- aggregates using WAL-based invalidation collection.
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
  count 
 -------

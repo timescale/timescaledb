@@ -238,3 +238,24 @@ SET index = COALESCE(index, '[]'::jsonb) ||
             )
 WHERE cs.orderby IS NOT NULL AND cardinality(cs.orderby) > 0;
 
+DROP FUNCTION IF EXISTS _timescaledb_internal.indexes_local_size;
+DROP FUNCTION IF EXISTS _timescaledb_functions.indexes_local_size;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk_index;
+DROP TABLE IF EXISTS _timescaledb_catalog.chunk_index;
+
+-- cagg materialization ranges
+CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
+  materialization_id integer,
+  lowest_modified_value bigint NOT NULL,
+  greatest_modified_value bigint NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_ranges', '');
+
+CREATE INDEX continuous_aggs_materialization_ranges_idx ON _timescaledb_catalog.continuous_aggs_materialization_ranges (materialization_id, lowest_modified_value ASC);
+
+GRANT SELECT ON TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges TO PUBLIC;
+

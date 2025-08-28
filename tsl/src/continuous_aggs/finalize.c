@@ -18,7 +18,7 @@
 
 /* Static function prototypes */
 static Var *mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input,
-										int original_query_resno, bool finalized,
+										List *rtable, int original_query_resno, bool finalized,
 										bool *skip_adding);
 static inline void makeMaterializeColumnName(char *colbuf, const char *type,
 											 int original_query_resno, int colno);
@@ -81,6 +81,7 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
 			bool skip_adding = false;
 			var = mattablecolumninfo_addentry(mattblinfo,
 											  (Node *) tle,
+											  orig_query->rtable,
 											  resno,
 											  inp->finalized,
 											  &skip_adding);
@@ -224,7 +225,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
  *
  */
 static Var *
-mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input,
+mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *input, List *rtable,
 							int original_query_resno, bool finalized, bool *skip_adding)
 {
 	int matcolno = list_length(out->matcollist) + 1;
@@ -254,6 +255,35 @@ mattablecolumninfo_addentry(MaterializationHypertableColumnInfo *out, Node *inpu
 
 			if (IsA(tle->expr, FuncExpr))
 				timebkt_chk = function_allowed_in_cagg_definition(((FuncExpr *) tle->expr)->funcid);
+
+#if PG18_GE
+			/* PG18 introduced RTEs for group clauses so
+			 * we use rtable to look up GROUP BY expressions.
+			 *
+			 * https://github.com/postgres/postgres/commit/247dea89
+			 */
+			if (IsA(tle->expr, Var))
+			{
+				Var *var = castNode(Var, tle->expr);
+				Assert((int) var->varno <= list_length(rtable));
+				RangeTblEntry *rte = list_nth(rtable, var->varno - 1);
+				Assert(rte->rtekind == RTE_GROUP);
+				Assert(var->varattno > 0);
+				Node *node = list_nth(rte->groupexprs, var->varattno - 1);
+				if (IsA(node, FuncExpr))
+				{
+					if (contain_mutable_functions(node))
+					{
+						ereport(WARNING,
+								(errmsg("using non-immutable functions in continuous aggregate "
+										"view may lead to "
+										"inconsistent results on rematerialization")));
+					}
+					FuncExpr *expr = (FuncExpr *) node;
+					timebkt_chk = function_allowed_in_cagg_definition(((FuncExpr *) expr)->funcid);
+				}
+			}
+#endif
 
 			if (tle->resname)
 				colname = pstrdup(tle->resname);

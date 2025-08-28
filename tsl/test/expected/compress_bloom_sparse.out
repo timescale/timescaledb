@@ -10,7 +10,6 @@ $$ language sql;
 create table bloom(x int, value text, u uuid, ts timestamp);
 select create_hypertable('bloom', 'x');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "x"
  create_hypertable  
 --------------------
  (1,public,bloom,t)
@@ -66,7 +65,7 @@ Indexes:
     "compress_hyper_2_2_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
 Options: toast_tuple_target=128
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where value = md5(7248::text);
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -92,7 +91,7 @@ select count(*) from bloom where value = md5(7248::text);
 set enable_mergejoin to off;
 set enable_hashjoin to off;
 set enable_material to off;
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 with query(value) as materialized (values (md5(3516::text)), (md5(9347::text)),
     (md5(5773::text)))
 select count(*) from bloom natural join query;
@@ -130,7 +129,7 @@ reset enable_hashjoin;
 reset enable_material;
 -- Stable expression that yields null
 set timescaledb.enable_chunk_append to off;
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where value =
     case when now() < '1970-01-01' then md5(2345::text) else null end
 ;
@@ -149,7 +148,7 @@ select count(*) from bloom where value =
 
 reset timescaledb.enable_chunk_append;
 -- Stable expression that yields not null
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where value =
     case when now() < '1970-01-01' then md5(2345::text) else md5(5837::text) end
 ;
@@ -172,7 +171,7 @@ select count(*) from bloom where value =
 (14 rows)
 
 -- Stable expression on minmax index
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where x <
     case when now() < '1970-01-01' then 1 else 1000 end
 ;
@@ -199,7 +198,7 @@ set timescaledb.enable_chunk_append to off;
 set plan_cache_mode to 'force_generic_plan';
 prepare p as
 select count(*) from bloom where x < $1;
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 execute p(1000);
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -219,7 +218,7 @@ deallocate p;
 -- Parameter on bloom index
 prepare p as
 select count(*) from bloom where value = $1;
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 execute p(md5('2345'));
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -236,7 +235,7 @@ execute p(md5('2345'));
 (10 rows)
 
 -- Null parameter on bloom index
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 execute p(null);
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -256,7 +255,7 @@ deallocate p;
 -- Function of parameter on bloom index
 prepare p as
 select count(*) from bloom where value = md5($1);
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 execute p('2345');
                                                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                                               
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -280,7 +279,7 @@ deallocate p;
 reset plan_cache_mode;
 reset timescaledb.enable_chunk_append;
 -- Scalar array operations are not yet supported
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where x < any(array[1000, 2000]::int[]);
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -295,7 +294,7 @@ select count(*) from bloom where x < any(array[1000, 2000]::int[]);
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
 (9 rows)
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where value = any(array[md5('1000'), md5('2000')]);
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -311,7 +310,7 @@ select count(*) from bloom where value = any(array[md5('1000'), md5('2000')]);
 (9 rows)
 
 -- UUID uses bloom
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -327,7 +326,7 @@ select count(*) from bloom where u = '90ec9e8e-4501-4232-9d03-6d7cf6132815';
                Rows Removed by Filter: 9
 (10 rows)
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcab';
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -342,7 +341,7 @@ select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcab';
                Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, '6c1d0998-05f3-452c-abd3-45afe72bbcab'::uuid)
 (9 rows)
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcac';
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -358,7 +357,7 @@ select count(*) from bloom where u = '6c1d0998-05f3-452c-abd3-45afe72bbcac';
 (9 rows)
 
 -- Timestamp uses minmax
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where ts between '2021-01-07' and '2021-01-14';
                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -377,7 +376,6 @@ select count(*) from bloom where ts between '2021-01-07' and '2021-01-14';
 -- Test some corner cases
 create table corner(ts int, s text, c text);
 select create_hypertable('corner', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable  
 ---------------------
  (3,public,corner,t)
@@ -401,7 +399,7 @@ select count(compress_chunk(x)) from show_chunks('corner') x;
 (1 row)
 
 vacuum full analyze corner;
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = 'short';
                                                                                                                                   QUERY PLAN                                                                                                                                   
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -418,7 +416,7 @@ select * from corner where c = 'short';
 (10 rows)
 
 -- Cross-type equality operator.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = 'short'::name;
                                                                                                                                   QUERY PLAN                                                                                                                                   
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -432,7 +430,7 @@ select * from corner where c = 'short'::name;
 (7 rows)
 
 -- Comparison with segmentby.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = s;
                                                                                                                                   QUERY PLAN                                                                                                                                   
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -449,7 +447,7 @@ select * from corner where c = s;
 
 -- Can push down only some parts of the expression but not the others, so the
 -- pushdown shouldn't work in this case.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = s or c = random()::text;
                                                                                                                                      QUERY PLAN                                                                                                                                      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -467,7 +465,7 @@ select * from corner where c = s or c = random()::text;
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
 (12 rows)
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = 'test'
     or c = case when now() > '1970-01-01' then 'test2' else random()::text end
 ;
@@ -488,7 +486,7 @@ select * from corner where c = 'test'
 (12 rows)
 
 -- Unsupported operator
-explain (costs off)
+explain (buffers off, costs off)
 select * from corner where c > s;
                    QUERY PLAN                   
 ------------------------------------------------
@@ -538,7 +536,6 @@ as
 ;
 create table badtable(ts int, s int, b badint);
 select create_hypertable('badtable', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
    create_hypertable   
 -----------------------
  (5,public,badtable,t)
@@ -652,7 +649,7 @@ Indexes:
 Options: toast_tuple_target=128
 
 -- Check index pushdown with one value.
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
@@ -668,7 +665,7 @@ select * from badtable where b = 1000::int8::badint;
 -- shape is a little weird to achieve the parameterized compressed scan, for
 -- joins it doesn't work at the moment due to general problem with parameterized
 -- DecompressChunk there.
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
     (pow(2, 32) * 2), (pow(2, 32) * 1024)),
 v_badint as materialized (select b::int8::badint from v_int)
@@ -728,7 +725,7 @@ select count(compress_chunk(x)) from show_chunks('badtable') x;
 (1 row)
 
 vacuum full analyze badtable;
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from badtable where b = 1000::int8::badint;
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
@@ -739,7 +736,7 @@ select * from badtable where b = 1000::int8::badint;
          Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_b, '1000'::badint)
 (5 rows)
 
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 with v_int(b) as (values (0), (1), (-1), (2), (4), (8), (1024),
     (pow(2, 32) * 2), (pow(2, 32) * 1024)),
 v_badint as materialized (select b::int8::badint from v_int)
@@ -781,7 +778,6 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
 -- Test a non-by-value 8-byte type.
 create table byref(ts int, x macaddr8);
 select create_hypertable('byref', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable  
 --------------------
  (7,public,byref,t)
@@ -801,7 +797,7 @@ select count(compress_chunk(x)) from show_chunks('byref') x;
 (1 row)
 
 vacuum analyze byref;
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from byref where x = float8tomacaddr8(mix(1));
                                                                                                                        QUERY PLAN                                                                                                                        
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -820,7 +816,6 @@ select * from byref where x = float8tomacaddr8(mix(1));
 create table arraybloom(x int, value int[], ts timestamp);
 select create_hypertable('arraybloom', 'x');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "x"
     create_hypertable    
 -------------------------
  (9,public,arraybloom,t)
@@ -841,7 +836,7 @@ select count(compress_chunk(x)) from show_chunks('arraybloom') x;
 (1 row)
 
 vacuum full analyze arraybloom;
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from arraybloom where value = array[7248::int];
                                                                                                                                                 QUERY PLAN                                                                                                                                                 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

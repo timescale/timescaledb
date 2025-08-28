@@ -59,7 +59,6 @@ SELECT create_hypertable('test_adaptive', 'time',
                          chunk_sizing_func => 'calculate_chunk_interval');
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (1,public,test_adaptive,t)
@@ -73,7 +72,6 @@ SELECT create_hypertable('test_adaptive', 'time',
                          create_default_indexes => true);
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (2,public,test_adaptive,t)
@@ -281,7 +279,6 @@ SELECT create_hypertable('test_adaptive_no_index', 'time',
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 WARNING:  no index on "time" found for adaptive chunking on hypertable "test_adaptive_no_index"
 NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable          
 -------------------------------------
  (3,public,test_adaptive_no_index,t)
@@ -383,7 +380,6 @@ SELECT create_hypertable('test_adaptive_correct_index', 'time',
                          create_default_indexes => false);
 WARNING:  no index on "time" found for adaptive chunking on hypertable "test_adaptive_correct_index"
 NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
-NOTICE:  adding not-null constraint to column "time"
             create_hypertable             
 ------------------------------------------
  (4,public,test_adaptive_correct_index,t)
@@ -482,7 +478,6 @@ SELECT create_hypertable('test_adaptive_space', 'time', 'location', 2,
                          create_default_indexes => true);
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (5,public,test_adaptive_space,t)
@@ -728,7 +723,6 @@ SELECT create_hypertable('test_adaptive_after_multiple_dims', 'time',
                          chunk_target_size => '100MB',
                          create_default_indexes => true);
 NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
-NOTICE:  adding not-null constraint to column "time"
                create_hypertable                
 ------------------------------------------------
  (6,public,test_adaptive_after_multiple_dims,t)
@@ -763,7 +757,6 @@ SELECT create_hypertable('test_adaptive', 'time',
                          chunk_sizing_func => 'my_chunk_func_schema.calculate_chunk_interval');
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
 NOTICE:  adaptive chunking is a BETA feature and is not recommended for production deployments
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (7,public,test_adaptive,t)

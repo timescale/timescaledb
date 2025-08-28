@@ -7,6 +7,7 @@
 
 \set TEST_BASE_NAME skip_scan
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_NAME",
+    format('include/%s_multi_load.sql', :'TEST_BASE_NAME') AS "TEST_MULTI_LOAD_NAME",
     format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
     format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_UNOPTIMIZED",
     format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_OPTIMIZED" \gset
@@ -62,7 +63,7 @@ SET timescaledb.enable_compressed_skipscan TO false;
 \o
 RESET timescaledb.enable_compressed_skipscan;
 
--- compare SkipScan results on hypertable
+-- compare SkipScan results on compressed hypertable
 :DIFF_CMD
 
 -- run tests on compressed hypertable with different layouts of compressed chunks
@@ -80,6 +81,76 @@ SET timescaledb.enable_compressed_skipscan TO false;
 \o
 RESET timescaledb.enable_compressed_skipscan;
 
+-- compare SkipScan results on compressed hypertable
+:DIFF_CMD
+
+-- run tests on compressed hypertable with different layouts of compressed chunks
+SELECT format('include/%s_multi_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME" \gset
+
+-- run multikey SkipScan tests
+
+\ir :TEST_MULTI_LOAD_NAME
+\set PREFIX ''
+
+-- make sure multikey SkipScan results are correct
+\set TABLE mskip_scan
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+SET timescaledb.enable_multikey_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+RESET timescaledb.enable_multikey_skipscan;
+
+-- compare SkipScan results on table
+:DIFF_CMD
+
+\set TABLE mskip_scan_ht
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+SET timescaledb.enable_multikey_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+RESET timescaledb.enable_multikey_skipscan;
+
 -- compare SkipScan results on hypertable
 :DIFF_CMD
 
+\set TABLE mskip_scan_htc
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+SET timescaledb.enable_multikey_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+RESET timescaledb.enable_multikey_skipscan;
+
+-- compare SkipScan results on compressed hypertable
+:DIFF_CMD
+
+-- make sure multikey SkipScan is applied correctly
+SET timescaledb.debug_skip_scan_info TO true;
+
+\set TABLE mskip_scan
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+\set TABLE mskip_scan_ht
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+\set TABLE mskip_scan_htc
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+\o
+
+RESET timescaledb.debug_skip_scan_info;

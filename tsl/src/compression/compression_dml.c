@@ -288,10 +288,11 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	 * the index on the uncompressed chunks in order to do speculative insertion
 	 * which is always built from all tuples (even in higher levels of isolation).
 	 */
+	PushActiveSnapshot(GetLatestSnapshot());
 	stats = decompress_batches_scan(in_rel,
 									out_rel,
 									index_rel,
-									GetLatestSnapshot(),
+									GetActiveSnapshot(),
 									index_scankeys,
 									cdst->index_scankeys.num_scankeys,
 									heap_scankeys,
@@ -306,6 +307,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 									NIL);
 	if (index_rel)
 		index_close(index_rel, AccessShareLock);
+	PopActiveSnapshot();
 
 	if (skip_current_tuple)
 	{
@@ -397,11 +399,11 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 		index_scankeys =
 			build_index_scankeys(matching_index_rel, index_filters, &num_index_scankeys);
 	}
-
+	PushActiveSnapshot(GetTransactionSnapshot());
 	stats = decompress_batches_scan(comp_chunk_rel,
 									chunk_rel,
 									matching_index_rel,
-									GetTransactionSnapshot(),
+									GetActiveSnapshot(),
 									index_scankeys,
 									num_index_scankeys,
 									scankeys,
@@ -417,6 +419,8 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	/* close the selected index */
 	if (matching_index_rel)
 		index_close(matching_index_rel, AccessShareLock);
+
+	PopActiveSnapshot();
 
 	/*
 	 * tuples from compressed chunk has been decompressed and moved
@@ -1069,7 +1073,7 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 					ScanState *ss = ((ScanState *) ps);
 					if (ss && ss->ss_currentScanDesc)
 					{
-						ss->ss_currentScanDesc->rs_snapshot = GetTransactionSnapshot();
+						ss->ss_currentScanDesc->rs_snapshot = GetActiveSnapshot();
 						table_rescan(ss->ss_currentScanDesc, NULL);
 					}
 				}

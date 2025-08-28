@@ -533,7 +533,8 @@ multi_invalidation_move_invalidations(MultiInvalidationState *state)
 	char nulls[3];
 	Datum args[3];
 
-	SPI_connect();
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
 
 	/* Set up plan if not already set up */
 	if (plan_get_invalidations == NULL)
@@ -560,6 +561,8 @@ multi_invalidation_move_invalidations(MultiInvalidationState *state)
 	args[0] = NameGetDatum(&state->slot_name);
 	args[1] = Int32GetDatum(ts_guc_cagg_wal_batch_size);
 	args[2] = PointerGetDatum(array);
+
+	TS_DEBUG_LOG("array: %s", datum_as_string(TEXTARRAYOID, args[2], false));
 
 	while (true)
 	{

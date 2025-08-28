@@ -14,12 +14,16 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 
 -- multicolumn index with dev as leading column
@@ -27,12 +31,16 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_time_idx;
 
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 
 -- hash index is not ordered so can't use skipscan
@@ -107,6 +115,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -240,9 +250,9 @@ DEALLOCATE prep;
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
 
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0;
 
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0
 UNION SELECT b.* FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;

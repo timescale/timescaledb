@@ -10,7 +10,6 @@ create or replace function ts_debug_allocated_bytes(text = 'PortalContext') retu
     language c strict volatile;
 create table mvagg (t int, s0 int, s1 int);
 select create_hypertable('mvagg', 't', chunk_time_interval => pow(10, 9)::int);
-NOTICE:  adding not-null constraint to column "t"
  create_hypertable  
 --------------------
  (1,public,mvagg,t)
@@ -37,7 +36,7 @@ vacuum analyze mvagg;
 -- here.
 create table log(n int, bytes int, a bigint, b bigint, c bigint, d bigint, e bigint, f bigint);
 -- First, ensure that the underlying decompression has constant memory usage.
-explain (costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,
+explain (buffers off, costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes,
         s0, s1, t
     from mvagg where t >= -1 and t < 1000000 order by s0, s1, t desc;
                                                               QUERY PLAN                                                              
@@ -45,7 +44,7 @@ explain (costs off) select distinct on (s0, s1) ts_debug_allocated_bytes() bytes
  Result
    ->  Unique
          ->  Merge Append
-               Sort Key: _hyper_1_1_chunk.s0, _hyper_1_1_chunk.s1, _hyper_1_1_chunk.t DESC
+               Sort Key: mvagg.s0, mvagg.s1, mvagg.t DESC
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                      Vectorized Filter: ((t >= '-1'::integer) AND (t < 1000000))
                      ->  Index Scan using compress_hyper_2_3_chunk_s0_s1__ts_meta_min_1__ts_meta_max__idx on compress_hyper_2_3_chunk
@@ -74,13 +73,13 @@ set max_parallel_workers_per_gather = 0;
 set timescaledb.debug_require_vector_agg = 'require';
 set enable_sort to off;
 -- We should reliably see HashAggregate here because of the tweaks we made above.
-explain (costs off) select ts_debug_allocated_bytes() bytes,
+explain (buffers off, costs off) select ts_debug_allocated_bytes() bytes,
         count(*) a, count(t) b, sum(t) c, avg(t) d, min(t) e, max(t) f
             from mvagg where t >= -1 and t < 1000000 group by s1;
                                                               QUERY PLAN                                                              
 --------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Group Key: _hyper_1_1_chunk.s1
+   Group Key: mvagg.s1
    ->  Append
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk

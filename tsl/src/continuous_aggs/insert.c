@@ -470,6 +470,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 	ScanKeyData scankey[1];
 	ScannerCtx scanctx;
 
+	PushActiveSnapshot(GetLatestSnapshot());
 	ScanKeyInit(&scankey[0],
 				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
 				BTEqualStrategyNumber,
@@ -494,7 +495,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 		   parallel session updates the scanned value and commits during a scan, we end up in a
 		   situation where we see the old and the new value. This causes ts_scanner_scan_one() to
 		   fail. */
-		.snapshot = GetLatestSnapshot(),
+		.snapshot = GetActiveSnapshot(),
 	};
 
 	/* If we don't find any invalidation threshold watermark, then we've never done any
@@ -502,7 +503,8 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 	 * first materialization needs to scan the entire table anyway; the invalidations are redundant.
 	 */
 	if (!ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME))
-		return INVAL_NEG_INFINITY;
+		min_val = INVAL_NEG_INFINITY;
+	PopActiveSnapshot();
 
 	return min_val;
 }

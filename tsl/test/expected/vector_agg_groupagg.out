@@ -10,7 +10,6 @@ set enable_hashagg to off;
 --set timescaledb.debug_require_vector_agg to 'forbid';
 create table groupagg(t int, s int, value int);
 select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
-NOTICE:  adding not-null constraint to column "t"
    create_hypertable   
 -----------------------
  (1,public,groupagg,t)
@@ -104,7 +103,6 @@ reset timescaledb.debug_require_vector_agg;
 -- More tests for dictionary encoding.
 create table text_table(ts int);
 select create_hypertable('text_table', 'ts', chunk_time_interval => 3);
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (3,public,text_table,t)

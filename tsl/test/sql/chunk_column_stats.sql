@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off, timing off, summary off)'
 
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT

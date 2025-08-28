@@ -40,14 +40,14 @@ vacuum full analyze bscan;
 
 -- We have many conditions here, so it's less selective and the bitmap scan
 -- overhead grows. This query should use Seq Scan.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from bscan where id = 1 or id = 2 or id = 3 or id = 4 or id = 5
     or id = 6 or id = 7 or id = 8
 ;
 
 -- This should be Bitmap Heap Scan because we have an OR of highly selective
 -- conditions.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from bscan where id = 1 or id = 2
 ;
 
@@ -55,7 +55,7 @@ select * from bscan where id = 1 or id = 2
 set enable_mergejoin to off;
 set enable_hashjoin to off;
 
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from bscan t1, bscan t2
 where (t2.id = 1 or t2.id = 2)
     and t1.s = t2.s

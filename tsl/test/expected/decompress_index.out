@@ -5,7 +5,6 @@
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float, tag text);
 ALTER TABLE ht_metrics_compressed SET (autovacuum_enabled = false);
 SELECT create_hypertable('ht_metrics_compressed','time',create_default_indexes:=false, chunk_time_interval => interval '100 day');
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable          
 ------------------------------------
  (1,public,ht_metrics_compressed,t)
@@ -98,14 +97,14 @@ select distinct on (device) device, time from :CHUNK order by 1, 2;
 -- To avoid differences in PG15 output which doesn't support this feature
 SET timescaledb.enable_skipscan_for_distinct_aggregates TO false;
 -- check that the indexes are used
-explain (costs off) select count(distinct tag) from :CHUNK;
+explain (buffers off, costs off) select count(distinct tag) from :CHUNK;
                                 QUERY PLAN                                
 --------------------------------------------------------------------------
  Aggregate
    ->  Index Only Scan using _hyper_1_1_chunk_tag_idx on _hyper_1_1_chunk
 (2 rows)
 
-explain (costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
+explain (buffers off, costs off) select distinct on (device) device, time from :CHUNK order by 1, 2;
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Unique

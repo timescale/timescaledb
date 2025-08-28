@@ -209,7 +209,7 @@ select sum(temp) from mergeme;
 set timescaledb.enable_columnarscan = false;
 set enable_seqscan = false;
 analyze mergeme;
-explain (costs off)
+explain (buffers off, costs off)
 select * from mergeme where device = 1;
 select * from mergeme where device = 1;
 select * from _timescaledb_internal._hyper_1_1_chunk where device = 1;

@@ -52,7 +52,8 @@ ts_cagg_watermark_get(int32 hypertable_id)
 	 * watermark must be done using the transaction snapshot in order to ensure that the view on the
 	 * watermark and the materialized part of the CAGG match.
 	 */
-	iterator.ctx.snapshot = GetTransactionSnapshot();
+
+	iterator.ctx.snapshot = RegisterSnapshot(GetTransactionSnapshot());
 	Assert(iterator.ctx.snapshot != NULL);
 
 	cagg_watermark_init_scan_by_mat_hypertable_id(&iterator, hypertable_id);
@@ -65,6 +66,7 @@ ts_cagg_watermark_get(int32 hypertable_id)
 		count++;
 	}
 	Assert(count <= 1);
+	UnregisterSnapshot(iterator.ctx.snapshot);
 	ts_scan_iterator_close(&iterator);
 
 	if (value_isnull)
@@ -243,6 +245,16 @@ cagg_watermark_update_scan_internal(TupleInfo *ti, void *data)
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	Form_continuous_aggs_watermark form = (Form_continuous_aggs_watermark) GETSTRUCT(tuple);
 
+	/* If the tuple was modified concurrently, retry the operation and use a new snapshot
+	 * to see the updated tuple. */
+	if (ti->lockresult == TM_Updated)
+		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
+
+	Ensure(ti->lockresult == TM_Ok,
+		   "unable to lock watermark tuple for cagg %d (lock result %d)",
+		   watermark_update->ht_relid,
+		   ti->lockresult);
+
 	if (watermark_update->watermark > form->watermark || watermark_update->force_update)
 	{
 		HeapTuple new_tuple = heap_copytuple(tuple);
@@ -284,27 +296,29 @@ static void
 cagg_watermark_update_internal(int32 mat_hypertable_id, Oid ht_relid, int64 new_watermark,
 							   bool force_update, bool invalidate_rel_cache)
 {
-	bool watermark_updated;
-	ScanKeyData scankey[1];
 	WatermarkUpdate data = { .watermark = new_watermark,
 							 .force_update = force_update,
 							 .invalidate_rel_cache = invalidate_rel_cache,
 							 .ht_relid = ht_relid };
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGGS_WATERMARK, RowExclusiveLock, CurrentMemoryContext);
 
-	ScanKeyInit(&scankey[0],
-				Anum_continuous_aggs_watermark_mat_hypertable_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(mat_hypertable_id));
+	cagg_watermark_init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+	iterator.ctx.tuple_found = cagg_watermark_update_scan_internal;
+	iterator.ctx.data = &data;
+	iterator.ctx.snapshot = RegisterSnapshot(GetLatestSnapshot());
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+	};
+	iterator.ctx.tuplock = &scantuplock;
+	iterator.ctx.flags = SCANNER_F_KEEPLOCK;
 
-	watermark_updated = ts_catalog_scan_one(CONTINUOUS_AGGS_WATERMARK /*=table*/,
-											CONTINUOUS_AGGS_WATERMARK_PKEY /*=indexid*/,
-											scankey /*=scankey*/,
-											1 /*=num_keys*/,
-											cagg_watermark_update_scan_internal /*=tuple_found*/,
-											RowExclusiveLock /*=lockmode*/,
-											CONTINUOUS_AGGS_WATERMARK_TABLE_NAME /*=table_name*/,
-											&data /*=data*/);
+	bool watermark_updated =
+		ts_scanner_scan_one(&iterator.ctx, false, "continuous aggregate watermark");
+	ts_scan_iterator_close(&iterator);
+	UnregisterSnapshot(iterator.ctx.snapshot);
 
 	if (!watermark_updated)
 	{

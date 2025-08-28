@@ -14,8 +14,8 @@ SELECT
 SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed results" %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') as "DIFF_CMD"
 \gset
 -- get EXPLAIN output for all variations
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
-\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off, verbose)'
 set work_mem to '64MB';
 set max_parallel_workers_per_gather to 0;
 set enable_nestloop to off;
@@ -763,17 +763,17 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
                Order: metrics_space."time" DESC
                ->  Merge Append (actual rows=1 loops=1)
-                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Key: metrics_space."time" DESC
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Merge Append (never executed)
-                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Key: metrics_space."time" DESC
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                ->  Merge Append (never executed)
-                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Key: metrics_space."time" DESC
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -803,17 +803,17 @@ QUERY PLAN
                            ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=2 loops=1)
                                  Order: metrics_space."time" DESC
                                  ->  Merge Append (actual rows=2 loops=1)
-                                       Sort Key: _hyper_X_X_chunk."time" DESC
+                                       Sort Key: metrics_space."time" DESC
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=2 loops=1)
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                                  ->  Merge Append (never executed)
-                                       Sort Key: _hyper_X_X_chunk."time" DESC
+                                       Sort Key: metrics_space."time" DESC
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                  ->  Merge Append (never executed)
-                                       Sort Key: _hyper_X_X_chunk."time" DESC
+                                       Sort Key: metrics_space."time" DESC
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                        ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -853,17 +853,17 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
          Order: metrics_space."time" DESC
          ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Key: metrics_space."time" DESC
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Key: metrics_space."time" DESC
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Key: metrics_space."time" DESC
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -891,7 +891,7 @@ QUERY PLAN
                ->  Custom Scan (ChunkAppend) on metrics_space o (actual rows=1 loops=3)
                      Order: o."time" DESC
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_1."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_1 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_2 (actual rows=0 loops=3)
@@ -899,7 +899,7 @@ QUERY PLAN
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_3 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_4."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_4 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_5 (actual rows=0 loops=3)
@@ -907,7 +907,7 @@ QUERY PLAN
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_6 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                      ->  Merge Append (actual rows=1 loops=3)
-                           Sort Key: o_7."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_7 (actual rows=1 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_8 (actual rows=1 loops=3)
@@ -937,7 +937,7 @@ QUERY PLAN
                ->  Custom Scan (ChunkAppend) on metrics_space o (actual rows=1 loops=2)
                      Order: o."time"
                      ->  Merge Append (actual rows=0 loops=2)
-                           Sort Key: o_1."time"
+                           Sort Key: o."time"
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_1 (actual rows=0 loops=2)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_2 (actual rows=0 loops=2)
@@ -945,7 +945,7 @@ QUERY PLAN
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_3 (actual rows=0 loops=2)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                      ->  Merge Append (actual rows=1 loops=2)
-                           Sort Key: o_4."time"
+                           Sort Key: o."time"
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_4 (actual rows=1 loops=2)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_5 (actual rows=1 loops=2)
@@ -953,7 +953,7 @@ QUERY PLAN
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_6 (actual rows=1 loops=2)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                      ->  Merge Append (never executed)
-                           Sort Key: o_7."time"
+                           Sort Key: o."time"
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_7 (never executed)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)))
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_8 (never executed)
@@ -983,7 +983,7 @@ QUERY PLAN
                ->  Custom Scan (ChunkAppend) on metrics_space o (actual rows=1 loops=3)
                      Order: o."time" DESC
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_1."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_1 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" < now()))
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_2 (actual rows=0 loops=3)
@@ -991,7 +991,7 @@ QUERY PLAN
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_3 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" < now()))
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_4."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_4 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" < now()))
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_5 (actual rows=0 loops=3)
@@ -999,7 +999,7 @@ QUERY PLAN
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_6 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" < now()))
                      ->  Merge Append (actual rows=1 loops=3)
-                           Sort Key: o_7."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_7 (actual rows=1 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" < now()))
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_8 (actual rows=1 loops=3)
@@ -1030,7 +1030,7 @@ QUERY PLAN
                ->  Custom Scan (ChunkAppend) on metrics_space o (actual rows=0 loops=3)
                      Order: o."time" DESC
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_1."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_1 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" > now()))
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_2 (actual rows=0 loops=3)
@@ -1038,7 +1038,7 @@ QUERY PLAN
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_3 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" > now()))
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_4."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_4 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" > now()))
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_5 (actual rows=0 loops=3)
@@ -1046,7 +1046,7 @@ QUERY PLAN
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_6 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" > now()))
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_7."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_7 (actual rows=0 loops=3)
                                  Index Cond: (("time" >= g."time") AND ("time" < (g."time" + '@ 1 day'::interval)) AND ("time" > now()))
                            ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o_8 (actual rows=0 loops=3)
@@ -1113,7 +1113,7 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=2 loops=1)
                Order: o1."time"
                ->  Merge Append (actual rows=2 loops=1)
-                     Sort Key: o1_1."time"
+                     Sort Key: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_1 (actual rows=2 loops=1)
                            Index Cond: ("time" < 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_2 (actual rows=1 loops=1)
@@ -1121,7 +1121,7 @@ QUERY PLAN
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_3 (actual rows=1 loops=1)
                            Index Cond: ("time" < 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Merge Append (never executed)
-                     Sort Key: o1_4."time"
+                     Sort Key: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_4 (never executed)
                            Index Cond: ("time" < 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_5 (never executed)
@@ -1133,17 +1133,17 @@ QUERY PLAN
                      ->  Custom Scan (ChunkAppend) on metrics_space o2 (actual rows=6 loops=1)
                            Order: o2."time"
                            ->  Merge Append (actual rows=6 loops=1)
-                                 Sort Key: o2_1."time"
+                                 Sort Key: o2."time"
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_1 (actual rows=2 loops=1)
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_2 (actual rows=4 loops=1)
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_3 (actual rows=2 loops=1)
                            ->  Merge Append (never executed)
-                                 Sort Key: o2_4."time"
+                                 Sort Key: o2."time"
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_4 (never executed)
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_5 (never executed)
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_6 (never executed)
                            ->  Merge Append (never executed)
-                                 Sort Key: o2_7."time"
+                                 Sort Key: o2."time"
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_7 (never executed)
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_8 (never executed)
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_9 (never executed)
@@ -1182,17 +1182,17 @@ QUERY PLAN
                        ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=1 loops=1)
                              Order: metrics_space."time" DESC
                              ->  Merge Append (actual rows=1 loops=1)
-                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   Sort Key: metrics_space."time" DESC
                                    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                                    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                                    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
                              ->  Merge Append (never executed)
-                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   Sort Key: metrics_space."time" DESC
                                    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                              ->  Merge Append (never executed)
-                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   Sort Key: metrics_space."time" DESC
                                    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                    ->  Index Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
@@ -1470,17 +1470,17 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Merge Append (actual rows=100 loops=1)
-                     Sort Key: o1_1."time"
+                     Sort Key: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_1 (actual rows=21 loops=1)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_2 (actual rows=60 loops=1)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_3 (actual rows=21 loops=1)
                ->  Merge Append (never executed)
-                     Sort Key: o1_4."time"
+                     Sort Key: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_4 (never executed)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_5 (never executed)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_6 (never executed)
                ->  Merge Append (never executed)
-                     Sort Key: o1_7."time"
+                     Sort Key: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_7 (never executed)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_8 (never executed)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_9 (never executed)
@@ -1488,17 +1488,17 @@ QUERY PLAN
                ->  Custom Scan (ChunkAppend) on metrics_space o2 (actual rows=101 loops=1)
                      Order: o2."time"
                      ->  Merge Append (actual rows=101 loops=1)
-                           Sort Key: o2_1."time"
+                           Sort Key: o2."time"
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_1 (actual rows=21 loops=1)
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_2 (actual rows=61 loops=1)
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_3 (actual rows=21 loops=1)
                      ->  Merge Append (never executed)
-                           Sort Key: o2_4."time"
+                           Sort Key: o2."time"
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_4 (never executed)
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_5 (never executed)
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_6 (never executed)
                      ->  Merge Append (never executed)
-                           Sort Key: o2_7."time"
+                           Sort Key: o2."time"
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_7 (never executed)
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_8 (never executed)
                            ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o2_9 (never executed)
@@ -2368,10 +2368,10 @@ FROM :TEST_TABLE o1
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Sort (actual rows=100 loops=1)
-         Sort Key: o1_1."time"
+         Sort Key: o1."time"
          Sort Method: top-N heapsort 
          ->  Hash Join (actual rows=68370 loops=1)
-               Hash Cond: ((o1_1.device_id = o2_1.device_id) AND (o1_1."time" = o2_1."time"))
+               Hash Cond: ((o1.device_id = o2.device_id) AND (o1."time" = o2."time"))
                ->  Append (actual rows=68370 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_1 (actual rows=17990 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=20 loops=1)
@@ -2552,7 +2552,7 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
                Order: metrics_space_compressed."time" DESC
                ->  Merge Append (actual rows=1 loops=1)
-                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Key: metrics_space_compressed."time" DESC
                      ->  Sort (actual rows=1 loops=1)
                            Sort Key: _hyper_X_X_chunk."time" DESC
                            Sort Method: quicksort 
@@ -2569,7 +2569,7 @@ QUERY PLAN
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                                  ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                ->  Merge Append (never executed)
-                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Key: metrics_space_compressed."time" DESC
                      ->  Sort (never executed)
                            Sort Key: _hyper_X_X_chunk."time" DESC
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2583,7 +2583,7 @@ QUERY PLAN
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
                                  ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                ->  Merge Append (never executed)
-                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Key: metrics_space_compressed."time" DESC
                      ->  Sort (never executed)
                            Sort Key: _hyper_X_X_chunk."time" DESC
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2622,7 +2622,7 @@ QUERY PLAN
                            ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=2 loops=1)
                                  Order: metrics_space_compressed."time" DESC
                                  ->  Merge Append (actual rows=2 loops=1)
-                                       Sort Key: _hyper_X_X_chunk."time" DESC
+                                       Sort Key: metrics_space_compressed."time" DESC
                                        ->  Sort (actual rows=2 loops=1)
                                              Sort Key: _hyper_X_X_chunk."time" DESC
                                              Sort Method: top-N heapsort 
@@ -2639,7 +2639,7 @@ QUERY PLAN
                                              ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                                                    ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                                  ->  Merge Append (never executed)
-                                       Sort Key: _hyper_X_X_chunk."time" DESC
+                                       Sort Key: metrics_space_compressed."time" DESC
                                        ->  Sort (never executed)
                                              Sort Key: _hyper_X_X_chunk."time" DESC
                                              ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2653,7 +2653,7 @@ QUERY PLAN
                                              ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
                                                    ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  ->  Merge Append (never executed)
-                                       Sort Key: _hyper_X_X_chunk."time" DESC
+                                       Sort Key: metrics_space_compressed."time" DESC
                                        ->  Sort (never executed)
                                              Sort Key: _hyper_X_X_chunk."time" DESC
                                              ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2705,7 +2705,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
          Order: metrics_space_compressed."time" DESC
          ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Key: metrics_space_compressed."time" DESC
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      Sort Method: top-N heapsort 
@@ -2722,7 +2722,7 @@ QUERY PLAN
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Key: metrics_space_compressed."time" DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2736,7 +2736,7 @@ QUERY PLAN
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
                            ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Key: metrics_space_compressed."time" DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_X_X_chunk."time" DESC
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -2773,7 +2773,7 @@ QUERY PLAN
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o (actual rows=1 loops=3)
                      Order: o."time" DESC
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_1."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_1."time" DESC
                                  Sort Method: quicksort 
@@ -2799,7 +2799,7 @@ QUERY PLAN
                                              Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_4."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_4."time" DESC
                                  Sort Method: quicksort 
@@ -2825,7 +2825,7 @@ QUERY PLAN
                                              Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=1 loops=3)
-                           Sort Key: o_7."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Sort (actual rows=1 loops=3)
                                  Sort Key: o_7."time" DESC
                                  Sort Method: top-N heapsort 
@@ -2876,7 +2876,7 @@ QUERY PLAN
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o (actual rows=1 loops=2)
                      Order: o."time"
                      ->  Merge Append (actual rows=0 loops=2)
-                           Sort Key: o_1."time"
+                           Sort Key: o."time"
                            ->  Sort (actual rows=0 loops=2)
                                  Sort Key: o_1."time"
                                  Sort Method: quicksort 
@@ -2902,7 +2902,7 @@ QUERY PLAN
                                              Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
                                              Rows Removed by Filter: 4
                      ->  Merge Append (actual rows=1 loops=2)
-                           Sort Key: o_4."time"
+                           Sort Key: o."time"
                            ->  Sort (actual rows=1 loops=2)
                                  Sort Key: o_4."time"
                                  Sort Method: top-N heapsort 
@@ -2931,7 +2931,7 @@ QUERY PLAN
                                              Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)))
                                              Rows Removed by Filter: 4
                      ->  Merge Append (never executed)
-                           Sort Key: o_7."time"
+                           Sort Key: o."time"
                            ->  Sort (never executed)
                                  Sort Key: o_7."time"
                                  ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o_7 (never executed)
@@ -2973,7 +2973,7 @@ QUERY PLAN
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o (actual rows=1 loops=3)
                      Order: o."time" DESC
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_1."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_1."time" DESC
                                  Sort Method: quicksort 
@@ -3002,7 +3002,7 @@ QUERY PLAN
                                              Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_4."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_4."time" DESC
                                  Sort Method: quicksort 
@@ -3031,7 +3031,7 @@ QUERY PLAN
                                              Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_min_1 < now()))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=1 loops=3)
-                           Sort Key: o_7."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Sort (actual rows=1 loops=3)
                                  Sort Key: o_7."time" DESC
                                  Sort Method: top-N heapsort 
@@ -3086,7 +3086,7 @@ QUERY PLAN
                ->  Custom Scan (ChunkAppend) on metrics_space_compressed o (actual rows=0 loops=3)
                      Order: o."time" DESC
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_1."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_1."time" DESC
                                  Sort Method: quicksort 
@@ -3115,7 +3115,7 @@ QUERY PLAN
                                              Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_4."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_4."time" DESC
                                  Sort Method: quicksort 
@@ -3144,7 +3144,7 @@ QUERY PLAN
                                              Filter: ((_ts_meta_max_1 >= g."time") AND (_ts_meta_min_1 < (g."time" + '@ 1 day'::interval)) AND (_ts_meta_max_1 > now()))
                                              Rows Removed by Filter: 6
                      ->  Merge Append (actual rows=0 loops=3)
-                           Sort Key: o_7."time" DESC
+                           Sort Key: o."time" DESC
                            ->  Sort (actual rows=0 loops=3)
                                  Sort Key: o_7."time" DESC
                                  Sort Method: quicksort 
@@ -3241,7 +3241,7 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=2 loops=1)
                Order: o1."time"
                ->  Merge Append (actual rows=2 loops=1)
-                     Sort Key: o1_1."time"
+                     Sort Key: o1."time"
                      ->  Sort (actual rows=2 loops=1)
                            Sort Key: o1_1."time"
                            Sort Method: quicksort 
@@ -3264,7 +3264,7 @@ QUERY PLAN
                                  ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                        Filter: (_ts_meta_min_1 < 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
                ->  Merge Append (never executed)
-                     Sort Key: o1_4."time"
+                     Sort Key: o1."time"
                      ->  Sort (never executed)
                            Sort Key: o1_4."time"
                            ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_4 (never executed)
@@ -3288,7 +3288,7 @@ QUERY PLAN
                      ->  Custom Scan (ChunkAppend) on metrics_space_compressed o2 (actual rows=6 loops=1)
                            Order: o2."time"
                            ->  Merge Append (actual rows=6 loops=1)
-                                 Sort Key: o2_1."time"
+                                 Sort Key: o2."time"
                                  ->  Sort (actual rows=2 loops=1)
                                        Sort Key: o2_1."time"
                                        Sort Method: quicksort 
@@ -3305,7 +3305,7 @@ QUERY PLAN
                                        ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_3 (actual rows=3598 loops=1)
                                              ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=4 loops=1)
                            ->  Merge Append (never executed)
-                                 Sort Key: o2_4."time"
+                                 Sort Key: o2."time"
                                  ->  Sort (never executed)
                                        Sort Key: o2_4."time"
                                        ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_4 (never executed)
@@ -3319,7 +3319,7 @@ QUERY PLAN
                                        ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_6 (never executed)
                                              ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                            ->  Merge Append (never executed)
-                                 Sort Key: o2_7."time"
+                                 Sort Key: o2."time"
                                  ->  Sort (never executed)
                                        Sort Key: o2_7."time"
                                        ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o2_7 (never executed)
@@ -3370,7 +3370,7 @@ QUERY PLAN
                        ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
                              Order: metrics_space_compressed."time" DESC
                              ->  Merge Append (actual rows=1 loops=1)
-                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   Sort Key: metrics_space_compressed."time" DESC
                                    ->  Sort (actual rows=1 loops=1)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          Sort Method: top-N heapsort 
@@ -3387,7 +3387,7 @@ QUERY PLAN
                                          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                                                ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
                              ->  Merge Append (never executed)
-                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   Sort Key: metrics_space_compressed."time" DESC
                                    ->  Sort (never executed)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -3401,7 +3401,7 @@ QUERY PLAN
                                          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
                                                ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                              ->  Merge Append (never executed)
-                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   Sort Key: metrics_space_compressed."time" DESC
                                    ->  Sort (never executed)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (never executed)
@@ -3724,10 +3724,10 @@ FROM :TEST_TABLE o1
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Sort (actual rows=100 loops=1)
-         Sort Key: o1_1."time"
+         Sort Key: o1."time"
          Sort Method: top-N heapsort 
          ->  Hash Join (actual rows=68370 loops=1)
-               Hash Cond: ((o1_1.device_id = o2_1.device_id) AND (o1_1."time" = o2_1."time"))
+               Hash Cond: ((o1.device_id = o2.device_id) AND (o1."time" = o2."time"))
                ->  Append (actual rows=68370 loops=1)
                      ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk o1_1 (actual rows=3598 loops=1)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
@@ -3918,14 +3918,14 @@ SET timescaledb.enable_chunkwise_aggregation = OFF;
 
 QUERY PLAN
  Sort (actual rows=20 loops=1)
-   Sort Key: (time_bucket('@ 1 day'::interval, tbl1_1."time"))
+   Sort Key: (time_bucket('@ 1 day'::interval, tbl1."time"))
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=20 loops=1)
-         Group Key: time_bucket('@ 1 day'::interval, tbl1_1."time")
+         Group Key: time_bucket('@ 1 day'::interval, tbl1."time")
          ->  Merge Join (actual rows=9121 loops=1)
-               Merge Cond: ((tbl1_1.device = tbl2_1.device) AND (tbl1_1."time" = tbl2_1."time"))
+               Merge Cond: ((tbl1.device = tbl2.device) AND (tbl1."time" = tbl2."time"))
                ->  Sort (actual rows=9121 loops=1)
-                     Sort Key: tbl1_1.device, tbl1_1."time"
+                     Sort Key: tbl1.device, tbl1."time"
                      Sort Method: quicksort 
                      ->  Append (actual rows=9121 loops=1)
                            ->  Seq Scan on _hyper_X_X_chunk tbl1_1 (actual rows=1300 loops=1)
@@ -3933,7 +3933,7 @@ QUERY PLAN
                            ->  Seq Scan on _hyper_X_X_chunk tbl1_3 (actual rows=3360 loops=1)
                            ->  Seq Scan on _hyper_X_X_chunk tbl1_4 (actual rows=1101 loops=1)
                ->  Sort (actual rows=9121 loops=1)
-                     Sort Key: tbl2_1.device, tbl2_1."time"
+                     Sort Key: tbl2.device, tbl2."time"
                      Sort Method: quicksort 
                      ->  Append (actual rows=9121 loops=1)
                            ->  Seq Scan on _hyper_X_X_chunk tbl2_1 (actual rows=1300 loops=1)

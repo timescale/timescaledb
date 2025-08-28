@@ -14,7 +14,6 @@ $$ LANGUAGE SQL;
 create table agggroup(t int, s int,
     cint2 int2, cint4 int4, cint8 int8);
 select create_hypertable('agggroup', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
-NOTICE:  adding not-null constraint to column "s"
    create_hypertable   
 -----------------------
  (1,public,agggroup,t)
@@ -80,7 +79,7 @@ select
             function, variable)
 from
     unnest(array[
-        'explain (costs off) ',
+        'explain (buffers off, costs off) ',
         null]) explain,
     unnest(array[
         'cint2',
@@ -1907,7 +1906,6 @@ reset timescaledb.debug_require_vector_agg;
 -- test the long scalar values.
 create table long(t int, a text, b text, c text, d text);
 select create_hypertable('long', 't');
-NOTICE:  adding not-null constraint to column "t"
  create_hypertable 
 -------------------
  (3,public,long,t)
@@ -2005,7 +2003,6 @@ reset timescaledb.debug_require_vector_agg;
 -- to long varlena header for the serialized key.
 create table keylength(t int, a text, b text);
 select create_hypertable('keylength', 't');
-NOTICE:  adding not-null constraint to column "t"
    create_hypertable    
 ------------------------
  (5,public,keylength,t)
@@ -2059,7 +2056,6 @@ reset timescaledb.debug_require_vector_agg;
 -- grouping test above.
 create table groupnull(t int, a text, b text);
 select create_hypertable('groupnull', 't');
-NOTICE:  adding not-null constraint to column "t"
    create_hypertable    
 ------------------------
  (7,public,groupnull,t)

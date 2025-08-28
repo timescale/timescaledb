@@ -91,7 +91,6 @@ ERROR:  column_name cannot be NULL
 -- Validate generalized hypertable for smallint
 CREATE TABLE test_table_smallint(id SMALLINT, device INTEGER, time TIMESTAMPTZ);
 SELECT create_hypertable('test_table_smallint', by_range('id'));
-NOTICE:  adding not-null constraint to column "id"
  create_hypertable 
 -------------------
  (1,t)
@@ -119,7 +118,6 @@ SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name='test_
 -- Validate generalized hypertable for int
 CREATE TABLE test_table_int(id INTEGER, device INTEGER, time TIMESTAMPTZ);
 SELECT create_hypertable('test_table_int', by_range('id'));
-NOTICE:  adding not-null constraint to column "id"
  create_hypertable 
 -------------------
  (2,t)
@@ -147,7 +145,6 @@ SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name='test_
 -- Validate generalized hypertable for bigint
 CREATE TABLE test_table_bigint(id BIGINT, device INTEGER, time TIMESTAMPTZ);
 SELECT create_hypertable('test_table_bigint', by_range('id'));
-NOTICE:  adding not-null constraint to column "id"
  create_hypertable 
 -------------------
  (3,t)
@@ -366,7 +363,6 @@ DROP TABLE jobs_big_serial;
 -- Verify partition function
 CREATE TABLE test_table_int(id TEXT, device INTEGER, time TIMESTAMPTZ);
 SELECT create_hypertable('test_table_int', by_range('id', 10, partition_func => 'part_func'));
-NOTICE:  adding not-null constraint to column "id"
  create_hypertable 
 -------------------
  (6,t)
@@ -387,7 +383,6 @@ DROP FUNCTION part_func;
 CREATE TABLE test_table_int(id INTEGER, device INTEGER, time TIMESTAMPTZ);
 INSERT INTO test_table_int SELECT t, t%10, '01-01-2023 11:00'::TIMESTAMPTZ FROM generate_series(1, 50, 1) t;
 SELECT create_hypertable('test_table_int', by_range('id', 10), migrate_data => true);
-NOTICE:  adding not-null constraint to column "id"
 NOTICE:  migrating data to chunks
  create_hypertable 
 -------------------
@@ -411,7 +406,6 @@ DROP TABLE test_table_int;
 -- create_hypertable without default indexes
 CREATE TABLE test_table_int(id INTEGER, device INTEGER, time TIMESTAMPTZ);
 SELECT create_hypertable('test_table_int', by_range('id', 10), create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "id"
  create_hypertable 
 -------------------
  (8,t)
@@ -426,7 +420,6 @@ DROP TABLE test_table_int;
 -- if_not_exists
 CREATE TABLE test_table_int(id INTEGER, device INTEGER, time TIMESTAMPTZ);
 SELECT create_hypertable('test_table_int', by_range('id', 10));
-NOTICE:  adding not-null constraint to column "id"
  create_hypertable 
 -------------------
  (9,t)
@@ -458,7 +451,6 @@ DROP TABLE test_table_int;
 -- Add dimension
 CREATE TABLE test_table_int(id INTEGER, device INTEGER, time TIMESTAMPTZ);
 SELECT create_hypertable('test_table_int', by_range('id', 10), migrate_data => true);
-NOTICE:  adding not-null constraint to column "id"
  create_hypertable 
 -------------------
  (10,t)
@@ -531,7 +523,6 @@ SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name='test_
 (1 row)
 
 SELECT add_dimension('test_time', by_range('device', partition_interval => 2));
-NOTICE:  adding not-null constraint to column "device"
  add_dimension 
 ---------------
  (13,t)

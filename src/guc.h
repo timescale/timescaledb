@@ -71,7 +71,9 @@ extern TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates;
 #endif
 extern bool ts_guc_enable_event_triggers;
 extern TSDLLEXPORT bool ts_guc_enable_compressed_skip_scan;
+extern TSDLLEXPORT bool ts_guc_enable_multikey_skip_scan;
 extern TSDLLEXPORT double ts_guc_skip_scan_run_cost_multiplier;
+extern TSDLLEXPORT bool ts_guc_debug_skip_scan_info;
 
 /* Only settable in debug mode for testing */
 extern TSDLLEXPORT bool ts_guc_enable_null_compression;

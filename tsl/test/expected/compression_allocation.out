@@ -4,7 +4,6 @@
 -- Test array compression overallocation protection
 CREATE TABLE vector_overalloc (time timestamptz, device int8, ord numeric, value text);
 SELECT create_hypertable('vector_overalloc', 'time', create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (1,public,vector_overalloc,t)

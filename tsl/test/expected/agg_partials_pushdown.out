@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 -- Make parallel plans predictable
 SET max_parallel_workers_per_gather = 1;
 SET parallel_leader_participation = off;
@@ -36,7 +36,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                                                                                                                                                                                                                           QUERY PLAN                                                                                                                                                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate (actual rows=1 loops=1)
-   Output: count(*), sum(_hyper_1_1_chunk.v0), sum(_hyper_1_1_chunk.v1), sum(_hyper_1_1_chunk.v2), sum(_hyper_1_1_chunk.v3)
+   Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
    ->  Append (actual rows=2 loops=1)
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
@@ -77,7 +77,7 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                                                                                                                                                                                                                           QUERY PLAN                                                                                                                                                                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate (actual rows=1 loops=1)
-   Output: count(*), sum(_hyper_1_1_chunk.v0), sum(_hyper_1_1_chunk.v1), sum(_hyper_1_1_chunk.v2), sum(_hyper_1_1_chunk.v3)
+   Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
    ->  Append (actual rows=4 loops=1)
          ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
                Output: (PARTIAL count(*)), (PARTIAL sum(_hyper_1_1_chunk.v0)), (PARTIAL sum(_hyper_1_1_chunk.v1)), (PARTIAL sum(_hyper_1_1_chunk.v2)), (PARTIAL sum(_hyper_1_1_chunk.v3))
@@ -345,7 +345,7 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
                      ->  Index Scan using _hyper_3_6_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
                            Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
                ->  Merge Append (actual rows=1 loops=1)
-                     Sort Key: _hyper_3_8_chunk.timecustom DESC NULLS LAST
+                     Sort Key: testtable2.timecustom DESC NULLS LAST
                      ->  Partial GroupAggregate (actual rows=1 loops=1)
                            Output: _hyper_3_8_chunk.timecustom, PARTIAL min(_hyper_3_8_chunk.series_0)
                            Group Key: _hyper_3_8_chunk.timecustom
@@ -411,7 +411,7 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
                                  Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
                                  Worker 0:  actual rows=1 loops=1
                      ->  Merge Append (actual rows=1 loops=1)
-                           Sort Key: _hyper_3_8_chunk.timecustom DESC NULLS LAST
+                           Sort Key: testtable2.timecustom DESC NULLS LAST
                            Worker 0:  actual rows=1 loops=1
                            ->  Partial GroupAggregate (actual rows=1 loops=1)
                                  Output: _hyper_3_8_chunk.timecustom, PARTIAL min(_hyper_3_8_chunk.series_0)
@@ -435,13 +435,13 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY ROLLUP(t);
                                           QUERY PLAN                                          
 ----------------------------------------------------------------------------------------------
  Gather (actual rows=7 loops=1)
-   Output: _hyper_3_5_chunk.timecustom, (min(_hyper_3_5_chunk.series_0))
+   Output: testtable2.timecustom, (min(testtable2.series_0))
    Workers Planned: 1
    Workers Launched: 1
    Single Copy: true
    ->  MixedAggregate (actual rows=7 loops=1)
-         Output: _hyper_3_5_chunk.timecustom, min(_hyper_3_5_chunk.series_0)
-         Hash Key: _hyper_3_5_chunk.timecustom
+         Output: testtable2.timecustom, min(testtable2.series_0)
+         Hash Key: testtable2.timecustom
          Group Key: ()
          Worker 0:  actual rows=7 loops=1
          ->  Append (actual rows=11 loops=1)
@@ -499,7 +499,7 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
                            Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
                            Worker 0:  actual rows=1 loops=1
                      ->  Merge Append (actual rows=1 loops=1)
-                           Sort Key: _hyper_3_8_chunk.timecustom DESC NULLS LAST
+                           Sort Key: testtable2.timecustom DESC NULLS LAST
                            Worker 0:  actual rows=1 loops=1
                            ->  Index Scan using _hyper_3_8_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
                                  Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
@@ -515,7 +515,6 @@ RESET enable_hashagg;
 CREATE TABLE merge_append_test (start_time timestamptz, sensor_id int, cluster varchar (253), cost_recommendation_memory numeric);
 SELECT * FROM create_hypertable('merge_append_test', 'start_time');
 WARNING:  column type "character varying" used for "cluster" does not follow best practices
-NOTICE:  adding not-null constraint to column "start_time"
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------
              4 | public      | merge_append_test | t
@@ -568,10 +567,10 @@ GROUP BY
                                                                                                                              QUERY PLAN                                                                                                                             
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate (actual rows=873 loops=1)
-   Output: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id, sum(_hyper_4_17_chunk.cost_recommendation_memory)
-   Group Key: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id
+   Output: merge_append_test.start_time, merge_append_test.sensor_id, sum(merge_append_test.cost_recommendation_memory)
+   Group Key: merge_append_test.start_time, merge_append_test.sensor_id
    ->  Merge Append (actual rows=873 loops=1)
-         Sort Key: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id
+         Sort Key: merge_append_test.start_time, merge_append_test.sensor_id
          ->  Partial GroupAggregate (actual rows=648 loops=1)
                Output: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id, PARTIAL sum(_hyper_4_17_chunk.cost_recommendation_memory)
                Group Key: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id

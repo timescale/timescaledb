@@ -17,7 +17,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 SELECT format('\! diff -u --label "Unoptimized result" --label "Optimized result" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
 \set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
-\set PREFIX_NO_ANALYZE 'EXPLAIN (costs off)'
+\set PREFIX_NO_ANALYZE 'EXPLAIN (buffers off, costs off)'
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -293,11 +293,11 @@ ORDER BY time DESC LIMIT 1;
   time_bucket('1d',time), device_id, name
 FROM dimension_last
 ORDER BY time_bucket('1d',time), device_id LIMIT 1;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
-         Sort Key: (time_bucket('@ 1 day'::interval, _hyper_2_4_chunk."time")), _hyper_2_4_chunk.device_id
+         Sort Key: (time_bucket('@ 1 day'::interval, dimension_last."time")), dimension_last.device_id
          Sort Method: top-N heapsort 
          ->  Result (actual rows=5760 loops=1)
                ->  Append (actual rows=5760 loops=1)
@@ -313,11 +313,11 @@ ORDER BY time_bucket('1d',time), device_id LIMIT 1;
   date_trunc('day',time), device_id, name
 FROM dimension_last
 ORDER BY 1,2 LIMIT 1;
-                                            QUERY PLAN                                            
---------------------------------------------------------------------------------------------------
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Sort (actual rows=1 loops=1)
-         Sort Key: (date_trunc('day'::text, _hyper_2_4_chunk."time")), _hyper_2_4_chunk.device_id
+         Sort Key: (date_trunc('day'::text, dimension_last."time")), dimension_last.device_id
          Sort Method: top-N heapsort 
          ->  Result (actual rows=5760 loops=1)
                ->  Append (actual rows=5760 loops=1)
@@ -350,7 +350,7 @@ LIMIT 2;
 -------------------------------------------------------------------------------------------------
  Limit
    ->  Nested Loop Left Join
-         Join Filter: (dimension_last."time" = _hyper_3_11_chunk."time")
+         Join Filter: (dimension_last."time" = dimension_only."time")
          ->  Custom Scan (ChunkAppend) on dimension_last
                Order: dimension_last."time" DESC
                ->  Index Scan using _hyper_2_7_chunk_dimension_last_time_idx on _hyper_2_7_chunk
@@ -524,7 +524,7 @@ ORDER BY time DESC;
  Custom Scan (ChunkAppend) on space2 (actual rows=116649 loops=1)
    Order: space2."time" DESC
    ->  Merge Append (actual rows=56169 loops=1)
-         Sort Key: _hyper_6_36_chunk."time" DESC
+         Sort Key: space2."time" DESC
          ->  Index Scan using _hyper_6_36_chunk_space2_time_idx on _hyper_6_36_chunk (actual rows=6241 loops=1)
          ->  Index Scan using _hyper_6_34_chunk_space2_time_idx on _hyper_6_34_chunk (actual rows=6241 loops=1)
          ->  Index Scan using _hyper_6_32_chunk_space2_time_idx on _hyper_6_32_chunk (actual rows=6241 loops=1)
@@ -535,7 +535,7 @@ ORDER BY time DESC;
          ->  Index Scan using _hyper_6_22_chunk_space2_time_idx on _hyper_6_22_chunk (actual rows=6241 loops=1)
          ->  Index Scan using _hyper_6_20_chunk_space2_time_idx on _hyper_6_20_chunk (actual rows=6241 loops=1)
    ->  Merge Append (actual rows=60480 loops=1)
-         Sort Key: _hyper_6_37_chunk."time" DESC
+         Sort Key: space2."time" DESC
          ->  Index Scan using _hyper_6_37_chunk_space2_time_idx on _hyper_6_37_chunk (actual rows=6720 loops=1)
          ->  Index Scan using _hyper_6_35_chunk_space2_time_idx on _hyper_6_35_chunk (actual rows=6720 loops=1)
          ->  Index Scan using _hyper_6_33_chunk_space2_time_idx on _hyper_6_33_chunk (actual rows=6720 loops=1)
@@ -557,7 +557,7 @@ ORDER BY time DESC;
  Custom Scan (ChunkAppend) on space3 (actual rows=103688 loops=1)
    Order: space3."time" DESC
    ->  Merge Append (actual rows=49928 loops=1)
-         Sort Key: _hyper_7_52_chunk."time" DESC
+         Sort Key: space3."time" DESC
          ->  Index Only Scan using _hyper_7_52_chunk_space3_time_idx on _hyper_7_52_chunk (actual rows=6241 loops=1)
          ->  Index Only Scan using _hyper_7_50_chunk_space3_time_idx on _hyper_7_50_chunk (actual rows=6241 loops=1)
          ->  Index Only Scan using _hyper_7_48_chunk_space3_time_idx on _hyper_7_48_chunk (actual rows=6241 loops=1)
@@ -567,7 +567,7 @@ ORDER BY time DESC;
          ->  Index Only Scan using _hyper_7_40_chunk_space3_time_idx on _hyper_7_40_chunk (actual rows=6241 loops=1)
          ->  Index Only Scan using _hyper_7_38_chunk_space3_time_idx on _hyper_7_38_chunk (actual rows=6241 loops=1)
    ->  Merge Append (actual rows=53760 loops=1)
-         Sort Key: _hyper_7_53_chunk."time" DESC
+         Sort Key: space3."time" DESC
          ->  Index Only Scan using _hyper_7_53_chunk_space3_time_idx on _hyper_7_53_chunk (actual rows=6720 loops=1)
          ->  Index Only Scan using _hyper_7_51_chunk_space3_time_idx on _hyper_7_51_chunk (actual rows=6720 loops=1)
          ->  Index Only Scan using _hyper_7_49_chunk_space3_time_idx on _hyper_7_49_chunk (actual rows=6720 loops=1)

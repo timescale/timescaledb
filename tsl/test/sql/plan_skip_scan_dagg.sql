@@ -7,7 +7,7 @@
 \ir include/skip_scan_load.sql
 
 -- we want to run with analyze here so we can see counts in the nodes
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 \set TABLE skip_scan
 \ir include/skip_scan_dagg_query.sql
 

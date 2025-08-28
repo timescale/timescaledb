@@ -4,7 +4,6 @@
 create table metrics(ts timestamp, id int, value float);
 select create_hypertable('metrics', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable   
 ----------------------
  (1,public,metrics,t)
@@ -38,7 +37,7 @@ where ts >= (select max(ts) from metrics);
 (18 rows)
 
 -- two non-const conditions
-explain (analyze, costs off, summary off, timing off)
+explain (analyze, buffers off, costs off, summary off, timing off)
 select * from metrics
 where ts >= (select max(ts) from metrics)
     and id = 1;

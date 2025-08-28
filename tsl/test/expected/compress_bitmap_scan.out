@@ -13,7 +13,6 @@ set max_parallel_workers_per_gather = 0;
 set enable_memoize to off;
 create table bscan(ts int, s int, id int, payload int);
 select create_hypertable('bscan', 'ts', chunk_time_interval => 500001);
-NOTICE:  adding not-null constraint to column "ts"
  create_hypertable  
 --------------------
  (1,public,bscan,t)
@@ -38,7 +37,7 @@ select count(compress_chunk(x)) from show_chunks('bscan') x;
 vacuum full analyze bscan;
 -- We have many conditions here, so it's less selective and the bitmap scan
 -- overhead grows. This query should use Seq Scan.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from bscan where id = 1 or id = 2 or id = 3 or id = 4 or id = 5
     or id = 6 or id = 7 or id = 8
 ;
@@ -69,7 +68,7 @@ select * from bscan where id = 1 or id = 2 or id = 3 or id = 4 or id = 5
 
 -- This should be Bitmap Heap Scan because we have an OR of highly selective
 -- conditions.
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from bscan where id = 1 or id = 2
 ;
                                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                                   
@@ -110,7 +109,7 @@ select * from bscan where id = 1 or id = 2
 -- Also try a join with a Bitmap Heap Scan
 set enable_mergejoin to off;
 set enable_hashjoin to off;
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from bscan t1, bscan t2
 where (t2.id = 1 or t2.id = 2)
     and t1.s = t2.s
@@ -118,7 +117,7 @@ where (t2.id = 1 or t2.id = 2)
                                                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=50 loops=1)
-   Output: t1_1.ts, t1_1.s, t1_1.id, t1_1.payload, t2_1.ts, t2_1.s, t2_1.id, t2_1.payload
+   Output: t1.ts, t1.s, t1.id, t1.payload, t2.ts, t2.s, t2.id, t2.payload
    ->  Append (actual rows=18 loops=1)
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk t2_1 (actual rows=10 loops=1)
                Output: t2_1.ts, t2_1.s, t2_1.id, t2_1.payload
@@ -159,7 +158,7 @@ where (t2.id = 1 or t2.id = 2)
                Bulk Decompression: true
                ->  Index Scan using compress_hyper_2_3_chunk_s__ts_meta_min_1__ts_meta_max_1__t_idx on _timescaledb_internal.compress_hyper_2_3_chunk (actual rows=1 loops=18)
                      Output: compress_hyper_2_3_chunk._ts_meta_count, compress_hyper_2_3_chunk.s, compress_hyper_2_3_chunk._ts_meta_min_2, compress_hyper_2_3_chunk._ts_meta_max_2, compress_hyper_2_3_chunk.ts, compress_hyper_2_3_chunk._ts_meta_min_1, compress_hyper_2_3_chunk._ts_meta_max_1, compress_hyper_2_3_chunk.id, compress_hyper_2_3_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_3_chunk.payload
-                     Index Cond: (compress_hyper_2_3_chunk.s = t2_1.s)
+                     Index Cond: (compress_hyper_2_3_chunk.s = t2.s)
                      Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_3_chunk._ts_meta_v2_bloom1_payload, '-537'::integer)
                      Rows Removed by Filter: 2
          ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk t1_2 (actual rows=1 loops=18)
@@ -169,7 +168,7 @@ where (t2.id = 1 or t2.id = 2)
                Bulk Decompression: true
                ->  Index Scan using compress_hyper_2_4_chunk_s__ts_meta_min_1__ts_meta_max_1__t_idx on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=1 loops=18)
                      Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.s, compress_hyper_2_4_chunk._ts_meta_min_2, compress_hyper_2_4_chunk._ts_meta_max_2, compress_hyper_2_4_chunk.ts, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk.id, compress_hyper_2_4_chunk._ts_meta_v2_bloom1_payload, compress_hyper_2_4_chunk.payload
-                     Index Cond: (compress_hyper_2_4_chunk.s = t2_1.s)
+                     Index Cond: (compress_hyper_2_4_chunk.s = t2.s)
                      Filter: _timescaledb_functions.bloom1_contains(compress_hyper_2_4_chunk._ts_meta_v2_bloom1_payload, '-537'::integer)
                      Rows Removed by Filter: 2
 (55 rows)

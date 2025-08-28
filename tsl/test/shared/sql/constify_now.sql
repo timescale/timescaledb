@@ -7,7 +7,7 @@ SET timescaledb.enable_constraint_aware_append TO false;
 SET timescaledb.current_timestamp_mock TO '1990-01-01';
 SET timezone TO PST8PDT;
 
-\set PREFIX 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
+\set PREFIX 'EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)'
 
 -- create a test table
 -- any query with successful now_constify will have 1 chunk while
@@ -236,15 +236,15 @@ SET timescaledb.enable_chunk_append TO true;
 SET timescaledb.enable_constraint_aware_append TO true;
 
 -- for all the queries below, exclusion should be happening at plantime
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '1 day' AND now()
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 ORDER BY "timestamp" ASC;
 
@@ -254,15 +254,15 @@ PREPARE pbtw AS SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
 ORDER BY "timestamp" ASC;
 
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 -- now move mock_now() to the future
 SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 -- much further into the future, no rows should be returned
 SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 DEALLOCATE pbtw;
 
@@ -274,15 +274,15 @@ PREPARE pbtw AS SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
 ORDER BY "timestamp" ASC;
 
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 -- now move mock_now() to the future
 SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 -- much further into the future, no rows should be returned
 SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 EXECUTE pbtw;
 DEALLOCATE pbtw;
 

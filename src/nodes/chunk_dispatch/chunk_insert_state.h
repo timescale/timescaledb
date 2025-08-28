@@ -98,6 +98,8 @@ typedef struct ChunkInsertState
 	/* for tracking compressed chunks */
 	bool chunk_compressed;
 	bool chunk_partial;
+	bool columnstore_insert;
+	bool needs_partial;
 
 	/* To speedup repeated calls of `decompress_batches_for_insert` */
 	CachedDecompressionState *cached_decompression_state;
@@ -106,6 +108,8 @@ typedef struct ChunkInsertState
 	bool skip_current_tuple;
 	SharedCounters *counters;
 
+	/* for tracking generated column computations */
+	bool skip_generated_column_computations;
 } ChunkInsertState;
 
 typedef struct ChunkDispatch ChunkDispatch;

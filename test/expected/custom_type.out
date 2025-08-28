@@ -65,7 +65,6 @@ SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval =
 ERROR:  invalid interval type for customtype dimension
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval => 10e6::bigint, create_default_indexes=>false);
-NOTICE:  adding not-null constraint to column "time_custom"
       create_hypertable       
 ------------------------------
  (1,public,customtype_test,t)
@@ -74,14 +73,14 @@ NOTICE:  adding not-null constraint to column "time_custom"
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
-EXPLAIN (costs off) SELECT * FROM customtype_test;
+EXPLAIN (buffers off, costs off) SELECT * FROM customtype_test;
           QUERY PLAN          
 ------------------------------
  Seq Scan on _hyper_1_1_chunk
 (1 row)
 
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:23'::customtype, 11);
-EXPLAIN (costs off) SELECT * FROM customtype_test;
+EXPLAIN (buffers off, costs off) SELECT * FROM customtype_test;
              QUERY PLAN             
 ------------------------------------
  Append
