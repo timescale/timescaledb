@@ -862,7 +862,8 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 	 * compressed chunk is never projected so we can't use it for that.
 	 */
 	const double work_mem_bytes = work_mem * 1024.0;
-	const double needed_memory_bytes = open_batches_clamped * compression_info->compressed_batch_size *
+	const double needed_memory_bytes = open_batches_clamped *
+									   compression_info->compressed_batch_size *
 									   dcpath->custom_path.path.pathtarget->width;
 
 	/*
