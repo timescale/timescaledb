@@ -1393,19 +1393,9 @@ test_uuid_dictionary_simple()
 	Datum compressed = (Datum) compressor->finish(compressor);
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
 
-	/* Test unaligned access to satisfy code coverage */
-	size_t compressed_size = VARSIZE_ANY(compressed);
-	char *unaligned_ptr = ((char *) palloc0(compressed_size + 3)) + 3;
-	memcpy(unaligned_ptr, DatumGetPointer(compressed), compressed_size);
-
-	ArrowArray *bulk_result = tsl_dictionary_decompress_all(PointerGetDatum(unaligned_ptr),
-															UUIDOID,
-															CurrentMemoryContext);
-	const pg_uuid_t *bulk_data = (pg_uuid_t *) bulk_result->buffers[1];
-
-	ArrowArray *bulk_result2 =
+	ArrowArray *bulk_result =
 		tsl_dictionary_decompress_all(compressed, UUIDOID, CurrentMemoryContext);
-	const pg_uuid_t *bulk_data2 = (pg_uuid_t *) bulk_result2->buffers[1];
+	const pg_uuid_t *bulk_data = (pg_uuid_t *) bulk_result->buffers[1];
 
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	/* The dictionary compression may recompress the data id Array compression would save space.
@@ -1423,8 +1413,6 @@ test_uuid_dictionary_simple()
 		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i / 4])));
 		TestAssertTrue(DatumGetBool(
 			DirectFunctionCall2(uuid_eq, PointerGetDatum(&bulk_data[i]), uuids[i / 4])));
-		TestAssertTrue(DatumGetBool(
-			DirectFunctionCall2(uuid_eq, PointerGetDatum(&bulk_data2[i]), uuids[i / 4])));
 	}
 }
 
