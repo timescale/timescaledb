@@ -15,11 +15,12 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 -- Create a user with specific timezone and mock time
 CREATE ROLE test_cagg_refresh_policy_user WITH LOGIN;
-ALTER ROLE test_cagg_refresh_policy_user SET timezone TO 'UTC';
-ALTER ROLE test_cagg_refresh_policy_user SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
+ALTER ROLE test_cagg_refresh_policy_user SET timescaledb.current_timestamp_mock TO '2025-06-11 00:00:00+07';
 GRANT ALL ON SCHEMA public TO test_cagg_refresh_policy_user;
 
 \c :TEST_DBNAME test_cagg_refresh_policy_user
+
+SET timezone TO PST8PDT;
 
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -60,8 +61,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2025-02-05 00:00:00+00',
-        '2025-03-05 00:00:00+00',
+        '2025-05-05 00:00:00',
+        '2025-06-05 00:00:00',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -188,8 +189,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2020-02-05 00:00:00+00',
-        '2020-03-05 00:00:00+00',
+        '2020-04-05 00:00:00',
+        '2020-05-05 00:00:00',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -255,8 +256,8 @@ SELECT
     t, d, 10
 FROM
     generate_series(
-        '2020-02-05 00:00:00+00',
-        '2020-02-06 00:00:00+00',
+        '2020-04-05 00:00:00',
+        '2020-04-06 00:00:00',
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
@@ -276,7 +277,7 @@ TRUNCATE conditions_by_day, conditions, bgw_log;
 
 -- Less than 1 day of data (smaller than the bucket width)
 INSERT INTO conditions
-VALUES ('2020-02-05 00:00:00+00', 1, 10);
+VALUES ('2020-05-05 00:00:00', 1, 10);
 
 -- advance time by 6h so that job runs one more time
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '6 hour')::bigint * 1000000, true);
@@ -310,14 +311,13 @@ SELECT
     ) AS job_id_manual \gset
 
 TRUNCATE bgw_log, conditions_by_day, conditions_by_day_manual_refresh, conditions;
-
 INSERT INTO conditions
 SELECT
     t, d, 10
 FROM
     generate_series(
-        '2025-03-11 00:00:00+00'::timestamptz - INTERVAL '30 days',
-        '2025-03-11 00:00:00+00'::timestamptz,
+        '2025-06-11 00:00:00'::timestamptz - INTERVAL '30 days',
+        '2025-06-11 00:00:00'::timestamptz,
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
