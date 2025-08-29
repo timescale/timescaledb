@@ -92,14 +92,40 @@ SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timesc
 SELECT count(*) FROM :COMPRESSED_CHUNK;
 ROLLBACK;
 
--- simple test with unique constraints
+-- test unique constraints prevent direct compress
 BEGIN;
 SET timescaledb.enable_direct_compress_copy = true;
 ALTER TABLE metrics ADD CONSTRAINT unique_time_device UNIQUE (time, device);
-COPY metrics FROM PROGRAM 'seq 100 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+COPY metrics FROM STDIN WITH (FORMAT CSV);
+2025-01-01,d1,0.3
+\.
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
 ROLLBACK;
+
+-- test triggers prevent direct compress
+BEGIN;
+SET timescaledb.enable_direct_compress_copy = true;
+CREATE OR REPLACE FUNCTION test_trigger() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER metrics_trigger BEFORE INSERT OR UPDATE ON metrics FOR EACH ROW EXECUTE FUNCTION test_trigger();
+COPY metrics FROM STDIN WITH (FORMAT CSV);
+2025-01-01,d1,0.3
+\.
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+ROLLBACK;
+
+-- test caggs prevent direct compress
+BEGIN;
+SET timescaledb.enable_direct_compress_copy = true;
+CREATE MATERIALIZED VIEW metrics_cagg WITH (tsdb.continuous) AS SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value FROM metrics GROUP BY bucket, device WITH NO DATA;
+COPY metrics FROM STDIN WITH (FORMAT CSV);
+2025-01-01,d1,0.3
+\.
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+ROLLBACK;
+
 
 -- test chunk status handling
 CREATE TABLE metrics_status(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time');

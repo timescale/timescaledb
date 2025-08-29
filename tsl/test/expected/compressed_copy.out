@@ -184,15 +184,53 @@ SELECT count(*) FROM :COMPRESSED_CHUNK;
 (1 row)
 
 ROLLBACK;
--- simple test with unique constraints
+-- test unique constraints prevent direct compress
 BEGIN;
 SET timescaledb.enable_direct_compress_copy = true;
 ALTER TABLE metrics ADD CONSTRAINT unique_time_device UNIQUE (time, device);
-COPY metrics FROM PROGRAM 'seq 100 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+COPY metrics FROM STDIN WITH (FORMAT CSV);
+WARNING:  disabling direct compress because the destination table has unique constraints
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                       QUERY PLAN                        
----------------------------------------------------------
- Seq Scan on _hyper_1_25_chunk (actual rows=100 loops=1)
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Seq Scan on _hyper_1_25_chunk (actual rows=1 loops=1)
+(1 row)
+
+SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+ status 
+--------
+(0 rows)
+
+ROLLBACK;
+-- test triggers prevent direct compress
+BEGIN;
+SET timescaledb.enable_direct_compress_copy = true;
+CREATE OR REPLACE FUNCTION test_trigger() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER metrics_trigger BEFORE INSERT OR UPDATE ON metrics FOR EACH ROW EXECUTE FUNCTION test_trigger();
+COPY metrics FROM STDIN WITH (FORMAT CSV);
+WARNING:  disabling direct compress copy due to presence of triggers on the destination table
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Seq Scan on _hyper_1_26_chunk (actual rows=1 loops=1)
+(1 row)
+
+SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
+ status 
+--------
+(0 rows)
+
+ROLLBACK;
+-- test caggs prevent direct compress
+BEGIN;
+SET timescaledb.enable_direct_compress_copy = true;
+CREATE MATERIALIZED VIEW metrics_cagg WITH (tsdb.continuous) AS SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value FROM metrics GROUP BY bucket, device WITH NO DATA;
+COPY metrics FROM STDIN WITH (FORMAT CSV);
+WARNING:  disabling direct compress because the destination table has triggers
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Seq Scan on _hyper_1_27_chunk (actual rows=1 loops=1)
 (1 row)
 
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
@@ -272,7 +310,7 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
 SELECT compress_chunk(show_chunks('metrics_status'));
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_3_33_chunk
+ _timescaledb_internal._hyper_4_35_chunk
 (1 row)
 
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
