@@ -1,2 +1,0 @@
-Implements: #8496 Fix dropping chunks with foreign keys
-Thanks: @pierreforstmann for fixing a bug when dropping chunks with foreign keys
