@@ -380,3 +380,93 @@ FROM
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_CLUSTER_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
 DROP ROLE test_cagg_refresh_policy_user;
+
+--------------------------------------------
+-- "Timestamp out of range" issue - SDC 3189
+
+CREATE TABLE test_metrics (
+    time TIMESTAMPTZ NOT NULL,
+    device_id INT,
+    value FLOAT
+);
+
+-- Set chunk time to 1 day
+SELECT create_hypertable('test_metrics', 'time', chunk_time_interval => INTERVAL '1 day');
+
+-- Create a continuous aggregate with fixed time_bucket 1 hour
+CREATE MATERIALIZED VIEW test_cagg
+WITH (timescaledb.continuous) AS
+SELECT 
+    time_bucket('1 hour', time) AS bucket,
+    device_id,
+    avg(value) as avg_value
+FROM test_metrics
+GROUP BY 1, 2;
+
+--Create a continuous aggregate with variable time_bucket
+CREATE MATERIALIZED VIEW test_cagg_var
+WITH (timescaledb.continuous) AS
+SELECT 
+    time_bucket('1 month', time) AS bucket,
+    device_id,
+    avg(value) as avg_value
+FROM test_metrics
+GROUP BY 1, 2;
+
+INSERT INTO test_metrics (time, device_id, value)
+VALUES ('2025-08-05', 1, 10.0);
+
+-- Force a refresh of the continuous aggregates
+CALL refresh_continuous_aggregate('test_cagg', NULL, interval '1 hour');
+
+--Check materialization log, 
+--for the cagg with fixed window bucket, 
+--it will have a row of [-9223372036854775808, -210866803200000001],
+--that is [-infinity, CAGG_INVALIDATION_WRONG_GREATEST_VALUE]
+
+SELECT lowest_modified_value, greatest_modified_value 
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg 
+                            WHERE user_view_name = 'test_cagg')
+      AND greatest_modified_value = -210866803200000001;
+
+CALL refresh_continuous_aggregate('test_cagg_var', NULL, interval '1 month');
+
+--The cagg with variable window bucket won't have 
+--the row of [-9223372036854775808, -210866803200000001],
+--because we use -infinity for the refresh window range_start for variable bucket.
+
+SELECT lowest_modified_value, greatest_modified_value 
+FROM _timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+WHERE materialization_id = (SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg 
+                            WHERE user_view_name = 'test_cagg_var')
+      AND greatest_modified_value = -210866803200000001;
+
+--Now insert some data that would trigger incremental refresh on test_cagg
+INSERT INTO test_metrics (time, device_id, value)
+    VALUES 
+        ('2025-08-05 15:00:00-05', 1, 10.0),
+        ('2025-07-03 19:00:00-05', 1, 20.0);
+
+SELECT add_continuous_aggregate_policy('test_cagg',
+  start_offset => NULL,
+  end_offset => INTERVAL '1 hour',
+  schedule_interval => INTERVAL '5 minute');
+
+SELECT add_continuous_aggregate_policy('test_cagg_var',
+  start_offset => NULL,
+  end_offset => INTERVAL '1 hour',
+  schedule_interval => INTERVAL '5 minute');
+
+ --make the policy run and check the log
+ --before the fix in https://github.com/timescale/timescaledb/pull/8476 this would result
+ --in a crash of failed Assert("refresh_window->end > result.start") on debug build,
+ --or "Timestamp out of range" error on release build
+ --After the fix, it will run successfully
+TRUNCATE bgw_log;
+SELECT ts_bgw_params_reset_time(0, true);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * FROM sorted_bgw_log;
+
+--clean up
+DROP TABLE test_metrics cascade;
