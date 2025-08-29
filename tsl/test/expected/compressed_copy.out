@@ -203,6 +203,7 @@ BEGIN;
 SET timescaledb.enable_direct_compress_copy = true;
 ALTER TABLE metrics ADD CONSTRAINT unique_time_device UNIQUE (time, device);
 COPY metrics FROM PROGRAM 'seq 100 | xargs -II date -d "2025-01-01 - I minute" +"%Y-%m-%d %H:%M:%S,d1,0.I"' WITH (FORMAT CSV);
+WARNING:  disabling direct compress because the destination table has unique constraints
 EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
                        QUERY PLAN                        
 ---------------------------------------------------------
