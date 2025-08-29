@@ -176,3 +176,19 @@ SELECT m.aggregate_name,
  WHERE m.table_name IS NULL OR s.table_name IS NULL
 GROUP BY 1 ORDER BY 1,2;
 
+-- This should be fine but not process any tables. Odd usage, but
+-- nothing wrong with it.
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY[]::regclass[]);
+
+-- These should error out
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['cond_10']);
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY[0]);
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['cond_10', 'cond_20']);
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['conditions', 'cond_20']);
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['conditions', 123456]::regclass[]);
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['conditions', 123456, 'cond_10']::regclass[]);
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['conditions', 123456, 'cond_10', 'cond_20']::regclass[]);
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1

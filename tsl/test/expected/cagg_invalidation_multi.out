@@ -231,3 +231,28 @@ GROUP BY 1 ORDER BY 1,2;
  cond_20        | [0,120)
 (2 rows)
 
+-- This should be fine but not process any tables. Odd usage, but
+-- nothing wrong with it.
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY[]::regclass[]);
+-- These should error out
+\set ON_ERROR_STOP 0
+\set VERBOSITY default
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['cond_10']);
+ERROR:  table "cond_10" is not a hypertable
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY[0]);
+ERROR:  OID 0 is not a hypertable
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['cond_10', 'cond_20']);
+ERROR:  2 objects in list are not hypertables
+DETAIL:  Bad objects are "cond_10" and "cond_20".
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['conditions', 'cond_20']);
+ERROR:  table "cond_20" is not a hypertable
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['conditions', 123456]::regclass[]);
+ERROR:  OID 123456 is not a hypertable
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['conditions', 123456, 'cond_10']::regclass[]);
+ERROR:  2 objects in list are not hypertables
+DETAIL:  Bad objects are 123456 and "cond_10".
+CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['conditions', 123456, 'cond_10', 'cond_20']::regclass[]);
+ERROR:  3 objects in list are not hypertables
+DETAIL:  Bad objects are 123456, "cond_10", and "cond_20".
+\set VERBOSITY terse
+\set ON_ERROR_STOP 1

@@ -45,7 +45,6 @@
 #include "chunk.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
-#include "guc.h"
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
 #include "time_utils.h"
@@ -2025,4 +2024,27 @@ ts_get_attr_expr(Relation rel, AttrNumber attno)
 	}
 
 	return expr;
+}
+
+char *
+ts_list_to_string(List *list, append_cell_func append)
+{
+	StringInfoData info;
+	ListCell *lc;
+
+	initStringInfo(&info);
+
+	foreach (lc, list)
+	{
+		if (!lnext(list, lc))
+			appendStringInfoString(&info, "and ");
+		append(&info, lc);
+		if (lnext(list, lc))
+		{
+			if (list_length(list) > 2)
+				appendStringInfoChar(&info, ',');
+			appendStringInfoChar(&info, ' ');
+		}
+	}
+	return info.data;
 }

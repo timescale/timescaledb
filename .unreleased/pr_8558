@@ -1,0 +1,1 @@
+Fixes: #8558 Error out on bad args when processing invalidation
