@@ -10,7 +10,7 @@ This release contains performance improvements and bug fixes since the 2.21.3 re
 
 **Highlighted features in TimescaleDB v2.22.0**
 * Sparse indexes on compressed hypertables can now be explicitly configured via `ALTER TABLE` rather than relying only on internal heuristics. Users can define indexes on multiple columns to improve query performance for their specific workloads.
-* Continuous aggregates now support the `timescaledb.invalidate_using` option, enabling invalidations to be collected either via triggers on the hypertable or directly from WAL using logical decoding. Aggregates inherit the hypertable’s method if none is specified.  
+* [Tech Preview] Continuous aggregates now support the `timescaledb.invalidate_using` option, enabling invalidations to be collected either via triggers on the hypertable or directly from WAL using logical decoding. Aggregates inherit the hypertable’s method if none is specified.  
 * UUIDv7 compression and vectorization are now supported. The compression algorithm leverages the timestamp portion for delta-delta compression while storing the random portion separately. The vectorized equality/inequality filters with bulk decompression deliver ~2× faster query performance. The feature is disabled by default (`timescaledb.enable_uuid_compression`) to simplify the downgrading experience, and will be enabled out of the box in the next minor release.
 * [Tech Preview] Hypertables can now be partitioned by UUIDv7 columns, using their embedded timestamp for time-based chunking. Non-v7 UUIDs are rejected on insert.  
 * SkipScan now supports multi-column indexes in not-null mode, improving performance for distinct and ordered queries across multiple keys.  
