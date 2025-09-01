@@ -1,7 +1,7 @@
 # TimescaleDB Changelog
 
 **Please note: When updating your database, you should connect using
-`psql` with the `-X` flag to prevent any `.psqlrc` commands from
+This page lists all the latest features and updates to TimescaleDB. When you use psql to update your database, use the -X flag and prevent any .psqlrc commands from accidentally triggering the load of a previous DB version.
 accidentally triggering the load of a previous DB version.**
 
 ## 2.22.0 (2025-09-02)
