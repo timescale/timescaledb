@@ -164,7 +164,8 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat;
 SELECT * FROM timescaledb_information.job_stats;
  hypertable_schema | hypertable_name | job_id | last_run_started_at | last_successful_finish | last_run_status | job_status | last_run_duration | next_start | total_runs | total_successes | total_failures 
 -------------------+-----------------+--------+---------------------+------------------------+-----------------+------------+-------------------+------------+------------+-----------------+----------------
-(0 rows)
+                   |                 |   1000 |                     |                        |                 | Paused     |                   |            |            |                 |               
+(1 row)
 
 SELECT test_toggle_scheduled(1000);
  test_toggle_scheduled 

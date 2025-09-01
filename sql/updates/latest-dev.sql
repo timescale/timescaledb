@@ -95,6 +95,8 @@ DROP VIEW IF EXISTS timescaledb_information.chunk_columnstore_settings;
 DROP VIEW IF EXISTS timescaledb_information.hypertable_compression_settings;
 DROP VIEW IF EXISTS timescaledb_information.chunk_compression_settings;
 DROP VIEW IF EXISTS timescaledb_information.compression_settings;
+DROP VIEW IF EXISTS timescaledb_information.job_stats;
+
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.compression_settings;
 DROP TABLE _timescaledb_catalog.compression_settings;
 
