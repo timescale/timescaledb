@@ -1825,6 +1825,12 @@ cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sor
 						get_sortgroupref_clause(subq_tle->ressortgroupref, subq_groupclause_copy);
 					subq_gclause->sortop = outer_sc->sortop;
 					subq_gclause->nulls_first = outer_sc->nulls_first;
+#if PG18_GE
+					/* Track sort direction in SortGroupClause
+					 * https://github.com/postgres/postgres/commit/0d2aa4d4
+					 */
+					subq_gclause->reverse_sort = outer_sc->reverse_sort;
+#endif
 					Assert(subq_gclause->eqop == outer_sc->eqop);
 					new_groupclause = lappend(new_groupclause, subq_gclause);
 					not_found = false;
