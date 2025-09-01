@@ -4,6 +4,8 @@ name: Homebrew
   schedule:
     # run daily 20:00 on main branch
     - cron: '0 20 * * *'
+  pull_request:
+    paths: .github/workflows/homebrew.yaml
   push:
     tags:
     - '*'
@@ -36,6 +38,7 @@ jobs:
 
     - name: Install timescaledb
       run: |
+        brew uninstall cmake
         brew install timescaledb ${{ matrix.install_options }}
         timescaledb-tune --quiet --yes
         timescaledb_move.sh
