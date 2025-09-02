@@ -1,2 +1,0 @@
-Fixes: #8559 Fix `timestamp out of range` using `end_offset=NULL` on CAgg refresh policy
-Thanks: @nofalx for reporting the error when using `end_offset=NULL` on CAgg refresh policy
