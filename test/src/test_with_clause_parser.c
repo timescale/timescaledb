@@ -111,6 +111,7 @@ def_elems_from_array(ArrayType *with_clause_array)
 typedef struct FilteredWithClauses
 {
 	List *within;
+	List *tigerlake;
 	List *without;
 } FilteredWithClauses;
 
@@ -169,9 +170,13 @@ TS_TEST_FN(ts_test_with_clause_filter)
 
 		filtered = palloc(sizeof(*filtered));
 		filtered->within = NIL;
+		filtered->tigerlake = NIL;
 		filtered->without = NIL;
 
-		ts_with_clause_filter(def_elems, &filtered->within, &filtered->without);
+		ts_with_clause_filter(def_elems,
+							  &filtered->within,
+							  &filtered->tigerlake,
+							  &filtered->without);
 
 		funcctx->user_fctx = filtered;
 

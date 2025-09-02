@@ -18,6 +18,7 @@
 #include "extension_constants.h"
 #include "with_clause_parser.h"
 
+#define TIGERLAKE_NAMESPACE "tigerlake"
 /*
  * Filter a list of DefElem based on a namespace.
  * This function will iterate through DefElem and output up to two lists:
@@ -32,7 +33,8 @@
  *    not_in = bar.bar_param, baz.baz_param
  */
 void
-ts_with_clause_filter(const List *def_elems, List **within_namespace, List **not_within_namespace)
+ts_with_clause_filter(const List *def_elems, List **within_namespace, List **tigerlake_namespace,
+					  List **not_within_namespace)
 {
 	ListCell *cell;
 
@@ -46,6 +48,18 @@ ts_with_clause_filter(const List *def_elems, List **within_namespace, List **not
 		{
 			if (within_namespace != NULL)
 				*within_namespace = lappend(*within_namespace, def);
+		}
+		else if (def->defnamespace != NULL &&
+				 (pg_strcasecmp(def->defnamespace, TIGERLAKE_NAMESPACE)))
+		{
+			if (tigerlake_namespace != NULL)
+			{
+				*tigerlake_namespace = lappend(*tigerlake_namespace, def);
+			}
+			else
+			{
+				*not_within_namespace = lappend(*not_within_namespace, def);
+			}
 		}
 		else if (not_within_namespace != NULL)
 		{
