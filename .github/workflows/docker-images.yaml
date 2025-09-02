@@ -2,7 +2,7 @@
 # The main purpose of this test is to check the image is working
 # and the latest tag points to an image with the most recent
 # release.
-name: Test Docker images
+name: "Packaging tests: Docker images"
 "on":
   schedule:
     # run daily 0:00 on main branch

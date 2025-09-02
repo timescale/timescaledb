@@ -1,5 +1,5 @@
 # Test installing our ubuntu and debian ARM64 packages for the latest version.
-name: APT ARM64 packages
+name: "Packaging tests: APT ARM64"
 "on":
   schedule:
     # run daily 0:00 on main branch
