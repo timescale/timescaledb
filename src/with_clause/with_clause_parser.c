@@ -32,7 +32,7 @@
  *    not_in = bar.bar_param, baz.baz_param
  */
 void
-ts_with_clause_filter(const List *def_elems, List **within_namespace, List **not_within_namespace)
+ts_with_clause_filter(const List *def_elems, List **within_namespace, List **tigerlake_namespace, List **not_within_namespace)
 {
 	ListCell *cell;
 
@@ -47,7 +47,12 @@ ts_with_clause_filter(const List *def_elems, List **within_namespace, List **not
 			if (within_namespace != NULL)
 				*within_namespace = lappend(*within_namespace, def);
 		}
-		else if (not_within_namespace != NULL)
+		else if (tigerlake_namespace != NULL && def->defnamespace != NULL &&
+			(pg_strcasecmp(def->defnamespace, TIGERLAKE_NAMESPACE)) ) {
+
+			*tigerlake_namespace = lappend(*tigerlake_namespace, def);
+                }
+                else if (not_within_namespace != NULL)
 		{
 			*not_within_namespace = lappend(*not_within_namespace, def);
 		}
