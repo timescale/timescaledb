@@ -2788,3 +2788,44 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('alias') ch;
      1
 (1 row)
 
+-- test mixing postgres and timescaledb options
+CREATE TABLE mix_pg_ts(time timestamptz, device text) WITH (tsdb.hypertable,tsdb.partition_column='time',fillfactor=90);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+   reloptions    
+-----------------
+ {fillfactor=90}
+(1 row)
+
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
+ hypertable | segmentby | orderby | compress_interval_length | index 
+------------+-----------+---------+--------------------------+-------
+ mix_pg_ts  |           |         |                          | 
+(1 row)
+
+ALTER TABLE mix_pg_ts SET (timescaledb.compress, fillfactor=70, tsdb.orderby='time', timescaledb.compress_segmentby='device', autovacuum_enabled=true);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+               reloptions                
+-----------------------------------------
+ {fillfactor=70,autovacuum_enabled=true}
+(1 row)
+
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
+ hypertable | segmentby | orderby | compress_interval_length |                            index                            
+------------+-----------+---------+--------------------------+-------------------------------------------------------------
+ mix_pg_ts  | device    | "time"  |                          | [{"type": "minmax", "column": "time", "source": "orderby"}]
+(1 row)
+
+-- test resetting options
+ALTER TABLE mix_pg_ts RESET (fillfactor, tsdb.segmentby);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+        reloptions         
+---------------------------
+ {autovacuum_enabled=true}
+(1 row)
+
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
+ hypertable | segmentby | orderby | compress_interval_length |                            index                            
+------------+-----------+---------+--------------------------+-------------------------------------------------------------
+ mix_pg_ts  |           | "time"  |                          | [{"type": "minmax", "column": "time", "source": "orderby"}]
+(1 row)
+
