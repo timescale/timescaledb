@@ -3325,7 +3325,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);
 
-	ts_with_clause_filter(stmt->options, &hypertable_options, &postgres_options);
+	ts_with_clause_filter(stmt->options, &hypertable_options, NULL, &postgres_options);
 
 	stmt->options = postgres_options;
 
@@ -4374,15 +4374,16 @@ continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
 				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(view_relid))));
 }
 
-static void
+static List *
 process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const List *defelems)
 {
 	WithClauseResult *parse_results;
-	List *pg_options = NIL, *cagg_options = NIL;
+	List *pg_options = NIL, *other_namespace_options = NIL, *cagg_options = NIL;
 
 	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
-	ts_with_clause_filter(defelems, &cagg_options, &pg_options);
+	ts_with_clause_filter(defelems, &cagg_options, &other_namespace_options, &pg_options);
+
 	if (list_length(pg_options) > 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -4394,6 +4395,12 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 		parse_results = ts_create_materialized_view_with_clause_parse(cagg_options);
 		ts_cm_functions->continuous_agg_update_options(cagg, parse_results);
 	}
+	if (list_length(other_namespace_options) > 0)
+	{
+		return other_namespace_options;
+	}
+	else
+		return NIL;
 }
 
 /* Run an alter table command on a relation */
@@ -4435,6 +4442,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 	ContinuousAgg *cagg;
 	ListCell *lc;
 
+	DDLResult ddl_res = DDL_DONE;
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
 
@@ -4456,7 +4464,16 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 					ereport(ERROR,
 							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 							 errmsg("expected set options to contain a list")));
-				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
+				List *other_namespace_opt =
+					process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
+				/* pass on SET options to other extensions like timescaledb-lake. only if
+				 * there are additional PG related ones, we error out
+				 */
+				if (other_namespace_opt != NIL)
+				{
+					cmd->def = (Node *) other_namespace_opt;
+					ddl_res = DDL_CONTINUE;
+				}
 				break;
 
 			case AT_ChangeOwner:
@@ -4487,8 +4504,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 								"aggregate")));
 		}
 	}
-	/* All commands processed by us, nothing for postgres to do.*/
-	return DDL_DONE;
+	return ddl_res;
 }
 
 static DDLResult
@@ -4992,7 +5008,7 @@ check_no_timescale_options(AlterTableCmd *cmd, Oid reloid)
 	List *pg_options = NIL, *compress_options = NIL;
 	Ensure(IsA(cmd->def, List), "wrong node type used as ALTER TABLE command definition");
 	List *inpdef = (List *) cmd->def;
-	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
+	ts_with_clause_filter(inpdef, &compress_options, NULL, &pg_options);
 
 	if (compress_options != NIL)
 	{
@@ -5011,7 +5027,7 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	WithClauseResult *parse_results = NULL;
 
 	/* split postgres and timescaledb options */
-	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, NULL, &pg_options);
 
 	if (!tsdb_options)
 		return DDL_CONTINUE;
@@ -5053,7 +5069,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	WithClauseResult *parse_results = NULL;
 
 	/* split postgres and timescaledb options */
-	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, NULL, &pg_options);
 
 	if (!tsdb_options)
 		return DDL_CONTINUE;
@@ -5107,7 +5123,7 @@ process_viewstmt(ProcessUtilityArgs *args)
 
 	/* Check if user is passing continuous aggregate parameters and print a
 	 * useful error message if that is the case. */
-	ts_with_clause_filter(stmt->options, &cagg_options, &pg_options);
+	ts_with_clause_filter(stmt->options, &cagg_options, NULL, &pg_options);
 	if (cagg_options)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -5122,12 +5138,15 @@ process_create_table_as(ProcessUtilityArgs *args)
 	CreateTableAsStmt *stmt = castNode(CreateTableAsStmt, args->parsetree);
 	WithClauseResult *parse_results = NULL;
 	bool is_cagg = false;
-	List *pg_options = NIL, *cagg_options = NIL;
+	List *pg_options = NIL, *cagg_options = NIL, *other_namespace_options = NIL;
 
 	if (stmt->objtype == OBJECT_MATVIEW)
 	{
 		/* Check for creation of continuous aggregate */
-		ts_with_clause_filter(stmt->into->options, &cagg_options, &pg_options);
+		ts_with_clause_filter(stmt->into->options,
+							  &cagg_options,
+							  &other_namespace_options,
+							  &pg_options);
 
 		if (cagg_options)
 		{
@@ -5146,7 +5165,12 @@ process_create_table_as(ProcessUtilityArgs *args)
 							   "parameters."),
 					 errhint("Use only parameters with the \"timescaledb.\" prefix when "
 							 "creating a continuous aggregate.")));
-
+		if (other_namespace_options)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_COLUMN),
+					 errmsg("non \"timescaledb\" namespace options can be set only via ALTER")));
+		}
 		if (!stmt->into->skipData)
 			PreventInTransactionBlock(args->context == PROCESS_UTILITY_TOPLEVEL,
 									  "CREATE MATERIALIZED VIEW ... WITH DATA");
@@ -5200,7 +5224,7 @@ process_create_stmt(ProcessUtilityArgs *args)
 	CreateStmt *stmt = castNode(CreateStmt, args->parsetree);
 
 	List *pg_options = NIL, *hypertable_options = NIL;
-	ts_with_clause_filter(stmt->options, &hypertable_options, &pg_options);
+	ts_with_clause_filter(stmt->options, &hypertable_options, NULL, &pg_options);
 	stmt->options = pg_options;
 
 	create_table_info.hypertable = false;
@@ -5303,7 +5327,6 @@ process_create_stmt(ProcessUtilityArgs *args)
 			}
 		}
 	}
-
 	return DDL_CONTINUE;
 }
 

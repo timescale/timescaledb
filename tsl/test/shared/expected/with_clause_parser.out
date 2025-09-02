@@ -40,8 +40,8 @@ SELECT * FROM test_with_clause_filter(
  timescaledb | baz         | bar   | t
  tsdb        | qux         | bar   | t
  tsdb        | quux        | bar   | t
- baz         | bar         | foo   | f
- bar         | timescaledb | baz   | f
+ baz         | bar         | foo   | t
+ bar         | timescaledb | baz   | t
 
 SELECT * FROM test_with_clause_filter(
         '{
@@ -51,9 +51,9 @@ SELECT * FROM test_with_clause_filter(
         }');
  namespace |    name     | value | filtered 
 -----------+-------------+-------+----------
- baz       | bar         | foo   | f
- bar       | timescaledb | baz   | f
- bar       | timescaledb | baz   | f
+ baz       | bar         | foo   | t
+ bar       | timescaledb | baz   | t
+ bar       | timescaledb | baz   | t
 
 SELECT * FROM test_with_clause_filter(
         '{
@@ -66,8 +66,8 @@ SELECT * FROM test_with_clause_filter(
 -------------+-------------+-------+----------
  timescaledb | bar         |       | t
  timescaledb | baz         |       | t
- bar         | timescaledb |       | f
- baz         | bar         |       | f
+ bar         | timescaledb |       | t
+ baz         | bar         |       | t
 
 SELECT * FROM test_with_clause_filter(
         '{

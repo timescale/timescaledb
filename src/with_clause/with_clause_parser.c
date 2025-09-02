@@ -32,7 +32,8 @@
  *    not_in = bar.bar_param, baz.baz_param
  */
 void
-ts_with_clause_filter(const List *def_elems, List **within_namespace, List **not_within_namespace)
+ts_with_clause_filter(const List *def_elems, List **within_namespace, List **other_namespace,
+					  List **not_within_namespace)
 {
 	ListCell *cell;
 
@@ -46,6 +47,10 @@ ts_with_clause_filter(const List *def_elems, List **within_namespace, List **not
 		{
 			if (within_namespace != NULL)
 				*within_namespace = lappend(*within_namespace, def);
+		}
+		else if (def->defnamespace != NULL && other_namespace != NULL)
+		{
+			*other_namespace = lappend(*other_namespace, def);
 		}
 		else if (not_within_namespace != NULL)
 		{

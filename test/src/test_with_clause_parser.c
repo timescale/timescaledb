@@ -111,6 +111,7 @@ def_elems_from_array(ArrayType *with_clause_array)
 typedef struct FilteredWithClauses
 {
 	List *within;
+	List *non_ts_namespace_option;
 	List *without;
 } FilteredWithClauses;
 
@@ -169,9 +170,13 @@ TS_TEST_FN(ts_test_with_clause_filter)
 
 		filtered = palloc(sizeof(*filtered));
 		filtered->within = NIL;
+		filtered->non_ts_namespace_option = NIL;
 		filtered->without = NIL;
 
-		ts_with_clause_filter(def_elems, &filtered->within, &filtered->without);
+		ts_with_clause_filter(def_elems,
+							  &filtered->within,
+							  &filtered->non_ts_namespace_option,
+							  &filtered->without);
 
 		funcctx->user_fctx = filtered;
 
@@ -187,6 +192,14 @@ TS_TEST_FN(ts_test_with_clause_filter)
 		DefElem *d = linitial(filtered->within);
 		tuple = create_filter_tuple(funcctx->tuple_desc, d, true);
 		filtered->within = list_delete_first(filtered->within);
+		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
+	}
+	else if (filtered->non_ts_namespace_option != NIL)
+	{
+		HeapTuple tuple;
+		DefElem *d = linitial(filtered->non_ts_namespace_option);
+		tuple = create_filter_tuple(funcctx->tuple_desc, d, true);
+		filtered->non_ts_namespace_option = list_delete_first(filtered->non_ts_namespace_option);
 		SRF_RETURN_NEXT(funcctx, HeapTupleGetDatum(tuple));
 	}
 	else if (filtered->without != NIL)

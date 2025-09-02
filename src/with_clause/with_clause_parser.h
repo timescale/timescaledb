@@ -29,7 +29,7 @@ typedef struct WithClauseResult
 } WithClauseResult;
 
 extern TSDLLEXPORT void ts_with_clause_filter(const List *def_elems, List **within_namespace,
-											  List **not_within_namespace);
+											  List **other_namespace, List **not_within_namespace);
 
 extern TSDLLEXPORT WithClauseResult *
 ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, Size nargs);
