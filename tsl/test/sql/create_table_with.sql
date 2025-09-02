@@ -13,8 +13,8 @@ DROP TABLE t1;
 
 -- test error cases
 \set ON_ERROR_STOP 0
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
+CREATE TABLE t2(time float, device text, value float) WITH (tsdb.hypertable);
+CREATE TABLE t2(time float, device text, value float) WITH (timescaledb.hypertable);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='');
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='foo');

@@ -10,10 +10,10 @@ CREATE TABLE t1(time timestamptz, device text, value float) WITH (autovacuum_ena
 DROP TABLE t1;
 -- test error cases
 \set ON_ERROR_STOP 0
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
-ERROR:  hypertable option requires partition_column
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
-ERROR:  hypertable option requires partition_column
+CREATE TABLE t2(time float, device text, value float) WITH (tsdb.hypertable);
+ERROR:  partition column could not be determined
+CREATE TABLE t2(time float, device text, value float) WITH (timescaledb.hypertable);
+ERROR:  partition column could not be determined
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
 ERROR:  column "null" does not exist
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='');

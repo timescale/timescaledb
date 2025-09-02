@@ -11,11 +11,11 @@ DROP TABLE t1;
 -- test error cases
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
-ERROR:  hypertable option requires partition_column
+CREATE TABLE t2(time float, device text, value float) WITH (tsdb.hypertable);
+ERROR:  partition column could not be determined
 HINT:  Use "timescaledb.partition_column" to specify the column to use as partitioning column.
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
-ERROR:  hypertable option requires partition_column
+CREATE TABLE t2(time float, device text, value float) WITH (timescaledb.hypertable);
+ERROR:  partition column could not be determined
 HINT:  Use "timescaledb.partition_column" to specify the column to use as partitioning column.
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
 ERROR:  column "null" does not exist
@@ -270,6 +270,20 @@ SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1
 ---------------------------------
  tbl_prefix_3_chunk
  tbl_prefix_3_chunk_t12_time_idx
+(2 rows)
+
+ROLLBACK;
+-- default partition column
+BEGIN;
+CREATE TABLE t13(time timestamptz, device text, value float) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+CREATE TABLE t14("TiMe" timestamptz, device text, value float) WITH (tsdb.hypertable);
+NOTICE:  using column "TiMe" as partitioning column
+SELECT hypertable_name, column_name FROM timescaledb_information.dimensions WHERE hypertable_name IN ('t13','t14') ORDER BY 1;
+ hypertable_name | column_name 
+-----------------+-------------
+ t13             | time
+ t14             | TiMe
 (2 rows)
 
 ROLLBACK;

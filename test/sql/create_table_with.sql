@@ -14,8 +14,8 @@ DROP TABLE t1;
 -- test error cases
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
+CREATE TABLE t2(time float, device text, value float) WITH (tsdb.hypertable);
+CREATE TABLE t2(time float, device text, value float) WITH (timescaledb.hypertable);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='');
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='foo');
@@ -153,5 +153,13 @@ SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_
 INSERT INTO t12 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
 ROLLBACK;
+
+-- default partition column
+BEGIN;
+CREATE TABLE t13(time timestamptz, device text, value float) WITH (tsdb.hypertable);
+CREATE TABLE t14("TiMe" timestamptz, device text, value float) WITH (tsdb.hypertable);
+SELECT hypertable_name, column_name FROM timescaledb_information.dimensions WHERE hypertable_name IN ('t13','t14') ORDER BY 1;
+ROLLBACK;
+
 
 
