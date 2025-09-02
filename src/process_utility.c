@@ -3623,6 +3623,43 @@ typedef struct CreateTableInfo
 } CreateTableInfo;
 
 static CreateTableInfo create_table_info = { 0 };
+
+/*
+ * Scan the table for a suitable default partitioning column.
+ *
+ * The default partitioning column is the first timestamp column
+ *
+ * Caller is expected to have appropriate lock on the table.
+ */
+static char *
+get_default_partition_column(Oid relid)
+{
+	Relation rel;
+	TupleDesc tupdesc;
+	int i;
+	char *column_name = NULL;
+
+	rel = relation_open(relid, NoLock);
+	tupdesc = RelationGetDescr(rel);
+
+	for (i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupdesc, i);
+
+		if (att->attisdropped)
+			continue;
+
+		if (att->atttypid == TIMESTAMPOID || att->atttypid == TIMESTAMPTZOID)
+		{
+			column_name = pstrdup(NameStr(att->attname));
+			break;
+		}
+	}
+
+	relation_close(rel, NoLock);
+	return column_name;
+}
+
 /*
  * Process create table statements.
  *
@@ -3671,8 +3708,28 @@ process_create_table_end(Node *parsetree)
 	if (create_table_info.hypertable)
 	{
 		Oid table_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-		char *time_column =
-			TextDatumGetCString(create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+		char *time_column = NULL;
+		if (create_table_info.with_clauses[CreateTableFlagTimeColumn].is_default)
+		{
+			time_column = get_default_partition_column(table_relid);
+			if (time_column)
+				ereport(NOTICE,
+						(errmsg("using column \"%s\" as partitioning column", time_column),
+						 errhint("Use \"timescaledb.partition_column\" to specify a different "
+								 "column to use as "
+								 "partitioning column.")));
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("partition column could not be determined"),
+						 errhint(
+							 "Use \"timescaledb.partition_column\" to specify the column to use as "
+							 "partitioning column.")));
+		}
+		else
+			time_column = TextDatumGetCString(
+				create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+
 		NameData time_column_name;
 		NameData associated_schema_name;
 		NameData associated_table_prefix;
@@ -5044,17 +5101,6 @@ process_create_stmt(ProcessUtilityArgs *args)
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("timescaledb options requires hypertable option"),
 					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
-
-		if (create_table_info.hypertable)
-		{
-			if (!create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed)
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("hypertable option requires partition_column"),
-						 errhint(
-							 "Use \"timescaledb.partition_column\" to specify the column to use as "
-							 "partitioning column.")));
-		}
 	}
 
 	return DDL_CONTINUE;
