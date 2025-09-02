@@ -1,2 +1,0 @@
-Fixes: #8422 Don't require columnstore=false when using apache licensed version
-Thanks: @Zaczero for reporting a bug with CREATE TABLE WITH when using apache licensed version
