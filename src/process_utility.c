@@ -4854,25 +4854,16 @@ check_no_timescale_options(AlterTableCmd *cmd, Oid reloid)
 static DDLResult
 process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 {
-	List *pg_options = NIL, *compress_options = NIL;
+	List *pg_options = NIL, *tsdb_options = NIL;
 	WithClauseResult *parse_results = NULL;
-	List *inpdef = NIL;
-	/* is this a compress table stmt */
-	Assert(IsA(cmd->def, List));
-	inpdef = (List *) cmd->def;
-	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
 
-	if (!compress_options)
+	/* split postgres and timescaledb options */
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
+
+	if (!tsdb_options)
 		return DDL_CONTINUE;
 
-	if (pg_options != NIL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only timescaledb.enable_columnstore parameters allowed when specifying "
-						"columnstore "
-						"parameters for hypertable")));
-
-	parse_results = ts_alter_table_with_clause_parse(compress_options);
+	parse_results = ts_alter_table_with_clause_parse(tsdb_options);
 
 	if (ht && !parse_results[AlterTableFlagChunkTimeInterval].is_default)
 	{
@@ -4897,25 +4888,24 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		!parse_results[AlterTableFlagIndex].is_default)
 		ts_cm_functions->process_compress_table(ht, parse_results);
 
-	return DDL_DONE;
+	cmd->def = (Node *) pg_options;
+
+	return cmd->def ? DDL_CONTINUE : DDL_DONE;
 }
 
 static DDLResult
 process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 {
-	List *pg_options = NIL, *compress_options = NIL;
-	List *inpdef = NIL;
+	List *pg_options = NIL, *tsdb_options = NIL;
 	WithClauseResult *parse_results = NULL;
 
-	/* is this a compress table stmt */
-	Assert(IsA(cmd->def, List));
-	inpdef = (List *) cmd->def;
-	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
+	/* split postgres and timescaledb options */
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
 
-	if (!compress_options)
+	if (!tsdb_options)
 		return DDL_CONTINUE;
 
-	parse_results = ts_alter_table_reset_with_clause_parse(compress_options);
+	parse_results = ts_alter_table_reset_with_clause_parse(tsdb_options);
 	if (parse_results[AlterTableFlagOrderBy].is_default &&
 		parse_results[AlterTableFlagSegmentBy].is_default &&
 		parse_results[AlterTableFlagIndex].is_default)
@@ -4951,6 +4941,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	}
 
 	ts_compression_settings_update(settings);
+
 	return DDL_CONTINUE;
 }
 
