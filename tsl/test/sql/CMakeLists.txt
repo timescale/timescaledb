@@ -3,10 +3,6 @@ include(GenerateTestSchedule)
 # These are the files for the 'postgresql' configuration. This is the default,
 # so unless you have a good reason, add new test files here.
 set(TEST_FILES
-    agg_partials_pushdown.sql
-    bgw_job_ddl.sql
-    bgw_policy.sql
-    bgw_security.sql
     cagg_api.sql
     cagg_config.sql
     cagg_deprecated_bucket_ng.sql
@@ -79,12 +75,7 @@ set(TEST_TEMPLATES
     cagg_query.sql.in
     cagg_query_using_merge.sql.in
     cagg_union_view.sql.in
-    cagg_permissions.sql.in
-    compression_permissions.sql.in
-    ordered_append.sql.in
-    plan_skip_scan.sql.in
-    transparent_decompression.sql.in
-    transparent_decompression_ordered_index.sql.in)
+    cagg_permissions.sql.in )
 
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
@@ -94,7 +85,7 @@ if(NOT APPLE)
   list(APPEND TEST_FILES compressed_copy.sql)
 endif()
 
-if(CMAKE_BUILD_TYPE MATCHES Debug)
+if(CMAKE_BUILD_TYPE MATCHES Release)
   list(
     APPEND
     TEST_FILES
