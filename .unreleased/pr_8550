@@ -1,0 +1,2 @@
+Fixes: #8550 Error in Gapfill with expressions over aggregates and groupby columns and out-of-order columns
+Thanks: @MKrkkl for reporting a bug in Gapfill queries with expressions over aggregates and groupby columns
