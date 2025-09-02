@@ -310,7 +310,7 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat_history (
 
 ALTER SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq OWNED BY _timescaledb_internal.bgw_job_stat_history.id;
 
-CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
+CREATE INDEX bgw_job_stat_history_execution_start_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (execution_start, job_id);
 
 --The job_stat table is not dumped by pg_dump on purpose because
 --the statistics probably aren't very meaningful across instances.

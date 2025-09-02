@@ -137,7 +137,7 @@ BEGIN
       c.relname NOT IN (
         'bgw_job_stat_pkey',
         'bgw_job_stat_history_pkey',
-        'bgw_job_stat_history_job_id_idx',
+        'bgw_job_stat_history_execution_start_job_id_idx',
         'bgw_policy_chunk_stats_job_id_chunk_id_key'
       )
   LOOP
