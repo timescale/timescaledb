@@ -36,6 +36,7 @@
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
+#include "bgw_policy/policies_v2.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "compression.h"
@@ -43,6 +44,7 @@
 #include "compression/sparse_index_bloom1.h"
 #include "create.h"
 #include "custom_type_cache.h"
+#include "dimension.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
@@ -54,6 +56,8 @@
 #include "utils.h"
 #include "with_clause/alter_table_with_clause.h"
 #include "with_clause/create_table_with_clause.h"
+
+#include "bgw_policy/compression_api.h"
 
 static const char *sparse_index_types[] = { "min", "max", "bloom1" };
 
@@ -1662,9 +1666,11 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 
 /*
  * Enables compression for a hypertable without creating initial configuration
+ *
+ * This is used when creating a hypertable with CREATE TABLE ... WITH (timescaledb.hypertable)
  */
 void
-tsl_compression_enable(Hypertable *ht, WithClauseResult *with_clause_options)
+tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 	Oid ownerid = ts_rel_get_owner(ht->main_table_relid);
@@ -1680,4 +1686,31 @@ tsl_compression_enable(Hypertable *ht, WithClauseResult *with_clause_options)
 	compression_settings_set_manually_for_create(ht, settings, with_clause_options);
 	int compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
 	ts_hypertable_set_compressed(ht, compress_htid);
+
+	/* Add default compression policy when compression is enabled via CREATE TABLE WITH */
+	/* Use the chunk interval as the compression interval */
+	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	if (time_dim != NULL)
+	{
+		Oid compress_after_type = ts_dimension_get_partition_type(time_dim);
+		Datum compress_after_datum;
+		if (IS_TIMESTAMP_TYPE(compress_after_type))
+			compress_after_type = INTERVALOID;
+
+		compress_after_datum =
+			ts_internal_to_interval_value(time_dim->fd.interval_length, compress_after_type);
+
+		policy_compression_add_internal(
+			ht->main_table_relid,
+			compress_after_datum,
+			compress_after_type,
+			NULL,								   /* created_before */
+			DEFAULT_COMPRESSION_SCHEDULE_INTERVAL, /* default_schedule_interval
+													*/
+			true,								   /* user_defined_schedule_interval */
+			true,								   /* if_not_exists */
+			false,								   /* fixed_schedule */
+			0,									   /* initial_start */
+			NULL /* timezone */);
+	}
 }
