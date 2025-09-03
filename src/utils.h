@@ -16,6 +16,7 @@
 #include <foreign/foreign.h>
 #include <nodes/extensible.h>
 #include <nodes/pathnodes.h>
+#include <optimizer/paths.h>
 #include <utils/builtins.h>
 #include <utils/datetime.h>
 #include <utils/jsonb.h>

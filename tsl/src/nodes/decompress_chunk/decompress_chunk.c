@@ -1884,17 +1884,29 @@ static bool
 add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 								   CompressionInfo *info, EMCreationContext *context)
 {
-	ListCell *lc;
-
 	TimescaleDBPrivate *compressed_fdw_private =
 		(TimescaleDBPrivate *) info->compressed_rel->fdw_private;
 	Assert(compressed_fdw_private != NULL);
 
+	EquivalenceMember *cur_em;
+#if PG18_GE
+	/* Use specialized iterator to include child ems.
+	 *
+	 * https://github.com/postgres/postgres/commit/d69d45a5
+	 */
+	EquivalenceMemberIterator it;
+
+	setup_eclass_member_iterator(&it, cur_ec, bms_make_singleton(info->chunk_rel->relid));
+	while ((cur_em = eclass_member_iterator_next(&it)) != NULL)
+	{
+#else
+	ListCell *lc;
 	foreach (lc, cur_ec->ec_members)
 	{
+		cur_em = (EquivalenceMember *) lfirst(lc);
+#endif
 		Expr *child_expr;
 		Relids new_relids;
-		EquivalenceMember *cur_em = (EquivalenceMember *) lfirst(lc);
 		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
@@ -1994,33 +2006,7 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
 			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
 #else
-			/* In PG18, child ems are not added to ec_members
-			 * but need to be maintained in separate Lists.
-			 *
-			 * https://github.com/postgres/postgres/commit/d69d45a5
-			 */
-			/* copied from add_child_eq_member */
-			/*
-			 * Allocate the array to store child members; an array of Lists indexed by
-			 * relid, or expand the existing one, if necessary.
-			 */
-			if (unlikely(cur_ec->ec_childmembers_size < root->simple_rel_array_size))
-			{
-				cur_ec->ec_relids =
-					bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
-				if (cur_ec->ec_childmembers == NULL)
-					cur_ec->ec_childmembers = palloc0_array(List *, root->simple_rel_array_size);
-				else
-					cur_ec->ec_childmembers = repalloc0_array(cur_ec->ec_childmembers,
-															  List *,
-															  cur_ec->ec_childmembers_size,
-															  root->simple_rel_array_size);
-				cur_ec->ec_childmembers_size = root->simple_rel_array_size;
-			}
-
-			/* add member to the ec_childmembers List for the given child_relid */
-			cur_ec->ec_childmembers[info->compressed_rel->relid] =
-				lappend(cur_ec->ec_childmembers[info->compressed_rel->relid], em);
+			ts_add_child_eq_member(root, cur_ec, em, info->compressed_rel->relid);
 #endif
 
 			/*
