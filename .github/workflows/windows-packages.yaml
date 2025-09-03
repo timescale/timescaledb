@@ -1,5 +1,5 @@
 # Test installation of windows package for latest version
-name: Windows Packages
+name: "Packaging tests: Windows"
 "on":
   schedule:
     # run daily 0:00 on main branch
