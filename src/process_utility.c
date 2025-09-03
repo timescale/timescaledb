@@ -3804,7 +3804,7 @@ process_create_table_end(Node *parsetree)
 			if (enable_columnstore)
 			{
 				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
-				ts_cm_functions->compression_enable(ht, create_table_info.with_clauses);
+				ts_cm_functions->columnstore_setup(ht, create_table_info.with_clauses);
 			}
 		}
 	}

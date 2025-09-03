@@ -137,7 +137,7 @@ typedef struct CrossModuleFunctions
 	void (*init_decompress_state_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
 
-	void (*compression_enable)(Hypertable *ht, WithClauseResult *with_clause_options);
+	void (*columnstore_setup)(Hypertable *ht, WithClauseResult *with_clause_options);
 	RowCompressor *(*compressor_init)(Relation in_rel, BulkWriter **bulk_writer, bool sort);
 	void (*compressor_add_slot)(RowCompressor *compressor, BulkWriter *bulk_writer,
 								TupleTableSlot *slot);
