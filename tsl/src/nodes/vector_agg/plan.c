@@ -366,19 +366,17 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			}
 		}
 #ifdef TS_USE_UMASH
+		/*
+		 * We also have the UUID type which is by-reference and has a
+		 * columnar in-memory representation, but no specialized single-column
+		 * vectorized grouping support. It can use the serialized grouping
+		 * strategy.
+		 */
 		else if (single_grouping_var->vartype == TEXTOID)
 		{
 			return VAGT_HashSingleText;
 		}
 #endif
-		else
-		{
-			/*
-			 * Currently we have the UUID type for which we have a columnar
-			 * in-memory representation but no vectorized grouping support yet.
-			 */
-			return VAGT_Invalid;
-		}
 	}
 
 #ifdef TS_USE_UMASH

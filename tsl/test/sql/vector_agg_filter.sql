@@ -161,11 +161,9 @@ insert into uuid_default select generate_series(1000, 1999), 2, '5dd0565f-1ddf-4
 
 select count(compress_chunk(x)) from show_chunks('uuid_default') x;
 
-set timescaledb.debug_require_vector_agg = 'allow';
+set timescaledb.debug_require_vector_agg = 'require';
 
 select id, sum(value) from uuid_default group by id;
-
-set timescaledb.debug_require_vector_agg = 'require';
 
 select sum(value) filter (where id = '5dd0565f-1ddf-4a6c-9e96-9b2b8c8c3993') from uuid_default;
 

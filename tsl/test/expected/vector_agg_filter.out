@@ -3055,7 +3055,7 @@ NOTICE:  chunk "_hyper_3_5_chunk" is already converted to columnstore
      2
 (1 row)
 
-set timescaledb.debug_require_vector_agg = 'allow';
+set timescaledb.debug_require_vector_agg = 'require';
 select id, sum(value) from uuid_default group by id;
                   id                  | sum  
 --------------------------------------+------
@@ -3063,7 +3063,6 @@ select id, sum(value) from uuid_default group by id;
  842ab294-923a-4f50-be7d-af6c51903a5f | 1000
 (2 rows)
 
-set timescaledb.debug_require_vector_agg = 'require';
 select sum(value) filter (where id = '5dd0565f-1ddf-4a6c-9e96-9b2b8c8c3993') from uuid_default;
  sum  
 ------
