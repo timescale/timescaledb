@@ -14,6 +14,87 @@ BEGIN
   PERFORM 1/0;
 END
 $$;
+-- Show default parameter values
+SHOW timescaledb.bgw_history_max_age;
+ timescaledb.bgw_history_max_age 
+---------------------------------
+ @ 1 mon
+(1 row)
+
+SHOW timescaledb.bgw_history_max_size;
+ timescaledb.bgw_history_max_size 
+----------------------------------
+ 100MB
+(1 row)
+
+SHOW timescaledb.bgw_history_max_successes_per_job;
+ timescaledb.bgw_history_max_successes_per_job 
+-----------------------------------------------
+ 1000
+(1 row)
+
+SHOW timescaledb.bgw_history_max_failures_per_job;
+ timescaledb.bgw_history_max_failures_per_job 
+----------------------------------------------
+ 1000
+(1 row)
+
+SHOW timescaledb.bgw_history_check_count;
+ timescaledb.bgw_history_check_count 
+-------------------------------------
+ 100
+(1 row)
+
+-- These should be OK. These limits should be fine for the rest of the
+-- test as well.
+ALTER SYSTEM SET timescaledb.bgw_history_max_age TO '1 week';
+ALTER SYSTEM SET timescaledb.bgw_history_max_size TO '1 MB';
+ALTER SYSTEM SET timescaledb.bgw_history_max_successes_per_job TO 5;
+ALTER SYSTEM SET timescaledb.bgw_history_max_failures_per_job TO 10;
+ALTER SYSTEM SET timescaledb.bgw_history_check_count TO 4;
+-- Reload and re-connect to get the new values.
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+\c
+SHOW timescaledb.bgw_history_max_age;
+ timescaledb.bgw_history_max_age 
+---------------------------------
+ @ 7 days
+(1 row)
+
+SHOW timescaledb.bgw_history_max_size;
+ timescaledb.bgw_history_max_size 
+----------------------------------
+ 1MB
+(1 row)
+
+SHOW timescaledb.bgw_history_max_successes_per_job;
+ timescaledb.bgw_history_max_successes_per_job 
+-----------------------------------------------
+ 5
+(1 row)
+
+SHOW timescaledb.bgw_history_max_failures_per_job;
+ timescaledb.bgw_history_max_failures_per_job 
+----------------------------------------------
+ 10
+(1 row)
+
+SHOW timescaledb.bgw_history_check_count;
+ timescaledb.bgw_history_check_count 
+-------------------------------------
+ 4
+(1 row)
+
+-- These should generate an error
+\set ON_ERROR_STOP 0
+ALTER SYSTEM SET timescaledb.bgw_history_max_age TO '1 blarg';
+ERROR:  invalid input syntax for type interval: "1 blarg"
+\set ON_ERROR_STOP 1
 -- Do not log all jobs, only FAILED executions
 SHOW timescaledb.enable_job_execution_logging;
  timescaledb.enable_job_execution_logging 

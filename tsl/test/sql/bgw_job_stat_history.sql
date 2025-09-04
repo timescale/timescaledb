@@ -18,6 +18,36 @@ BEGIN
 END
 $$;
 
+-- Show default parameter values
+SHOW timescaledb.bgw_history_max_age;
+SHOW timescaledb.bgw_history_max_size;
+SHOW timescaledb.bgw_history_max_successes_per_job;
+SHOW timescaledb.bgw_history_max_failures_per_job;
+SHOW timescaledb.bgw_history_check_count;
+
+-- These should be OK. These limits should be fine for the rest of the
+-- test as well.
+ALTER SYSTEM SET timescaledb.bgw_history_max_age TO '1 week';
+ALTER SYSTEM SET timescaledb.bgw_history_max_size TO '1 MB';
+ALTER SYSTEM SET timescaledb.bgw_history_max_successes_per_job TO 5;
+ALTER SYSTEM SET timescaledb.bgw_history_max_failures_per_job TO 10;
+ALTER SYSTEM SET timescaledb.bgw_history_check_count TO 4;
+
+-- Reload and re-connect to get the new values.
+SELECT pg_reload_conf();
+\c
+
+SHOW timescaledb.bgw_history_max_age;
+SHOW timescaledb.bgw_history_max_size;
+SHOW timescaledb.bgw_history_max_successes_per_job;
+SHOW timescaledb.bgw_history_max_failures_per_job;
+SHOW timescaledb.bgw_history_check_count;
+
+-- These should generate an error
+\set ON_ERROR_STOP 0
+ALTER SYSTEM SET timescaledb.bgw_history_max_age TO '1 blarg';
+\set ON_ERROR_STOP 1
+
 -- Do not log all jobs, only FAILED executions
 SHOW timescaledb.enable_job_execution_logging;
 

@@ -68,6 +68,11 @@ static const struct config_enum_entry compress_truncate_behaviour_options[] = {
 #define GUC_CAGG_HIGH_WORK_MEM_NAME "cagg_processing_high_work_mem"
 #define GUC_CAGG_HIGH_WORK_MEM_VALUE (0.8 * 65536)
 
+#define GUC_BGW_HISTORY_SIZE_DEFAULT (100 * 1024)
+#define GUC_BGW_HISTORY_MAX_SUCCESSES_PER_JOB_DEFAULT 1000
+#define GUC_BGW_HISTORY_MAX_FAILURES_PER_JOB_DEFAULT 1000
+#define GUC_BGW_HISTORY_CHECK_COUNT_DEFAULT 100
+
 bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
@@ -127,6 +132,15 @@ TSDLLEXPORT bool ts_guc_enable_compression_ratio_warnings = true;
  * disabled, regular sequence scans will be used instead. */
 TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
+TSDLLEXPORT char *ts_guc_bgw_history_max_age_string = NULL;
+TSDLLEXPORT Interval ts_guc_bgw_history_max_age_interval = { 0, 0, 1 };
+TSDLLEXPORT int ts_guc_bgw_history_max_size = GUC_BGW_HISTORY_SIZE_DEFAULT;
+TSDLLEXPORT int ts_guc_bgw_history_max_successes_per_job =
+	GUC_BGW_HISTORY_MAX_SUCCESSES_PER_JOB_DEFAULT;
+TSDLLEXPORT int ts_guc_bgw_history_max_failures_per_job =
+	GUC_BGW_HISTORY_MAX_FAILURES_PER_JOB_DEFAULT;
+TSDLLEXPORT int ts_guc_bgw_history_check_count = GUC_BGW_HISTORY_CHECK_COUNT_DEFAULT;
+
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 #if PG16_GE
 TSDLLEXPORT bool ts_guc_enable_skip_scan_for_distinct_aggregates = true;
@@ -398,6 +412,56 @@ get_orderby_func(char *input_name)
 #endif
 	Oid argtyp[] = { REGCLASSOID, TEXTARRAYOID };
 	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
+}
+
+/* Value is expected to be an interval, so check that it parses and save away
+ * the interval in that case. */
+static bool
+check_bgw_max_age(char **newval, void **extra, GucSource source)
+{
+	volatile Datum result = 0;
+	MemoryContext oldcontext = CurrentMemoryContext;
+	PG_TRY();
+	{
+		result = DirectFunctionCall3(interval_in,
+									 CStringGetDatum(*newval),
+									 ObjectIdGetDatum(InvalidOid),
+									 Int32GetDatum(-1));
+	}
+	PG_CATCH();
+	{
+		MemoryContextSwitchTo(oldcontext);
+		ErrorData *edata = CopyErrorData();
+		FlushErrorState();
+		GUC_check_errmsg("%s", edata->message);
+		GUC_check_errdetail("%s", edata->detail);
+	}
+	PG_END_TRY();
+
+	if (!result)
+		return false;
+
+	Interval *interval = DatumGetIntervalP(result);
+
+	*extra = guc_malloc(LOG, sizeof(Interval));
+	if (!*extra)
+		return false;
+	*(Interval *) *extra = *interval;
+	pfree(interval);
+	return true;
+}
+
+static void
+assign_bgw_max_age(const char *newval, void *extra)
+{
+	ts_guc_bgw_history_max_age_interval = *(Interval *) extra;
+}
+
+static const char *
+show_bgw_max_age(void)
+{
+	return DatumGetCString(
+		DirectFunctionCall1(interval_out, IntervalPGetDatum(&ts_guc_bgw_history_max_age_interval)));
 }
 
 static bool
@@ -1242,6 +1306,76 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomStringVariable(MAKE_EXTOPTION("bgw_history_max_age"),
+							   "Max age of messages in the background worker job history",
+							   "Message with a finish time exceeding this interval will be removed "
+							   "from the background worker jobs history table.",
+							   &ts_guc_bgw_history_max_age_string,
+							   /* Value= */ "1 month",
+							   /* context= */ PGC_SIGHUP,
+							   /* flags= */ 0,
+							   /* check_hook= */ check_bgw_max_age,
+							   /* assign_hook= */ assign_bgw_max_age,
+							   /* show_hook= */ show_bgw_max_age);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("bgw_history_max_size"),
+							"Max size for the background worker history.",
+							"The max size in kilobytes for the job history table. Defaults to 100 "
+							"MiB.",
+							&ts_guc_bgw_history_max_size,
+							GUC_BGW_HISTORY_SIZE_DEFAULT,
+							64,
+							MAX_KILOBYTES,
+							/* context= */ PGC_SIGHUP,
+							/* flags= */ GUC_UNIT_KB,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("bgw_history_max_successes_per_job"),
+							"Maximum number of successful entries to keep for each job.",
+							"The maximum number of job entries for successful runs to keep in the "
+							"jobs history for each job with zero meaning keep all entries. "
+							"Defaults to 1000.",
+							&ts_guc_bgw_history_max_successes_per_job,
+							GUC_BGW_HISTORY_MAX_SUCCESSES_PER_JOB_DEFAULT,
+							0,
+							PG_INT32_MAX,
+							/* context= */ PGC_SIGHUP,
+							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("bgw_history_max_failures_per_job"),
+							"Maximum number of failure entries to keep for each job.",
+							"The maximum number of job entries for failing runs to keep in the "
+							"jobs history for each job with zero meaning keep all entries. "
+							"Defaults to 1000.",
+							&ts_guc_bgw_history_max_failures_per_job,
+							GUC_BGW_HISTORY_MAX_FAILURES_PER_JOB_DEFAULT,
+							0,
+							PG_INT32_MAX,
+							/* context= */ PGC_SIGHUP,
+							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
+
+	DefineCustomIntVariable(MAKE_EXTOPTION("bgw_history_check_count"),
+							"Check count for how often to check if history needs pruning.",
+							"A count of how often we should check if the history needs pruning. "
+							"Defaults to every 100 record.",
+							&ts_guc_bgw_history_check_count,
+							GUC_BGW_HISTORY_CHECK_COUNT_DEFAULT,
+							0,
+							PG_INT32_MAX,
+							/* context= */ PGC_SIGHUP,
+							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
+
 	/* this information is useful in general on customer deployments */
 	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_compression_path_info"),
 							 /* short_desc= */ "show various compression-related debug info",
@@ -1279,7 +1413,8 @@ _guc_init(void)
 #endif
 
 	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("debug_bgw_scheduler_exit_status"),
-							/* short_desc= */ "exit status to use when shutting down the scheduler",
+							/* short_desc= */
+							"exit status to use when shutting down the scheduler",
 							/* long_desc= */ "this is for debugging purposes",
 							/* valueAddr= */ &ts_debug_bgw_scheduler_exit_status,
 							/* bootValue= */ 0,
@@ -1292,7 +1427,8 @@ _guc_init(void)
 							/* show_hook= */ NULL);
 
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
-							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
+							 /* short_desc= */
+							 "require batch sorted merge in DecompressChunk node",
 							 /* long_desc= */ "this is for debugging purposes",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_batch_sorted_merge,
 							 /* bootValue= */ DRO_Allow,
@@ -1372,8 +1508,10 @@ _guc_init(void)
 							 "ensure that non-vectorized or vectorized filters are used in "
 							 "DecompressChunk node",
 							 /* long_desc= */
-							 "this is for debugging purposes, to let us check if the vectorized "
-							 "quals are used or not. EXPLAIN differs after PG15 for custom nodes, "
+							 "this is for debugging purposes, to let us check if the "
+							 "vectorized "
+							 "quals are used or not. EXPLAIN differs after PG15 for custom "
+							 "nodes, "
 							 "and "
 							 "using the test templates is a pain",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_qual,
