@@ -85,15 +85,15 @@ jobs:
         merge_append_partially_compressed
         metadata
         telemetry
-      SKIPS: >-
-        bgw_db_scheduler
-        bgw_db_scheduler_fixed
         vector_agg_filter
         vector_agg_groupagg
         vector_agg_grouping
         vector_agg_text
         vector_agg_uuid
         vectorized_aggregation
+      SKIPS: >-
+        bgw_db_scheduler
+        bgw_db_scheduler_fixed
     steps:
     - name: Setup WSL
       uses: Vampire/setup-wsl@v3.1.4
