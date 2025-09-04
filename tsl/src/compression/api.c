@@ -779,6 +779,12 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 				write_logical_replication_msg_compression_end();
 				return uncompressed_chunk_id;
 			}
+			else
+			{
+				recompress_chunk(chunk);
+				write_logical_replication_msg_compression_end();
+				return uncompressed_chunk_id;
+			}
 		}
 		if (!ts_chunk_needs_recompression(chunk))
 		{
@@ -807,8 +813,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 						  ""),
 					 NameStr(chunk->fd.schema_name),
 					 NameStr(chunk->fd.table_name));
-			decompress_chunk_impl(chunk, false);
-			compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+			recompress_chunk(chunk);
 		}
 	}
 	else
