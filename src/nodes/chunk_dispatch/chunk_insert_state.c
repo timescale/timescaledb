@@ -28,9 +28,11 @@
 #include "chunk_dispatch.h"
 #include "chunk_index.h"
 #include "chunk_insert_state.h"
+#include "chunk_tuple_routing.h"
 #include "debug_point.h"
 #include "errors.h"
 #include "indexing.h"
+#include "nodes/modify_hypertable.h"
 #include "ts_catalog/continuous_agg.h"
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
@@ -43,26 +45,6 @@ prepare_constr_expr(Expr *node)
 	result = ExecInitExpr(node, NULL);
 
 	return result;
-}
-
-static inline ModifyTableState *
-get_modifytable_state(const ChunkDispatch *dispatch)
-{
-	return dispatch->dispatch_state->mtstate;
-}
-
-static inline ModifyTable *
-get_modifytable(const ChunkDispatch *dispatch)
-{
-	return castNode(ModifyTable, get_modifytable_state(dispatch)->ps.plan);
-}
-
-static CmdType
-chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
-{
-	return (dispatch->dispatch_state == NULL || dispatch->dispatch_state->mtstate == NULL) ?
-			   CMD_INSERT :
-			   dispatch->dispatch_state->mtstate->operation;
 }
 
 /*
@@ -437,14 +419,14 @@ adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsert
  * ResultRelInfo should be similar to ExecInitModifyTable().
  */
 extern ChunkInsertState *
-ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
+ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 {
 	ChunkInsertState *state;
 	Relation rel, parent_rel;
-	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
+	MemoryContext cis_context = AllocSetContextCreate(ctr->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
-	OnConflictAction onconflict_action = get_modifytable(dispatch)->onConflictAction;
+	OnConflictAction onconflict_action = ctr->mht_state->mt->onConflictAction;
 	ResultRelInfo *relinfo;
 	const Chunk *chunk;
 
@@ -475,19 +457,16 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
-	relinfo = create_chunk_result_relation_info(dispatch->hypertable_result_rel_info,
-												rel,
-												dispatch->estate);
-	CheckValidResultRelCompat(relinfo, chunk_dispatch_get_cmd_type(dispatch), NIL);
+	relinfo = create_chunk_result_relation_info(ctr->hypertable_rri, rel, ctr->estate);
+	CheckValidResultRelCompat(relinfo, ctr->mht_state->mt->operation, NIL);
 
 	state = palloc0(sizeof(ChunkInsertState));
-	state->cds = dispatch->dispatch_state;
-	state->counters = dispatch->counters;
+	state->counters = ctr->counters;
 	state->onConflictAction = onconflict_action;
 	state->mctx = cis_context;
 	state->rel = rel;
 	state->result_relation_info = relinfo;
-	state->estate = dispatch->estate;
+	state->estate = ctr->estate;
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
@@ -513,7 +492,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 			elog(ERROR, "statement trigger on chunk table not supported");
 	}
 
-	parent_rel = table_open(dispatch->hypertable->main_table_relid, AccessShareLock);
+	parent_rel = table_open(ctr->hypertable->main_table_relid, AccessShareLock);
 
 	/* Set tuple conversion map, if tuple needs conversion. We don't want to
 	 * convert tuples going into foreign tables since these are actually sent to
@@ -522,8 +501,8 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 		state->hyper_to_chunk_map =
 			convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
 
-	adjust_projections(dispatch->hypertable_result_rel_info,
-					   dispatch->dispatch_state->mtstate,
+	adjust_projections(ctr->hypertable_rri,
+					   linitial_node(ModifyTableState, ctr->mht_state->cscan_state.custom_ps),
 					   state,
 					   RelationGetForm(rel)->reltype);
 
@@ -544,14 +523,13 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
 #if PG16_LT
-		RangeTblEntry *rte =
-			rt_fetch(relinfo->ri_RangeTableIndex, dispatch->estate->es_range_table);
+		RangeTblEntry *rte = rt_fetch(relinfo->ri_RangeTableIndex, ctr->estate->es_range_table);
 
 		Assert(rte != NULL);
 
 		state->user_id = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
 #else
-		state->user_id = ExecGetResultRelCheckAsUser(relinfo, state->estate);
+		state->user_id = ExecGetResultRelCheckAsUser(relinfo, ctr->estate);
 #endif
 	}
 

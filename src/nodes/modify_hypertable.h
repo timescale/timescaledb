@@ -9,6 +9,7 @@
 #include <foreign/fdwapi.h>
 #include <nodes/execnodes.h>
 
+#include "chunk_tuple_routing.h"
 #include "hypertable.h"
 
 /* Forward declarations */
@@ -30,6 +31,8 @@ typedef struct ModifyHypertableState
 {
 	CustomScanState cscan_state;
 	ModifyTable *mt;
+	ChunkTupleRouting *ctr;
+
 	bool comp_chunks_processed;
 	Snapshot snapshot;
 	int64 tuples_decompressed;
@@ -37,6 +40,7 @@ typedef struct ModifyHypertableState
 	int64 batches_filtered;
 	int64 batches_deleted;
 	int64 tuples_deleted;
+
 } ModifyHypertableState;
 
 extern void ts_modify_hypertable_fixup_tlist(Plan *plan);
