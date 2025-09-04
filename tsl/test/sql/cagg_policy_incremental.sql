@@ -4,22 +4,30 @@
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 
-CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
+CREATE OR REPLACE FUNCTION ts_bgw_log_register_emit_log_hook(application_name TEXT) RETURNS VOID
+AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
+CREATE OR REPLACE FUNCTION ts_bgw_log_unregister_emit_log_hook() RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE OR REPLACE FUNCTION ts_bgw_params_create() RETURNS VOID
-AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
-CREATE OR REPLACE FUNCTION ts_bgw_params_destroy() RETURNS VOID
-AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
-CREATE OR REPLACE FUNCTION ts_bgw_params_reset_time(set_time BIGINT = 0, wait BOOLEAN = false) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
 -- Create a user with specific timezone and mock time
 CREATE ROLE test_cagg_refresh_policy_user WITH LOGIN;
-ALTER ROLE test_cagg_refresh_policy_user SET timezone TO 'UTC';
-ALTER ROLE test_cagg_refresh_policy_user SET timescaledb.current_timestamp_mock TO '2025-03-11 00:00:00+00';
 GRANT ALL ON SCHEMA public TO test_cagg_refresh_policy_user;
 
 \c :TEST_DBNAME test_cagg_refresh_policy_user
+
+CREATE PROCEDURE run_job_with_log(job_id INTEGER)
+AS
+$$
+BEGIN
+    SET LOCAL application_name = 'cagg_policy_incremental';
+    CALL run_job(job_id);
+END;
+$$
+LANGUAGE plpgsql;
+
+SET timezone TO 'UTC';
 
 CREATE TABLE public.bgw_log(
     msg_no INT,
@@ -30,12 +38,13 @@ CREATE TABLE public.bgw_log(
 
 CREATE VIEW sorted_bgw_log AS
 SELECT
-    msg_no,
-    mock_time,
-    application_name,
+    row_number() OVER () AS msg_no,
     regexp_replace(regexp_replace(msg, '(Wait until|started at|execution time) [0-9]+(\.[0-9]+)?', '\1 (RANDOM)', 'g'), 'background worker "[^"]+"','connection') AS msg
 FROM
     bgw_log
+WHERE
+    msg !~ '^(statement:|duration:|LOG:  background worker "[^"]+" )'
+    AND application_name = 'cagg_policy_incremental'
 ORDER BY
     mock_time,
     application_name COLLATE "C",
@@ -46,6 +55,7 @@ CREATE TABLE public.bgw_dsm_handle_store(
 );
 INSERT INTO public.bgw_dsm_handle_store VALUES (0);
 SELECT ts_bgw_params_create();
+SELECT ts_bgw_log_register_emit_log_hook('cagg_policy_incremental');
 
 CREATE TABLE conditions (
     time         TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -87,6 +97,7 @@ SELECT
         start_offset => NULL,
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h',
+        initial_start => NOW() + INTERVAL '1 h',
         buckets_per_batch => 10
     ) AS job_id \gset
 
@@ -97,8 +108,7 @@ FROM
 WHERE
     job_id = :'job_id' \gset
 
-SELECT ts_bgw_params_reset_time(0, true);
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+CALL run_job_with_log(:'job_id');
 SELECT * FROM sorted_bgw_log;
 
 CREATE MATERIALIZED VIEW conditions_by_day_manual_refresh
@@ -140,10 +150,7 @@ FROM
         config => jsonb_set(:'config', '{max_batches_per_execution}', '2')
     );
 
--- advance time by 1h so that job runs one more time
-SELECT ts_bgw_params_reset_time(extract(epoch from interval '1 hour')::bigint * 1000000, true);
-
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+CALL run_job_with_log(:'job_id');
 SELECT * FROM sorted_bgw_log;
 
 SELECT count(*) FROM conditions_by_day;
@@ -157,10 +164,7 @@ FROM
     EXCEPT
     (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
 
--- advance time by 2h so that job runs one more time
-SELECT ts_bgw_params_reset_time(extract(epoch from interval '2 hour')::bigint * 1000000, true);
-
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+CALL run_job_with_log(:'job_id');
 SELECT * FROM sorted_bgw_log;
 
 -- Should have no differences
@@ -193,11 +197,7 @@ FROM
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
--- advance time by 3h so that job runs one more time
-SELECT ts_bgw_params_reset_time(extract(epoch from interval '3 hour')::bigint * 1000000, true);
-
--- Should process all four batches in the past
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+CALL run_job_with_log(:'job_id');
 SELECT * FROM sorted_bgw_log;
 
 SELECT count(*) FROM conditions_by_day;
@@ -239,11 +239,7 @@ FROM
 -- Truncate all data from the original hypertable
 TRUNCATE bgw_log, conditions;
 
--- advance time by 4h so that job runs one more time
-SELECT ts_bgw_params_reset_time(extract(epoch from interval '4 hour')::bigint * 1000000, true);
-
--- Should fallback to single batch processing because there's no data to be refreshed on the original hypertable
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+CALL run_job_with_log(:'job_id');
 SELECT * FROM sorted_bgw_log;
 
 -- Should return zero rows
@@ -262,11 +258,7 @@ FROM
 
 TRUNCATE bgw_log;
 
--- advance time by 5h so that job runs one more time
-SELECT ts_bgw_params_reset_time(extract(epoch from interval '5 hour')::bigint * 1000000, true);
-
--- Should fallback to single batch processing because the refresh size is too small
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+CALL run_job_with_log(:'job_id');
 SELECT * FROM sorted_bgw_log;
 
 -- Should return 10 rows because the bucket width is `1 day` and buckets per batch is `10`
@@ -278,11 +270,7 @@ TRUNCATE conditions_by_day, conditions, bgw_log;
 INSERT INTO conditions
 VALUES ('2020-02-05 00:00:00+00', 1, 10);
 
--- advance time by 6h so that job runs one more time
-SELECT ts_bgw_params_reset_time(extract(epoch from interval '6 hour')::bigint * 1000000, true);
-
--- Should fallback to single batch processing because the refresh size is too small
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+CALL run_job_with_log(:'job_id');
 SELECT * FROM sorted_bgw_log;
 
 -- Should return 1 row
@@ -293,9 +281,10 @@ SELECT delete_job(:job_id);
 SELECT
     add_continuous_aggregate_policy(
         'conditions_by_day',
-        start_offset => INTERVAL '15 days',
+        start_offset => NULL,
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h',
+        initial_start => NOW() + INTERVAL '1 h',
         buckets_per_batch => 5,
         refresh_newest_first => true -- explicitly set to true to test the default behavior
     ) AS job_id \gset
@@ -303,9 +292,10 @@ SELECT
 SELECT
     add_continuous_aggregate_policy(
         'conditions_by_day_manual_refresh',
-        start_offset => INTERVAL '15 days',
+        start_offset => NULL,
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h',
+        initial_start => NOW() + INTERVAL '1 h',
         buckets_per_batch => 0 -- 0 means no batching, so it will refresh all buckets in one go
     ) AS job_id_manual \gset
 
@@ -321,8 +311,8 @@ FROM
         '1 hour'::interval) AS t,
     generate_series(1,5) AS d;
 
-SELECT ts_bgw_params_reset_time(0, true);
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+CALL run_job_with_log(:'job_id');
+CALL run_job_with_log(:'job_id_manual');
 SELECT * FROM sorted_bgw_log;
 
 -- Both continuous aggregates should have the same data
@@ -344,9 +334,10 @@ SELECT delete_job(:job_id_manual);
 SELECT
     add_continuous_aggregate_policy(
         'conditions_by_day',
-        start_offset => INTERVAL '15 days',
+        start_offset => NULL,
         end_offset => NULL,
         schedule_interval => INTERVAL '1 h',
+        initial_start => NOW() + INTERVAL '1 h',
         buckets_per_batch => 5,
         refresh_newest_first => false
     ) AS job_id \gset
@@ -360,8 +351,7 @@ WHERE
 
 TRUNCATE bgw_log, conditions_by_day;
 
-SELECT ts_bgw_params_reset_time(0, true);
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+CALL run_job_with_log(:'job_id');
 SELECT * FROM sorted_bgw_log;
 
 -- Both continuous aggregates should have the same data
@@ -375,6 +365,8 @@ FROM
     ((SELECT * FROM conditions_by_day_manual_refresh ORDER BY 1, 2)
     EXCEPT
     (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
+
+SELECT ts_bgw_log_unregister_emit_log_hook();
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_CLUSTER_SUPERUSER;
