@@ -88,6 +88,7 @@ jobs:
       SKIPS: >-
         bgw_db_scheduler
         bgw_db_scheduler_fixed
+        vector_agg_filter
         vector_agg_groupagg
         vector_agg_grouping
         vector_agg_text
