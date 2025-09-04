@@ -103,6 +103,7 @@ typedef struct ChunkInsertState
 	/* To speedup repeated calls of `decompress_batches_for_insert` */
 	CachedDecompressionState *cached_decompression_state;
 
+	OnConflictAction onConflictAction;
 	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
 	bool skip_current_tuple;
 	SharedCounters *counters;
@@ -119,6 +120,4 @@ extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
 ResultRelInfo *create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel,
 												 EState *estate);
 
-TSDLLEXPORT OnConflictAction
-ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);
 void ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk);

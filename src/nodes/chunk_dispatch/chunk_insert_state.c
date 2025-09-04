@@ -57,14 +57,6 @@ get_modifytable(const ChunkDispatch *dispatch)
 	return castNode(ModifyTable, get_modifytable_state(dispatch)->ps.plan);
 }
 
-OnConflictAction
-ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
-{
-	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
-		return ONCONFLICT_NONE;
-	return get_modifytable(dispatch)->onConflictAction;
-}
-
 static CmdType
 chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
 {
@@ -452,7 +444,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
+	OnConflictAction onconflict_action = get_modifytable(dispatch)->onConflictAction;
 	ResultRelInfo *relinfo;
 	const Chunk *chunk;
 
@@ -491,6 +483,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	state = palloc0(sizeof(ChunkInsertState));
 	state->cds = dispatch->dispatch_state;
 	state->counters = dispatch->counters;
+	state->onConflictAction = onconflict_action;
 	state->mctx = cis_context;
 	state->rel = rel;
 	state->result_relation_info = relinfo;

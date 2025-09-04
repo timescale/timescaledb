@@ -384,7 +384,7 @@ chunk_dispatch_exec(CustomScanState *node)
 												   on_chunk_insert_state_changed,
 												   state);
 
-	bool update_counter = ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE;
+	bool update_counter = cis->onConflictAction == ONCONFLICT_UPDATE;
 
 	ts_chunk_tuple_routing_decompress_for_insert(cis, slot, dispatch->estate, update_counter);
 

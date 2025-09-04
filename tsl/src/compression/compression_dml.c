@@ -58,8 +58,7 @@ static void process_predicates(Chunk *ch, CompressionSettings *settings, List *p
 							   List **heap_filters, List **index_filters, List **is_null);
 static Relation find_matching_index(Relation comp_chunk_rel, List **index_filters,
 									List **heap_filters);
-static tuple_filtering_constraints *
-get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation relation);
+static tuple_filtering_constraints *get_batch_keys_for_unique_constraints(Relation relation);
 static BatchFilter *make_batchfilter(char *column_name, StrategyNumber strategy, Oid collation,
 									 RegProcedure opcode, Const *value, bool is_null_check,
 									 bool is_null, bool is_array_op);
@@ -109,8 +108,10 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 
 	if (cdst->has_primary_or_unique_index)
 	{
-		tuple_filtering_constraints *constraints =
-			get_batch_keys_for_unique_constraints(cis, cis->rel);
+		tuple_filtering_constraints *constraints = get_batch_keys_for_unique_constraints(cis->rel);
+		if (constraints->covered)
+			constraints->on_conflict = cis->onConflictAction;
+
 		cdst->constraints = constraints;
 
 		CompressionSettings *compression_settings =
@@ -1098,7 +1099,7 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
  *
  */
 static tuple_filtering_constraints *
-get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation relation)
+get_batch_keys_for_unique_constraints(Relation relation)
 {
 	tuple_filtering_constraints *constraints = palloc0(sizeof(tuple_filtering_constraints));
 	constraints->on_conflict = ONCONFLICT_UPDATE;
@@ -1179,11 +1180,6 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 		 */
 		if (!constraints->key_columns)
 			return constraints;
-	}
-
-	if (constraints->covered && cis->cds && cis->cds->dispatch)
-	{
-		constraints->on_conflict = ts_chunk_dispatch_get_on_conflict_action(cis->cds->dispatch);
 	}
 
 	return constraints;
