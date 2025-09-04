@@ -128,27 +128,24 @@ compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slo
 	 * We have functions with one argument, and one function with no arguments
 	 * (count(*)). Collect the arguments.
 	 */
-	if (agg_def->input_offset >= 0)
+	if (agg_def->argument != NULL)
 	{
-		const AttrNumber attnum = AttrOffsetGetAttrNumber(agg_def->input_offset);
-		const CompressedColumnValues *values =
-			vector_slot_get_compressed_column_values(vector_slot, attnum);
+		const CompressedColumnValues values =
+			vector_slot_get_compressed_column_values(vector_slot, agg_def->argument);
 
-		Assert(values->decompression_type != DT_Invalid);
-		Ensure(values->decompression_type != DT_Iterator,
-			   "expected arrow array but got iterator for attnum %d",
-			   attnum);
+		Assert(values.decompression_type != DT_Invalid);
+		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
 
-		if (values->arrow != NULL)
+		if (values.arrow != NULL)
 		{
-			arg_arrow = values->arrow;
-			arg_validity_bitmap = values->buffers[0];
+			arg_arrow = values.arrow;
+			arg_validity_bitmap = values.buffers[0];
 		}
 		else
 		{
-			Assert(values->decompression_type == DT_Scalar);
-			arg_datum = *values->output_value;
-			arg_isnull = *values->output_isnull;
+			Assert(values.decompression_type == DT_Scalar);
+			arg_datum = *values.output_value;
+			arg_isnull = *values.output_isnull;
 		}
 	}
 
@@ -230,13 +227,12 @@ gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 	for (int i = 0; i < ngrp; i++)
 	{
 		GroupingColumn *col = &policy->grouping_columns[i];
-		const AttrNumber attnum = AttrOffsetGetAttrNumber(col->input_offset);
 		Assert(col->input_offset >= 0);
 		Assert(col->output_offset >= 0);
 
-		const CompressedColumnValues *values =
-			vector_slot_get_compressed_column_values(vector_slot, attnum);
-		Assert(values->decompression_type == DT_Scalar);
+		const CompressedColumnValues values =
+			vector_slot_get_compressed_column_values(vector_slot, col->expr);
+		Assert(values.decompression_type == DT_Scalar);
 
 		/*
 		 * By sheer luck, we can avoid generically copying the Datum here,
@@ -244,8 +240,8 @@ gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 		 * means we're grouping by segmentby, and these values will be valid
 		 * until the next call to the vector agg node.
 		 */
-		policy->output_grouping_values[i] = *values->output_value;
-		policy->output_grouping_isnull[i] = *values->output_isnull;
+		policy->output_grouping_values[i] = *values.output_value;
+		policy->output_grouping_isnull[i] = *values.output_isnull;
 	}
 
 	policy->have_results = true;

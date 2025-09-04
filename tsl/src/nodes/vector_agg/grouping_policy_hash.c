@@ -137,27 +137,24 @@ compute_single_aggregate(GroupingPolicyHash *policy, TupleTableSlot *vector_slot
 	 * We have functions with one argument, and one function with no arguments
 	 * (count(*)). Collect the arguments.
 	 */
-	if (agg_def->input_offset >= 0)
+	if (agg_def->argument != NULL)
 	{
-		const AttrNumber attnum = AttrOffsetGetAttrNumber(agg_def->input_offset);
-		const CompressedColumnValues *values =
-			vector_slot_get_compressed_column_values(vector_slot, attnum);
+		const CompressedColumnValues values =
+			vector_slot_get_compressed_column_values(vector_slot, agg_def->argument);
 
-		Assert(values->decompression_type != DT_Invalid);
-		Ensure(values->decompression_type != DT_Iterator,
-			   "expected arrow array but got iterator for attnum %d",
-			   attnum);
+		Assert(values.decompression_type != DT_Invalid);
+		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
 
-		if (values->arrow != NULL)
+		if (values.arrow != NULL)
 		{
-			arg_arrow = values->arrow;
-			arg_validity_bitmap = values->buffers[0];
+			arg_arrow = values.arrow;
+			arg_validity_bitmap = values.buffers[0];
 		}
 		else
 		{
-			Assert(values->decompression_type == DT_Scalar);
-			arg_datum = *values->output_value;
-			arg_isnull = *values->output_isnull;
+			Assert(values.decompression_type == DT_Scalar);
+			arg_datum = *values.output_value;
+			arg_isnull = *values.output_isnull;
 		}
 	}
 
@@ -338,8 +335,7 @@ gp_hash_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 		const GroupingColumn *def = &policy->grouping_columns[i];
 
 		policy->current_batch_grouping_column_values[i] =
-			*vector_slot_get_compressed_column_values(vector_slot,
-													  AttrOffsetGetAttrNumber(def->input_offset));
+			vector_slot_get_compressed_column_values(vector_slot, def->expr);
 	}
 
 	/*

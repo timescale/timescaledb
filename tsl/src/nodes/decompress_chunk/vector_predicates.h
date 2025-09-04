@@ -13,6 +13,10 @@ typedef void(VectorPredicate)(const ArrowArray *, Datum, uint64 *restrict);
 
 VectorPredicate *get_vector_const_predicate(Oid pg_predicate);
 
+typedef void(VectorFunction)(const ArrowArray **args, int nargs, ArrowArray *result);
+
+VectorFunction *get_vector_function(Oid pg_function);
+
 void vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 							const ArrowArray *vector, Datum array, uint64 *restrict final_result);
 

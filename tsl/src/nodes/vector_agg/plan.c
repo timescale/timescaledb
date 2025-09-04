@@ -187,6 +187,33 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 static bool
 is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 {
+	if (IsA(expr, Const))
+	{
+		return true;
+	}
+
+	if (IsA(expr, FuncExpr))
+	{
+		/* Can vectorize some functions! */
+		FuncExpr *f = castNode(FuncExpr, expr);
+
+		if (get_vector_function(f->funcid) == NULL)
+		{
+			return false;
+		}
+
+		ListCell *lc;
+		foreach (lc, f->args)
+		{
+			if (!is_vector_var(vqinfo, (Expr *) lfirst(lc)))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	if (!IsA(expr, Var))
 	{
 		/* Can aggregate only a bare decompressed column, not an expression. */
