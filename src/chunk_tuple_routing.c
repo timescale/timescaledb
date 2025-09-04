@@ -7,7 +7,9 @@
 #include <utils/rls.h>
 
 #include "chunk_tuple_routing.h"
+#include "cross_module_fn.h"
 #include "debug_point.h"
+#include "guc.h"
 #include "hypercube.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "nodes/modify_hypertable.h"
@@ -42,7 +44,6 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 										   estate->es_query_cxt,
 										   ts_guc_max_open_chunks_per_insert);
 
-	ctr->onConflictAction = ONCONFLICT_NONE;
 	return ctr;
 }
 
@@ -210,7 +211,13 @@ chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr)
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(relinfo, ctr->onConflictAction != ONCONFLICT_NONE);
+	{
+		bool speculative = false;
+		if (ctr->mht_state && ctr->mht_state->mt->onConflictAction != ONCONFLICT_NONE)
+			speculative = true;
+
+		ExecOpenIndices(relinfo, speculative);
+	}
 
 	if (relinfo->ri_TrigDesc != NULL)
 	{

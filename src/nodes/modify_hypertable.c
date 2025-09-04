@@ -88,6 +88,9 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		/* setup chunk dispatch state only for INSERTs */
 		ChunkDispatchState *cds = get_chunk_dispatch_state(subplan);
+		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
+		state->ctr->mht_state = state;
+		cds->dispatch->ctr = state->ctr;
 
 		/* Ensure that we found at least one ChunkDispatchState node */
 		Assert(cds);
@@ -106,7 +109,10 @@ modify_hypertable_exec(CustomScanState *node)
 static void
 modify_hypertable_end(CustomScanState *node)
 {
+	ModifyHypertableState *state = (ModifyHypertableState *) node;
 	ExecEndNode(linitial(node->custom_ps));
+	if (state->ctr)
+		ts_chunk_tuple_routing_destroy(state->ctr);
 }
 
 static void
@@ -161,11 +167,12 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		outerPlanState(mtstate))
 	{
 		ChunkDispatchState *cds = get_chunk_dispatch_state(outerPlanState(mtstate));
+		SharedCounters *counters = cds->dispatch->ctr->counters;
 
-		state->batches_deleted += cds->dispatch->counters->batches_deleted;
-		state->batches_filtered += cds->dispatch->counters->batches_filtered;
-		state->batches_decompressed += cds->dispatch->counters->batches_decompressed;
-		state->tuples_decompressed += cds->dispatch->counters->tuples_decompressed;
+		state->batches_deleted += counters->batches_deleted;
+		state->batches_filtered += counters->batches_filtered;
+		state->batches_decompressed += counters->batches_decompressed;
+		state->tuples_decompressed += counters->tuples_decompressed;
 	}
 	if (state->batches_filtered > 0)
 		ExplainPropertyInteger("Batches filtered", NULL, state->batches_filtered, es);

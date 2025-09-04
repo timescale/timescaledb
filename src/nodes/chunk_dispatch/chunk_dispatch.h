@@ -18,6 +18,8 @@
 #include "hypertable_cache.h"
 #include "subspace_store.h"
 
+typedef struct ChunkTupleRouting ChunkTupleRouting;
+
 /*
  * ChunkDispatch keeps cached state needed to dispatch tuples to chunks. It is
  * separate from any plan and executor nodes, since it is used both for INSERT
@@ -31,6 +33,7 @@ typedef struct ChunkDispatch
 	Hypertable *hypertable;
 	SubspaceStore *cache;
 	EState *estate;
+	ChunkTupleRouting *ctr;
 
 	/*
 	 * Keep a pointer to the original (hypertable's) ResultRelInfo since we
@@ -39,8 +42,6 @@ typedef struct ChunkDispatch
 	ResultRelInfo *hypertable_result_rel_info;
 	ChunkInsertState *prev_cis;
 	Oid prev_cis_oid;
-	bool create_compressed_chunk;
-	SharedCounters *counters; /* shared counters for the current statement */
 } ChunkDispatch;
 
 typedef struct ChunkDispatchPath
