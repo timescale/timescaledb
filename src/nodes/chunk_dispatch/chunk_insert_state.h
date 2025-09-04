@@ -13,7 +13,6 @@
 #include "chunk.h"
 #include "cross_module_fn.h"
 
-typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
 typedef struct ChunkDispatchState ChunkDispatchState;
 typedef struct CompressionSettings CompressionSettings;
 typedef struct tuple_filtering_constraints tuple_filtering_constraints;
