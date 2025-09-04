@@ -1040,6 +1040,12 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 			compute_inscribed_bucketed_refresh_window(cagg, &refresh_window, bucket_width);
 	}
 
+	/* We must cap the refresh window at the invalidation threshold to don't produce unnecessary
+	 * batches */
+	int64 invalidation_threshold =
+		invalidation_threshold_get(cagg->data.raw_hypertable_id, refresh_window.type);
+	refresh_window.end = MIN(invalidation_threshold, refresh_window.end);
+
 	/* Check if the refresh size is large enough to produce bathes, if not then return no batches */
 	const int64 refresh_window_size = i64abs(refresh_window.end - refresh_window.start);
 	const int64 batch_size = (bucket_width * buckets_per_batch);
