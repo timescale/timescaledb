@@ -14,6 +14,7 @@
 extern Datum tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS);
 
 Oid recompress_chunk_segmentwise_impl(Chunk *chunk);
+void recompress_chunk(Chunk *uncompressed_chunk);
 
 /* Result of matching an uncompressed tuple against a compressed batch */
 enum Batch_match_result

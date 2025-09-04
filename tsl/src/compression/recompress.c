@@ -16,6 +16,7 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "api.h"
 #include "compression.h"
 #include "compression_dml.h"
 #include "create.h"
@@ -25,6 +26,7 @@
 #include "recompress.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/chunk_column_stats.h"
+#include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 
 /*
@@ -580,6 +582,252 @@ finish:
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
+/*
+ * Perform in-memory segmentwise recompression of a compressed chunk.
+ *
+ * This function decompresses segments of a compressed chunk in memory,
+ * sorts them according to the compression order by settings, and creates
+ * a new compressed chunk with improved compression ratios.
+ *
+ * Args:
+ *   uncompressed_chunk: The chunk to recompress (must be compressed)
+ *
+ * Note: This function will early return if the chunk is not suitable for
+ * recompression (e.g., partial, unordered, frozen, or has unique constraints).
+ */
+void
+recompress_chunk(Chunk *uncompressed_chunk)
+{
+	if (uncompressed_chunk == NULL)
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("chunk cannot be NULL")));
+
+	/*
+	 * Only proceed if chunk is in compressed state without partial or unordered status
+	 * Status meanings:
+	 * 1: compressed
+	 * 2: compressed_unordered
+	 * 4: frozen
+	 * 8: compressed_partial
+	 */
+	if (!ts_chunk_is_compressed(uncompressed_chunk) || ts_chunk_is_partial(uncompressed_chunk) ||
+		ts_chunk_is_unordered(uncompressed_chunk) || ts_chunk_is_frozen(uncompressed_chunk))
+		return;
+
+	/* need it to find the segby cols from the catalog */
+	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	Ensure(compressed_chunk != NULL,
+		   "compressed chunk not found for chunk \"%s\"",
+		   get_rel_name(uncompressed_chunk->table_id));
+
+	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
+	Ensure(settings != NULL,
+		   "compression settings not found for chunk \"%s\"",
+		   get_rel_name(uncompressed_chunk->table_id));
+
+	// Poro Ensure(settings->fd.orderby, "empty order by, cannot recompress");
+
+	LOCKMODE recompression_lockmode = ExclusiveLock;
+
+	/* lock both chunks, compressed and uncompressed */
+	Relation uncompressed_chunk_rel =
+		table_open(uncompressed_chunk->table_id, recompression_lockmode);
+	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, recompression_lockmode);
+
+	// Poro not an issue because we take heavy locks
+	if (ts_indexing_relation_has_primary_or_unique_index(uncompressed_chunk_rel))
+	{
+		table_close(uncompressed_chunk_rel, recompression_lockmode);
+		table_close(compressed_chunk_rel, recompression_lockmode);
+		return;
+	}
+
+	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
+	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
+
+	int num_segmentby = ts_array_length(settings->fd.segmentby);
+	int num_orderby = ts_array_length(settings->fd.orderby);
+	int n_keys = num_segmentby + num_orderby;
+
+	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
+	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
+	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
+	bool *nulls_first = palloc(sizeof(*nulls_first) * n_keys);
+
+	CompressedSegmentInfo *current_segment = palloc0(sizeof(CompressedSegmentInfo) * n_keys);
+
+	for (int n = 0; n < n_keys; n++)
+	{
+		const char *attname;
+		int position;
+		if (n < num_segmentby)
+		{
+			position = n + 1;
+			attname = ts_array_get_element_text(settings->fd.segmentby, position);
+		}
+		else
+		{
+			position = n - num_segmentby + 1;
+			attname = ts_array_get_element_text(settings->fd.orderby, position);
+		}
+
+		AttrNumber col_attno = get_attnum(uncompressed_chunk_rel->rd_id, attname);
+		current_segment[n].decompressed_chunk_offset = AttrNumberGetAttrOffset(col_attno);
+		current_segment[n].segment_info = segment_info_new(
+			TupleDescAttr(uncompressed_rel_tupdesc, current_segment[n].decompressed_chunk_offset));
+
+		compress_chunk_populate_sort_info_for_column(settings,
+													 RelationGetRelid(uncompressed_chunk_rel),
+													 attname,
+													 &sort_keys[n],
+													 &sort_operators[n],
+													 &sort_collations[n],
+													 &nulls_first[n]);
+	}
+
+	CatalogIndexState indstate = CatalogOpenIndexes(compressed_chunk_rel);
+	Oid index_oid = get_compressed_chunk_index(indstate, settings);
+	CatalogCloseIndexes(indstate);
+
+	LOCKMODE index_lockmode = ExclusiveLock;
+	Relation index_rel = index_open(index_oid, index_lockmode);
+
+	/* Delete old compression settings before creating new compressed chunk to avoid conflict */
+	ts_compression_settings_delete(uncompressed_chunk->table_id);
+
+	RelationSize before_size, after_size;
+	CompressionStats cstat;
+	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
+	Hypertable *compressed_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+	/*
+	 * Create new compressed chunk. The old compression settings were deleted above
+	 * to avoid catalog conflicts.
+	 */
+	Chunk *new_compressed_chunk =
+		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid);
+	CompressionSettings *new_settings = ts_compression_settings_get(uncompressed_chunk->table_id);
+	Relation new_compressed_chunk_rel =
+		table_open(new_compressed_chunk->table_id, recompression_lockmode);
+	TupleDesc new_compressed_rel_tupdesc = RelationGetDescr(new_compressed_chunk_rel);
+
+	/* Only proceed if tuple descriptors and compression settings match */ // Poro maybe overkill
+	if (!equalTupleDescs(compressed_rel_tupdesc, new_compressed_rel_tupdesc) ||
+		!ts_compression_settings_equal(new_settings, settings))
+	{
+		/************** recompress ****************************/
+		PushActiveSnapshot(GetTransactionSnapshot());
+
+		RowDecompressor decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
+														  RelationGetDescr(uncompressed_chunk_rel));
+		/*
+		 * Used for gathering and resorting the tuples that should be recompressed together.
+		 */
+		Tuplesortstate *recompress_tuplesortstate =
+			tuplesort_begin_heap(uncompressed_rel_tupdesc,
+								 n_keys,
+								 sort_keys,
+								 sort_operators,
+								 sort_collations,
+								 nulls_first,
+								 maintenance_work_mem,
+								 NULL,
+								 false); // Poro make this key orderby only once batched
+		before_size = ts_relation_size_impl(uncompressed_chunk->table_id);
+		RowCompressor row_compressor;
+		Assert(new_settings->fd.compress_relid == RelationGetRelid(new_compressed_chunk_rel));
+		row_compressor_init(&row_compressor,
+							new_settings,
+							RelationGetDescr(uncompressed_chunk_rel),
+							RelationGetDescr(new_compressed_chunk_rel));
+
+		BulkWriter writer = bulk_writer_build(new_compressed_chunk_rel, 0);
+		TupleTableSlot *compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
+
+		HeapTuple compressed_tuple;
+		bool first_iteration = true;
+		IndexScanDesc index_scan = index_beginscan_compat(compressed_chunk_rel,
+														  index_rel,
+														  GetActiveSnapshot(),
+														  NULL,
+														  0,
+														  0);
+
+		index_rescan(index_scan, NULL, 0, NULL, 0);
+
+		while (index_getnext_slot(index_scan, ForwardScanDirection, compressed_slot))
+		{
+			if (first_iteration)
+			{
+				update_current_segment(current_segment, compressed_slot, num_segmentby);
+				first_iteration = false;
+			}
+			else if (check_changed_group(current_segment, compressed_slot, num_segmentby))
+			{
+				recompress_segment(recompress_tuplesortstate,
+								   uncompressed_chunk_rel,
+								   &row_compressor,
+								   &writer);
+				update_current_segment(current_segment, compressed_slot, num_segmentby);
+			}
+
+			bool should_free;
+
+			compressed_tuple = ExecFetchSlotHeapTuple(compressed_slot, false, &should_free);
+
+			heap_deform_tuple(compressed_tuple,
+							  compressed_rel_tupdesc,
+							  decompressor.compressed_datums,
+							  decompressor.compressed_is_nulls);
+
+			row_decompressor_decompress_row_to_tuplesort(&decompressor, recompress_tuplesortstate);
+
+			if (should_free)
+				heap_freetuple(compressed_tuple);
+		}
+
+		recompress_segment(recompress_tuplesortstate,
+						   uncompressed_chunk_rel,
+						   &row_compressor,
+						   &writer);
+
+		after_size = ts_relation_size_impl(new_compressed_chunk->table_id);
+		cstat.rowcnt_pre_compression = row_compressor.rowcnt_pre_compression;
+		cstat.rowcnt_post_compression = row_compressor.num_compressed_rows;
+		cstat.rowcnt_frozen = row_compressor.num_compressed_rows;
+
+		row_compressor_close(&row_compressor);
+		bulk_writer_close(&writer);
+		ExecDropSingleTupleTableSlot(compressed_slot);
+		index_endscan(index_scan);
+		row_decompressor_close(&decompressor);
+		tuplesort_end(recompress_tuplesortstate);
+		PopActiveSnapshot();
+	}
+
+	/* cleanup */
+	pfree(current_segment);
+	index_close(index_rel, NoLock);
+	table_close(uncompressed_chunk_rel, NoLock);
+	table_close(compressed_chunk_rel, NoLock);
+	table_close(new_compressed_chunk_rel, NoLock);
+
+	/* drop old compressed chunk and update catalog */
+	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
+
+	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
+	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
+	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
+
+	/* add new compressed chunk details */
+	ts_chunk_set_compressed_chunk(uncompressed_chunk, new_compressed_chunk->fd.id);
+	compression_chunk_size_catalog_insert(uncompressed_chunk->fd.id,
+										  &before_size,
+										  new_compressed_chunk->fd.id,
+										  &after_size,
+										  cstat.rowcnt_pre_compression,
+										  cstat.rowcnt_post_compression,
+										  cstat.rowcnt_frozen);
+}
+
 static void
 update_segmentby_scankeys(TupleTableSlot *uncompressed_slot, CompressedSegmentInfo *current_segment,
 						  int num_segmentby, ScanKey index_scankeys)
@@ -839,24 +1087,24 @@ delete_tuple_for_recompression(Relation rel, ItemPointer tid, Snapshot snapshot)
 	TM_Result result;
 	TM_FailureData tmfd;
 
-	result =
-		table_tuple_delete(rel,
-						   tid,
-						   GetCurrentCommandId(true),
-						   snapshot,
-						   InvalidSnapshot,
-						   true /* for now, just wait for commit/abort, that might let us proceed */
-						   ,
-						   &tmfd,
-						   true /* changingPart */);
+	result = table_tuple_delete(rel,
+								tid,
+								GetCurrentCommandId(true),
+								snapshot,
+								InvalidSnapshot,
+								true /* for now, just wait for commit/abort, that might let us
+										proceed */
+								,
+								&tmfd,
+								true /* changingPart */);
 
 	return result == TM_Ok;
 }
 
 /* Check if we can update the chunk status to fully compressed after segmentwise recompression
- * We can only do this if there were no concurrent DML operations, so we check to see if there are
- * any uncompressed tuples in the chunk after compression.
- * If there aren't, we can update the chunk status
+ * We can only do this if there were no concurrent DML operations, so we check to see if there
+ * are any uncompressed tuples in the chunk after compression. If there aren't, we can update
+ * the chunk status
  *
  * Note: Caller is expected to have an ExclusiveLock on the uncompressed_chunk
  */
