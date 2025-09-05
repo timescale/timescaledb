@@ -108,3 +108,12 @@ jobs:
           false
         fi
 
+    - name: Install toolkit
+      run: |
+        yum install -y timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
+    - name: List available toolkit versions
+      run: |
+        yum --showduplicates list timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
+

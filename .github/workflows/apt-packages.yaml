@@ -105,6 +105,15 @@ jobs:
           false
         fi
 
+    - name: Install toolkit
+      run: |
+        apt-get install -y --no-install-recommends \
+          timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
+    - name: List available toolkit versions
+      run: |
+        apt-cache show timescaledb-toolkit-postgresql-${{ matrix.pg }} | grep -e Version: -e Depends: | tr '\n' ' ' | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
+
     - name: PostgreSQL log
       if: always()
       run: |
