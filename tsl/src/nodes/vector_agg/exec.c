@@ -131,6 +131,81 @@ arrow_make_uint64_constant(MemoryContext mcxt, Datum value, bool isnull, int64 n
 	return array;
 }
 
+static CompressedColumnValues
+evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+
+	Ensure(list_length(args) == 2, "only 2 args supported");
+
+	FmgrInfo flinfo;
+	fmgr_info(funcoid, &flinfo);
+	LOCAL_FCINFO(fcinfo, 2);
+	InitFunctionCallInfoData(*fcinfo, &flinfo, 2, inputcollid, NULL, NULL);
+
+	const int n = batch_state->total_batch_rows;
+
+	const ArrowArray *arrow_args[2];
+	CompressedColumnValues arg_values[2];
+	ListCell *lc;
+	bool have_nulls = false;
+	foreach (lc, args)
+	{
+		CompressedColumnValues arg = vector_slot_get_compressed_column_values(slot, lfirst(lc));
+		Ensure(arg.arrow != NULL, "no arrow for arg");
+		arrow_args[foreach_current_index(lc)] = arg.arrow;
+		have_nulls = (arg.arrow->null_count > 0) || have_nulls;
+		arg_values[foreach_current_index(lc)] = arg;
+
+		arg_values[foreach_current_index(lc)].output_value =
+			&fcinfo->args[foreach_current_index(lc)].value;
+		arg_values[foreach_current_index(lc)].output_isnull =
+			&fcinfo->args[foreach_current_index(lc)].isnull;
+	}
+
+	ArrowArray *arrow_result = palloc0(sizeof(ArrowArray) + 2 * sizeof(void *));
+	arrow_result->length = n;
+	arrow_result->buffers = (void *) &arrow_result[1];
+	arrow_result->buffers[1] = palloc0(sizeof(uint64) * n);
+
+	// vector_function(arrow_args, list_length(f->args), arrow_result);
+
+	for (int i = 0; i < n; i++)
+	{
+		compressed_columns_to_postgres_data(arg_values, 2, i);
+
+		Datum result = FunctionCallInvoke(fcinfo);
+
+		(void) result;
+
+		((uint64 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt64(result);
+	}
+
+	/*
+	 * Our functions are strict so we handle validity separately.
+	 */
+	if (have_nulls)
+	{
+		const size_t num_words = (n + 63) / 64;
+		arrow_result->buffers[0] = palloc0(sizeof(uint64) * num_words);
+		arrow_combine_validity(num_words,
+							   (uint64 *) arrow_result->buffers[0],
+							   (uint64 *) arrow_args[0]->buffers[0],
+							   (uint64 *) arrow_args[1]->buffers[0],
+							   NULL);
+		arrow_result->null_count =
+			arrow_result->length - arrow_num_valid(arrow_result->buffers[0], arrow_result->length);
+	}
+
+	CompressedColumnValues result = {
+		.decompression_type = 8,
+		.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
+		.arrow = arrow_result,
+	};
+
+	return result;
+}
+
 /*
  * Return the arrow array or the datum (in case of single scalar value) for a
  * given attribute as a CompressedColumnValues struct.
@@ -162,81 +237,15 @@ vector_slot_get_compressed_column_values(TupleTableSlot *slot, const Expr *argum
 			const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
 			return *values;
 		}
+		case T_OpExpr:
+		{
+			const OpExpr *o = (const OpExpr *) argument;
+			return evaluate_function(slot, o->args, o->opfuncid, o->inputcollid);
+		}
 		case T_FuncExpr:
 		{
 			const FuncExpr *f = (const FuncExpr *) argument;
-			Ensure(list_length(f->args) == 2, "only 2 args supported");
-			VectorFunction *vector_function = get_vector_function(f->funcid);
-			Ensure(vector_function != NULL,
-				   "vector function not found for pg function %d",
-				   f->funcid);
-
-			FmgrInfo flinfo;
-			fmgr_info(f->funcid, &flinfo);
-			LOCAL_FCINFO(fcinfo, 2);
-			InitFunctionCallInfoData(*fcinfo, &flinfo, 2, InvalidOid, NULL, NULL);
-
-			const ArrowArray *arrow_args[2];
-			CompressedColumnValues arg_values[2];
-			ListCell *lc;
-			bool have_nulls = false;
-			foreach (lc, f->args)
-			{
-				CompressedColumnValues arg =
-					vector_slot_get_compressed_column_values(slot, lfirst(lc));
-				Ensure(arg.arrow != NULL, "no arrow for arg");
-				arrow_args[foreach_current_index(lc)] = arg.arrow;
-				have_nulls = (arg.arrow->null_count > 0) || have_nulls;
-				arg_values[foreach_current_index(lc)] = arg;
-
-				arg_values[foreach_current_index(lc)].output_value =
-					&fcinfo->args[foreach_current_index(lc)].value;
-				arg_values[foreach_current_index(lc)].output_isnull =
-					&fcinfo->args[foreach_current_index(lc)].isnull;
-			}
-
-			ArrowArray *arrow_result = palloc0(sizeof(ArrowArray) + 2 * sizeof(void *));
-			arrow_result->length = batch_state->total_batch_rows;
-			arrow_result->buffers = (void *) &arrow_result[1];
-			arrow_result->buffers[1] = palloc0(sizeof(uint64) * batch_state->total_batch_rows);
-
-			// vector_function(arrow_args, list_length(f->args), arrow_result);
-
-			for (int i = 0; i < batch_state->total_batch_rows; i++)
-			{
-				compressed_columns_to_postgres_data(arg_values, 2, i);
-
-				Datum result = FunctionCallInvoke(fcinfo);
-
-				(void) result;
-
-				((uint64 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt64(result);
-			}
-
-			/*
-			 * Our functions are strict so we handle validity separately.
-			 */
-			if (have_nulls)
-			{
-				const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
-				arrow_result->buffers[0] = palloc0(sizeof(uint64) * num_words);
-				arrow_combine_validity(num_words,
-									   (uint64 *) arrow_result->buffers[0],
-									   (uint64 *) arrow_args[0]->buffers[0],
-									   (uint64 *) arrow_args[1]->buffers[0],
-									   NULL);
-				arrow_result->null_count =
-					arrow_result->length -
-					arrow_num_valid(arrow_result->buffers[0], arrow_result->length);
-			}
-
-			CompressedColumnValues result = {
-				.decompression_type = 8,
-				.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
-				.arrow = arrow_result,
-			};
-
-			return result;
+			return evaluate_function(slot, f->args, f->funcid, f->inputcollid);
 		}
 		default:
 			fprintf(stderr, "%s\n", ts_get_node_name((Node *) argument));
@@ -347,7 +356,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				//				Var *var = castNode(Var, ;
 				//				def->input_offset =
 				//					get_input_offset((const DecompressChunkState *) childstate,
-				//var);
+				// var);
 			}
 			else
 			{

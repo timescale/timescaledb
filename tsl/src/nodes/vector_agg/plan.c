@@ -180,6 +180,49 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	return (Plan *) vector_agg;
 }
 
+static bool
+is_vector_type(Oid typeoid)
+{
+	switch (typeoid)
+	{
+		case BOOLOID:
+		case FLOAT4OID:
+		case FLOAT8OID:
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+		case TEXTOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+		case UUIDOID:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool is_vector_var(const VectorQualInfo *vqinfo, Expr *expr);
+
+static bool
+is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid inputcollid)
+{
+	if (get_vector_function(funcoid) == NULL)
+	{
+		return false;
+	}
+
+	ListCell *lc;
+	foreach (lc, args)
+	{
+		if (!is_vector_var(vqinfo, (Expr *) lfirst(lc)))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 /*
  * Whether the expression can be used for vectorized processing: must be a Var
  * that refers to either a bulk-decompressed or a segmentby column.
@@ -187,50 +230,44 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 static bool
 is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 {
-	if (IsA(expr, Const))
+	switch (((Node *) expr)->type)
 	{
-		return true;
-	}
-
-	if (IsA(expr, FuncExpr))
-	{
-		/* Can vectorize some functions! */
-		FuncExpr *f = castNode(FuncExpr, expr);
-
-		if (get_vector_function(f->funcid) == NULL)
+		case T_Const:
 		{
-			return false;
+			Const *c = (Const *) expr;
+			return is_vector_type(c->consttype);
 		}
 
-		ListCell *lc;
-		foreach (lc, f->args)
+		case T_FuncExpr:
 		{
-			if (!is_vector_var(vqinfo, (Expr *) lfirst(lc)))
+			/* Can vectorize some functions! */
+			FuncExpr *f = castNode(FuncExpr, expr);
+			return is_vector_function(vqinfo, f->args, f->funcid, f->inputcollid);
+		}
+
+		case T_OpExpr:
+		{
+			OpExpr *o = castNode(OpExpr, expr);
+			return is_vector_function(vqinfo, o->args, o->opfuncid, o->inputcollid);
+		}
+
+		case T_Var:
+		{
+			Var *var = castNode(Var, expr);
+
+			if (var->varattno <= 0)
 			{
+				/* Can't work with special attributes like tableoid. */
 				return false;
 			}
+
+			Assert(var->varattno <= vqinfo->maxattno);
+
+			return vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
 		}
-
-		return true;
+		default:
+			return false;
 	}
-
-	if (!IsA(expr, Var))
-	{
-		/* Can aggregate only a bare decompressed column, not an expression. */
-		return false;
-	}
-
-	Var *var = castNode(Var, expr);
-
-	if (var->varattno <= 0)
-	{
-		/* Can't work with special attributes like tableoid. */
-		return false;
-	}
-
-	Assert(var->varattno <= vqinfo->maxattno);
-
-	return vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
 }
 
 /*
