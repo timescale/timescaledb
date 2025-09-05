@@ -366,11 +366,14 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			}
 		}
 #ifdef TS_USE_UMASH
-		else
+		/*
+		 * We also have the UUID type which is by-reference and has a
+		 * columnar in-memory representation, but no specialized single-column
+		 * vectorized grouping support. It can use the serialized grouping
+		 * strategy.
+		 */
+		else if (single_grouping_var->vartype == TEXTOID)
 		{
-			Ensure(single_grouping_var->vartype == TEXTOID,
-				   "invalid vector type %d for grouping",
-				   single_grouping_var->vartype);
 			return VAGT_HashSingleText;
 		}
 #endif
@@ -391,19 +394,20 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
  * aggregation node in the plan tree. This is used for testing.
  */
 bool
-has_vector_agg_node(Plan *plan, bool *has_normal_agg)
+has_vector_agg_node(Plan *plan, bool *has_postgres_partial_agg)
 {
-	if (IsA(plan, Agg))
+	if (IsA(plan, Agg) && castNode(Agg, plan)->aggsplit == AGGSPLIT_INITIAL_SERIAL)
 	{
-		*has_normal_agg = true;
+		*has_postgres_partial_agg = true;
+		return false;
 	}
 
-	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_normal_agg))
+	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_postgres_partial_agg))
 	{
 		return true;
 	}
 
-	if (plan->righttree && has_vector_agg_node(plan->righttree, has_normal_agg))
+	if (plan->righttree && has_vector_agg_node(plan->righttree, has_postgres_partial_agg))
 	{
 		return true;
 	}
@@ -437,7 +441,7 @@ has_vector_agg_node(Plan *plan, bool *has_normal_agg)
 		ListCell *lc;
 		foreach (lc, append_plans)
 		{
-			if (has_vector_agg_node(lfirst(lc), has_normal_agg))
+			if (has_vector_agg_node(lfirst(lc), has_postgres_partial_agg))
 			{
 				return true;
 			}
