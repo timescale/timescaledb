@@ -163,10 +163,12 @@ evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid
 			&fcinfo->args[foreach_current_index(lc)].isnull;
 	}
 
-	ArrowArray *arrow_result = palloc0(sizeof(ArrowArray) + 2 * sizeof(void *));
+	ArrowArray *arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+													  sizeof(ArrowArray) + 2 * sizeof(void *));
 	arrow_result->length = n;
 	arrow_result->buffers = (void *) &arrow_result[1];
-	arrow_result->buffers[1] = palloc0(sizeof(uint64) * n);
+	arrow_result->buffers[1] =
+		MemoryContextAllocZero(batch_state->per_batch_context, sizeof(uint64) * n);
 
 	// vector_function(arrow_args, list_length(f->args), arrow_result);
 
@@ -187,7 +189,8 @@ evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid
 	if (have_nulls)
 	{
 		const size_t num_words = (n + 63) / 64;
-		arrow_result->buffers[0] = palloc0(sizeof(uint64) * num_words);
+		arrow_result->buffers[0] =
+			MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_words);
 		arrow_combine_validity(num_words,
 							   (uint64 *) arrow_result->buffers[0],
 							   (uint64 *) arrow_args[0]->buffers[0],
@@ -219,7 +222,7 @@ vector_slot_get_compressed_column_values(TupleTableSlot *slot, const Expr *argum
 		case T_Const:
 		{
 			const Const *c = (const Const *) argument;
-			ArrowArray *arrow_result = arrow_make_uint64_constant(CurrentMemoryContext,
+			ArrowArray *arrow_result = arrow_make_uint64_constant(batch_state->per_batch_context,
 																  c->constvalue,
 																  c->constisnull,
 																  batch_state->total_batch_rows);
