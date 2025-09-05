@@ -1094,21 +1094,13 @@ store_text_datum(CompressedColumnValues *column_values, int arrow_row)
 		   value_bytes);
 }
 
-/*
- * Construct the next tuple in the decompressed scan slot.
- * Doesn't check the quals.
- */
-static void
-make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_data_columns)
+void
+compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_data_columns,
+									uint16 arrow_row)
 {
-	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data.base;
-
-	Assert(batch_state->total_batch_rows > 0);
-	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
-
 	for (int i = 0; i < num_data_columns; i++)
 	{
-		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+		CompressedColumnValues *column_values = &columns[i];
 		if (column_values->decompression_type == DT_Iterator)
 		{
 			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
@@ -1183,6 +1175,23 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 			Assert(column_values->decompression_type == DT_Scalar);
 		}
 	}
+}
+
+/*
+ * Construct the next tuple in the decompressed scan slot.
+ * Doesn't check the quals.
+ */
+static void
+make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_data_columns)
+{
+	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data.base;
+
+	Assert(batch_state->total_batch_rows > 0);
+	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
+
+	compressed_columns_to_postgres_data(batch_state->compressed_columns,
+										num_data_columns,
+										arrow_row);
 
 	/*
 	 * It's a virtual tuple slot, so no point in clearing/storing it

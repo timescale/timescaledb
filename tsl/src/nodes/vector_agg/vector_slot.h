@@ -34,11 +34,5 @@ vector_slot_get_qual_result(const TupleTableSlot *slot, uint16 *num_rows)
  * Return the arrow array or the datum (in case of single scalar value) for a
  * given attribute as a CompressedColumnValues struct.
  */
-static inline const CompressedColumnValues *
-vector_slot_get_compressed_column_values(TupleTableSlot *slot, const AttrNumber attnum)
-{
-	const uint16 offset = AttrNumberGetAttrOffset(attnum);
-	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
-	const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
-	return values;
-}
+CompressedColumnValues vector_slot_get_compressed_column_values(TupleTableSlot *slot,
+																const Expr *argument);

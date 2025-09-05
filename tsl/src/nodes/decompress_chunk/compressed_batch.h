@@ -130,6 +130,9 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 											  DecompressBatchState *batch_state,
 											  TupleTableSlot *first_tuple_slot);
 
+void compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_data_columns,
+										 uint16 arrow_row);
+
 /*
  * Initialize the batch memory context and bulk decompression context.
  *
