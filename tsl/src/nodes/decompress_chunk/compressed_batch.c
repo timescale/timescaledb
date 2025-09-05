@@ -11,6 +11,7 @@
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/timestamp.h>
+#include <utils/uuid.h>
 
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
@@ -73,6 +74,7 @@ make_single_value_arrow_arithmetic(Oid arithmetic_type, Datum datum, bool isnull
 		FOR_TYPE(TIMESTAMPTZOID, TimestampTz, DatumGetTimestampTz);
 		FOR_TYPE(TIMESTAMPOID, Timestamp, DatumGetTimestamp);
 		FOR_TYPE(DATEOID, DateADT, DatumGetDateADT);
+		FOR_TYPE(UUIDOID, pg_uuid_t, *DatumGetUUIDP);
 		default:
 			elog(ERROR, "unexpected column type '%s'", format_type_be(arithmetic_type));
 			pg_unreachable();
