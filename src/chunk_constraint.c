@@ -715,7 +715,14 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 static bool
 chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 {
-	if (conform->contype == CONSTRAINT_CHECK)
+	if (conform->contype == CONSTRAINT_CHECK
+#if PG18_GE
+		/* Avoid NOT NULL constraints
+		 * https://github.com/postgres/postgres/commit/b0e96f31
+		 */
+		|| conform->contype == CONSTRAINT_NOTNULL
+#endif
+	)
 	{
 		/*
 		 * check and not null constraints handled by regular inheritance (from
