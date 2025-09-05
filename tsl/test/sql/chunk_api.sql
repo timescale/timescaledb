@@ -214,3 +214,22 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'chunkapi'; \gexec
 
 DROP TABLE chunkapi;
+
+-- Test the fix for Bug #8577
+-- Mismatch in attnum between chunk and hypertable should not fail
+CREATE TABLE chunkapi(col_to_drop int, time timestamptz not null, device int);
+SELECT create_hypertable('chunkapi', 'time', 'device', 2);
+ALTER TABLE chunkapi DROP COLUMN col_to_drop;
+
+CREATE TABLE new_chunk(time timestamptz not null, device int);
+INSERT INTO new_chunk VALUES ('2018-01-01 05:00:00-8', 1);
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}', NULL, NULL, 'new_chunk');
+
+CREATE TABLE reordered_chunk(device int, time timestamptz not null);
+INSERT INTO reordered_chunk VALUES (1, '2018-01-08 05:00:00-8');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515024000000000, 1515628800000000], "device": [-9223372036854775808, 1073741823]}', NULL, NULL, 'reordered_chunk');
+
+CREATE TABLE new_col_chunk(time timestamptz not null, temp float, device int);
+INSERT INTO new_col_chunk VALUES ('2018-01-15 05:00:00-8', 23.4, 1);
+ALTER TABLE chunkapi ADD COLUMN temp float;
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', '{"time": [1515628800000000, 1516233600000000], "device": [-9223372036854775808, 1073741823]}', NULL, NULL, 'new_col_chunk');
