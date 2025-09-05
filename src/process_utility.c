@@ -2676,6 +2676,17 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 					 */
 				case CONSTR_FOREIGN:
 					break;
+#if PG18_GE
+					/* NULL and NOT NULL constraints have been added to
+					 * pg_constraints in PG18, we can safely ignore them at end
+					 * just like at beginning.
+					 *
+					 * https://github.com/postgres/postgres/commit/b0e96f31
+					 */
+				case CONSTR_NULL:
+				case CONSTR_NOTNULL:
+					break;
+#endif
 				case CONSTR_CHECK:
 				{
 					validate_check_constraint(chunk, con);
