@@ -35,11 +35,6 @@ typedef struct ChunkDispatch
 	EState *estate;
 	ChunkTupleRouting *ctr;
 
-	/*
-	 * Keep a pointer to the original (hypertable's) ResultRelInfo since we
-	 * will reset the pointer in EState as we lookup new chunks.
-	 */
-	ResultRelInfo *hypertable_result_rel_info;
 	ChunkInsertState *prev_cis;
 	Oid prev_cis_oid;
 } ChunkDispatch;

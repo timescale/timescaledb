@@ -37,7 +37,6 @@ ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 
 	cd->hypertable = ht;
 	cd->estate = estate;
-	cd->hypertable_result_rel_info = NULL;
 	cd->cache =
 		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
 	cd->prev_cis = NULL;
@@ -350,12 +349,6 @@ chunk_dispatch_exec(CustomScanState *node)
 	}
 	/* Calculate the tuple's point in the N-dimensional hyperspace */
 	point = ts_hyperspace_calculate_point(ht->space, (newslot ? newslot : slot));
-
-	/* Save the main table's (hypertable's) ResultRelInfo */
-	if (!dispatch->hypertable_result_rel_info)
-	{
-		dispatch->hypertable_result_rel_info = dispatch->dispatch_state->mtstate->resultRelInfo;
-	}
 
 	/* Find or create the insert state matching the point */
 	cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
