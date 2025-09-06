@@ -166,8 +166,7 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 	if ((mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE) &&
 		outerPlanState(mtstate))
 	{
-		ChunkDispatchState *cds = get_chunk_dispatch_state(outerPlanState(mtstate));
-		SharedCounters *counters = cds->dispatch->ctr->counters;
+		SharedCounters *counters = state->ctr->counters;
 
 		state->batches_deleted += counters->batches_deleted;
 		state->batches_filtered += counters->batches_filtered;
