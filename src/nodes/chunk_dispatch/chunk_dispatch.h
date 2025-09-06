@@ -35,8 +35,6 @@ typedef struct ChunkDispatch
 	EState *estate;
 	ChunkTupleRouting *ctr;
 
-	ChunkInsertState *prev_cis;
-	Oid prev_cis_oid;
 } ChunkDispatch;
 
 typedef struct ChunkDispatchPath
@@ -67,7 +65,6 @@ typedef struct ChunkDispatchState
 	 * relations) for each chunk.
 	 */
 	ChunkDispatch *dispatch;
-	ResultRelInfo *rri;
 
 	/*
 	 * Keep the chunk insert state available to pass it from
@@ -85,13 +82,10 @@ extern void ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state,
 											   ModifyTableState *mtstate);
 typedef struct Point Point;
 
-typedef void (*on_chunk_changed_func)(ChunkInsertState *state, void *data);
-
 extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);
 extern void ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch);
-extern ChunkInsertState *
-ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p,
-										 const on_chunk_changed_func on_chunk_changed, void *data);
+extern ChunkInsertState *ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch,
+																  Point *p);
 extern void ts_chunk_dispatch_decompress_batches_for_insert(ChunkInsertState *cis,
 															TupleTableSlot *slot, EState *estate,
 															bool update_counter);

@@ -39,8 +39,6 @@ ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
 	cd->estate = estate;
 	cd->cache =
 		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
-	cd->prev_cis = NULL;
-	cd->prev_cis_oid = InvalidOid;
 
 	return cd;
 }
@@ -62,11 +60,9 @@ destroy_chunk_insert_state(void *cis)
  * partitioned hyperspace.
  */
 extern ChunkInsertState *
-ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
-										 const on_chunk_changed_func on_chunk_changed, void *data)
+ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
 {
 	ChunkInsertState *cis;
-	bool cis_changed = true;
 	Chunk *chunk = NULL;
 
 	cis = ts_subspace_store_get(dispatch->cache, point);
@@ -129,20 +125,10 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		cis = ts_chunk_insert_state_create(chunk->table_id, dispatch->ctr);
 		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
 	}
-	else if (cis->rel->rd_id == dispatch->prev_cis_oid && cis == dispatch->prev_cis)
-	{
-		/* got the same item from cache as before */
-		cis_changed = false;
-	}
 
 	MemoryContextSwitchTo(old_context);
 
-	if (cis_changed && on_chunk_changed)
-		on_chunk_changed(cis, data);
-
 	Assert(cis != NULL);
-	dispatch->prev_cis = cis;
-	dispatch->prev_cis_oid = cis->rel->rd_id;
 	return cis;
 }
 
@@ -243,19 +229,6 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = list_make1(ps);
 }
 
-/*
- * Change to another chunk for inserts.
- *
- * Prepare the ModifyTableState executor node for inserting into another
- * chunk. Called every time we switch to another chunk for inserts.
- */
-static void
-on_chunk_insert_state_changed(ChunkInsertState *cis, void *data)
-{
-	ChunkDispatchState *state = data;
-	state->rri = cis->result_relation_info;
-}
-
 static AttrNumber
 rel_get_natts(Oid relid)
 {
@@ -351,10 +324,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	point = ts_hyperspace_calculate_point(ht->space, (newslot ? newslot : slot));
 
 	/* Find or create the insert state matching the point */
-	cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
-												   point,
-												   on_chunk_insert_state_changed,
-												   state);
+	cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point);
 
 	bool update_counter = cis->onConflictAction == ONCONFLICT_UPDATE;
 

@@ -560,7 +560,7 @@ ExecPrepareTupleRouting(ModifyTableState *mtstate,
 	if (cis->hyper_to_chunk_map != NULL && cds->is_dropped_attr_exists == false)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
 
-	*partRelInfo = cds->rri;
+	*partRelInfo = cis->result_relation_info;
 	return slot;
 }
 
@@ -2467,7 +2467,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 		context.planSlot = ExecProcNode(subplanstate);
 
-		if (cds && cds->rri && operation == CMD_INSERT && cds->cis->skip_current_tuple)
+		if (cds && cds->cis && operation == CMD_INSERT && cds->cis->skip_current_tuple)
 		{
 			cds->cis->skip_current_tuple = false;
 			if (node->ps.instrument)
@@ -2485,12 +2485,12 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		 * XXX do we need an additional support of NOT MATCHED BY SOURCE
 		 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 		 */
-		if (cds && cds->rri && operation == CMD_MERGE)
+		if (cds && cds->cis && operation == CMD_MERGE)
 #if PG17_GE
-			cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
+			cds->cis->result_relation_info->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
 				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
 #else
-			cds->rri->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
+			cds->cis->result_relation_info->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
 #endif
 		/*
 		 * When there are multiple result relations, each tuple contains a
@@ -3337,9 +3337,9 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 	 */
 #if PG17_GE
-	actionStates = cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+	actionStates = cds->cis->result_relation_info->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
 #else
-	actionStates = cds->rri->ri_notMatchedMergeAction;
+	actionStates = cds->cis->result_relation_info->ri_notMatchedMergeAction;
 #endif
 	/*
 	 * Make source tuple available to ExecQual and ExecProject. We don't
@@ -3391,7 +3391,7 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 					TupleTableSlot *chunk_slot = NULL;
 
 					parenttupdesc = RelationGetDescr(resultRelInfo->ri_RelationDesc);
-					chunktupdesc = RelationGetDescr(cds->rri->ri_RelationDesc);
+					chunktupdesc = RelationGetDescr(cds->cis->result_relation_info->ri_RelationDesc);
 					/* map from parent to chunk */
 #if PG16_LT
 					map = build_attrmap_by_name_if_req(parenttupdesc, chunktupdesc);
