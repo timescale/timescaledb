@@ -313,7 +313,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.set_rel_pathlist_query = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
-	.process_explain_def = NULL,
 
 	/* gapfill */
 	.gapfill_marker = error_no_default_fn_pg_community,
