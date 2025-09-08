@@ -204,9 +204,10 @@ is_vector_type(Oid typeoid)
 static bool is_vector_var(const VectorQualInfo *vqinfo, Expr *expr);
 
 static bool
-is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid inputcollid)
+is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid resulttype,
+				   Oid inputcollid)
 {
-	if (get_vector_function(funcoid) == NULL)
+	if (!is_vector_type(resulttype))
 	{
 		return false;
 	}
@@ -218,6 +219,11 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid in
 		{
 			return false;
 		}
+	}
+
+	if (!func_strict(funcoid))
+	{
+		return false;
 	}
 
 	return true;
@@ -242,13 +248,21 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 		{
 			/* Can vectorize some functions! */
 			FuncExpr *f = castNode(FuncExpr, expr);
-			return is_vector_function(vqinfo, f->args, f->funcid, f->inputcollid);
+			return is_vector_function(vqinfo,
+									  f->args,
+									  f->funcid,
+									  f->funcresulttype,
+									  f->inputcollid);
 		}
 
 		case T_OpExpr:
 		{
 			OpExpr *o = castNode(OpExpr, expr);
-			return is_vector_function(vqinfo, o->args, o->opfuncid, o->inputcollid);
+			return is_vector_function(vqinfo,
+									  o->args,
+									  o->opfuncid,
+									  o->opresulttype,
+									  o->inputcollid);
 		}
 
 		case T_Var:

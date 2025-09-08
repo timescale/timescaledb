@@ -89,46 +89,143 @@ arrow_create_with_buffers(MemoryContext mcxt, int n_buffers)
 }
 
 /*
- * Create a primitive ArrowArray (uint64) of length nrows.
- * If isnull is true, all slots are null (validity bitmap = 0, null_count = nrows).
- * Otherwise, validity bitmap is omitted (buffers[0] = NULL) per spec and null_count = 0.
- * Data buffer always has nrows 64-bit values, each equal to DatumGetUInt64(value).
+ * Variable-size primitive layout ArrowArray from decompression iterator.
  */
 static ArrowArray *
-arrow_make_uint64_constant(MemoryContext mcxt, Datum value, bool isnull, int64 nrows)
+arrow_from_const_varlen(MemoryContext mcxt, int nrows, Datum value)
 {
-	/* Primitive layout: [0] validity (optional), [1] data */
+	const int value_bytes = VARSIZE_ANY_EXHDR(value);
+
+	int32 *restrict offsets_buffer = MemoryContextAlloc(mcxt, nrows * sizeof(*offsets_buffer));
+	for (int i = 0; i < nrows; i++)
+	{
+		offsets_buffer[i] = value_bytes * i;
+	}
+
+	uint8 *restrict data_buffer = MemoryContextAlloc(mcxt, nrows * value_bytes);
+	for (int i = 0; i < nrows; i++)
+	{
+		memcpy(data_buffer + value_bytes * i, DatumGetPointer(value), value_bytes);
+	}
+
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 3);
+	array->length = nrows;
+	array->buffers[0] = NULL;
+	array->buffers[1] = offsets_buffer;
+	array->buffers[2] = data_buffer;
+
+	return array;
+}
+
+/*
+ * Fixed-Size Primitive layout ArrowArray from decompression iterator.
+ */
+static ArrowArray *
+arrow_from_const_fixlen(MemoryContext mcxt, int nrows, Datum value, int16 typlen, bool typbyval)
+{
+	/* Just a precaution: this should not be a varlen type */
+	Assert(typlen > 0);
+
+	uint8 *restrict data_buffer = MemoryContextAlloc(mcxt, nrows * typlen);
+	for (int i = 0; i < nrows; i++)
+	{
+		if (typbyval)
+		{
+			/*
+			 * We use unsigned integers to avoid conversions between signed
+			 * and unsigned values (which in theory could change the value)
+			 * when converting to datum (which is an unsigned value).
+			 *
+			 * Conversions between unsigned values is well-defined in the C
+			 * standard and will work here.
+			 */
+			switch (typlen)
+			{
+				case sizeof(uint8):
+					data_buffer[i] = DatumGetUInt8(value);
+					break;
+				case sizeof(uint16):
+					((uint16 *) data_buffer)[i] = DatumGetUInt16(value);
+					break;
+				case sizeof(uint32):
+					((uint32 *) data_buffer)[i] = DatumGetUInt32(value);
+					break;
+				case sizeof(uint64):
+					/* This branch is not called for by-reference 64-bit values */
+					((uint64 *) data_buffer)[i] = DatumGetUInt64(value);
+					break;
+				default:
+					ereport(ERROR,
+							errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("not supporting writing by value length %d", typlen));
+			}
+		}
+		else
+		{
+			memcpy(&data_buffer[typlen * i], DatumGetPointer(value), typlen);
+		}
+	}
+
 	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
 	array->length = nrows;
-	//	array->release = arrow_release_buffers;
+	array->buffers[0] = NULL;
+	array->buffers[1] = data_buffer;
+	return array;
+}
 
-	/* Validity (buffer[0]) */
-	uint64 *validity = NULL;
-	if (isnull && nrows > 0)
+static ArrowArray *
+arrow_from_const_bool(MemoryContext mcxt, int nrows, Datum value)
+{
+	const size_t words = (size_t) ((nrows + 63) / 64);
+	uint64 *values = (uint64 *) MemoryContextAlloc(mcxt, words * sizeof(*values));
+	memset(values, DatumGetBool(value) ? (uint8) -1 : 0, words * sizeof(*values));
+
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
+	array->length = nrows;
+	array->buffers[0] = NULL;
+	array->buffers[1] = values;
+	return array;
+}
+
+static ArrowArray *
+arrow_from_const_null(MemoryContext mcxt, int nrows)
+{
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
+	array->length = nrows;
+	array->null_count = nrows;
+
+	const size_t words = (size_t) ((nrows + 63) / 64);
+	uint64 *validity = (uint64 *) MemoryContextAllocZero(mcxt, words * sizeof(uint64));
+	array->buffers[0] = validity;
+	return array;
+}
+
+/*
+ * Read the entire contents of a decompression iterator into the arrow array.
+ */
+static ArrowArray *
+arrow_from_constant(MemoryContext mcxt, int nrows, const Const *c)
+{
+	int16 typlen;
+	bool typbyval;
+	get_typlenbyval(c->consttype, &typlen, &typbyval);
+
+	if (c->constisnull)
 	{
-		const size_t words = (size_t) ((nrows + 63) / 64);
-		/* All-bits-zero => all slots are null */
-		validity = (uint64 *) MemoryContextAllocZero(mcxt, words * sizeof(uint64));
-		array->null_count = nrows;
+		return arrow_from_const_null(mcxt, nrows);
+	}
+	else if (c->consttype == BOOLOID)
+	{
+		return arrow_from_const_bool(mcxt, nrows, c->constvalue);
+	}
+	else if (typlen == -1)
+	{
+		return arrow_from_const_varlen(mcxt, nrows, c->constvalue);
 	}
 	else
 	{
-		array->null_count = 0;
+		return arrow_from_const_fixlen(mcxt, nrows, c->constvalue, typlen, typbyval);
 	}
-	array->buffers[0] = validity;
-
-	/* Data (buffer[1]) */
-	uint64 *restrict data =
-		(uint64 *) MemoryContextAllocZero(mcxt, (size_t) nrows * sizeof(uint64));
-	if (nrows > 0)
-	{
-		const uint64 v = DatumGetUInt64(value);
-		for (int64 i = 0; i < nrows; i++)
-			data[i] = v;
-	}
-	array->buffers[1] = data;
-
-	return array;
 }
 
 static CompressedColumnValues
@@ -143,7 +240,7 @@ evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid
 	LOCAL_FCINFO(fcinfo, 2);
 	InitFunctionCallInfoData(*fcinfo, &flinfo, 2, inputcollid, NULL, NULL);
 
-	const int n = batch_state->total_batch_rows;
+	const int nrows = batch_state->total_batch_rows;
 
 	const ArrowArray *arrow_args[2];
 	CompressedColumnValues arg_values[2];
@@ -163,16 +260,26 @@ evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid
 			&fcinfo->args[foreach_current_index(lc)].isnull;
 	}
 
+	Oid rettype = get_func_rettype(funcoid);
+	int16 rettyplen;
+	bool rettypbyval;
+	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
+
+	if (!rettypbyval)
+	{
+		elog(ERROR, "only byval for now");
+	}
+
 	ArrowArray *arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
 													  sizeof(ArrowArray) + 2 * sizeof(void *));
-	arrow_result->length = n;
+	arrow_result->length = nrows;
 	arrow_result->buffers = (void *) &arrow_result[1];
 	arrow_result->buffers[1] =
-		MemoryContextAllocZero(batch_state->per_batch_context, sizeof(uint64) * n);
+		MemoryContextAllocZero(batch_state->per_batch_context, rettyplen * nrows);
 
 	// vector_function(arrow_args, list_length(f->args), arrow_result);
 
-	for (int i = 0; i < n; i++)
+	for (int i = 0; i < nrows; i++)
 	{
 		compressed_columns_to_postgres_data(arg_values, 2, i);
 
@@ -180,7 +287,22 @@ evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid
 
 		(void) result;
 
-		((uint64 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt64(result);
+		switch (rettyplen)
+		{
+			case 2:
+				((uint16 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt16(result);
+				break;
+			case 4:
+				((uint32 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt32(result);
+				break;
+			case 8:
+				((uint64 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt64(result);
+				//				fprintf(stderr, "rtl %d row %d result %ld\n", rettyplen, i,
+				//DatumGetUInt64(result);
+				break;
+			default:
+				elog(ERROR, "wrong size %d", rettyplen);
+		}
 	}
 
 	/*
@@ -188,7 +310,7 @@ evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid
 	 */
 	if (have_nulls)
 	{
-		const size_t num_words = (n + 63) / 64;
+		const size_t num_words = (nrows + 63) / 64;
 		arrow_result->buffers[0] =
 			MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_words);
 		arrow_combine_validity(num_words,
@@ -201,7 +323,7 @@ evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid
 	}
 
 	CompressedColumnValues result = {
-		.decompression_type = 8,
+		.decompression_type = rettyplen,
 		.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
 		.arrow = arrow_result,
 	};
@@ -222,12 +344,11 @@ vector_slot_get_compressed_column_values(TupleTableSlot *slot, const Expr *argum
 		case T_Const:
 		{
 			const Const *c = (const Const *) argument;
-			ArrowArray *arrow_result = arrow_make_uint64_constant(batch_state->per_batch_context,
-																  c->constvalue,
-																  c->constisnull,
-																  batch_state->total_batch_rows);
+			ArrowArray *arrow_result = arrow_from_constant(batch_state->per_batch_context,
+														   batch_state->total_batch_rows,
+														   c);
 			CompressedColumnValues result = {
-				.decompression_type = 8,
+				.decompression_type = get_typlen(c->consttype),
 				.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
 				.arrow = arrow_result,
 			};
