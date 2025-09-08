@@ -115,6 +115,33 @@ setup
       INTO mattable;
       EXECUTE format('LOCK table %s IN ROW EXCLUSIVE MODE', mattable);
     END; $$ LANGUAGE plpgsql;
+
+    CREATE TABLE killpid (
+        pid INTEGER NOT NULL PRIMARY KEY
+    );
+    CREATE OR REPLACE PROCEDURE killpids() AS 
+    $$
+    BEGIN
+        PERFORM pg_terminate_backend(pid) FROM killpid;
+        WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM killpid))
+        LOOP
+            PERFORM pg_sleep(0.01);
+        END LOOP;
+        DELETE FROM killpid;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    CREATE OR REPLACE VIEW pending_materialization_ranges AS
+    SELECT
+        c.user_view_name,
+        m.lowest_modified_value,
+        m.greatest_modified_value
+    FROM
+        _timescaledb_catalog.continuous_aggs_materialization_ranges m
+        JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
+    ORDER BY
+        1, 2, 3;
+
 }
 
 # Move the invalidation threshold so that we can generate some
@@ -149,6 +176,7 @@ setup
 teardown {
     DROP TABLE conditions CASCADE;
     DROP TABLE conditions2 CASCADE;
+    DROP TABLE killpid;
 }
 
 # Waitpoint for cagg invalidation logs
@@ -168,6 +196,8 @@ setup
 {
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
+    INSERT INTO killpid VALUES (pg_backend_pid())
+    ON CONFLICT (pid) DO NOTHING;
 }
 step "R1_refresh"
 {
@@ -183,6 +213,12 @@ setup
 step "R12_refresh"
 {
     CALL refresh_continuous_aggregate('cond2_10', 25, 70);
+}
+
+session "R13"
+step "R13_refresh"
+{
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
 }
 
 # Refresh that overlaps with R1
@@ -235,21 +271,11 @@ step "R5_refresh"
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
 }
 
-# Check for the materialization ranges
+# Check for pending materialization ranges
 session "R6"
-step "R6_materialization_ranges"
+step "R6_pending_materialization_ranges"
 {
-    SELECT
-        c.user_view_name,
-        m.lowest_modified_value,
-        m.greatest_modified_value
-    FROM
-        _timescaledb_catalog.continuous_aggs_materialization_ranges m
-        JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
-    WHERE
-        c.user_view_name = 'cond_10'
-    ORDER BY
-        1, 2, 3;
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
 }
 
 # Define a number of lock sessions to simulate concurrent refreshes
@@ -336,6 +362,12 @@ step "S1_select"
     ORDER BY 1;
 }
 
+session "K1"
+step "K1_killpid"
+{
+    CALL killpids();
+}
+
 ####################################################################
 #
 # Tests for concurrent updates to the invalidation threshold (first
@@ -385,6 +417,10 @@ permutation "L3_lock_cagg_table" "R3_refresh" "R4_refresh" "L3_unlock_cagg_table
 # block each other
 permutation "R1_refresh" "R12_refresh"
 
-# CAgg invalidation logs processing skipping locks due to
-# the concurrent execution
-permutation "WP_enable" "R1_refresh"("WP_enable") "R6_materialization_ranges" "R5_refresh"("WP_enable") "R6_materialization_ranges" "WP_release" "R6_materialization_ranges" "S1_select"
+# CAgg invalidation logs processing in a separated transaction and the materialization
+# transaction can be executed concurrently
+permutation "WP_enable" "R1_refresh"("WP_enable") "R6_pending_materialization_ranges" "R5_refresh"("WP_enable") "R6_pending_materialization_ranges" "WP_release" "R6_pending_materialization_ranges" "S1_select"
+
+# CAgg materialization phase (third trasaction of the refresh procedure) terminated by another session and then
+# refreshing again and make sure the pending ranges will be processed
+permutation "WP_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_enable") "R3_refresh"("WP_enable") "K1_killpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_release" "R13_refresh"("K1_killpid") "R6_pending_materialization_ranges"
