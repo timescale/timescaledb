@@ -35,6 +35,29 @@ DROP FUNCTION IF EXISTS timescaledb_experimental.add_policies;
 DROP FUNCTION IF EXISTS @extschema@.compress_chunk;
 DROP PROCEDURE IF EXISTS @extschema@.convert_to_columnstore;
 
+DO $$
+DECLARE
+    remove_these text[];
+BEGIN
+    SELECT array_agg(format('%I.%I', user_view_schema, user_view_name))
+      INTO remove_these
+      FROM _timescaledb_catalog.continuous_agg
+      JOIN _timescaledb_catalog.hypertable ht
+        ON raw_hypertable_id = ht.id
+     WHERE 'ts_cagg_invalidation_trigger' NOT IN (
+         SELECT tgname FROM pg_trigger
+          WHERE tgrelid = format('%I.%I', ht.schema_name, ht.table_name)::regclass
+     );
+
+    IF array_length(remove_these, 1) > 0 THEN
+        RAISE EXCEPTION 'cannot downgrade because there are continuous aggregates using WAL-based invalidation collection'
+            USING
+                ERRCODE = 'object_not_in_prerequisite_state',
+                DETAIL = format('Please remove these CAggs before downgrade: %s.', array_to_string(remove_these, ','));
+    END IF;
+END
+$$;
+
 CREATE FUNCTION @extschema@.compress_chunk(
   uncompressed_chunk REGCLASS,
   if_not_compressed BOOLEAN = true,
