@@ -426,7 +426,6 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	MemoryContext cis_context = AllocSetContextCreate(ctr->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
-	OnConflictAction onconflict_action = ctr->mht_state->mt->onConflictAction;
 	ResultRelInfo *relinfo;
 	const Chunk *chunk;
 
@@ -458,11 +457,13 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(ctr->hypertable_rri, rel, ctr->estate);
-	CheckValidResultRelCompat(relinfo, ctr->mht_state->mt->operation, NIL);
+	if (ctr->mht_state)
+		CheckValidResultRelCompat(relinfo, ctr->mht_state->mt->operation, NIL);
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->counters = ctr->counters;
-	state->onConflictAction = onconflict_action;
+	if (ctr->mht_state)
+		state->onConflictAction = ctr->mht_state->mt->onConflictAction;
 	state->mctx = cis_context;
 	state->rel = rel;
 	state->result_relation_info = relinfo;
@@ -470,7 +471,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(relinfo, onconflict_action != ONCONFLICT_NONE);
+		ExecOpenIndices(relinfo, state->onConflictAction != ONCONFLICT_NONE);
 
 	if (relinfo->ri_TrigDesc != NULL)
 	{
@@ -501,10 +502,11 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 		state->hyper_to_chunk_map =
 			convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
 
-	adjust_projections(ctr->hypertable_rri,
-					   linitial_node(ModifyTableState, ctr->mht_state->cscan_state.custom_ps),
-					   state,
-					   RelationGetForm(rel)->reltype);
+	if (ctr->mht_state)
+		adjust_projections(ctr->hypertable_rri,
+						   linitial_node(ModifyTableState, ctr->mht_state->cscan_state.custom_ps),
+						   state,
+						   RelationGetForm(rel)->reltype);
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
 	 * want this slot tied to the executor's tuple table, since that would tie

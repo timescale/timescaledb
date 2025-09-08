@@ -15,8 +15,6 @@
 #include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
-static ChunkInsertState *chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr);
-
 ChunkTupleRouting *
 ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 {
@@ -150,7 +148,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 			}
 		}
 
-		cis = chunk_insert_state_create(chunk->table_id, ctr);
+		cis = ts_chunk_insert_state_create(chunk->table_id, ctr);
 		cis->needs_partial = needs_partial;
 		ts_subspace_store_add(ctr->subspace, chunk->cube, cis, destroy_chunk_insert_state);
 	}
@@ -160,106 +158,6 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 	Assert(cis != NULL);
 
 	return cis;
-}
-
-static ChunkInsertState *
-chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr)
-{
-	ChunkInsertState *state;
-	Relation rel, parent_rel;
-	MemoryContext cis_context = AllocSetContextCreate(ctr->estate->es_query_cxt,
-													  "chunk insert state memory context",
-													  ALLOCSET_DEFAULT_SIZES);
-	ResultRelInfo *relinfo;
-	const Chunk *chunk;
-
-	/* permissions NOT checked here; were checked at hypertable level */
-	if (check_enable_rls(chunk_relid, InvalidOid, false) == RLS_ENABLED)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("hypertables do not support row-level security")));
-
-	/*
-	 * Since we insert data and won't modify metadata, a RowExclusiveLock
-	 * should be sufficient. This should conflict with any metadata-modifying
-	 * operations as they should take higher-level locks (ShareLock and
-	 * above).
-	 */
-	DEBUG_WAITPOINT("chunk_insert_before_lock");
-	rel = table_open(chunk_relid, RowExclusiveLock);
-
-	/*
-	 * A concurrent chunk operation (e.g., compression) might have changed the
-	 * chunk metadata before we got a lock, so re-read it.
-	 *
-	 * This works even in higher levels of isolation since catalog data is
-	 * always read from latest snapshot.
-	 */
-	chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Assert(chunk->relkind == RELKIND_RELATION);
-	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
-
-	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
-	relinfo = create_chunk_result_relation_info(ctr->hypertable_rri, rel, ctr->estate);
-
-	state = palloc0(sizeof(ChunkInsertState));
-	state->counters = ctr->counters;
-	state->mctx = cis_context;
-	state->rel = rel;
-	state->result_relation_info = relinfo;
-	state->estate = ctr->estate;
-	ts_set_compression_status(state, chunk);
-
-	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
-	{
-		bool speculative = false;
-		if (ctr->mht_state && ctr->mht_state->mt->onConflictAction != ONCONFLICT_NONE)
-			speculative = true;
-
-		ExecOpenIndices(relinfo, speculative);
-	}
-
-	if (relinfo->ri_TrigDesc != NULL)
-	{
-		TriggerDesc *tg = relinfo->ri_TrigDesc;
-
-		/* instead of triggers can only be created on VIEWs */
-		Assert(!tg->trig_insert_instead_row);
-
-		/*
-		 * A statement that targets a parent table in an inheritance or
-		 * partitioning hierarchy does not cause the statement-level triggers
-		 * of affected child tables to be fired; only the parent table's
-		 * statement-level triggers are fired. However, row-level triggers
-		 * of any affected child tables will be fired.
-		 * During chunk creation we only copy ROW trigger to chunks so
-		 * statement triggers should not exist on chunks.
-		 */
-		if (tg->trig_insert_after_statement || tg->trig_insert_before_statement)
-			elog(ERROR, "statement trigger on chunk table not supported");
-	}
-
-	parent_rel = table_open(ctr->hypertable->main_table_relid, AccessShareLock);
-	state->hyper_to_chunk_map =
-		convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
-
-	/* Need a tuple table slot to store tuples going into this chunk. We don't
-	 * want this slot tied to the executor's tuple table, since that would tie
-	 * the slot's lifetime to the entire length of the execution and we want
-	 * to be able to dynamically create and destroy chunk insert
-	 * state. Otherwise, memory might blow up when there are many chunks being
-	 * inserted into. This also means that the slot needs to be destroyed with
-	 * the chunk insert state. */
-	state->slot = MakeSingleTupleTableSlot(RelationGetDescr(relinfo->ri_RelationDesc),
-										   table_slot_callbacks(relinfo->ri_RelationDesc));
-	table_close(parent_rel, AccessShareLock);
-
-	state->hypertable_relid = chunk->hypertable_relid;
-	state->chunk_id = chunk->fd.id;
-
-	MemoryContextSwitchTo(old_mcxt);
-
-	return state;
 }
 
 extern void

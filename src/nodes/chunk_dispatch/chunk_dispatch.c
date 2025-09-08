@@ -55,83 +55,6 @@ destroy_chunk_insert_state(void *cis)
 	ts_chunk_insert_state_destroy((ChunkInsertState *) cis);
 }
 
-/*
- * Get the chunk insert state for the chunk that matches the given point in the
- * partitioned hyperspace.
- */
-extern ChunkInsertState *
-ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point)
-{
-	ChunkInsertState *cis;
-	Chunk *chunk = NULL;
-
-	cis = ts_subspace_store_get(dispatch->cache, point);
-
-	/*
-	 * The chunk search functions may leak memory, so switch to a temporary
-	 * memory context.
-	 */
-	MemoryContext old_context = MemoryContextSwitchTo(GetPerTupleMemoryContext(dispatch->estate));
-
-	if (!cis)
-	{
-		/*
-		 * Normally, for every row of the chunk except the first one, we expect
-		 * the chunk to exist already. The "create" function would take a lock
-		 * on the hypertable to serialize the concurrent chunk creation. Here we
-		 * first use the "find" function to try to find the chunk without
-		 * locking the hypertable. This serves as a fast path for the usual case
-		 * where the chunk already exists.
-		 */
-		chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
-
-		/*
-		 * Frozen chunks require at least PG14.
-		 */
-		if (chunk && ts_chunk_is_frozen(chunk))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot INSERT into frozen chunk \"%s\"",
-							get_rel_name(chunk->table_id))));
-		if (chunk && IS_OSM_CHUNK(chunk))
-		{
-			const Dimension *time_dim =
-				hyperspace_get_open_dimension(dispatch->hypertable->space, 0);
-			Assert(time_dim != NULL);
-
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
-							"new chunk "
-							"with range  [%s %s] failed",
-							NameStr(dispatch->hypertable->fd.schema_name),
-							NameStr(dispatch->hypertable->fd.table_name),
-							ts_internal_to_time_string(chunk->cube->slices[0]->fd.range_start,
-													   time_dim->fd.column_type),
-							ts_internal_to_time_string(chunk->cube->slices[0]->fd.range_end,
-													   time_dim->fd.column_type)),
-					 errhint(
-						 "Hypertable has tiered data with time range that overlaps the insert")));
-		}
-
-		if (!chunk)
-		{
-			chunk = ts_hypertable_create_chunk_for_point(dispatch->hypertable, point);
-		}
-
-		if (!chunk)
-			elog(ERROR, "no chunk found or created");
-
-		cis = ts_chunk_insert_state_create(chunk->table_id, dispatch->ctr);
-		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
-	}
-
-	MemoryContextSwitchTo(old_context);
-
-	Assert(cis != NULL);
-	return cis;
-}
-
 static CustomScanMethods chunk_dispatch_plan_methods = {
 	.CustomName = "ChunkDispatch",
 	.CreateCustomScanState = chunk_dispatch_state_create,
@@ -324,7 +247,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	point = ts_hyperspace_calculate_point(ht->space, (newslot ? newslot : slot));
 
 	/* Find or create the insert state matching the point */
-	cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch, point);
+	cis = ts_chunk_tuple_routing_find_chunk(dispatch->ctr, point);
 
 	bool update_counter = cis->onConflictAction == ONCONFLICT_UPDATE;
 
