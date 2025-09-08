@@ -919,11 +919,37 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 
-	if (!process_cagg_invalidations_and_refresh(cagg,
-												&refresh_window,
-												context,
-												INVALID_CHUNK_ID,
-												force))
+	bool refreshed = process_cagg_invalidations_and_refresh(cagg,
+															&refresh_window,
+															context,
+															INVALID_CHUNK_ID,
+															force);
+
+	bool has_pending_materializations =
+		continuous_agg_has_pending_materializations(cagg, refresh_window);
+
+	if (has_pending_materializations)
+	{
+		ContinuousAggRefreshState refresh;
+		continuous_agg_refresh_init(&refresh, cagg, &refresh_window);
+
+		InternalTimeRange invalidation = {
+			.type = refresh_window.type,
+			.start = refresh_window.start,
+			/* Invalidations are inclusive at the end, while refresh windows
+			 * aren't, so add one to the end of the invalidated region */
+			.end = ts_time_saturating_add(refresh_window.end, 1, refresh_window.type),
+		};
+
+		InternalTimeRange bucketed_refresh_window =
+			compute_circumscribed_bucketed_refresh_window(cagg,
+														  &invalidation,
+														  cagg->bucket_function);
+
+		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window, INVALID_CHUNK_ID);
+	}
+
+	if (!refreshed && !has_pending_materializations)
 		emit_up_to_date_notice(cagg, context);
 
 	/* Restore search_path */
