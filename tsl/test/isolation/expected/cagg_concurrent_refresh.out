@@ -1,4 +1,4 @@
-Parsed test spec with 12 sessions
+Parsed test spec with 14 sessions
 
 starting permutation: R1_refresh S1_select R3_refresh S1_select L2_read_unlock_threshold_table L3_unlock_cagg_table L1_unlock_threshold_table
 step R1_refresh: 
@@ -356,7 +356,6 @@ step L3_unlock_cagg_table:
     ROLLBACK;
 
 step R1_refresh: <... completed>
-R2: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 step R2_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
@@ -545,7 +544,7 @@ step R12_refresh:
     CALL refresh_continuous_aggregate('cond2_10', 25, 70);
 
 
-starting permutation: WP_enable R1_refresh R6_materialization_ranges R5_refresh R6_materialization_ranges WP_release R6_materialization_ranges S1_select
+starting permutation: WP_enable R1_refresh R6_pending_materialization_ranges R5_refresh R6_pending_materialization_ranges WP_release R6_pending_materialization_ranges S1_select
 R5: LOG:  statement: 
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
@@ -565,18 +564,8 @@ debug_waitpoint_enable
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
  <waiting ...>
-step R6_materialization_ranges: 
-    SELECT
-        c.user_view_name,
-        m.lowest_modified_value,
-        m.greatest_modified_value
-    FROM
-        _timescaledb_catalog.continuous_aggs_materialization_ranges m
-        JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
-    WHERE
-        c.user_view_name = 'cond_10'
-    ORDER BY
-        1, 2, 3;
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
 
 user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
@@ -589,18 +578,8 @@ R5: LOG:  statement:
 step R5_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
  <waiting ...>
-step R6_materialization_ranges: 
-    SELECT
-        c.user_view_name,
-        m.lowest_modified_value,
-        m.greatest_modified_value
-    FROM
-        _timescaledb_catalog.continuous_aggs_materialization_ranges m
-        JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
-    WHERE
-        c.user_view_name = 'cond_10'
-    ORDER BY
-        1, 2, 3;
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
 
 user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
@@ -621,18 +600,8 @@ R5: DEBUG:  continuous aggregate refresh (individual invalidation) on "cond_10" 
 R5: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
 R5: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
 step R5_refresh: <... completed>
-step R6_materialization_ranges: 
-    SELECT
-        c.user_view_name,
-        m.lowest_modified_value,
-        m.greatest_modified_value
-    FROM
-        _timescaledb_catalog.continuous_aggs_materialization_ranges m
-        JOIN _timescaledb_catalog.continuous_agg c on c.mat_hypertable_id = m.materialization_id
-    WHERE
-        c.user_view_name = 'cond_10'
-    ORDER BY
-        1, 2, 3;
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
 
 user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
@@ -674,4 +643,73 @@ hypertable |  threshold
 conditions |        100
 conditions2|-2147483648
 (2 rows)
+
+
+starting permutation: WP_enable R6_pending_materialization_ranges R1_refresh R3_refresh K1_killpid R6_pending_materialization_ranges WP_release R13_refresh R6_pending_materialization_ranges
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|lowest_modified_value|greatest_modified_value
+--------------+---------------------+-----------------------
+(0 rows)
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step R3_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
+ <waiting ...>
+step K1_killpid: 
+    CALL killpids();
+ <waiting ...>
+step R1_refresh: <... completed>
+FATAL:  terminating connection due to administrator command
+server closed the connection unexpectedly
+	This probably means the server terminated abnormally
+	before or while processing the request.
+
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|lowest_modified_value|greatest_modified_value
+--------------+---------------------+-----------------------
+cond_10       |                   30|                     70
+cond_10       |                   70|                    100
+(2 rows)
+
+step K1_killpid: <... completed>
+step WP_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step R3_refresh: <... completed>
+step R13_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|lowest_modified_value|greatest_modified_value
+--------------+---------------------+-----------------------
+(0 rows)
 
