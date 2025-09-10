@@ -28,7 +28,7 @@ typedef struct WithClauseResult
 	Datum parsed;
 } WithClauseResult;
 
-extern TSDLLEXPORT void ts_with_clause_filter(const List *def_elems, List **within_namespace,
+extern TSDLLEXPORT void ts_with_clause_filter(const List *def_elems, List **within_namespace, List **tigerlake_namespace,
 											  List **not_within_namespace);
 
 extern TSDLLEXPORT WithClauseResult *

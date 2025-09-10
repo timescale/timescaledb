@@ -3252,7 +3252,7 @@ process_index_start(ProcessUtilityArgs *args)
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);
 
-	ts_with_clause_filter(stmt->options, &hypertable_options, &postgres_options);
+	ts_with_clause_filter(stmt->options, &hypertable_options, NULL, &postgres_options);
 
 	stmt->options = postgres_options;
 
@@ -4267,15 +4267,17 @@ continuous_agg_with_clause_perm_check(ContinuousAgg *cagg, Oid view_relid)
 				 errmsg("must be owner of continuous aggregate \"%s\"", get_rel_name(view_relid))));
 }
 
-static void
+static List* 
 process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const List *defelems)
 {
 	WithClauseResult *parse_results;
-	List *pg_options = NIL, *cagg_options = NIL;
+	List *pg_options = NIL, *tigerlake_options=NIL, *cagg_options = NIL;
 
 	continuous_agg_with_clause_perm_check(cagg, view_relid);
 
-	ts_with_clause_filter(defelems, &cagg_options, &pg_options);
+	ts_with_clause_filter(defelems, &cagg_options, &tigerlake_options, &pg_options);
+	ereport(NOTICE, errmsg("parsed with clause filter"));
+
 	if (list_length(pg_options) > 0)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -4287,6 +4289,13 @@ process_altercontinuousagg_set_with(ContinuousAgg *cagg, Oid view_relid, const L
 		parse_results = ts_create_materialized_view_with_clause_parse(cagg_options);
 		ts_cm_functions->continuous_agg_update_options(cagg, parse_results);
 	}
+	if (list_length(tigerlake_options) > 0)
+	{
+            return tigerlake_options;
+	}
+        else
+            return NIL;
+
 }
 
 /* Run an alter table command on a relation */
@@ -4328,6 +4337,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 	ContinuousAgg *cagg;
 	ListCell *lc;
 
+        DDLResult ddl_res = DDL_STOP;
 	if (!OidIsValid(view_relid))
 		return DDL_CONTINUE;
 
@@ -4349,7 +4359,15 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 					ereport(ERROR,
 							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 							 errmsg("expected set options to contain a list")));
-				process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
+				List *tigerlake_opt = process_altercontinuousagg_set_with(cagg, view_relid, (List *) cmd->def);
+                                /* pass on SET options to other extensions like timescaledb-lake. only if
+                                 * there are additional PG related ones, we error out 
+                                 */
+                                if ( tigerlake_opt != NIL )
+                                {
+                                    cmd->def = (Node *)tigerlake_opt;
+                                    ddl_res = DDL_CONTINUE;
+                                }
 				break;
 
 			case AT_ChangeOwner:
@@ -4380,8 +4398,7 @@ process_altertable_start_matview(ProcessUtilityArgs *args)
 								"aggregate")));
 		}
 	}
-	/* All commands processed by us, nothing for postgres to do.*/
-	return DDL_DONE;
+	return ddl_res;
 }
 
 static DDLResult
