@@ -166,7 +166,7 @@ chunk_dispatch_exec(CustomScanState *node)
 		{
 			if (attr_is_dropped_or_missing(ht->main_table_relid, attno))
 			{
-				state->is_dropped_attr_exists = true;
+				state->ctr->has_dropped_attrs = true;
 				break;
 			}
 		}

@@ -24,6 +24,7 @@ typedef struct ChunkTupleRouting
 	SubspaceStore *subspace;
 	EState *estate;
 	bool create_compressed_chunk;
+	bool has_dropped_attrs;
 
 	ModifyHypertableState *mht_state; /* state for the ModifyHypertable custom scan node */
 

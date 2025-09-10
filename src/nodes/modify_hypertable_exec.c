@@ -557,7 +557,7 @@ ExecPrepareTupleRouting(ModifyTableState *mtstate,
 {
 	ChunkInsertState *cis = cds->cis;
 	/* Convert the tuple to the chunk's rowtype, if necessary */
-	if (cis->hyper_to_chunk_map != NULL && cds->is_dropped_attr_exists == false)
+	if (cis->hyper_to_chunk_map != NULL && cds->ctr->has_dropped_attrs == false)
 		slot = execute_attr_map_slot(cis->hyper_to_chunk_map->attrMap, slot, cis->slot);
 
 	*partRelInfo = cis->result_relation_info;
@@ -3384,7 +3384,7 @@ ExecMergeNotMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 #else
 				context->relaction = action;
 #endif
-				if (cds->is_dropped_attr_exists)
+				if (cds->ctr->has_dropped_attrs)
 				{
 					AttrMap *map;
 					TupleDesc parenttupdesc, chunktupdesc;
