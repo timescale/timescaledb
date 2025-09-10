@@ -30,25 +30,6 @@
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
 
-ChunkDispatch *
-ts_chunk_dispatch_create(Hypertable *ht, EState *estate)
-{
-	ChunkDispatch *cd = palloc0(sizeof(ChunkDispatch));
-
-	cd->hypertable = ht;
-	cd->estate = estate;
-	cd->cache =
-		ts_subspace_store_init(ht->space, estate->es_query_cxt, ts_guc_max_open_chunks_per_insert);
-
-	return cd;
-}
-
-void
-ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch)
-{
-	ts_subspace_store_free(chunk_dispatch->cache);
-}
-
 static CustomScanMethods chunk_dispatch_plan_methods = {
 	.CustomName = "ChunkDispatch",
 	.CreateCustomScanState = chunk_dispatch_state_create,
@@ -132,16 +113,10 @@ static void
 chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
-	Hypertable *ht;
-	Cache *hypertable_cache;
 	PlanState *ps;
 
-	ht = ts_hypertable_cache_get_cache_and_entry(state->hypertable_relid,
-												 CACHE_FLAG_NONE,
-												 &hypertable_cache);
 	ps = ExecInitNode(state->subplan, estate, eflags);
-	state->hypertable_cache = hypertable_cache;
-	state->dispatch = ts_chunk_dispatch_create(ht, estate);
+	state->dispatch = palloc0(sizeof(ChunkDispatch));
 	state->dispatch->dispatch_state = state;
 	node->custom_ps = list_make1(ps);
 }
@@ -272,12 +247,9 @@ chunk_dispatch_exec(CustomScanState *node)
 static void
 chunk_dispatch_end(CustomScanState *node)
 {
-	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	PlanState *substate = linitial(node->custom_ps);
 
 	ExecEndNode(substate);
-	ts_chunk_dispatch_destroy(state->dispatch);
-	ts_cache_release(&state->hypertable_cache);
 }
 
 static void
