@@ -27,12 +27,7 @@ typedef struct ChunkTupleRouting ChunkTupleRouting;
  */
 typedef struct ChunkDispatch
 {
-	/* Link to the executor state for INSERTs. This is an mostly empty dummy state in the COPY path.
-	 */
-	struct ChunkDispatchState *dispatch_state;
-	EState *estate;
 	ChunkTupleRouting *ctr;
-
 } ChunkDispatch;
 
 typedef struct ChunkDispatchPath

@@ -117,7 +117,6 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 
 	ps = ExecInitNode(state->subplan, estate, eflags);
 	state->dispatch = palloc0(sizeof(ChunkDispatch));
-	state->dispatch->dispatch_state = state;
 	node->custom_ps = list_make1(ps);
 }
 
