@@ -39,10 +39,6 @@ static CustomScanMethods chunk_dispatch_plan_methods = {
  * purpose of this plan node is to dispatch (route) tuples to the correct chunk
  * in a hypertable.
  *
- * Note that CustomScan nodes cannot be extended (by struct embedding) because
- * they might be copied, therefore we pass hypertable_relid in the
- * custom_private field.
- *
  * The chunk dispatch plan takes the original tuple-producing subplan, which
  * was part of a ModifyTable node, and imposes itself between the
  * ModifyTable plan and the subplan. During execution, the subplan will
@@ -53,7 +49,6 @@ static Plan *
 chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_path,
 						   List *tlist, List *clauses, List *custom_plans)
 {
-	ChunkDispatchPath *cdpath = (ChunkDispatchPath *) best_path;
 	CustomScan *cscan = makeNode(CustomScan);
 	ListCell *lc;
 
@@ -67,7 +62,6 @@ chunk_dispatch_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *be
 		cscan->scan.plan.plan_width += subplan->plan_width;
 	}
 
-	cscan->custom_private = list_make1_oid(cdpath->hypertable_relid);
 	cscan->methods = &chunk_dispatch_plan_methods;
 	cscan->custom_plans = custom_plans;
 	cscan->scan.scanrelid = 0; /* Indicate this is not a real relation we are
@@ -96,7 +90,6 @@ ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 {
 	ChunkDispatchPath *path = (ChunkDispatchPath *) palloc0(sizeof(ChunkDispatchPath));
 	Path *subpath = mtpath->subpath;
-	RangeTblEntry *rte = planner_rt_fetch(mtpath->nominalRelation, root);
 
 	memcpy(&path->cpath.path, subpath, sizeof(Path));
 	path->cpath.path.type = T_CustomPath;
@@ -104,7 +97,6 @@ ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath)
 	path->cpath.methods = &chunk_dispatch_path_methods;
 	path->cpath.custom_paths = list_make1(subpath);
 	path->mtpath = mtpath;
-	path->hypertable_relid = rte->relid;
 
 	return &path->cpath.path;
 }
@@ -115,30 +107,6 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
 	PlanState *ps = ExecInitNode(state->subplan, estate, eflags);
 	node->custom_ps = list_make1(ps);
-}
-
-static AttrNumber
-rel_get_natts(Oid relid)
-{
-	HeapTuple tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-	AttrNumber natts = ((Form_pg_class) GETSTRUCT(tp))->relnatts;
-	ReleaseSysCache(tp);
-	return natts;
-}
-
-static bool
-attr_is_dropped_or_missing(Oid relid, AttrNumber attno)
-{
-	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
-	if (!HeapTupleIsValid(tp))
-		return false;
-	Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-	bool result = att_tup->attisdropped || att_tup->atthasmissing;
-	ReleaseSysCache(tp);
-	return result;
 }
 
 static TupleTableSlot *
@@ -169,15 +137,6 @@ chunk_dispatch_exec(CustomScanState *node)
 	TupleTableSlot *newslot = NULL;
 	if (ctr->mht_state->mt->operation == CMD_MERGE)
 	{
-		const AttrNumber natts = rel_get_natts(ht->main_table_relid);
-		for (AttrNumber attno = 1; attno <= natts; attno++)
-		{
-			if (attr_is_dropped_or_missing(ht->main_table_relid, attno))
-			{
-				state->is_dropped_attr_exists = true;
-				break;
-			}
-		}
 		for (int i = 0; i < ht->space->num_dimensions; i++)
 		{
 			/*
@@ -235,7 +194,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	 * We can probably improve this code by removing ChunkDispatch. See
 	 * hypertable_modify.c for more information.
 	 */
-	state->cis = cis;
+	state->ctr->cis = cis;
 
 	return slot;
 }
@@ -273,10 +232,8 @@ static Node *
 chunk_dispatch_state_create(CustomScan *cscan)
 {
 	ChunkDispatchState *state;
-	Oid hypertable_relid = linitial_oid(cscan->custom_private);
 
 	state = (ChunkDispatchState *) newNode(sizeof(ChunkDispatchState), T_CustomScanState);
-	state->hypertable_relid = hypertable_relid;
 	Assert(list_length(cscan->custom_plans) == 1);
 	state->subplan = linitial(cscan->custom_plans);
 	state->cscan_state.methods = &chunk_dispatch_state_methods;

@@ -7,6 +7,7 @@
 #include <postgres.h>
 #include <nodes/execnodes.h>
 #include <nodes/makefuncs.h>
+#include <utils/syscache.h>
 
 #include "compat/compat.h"
 #include "chunk_tuple_routing.h"
@@ -36,6 +37,36 @@ get_chunk_dispatch_state(PlanState *substate)
 	}
 
 	return NULL;
+}
+
+static AttrNumber
+rel_get_natts(Oid relid)
+{
+	HeapTuple tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tp))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+	AttrNumber natts = ((Form_pg_class) GETSTRUCT(tp))->relnatts;
+	ReleaseSysCache(tp);
+	return natts;
+}
+
+static bool
+rel_has_dropped_attrs(Oid relid)
+{
+	AttrNumber natts = rel_get_natts(relid);
+	for (AttrNumber attno = 1; attno <= natts; attno++)
+	{
+		HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
+		if (!HeapTupleIsValid(tp))
+			continue;
+		Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
+		bool result = att_tup->attisdropped || att_tup->atthasmissing;
+		ReleaseSysCache(tp);
+		if (result)
+			return true;
+	}
+	return false;
 }
 
 /*
@@ -90,6 +121,10 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 		ChunkDispatchState *cds = get_chunk_dispatch_state(subplan);
 		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
 		state->ctr->mht_state = state;
+		if (mtstate->operation == CMD_MERGE)
+			state->ctr->has_dropped_attrs =
+				rel_has_dropped_attrs(state->ctr->hypertable->main_table_relid);
+
 		cds->ctr = state->ctr;
 	}
 }

@@ -42,6 +42,8 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 										   estate->es_query_cxt,
 										   ts_guc_max_open_chunks_per_insert);
 
+	ctr->has_dropped_attrs = false;
+
 	return ctr;
 }
 
