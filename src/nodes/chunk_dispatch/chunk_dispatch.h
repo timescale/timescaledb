@@ -43,8 +43,6 @@ typedef struct ChunkDispatchState
 	 */
 	ChunkInsertState *cis;
 
-	/* flag to represent dropped attributes */
-	bool is_dropped_attr_exists;
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
