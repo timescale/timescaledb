@@ -55,12 +55,6 @@ typedef struct ChunkDispatchState
 	Oid hypertable_relid;
 
 	/*
-	 * Keep a pointer to the parent ModifyTableState executor node since we need
-	 * to manipulate the current result relation on-the-fly for chunk routing
-	 * during inserts.
-	 */
-	ModifyTableState *mtstate;
-	/*
 	 * The chunk dispatch state. Keeps cached chunk insert states (with result
 	 * relations) for each chunk.
 	 */
@@ -78,8 +72,6 @@ typedef struct ChunkDispatchState
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
-extern void ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state,
-											   ModifyTableState *mtstate);
 typedef struct Point Point;
 
 extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);

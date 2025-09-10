@@ -49,12 +49,6 @@ ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch)
 	ts_subspace_store_free(chunk_dispatch->cache);
 }
 
-static void
-destroy_chunk_insert_state(void *cis)
-{
-	ts_chunk_insert_state_destroy((ChunkInsertState *) cis);
-}
-
 static CustomScanMethods chunk_dispatch_plan_methods = {
 	.CustomName = "ChunkDispatch",
 	.CreateCustomScanState = chunk_dispatch_state_create,
@@ -184,8 +178,8 @@ chunk_dispatch_exec(CustomScanState *node)
 	TupleTableSlot *slot;
 	Point *point;
 	ChunkInsertState *cis;
-	ChunkDispatch *dispatch = state->dispatch;
-	Hypertable *ht = dispatch->hypertable;
+	ChunkTupleRouting *ctr = state->dispatch->ctr;
+	Hypertable *ht = ctr->hypertable;
 	EState *estate = node->ss.ps.state;
 	MemoryContext old;
 
@@ -202,7 +196,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	old = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
 	TupleTableSlot *newslot = NULL;
-	if (dispatch->dispatch_state->mtstate->operation == CMD_MERGE)
+	if (ctr->mht_state->mt->operation == CMD_MERGE)
 	{
 		const AttrNumber natts = rel_get_natts(ht->main_table_relid);
 		for (AttrNumber attno = 1; attno <= natts; attno++)
@@ -220,11 +214,10 @@ chunk_dispatch_exec(CustomScanState *node)
 			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 			 */
 #if PG17_GE
-			List *actionStates = dispatch->dispatch_state->mtstate->resultRelInfo
-									 ->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
-#else
 			List *actionStates =
-				dispatch->dispatch_state->mtstate->resultRelInfo->ri_notMatchedMergeAction;
+				ctr->hypertable_rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#else
+			List *actionStates = ctr->hypertable_rri->ri_notMatchedMergeAction;
 #endif
 			ListCell *l;
 			foreach (l, actionStates)
@@ -247,11 +240,11 @@ chunk_dispatch_exec(CustomScanState *node)
 	point = ts_hyperspace_calculate_point(ht->space, (newslot ? newslot : slot));
 
 	/* Find or create the insert state matching the point */
-	cis = ts_chunk_tuple_routing_find_chunk(dispatch->ctr, point);
+	cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
 
 	bool update_counter = cis->onConflictAction == ONCONFLICT_UPDATE;
 
-	ts_chunk_tuple_routing_decompress_for_insert(cis, slot, dispatch->estate, update_counter);
+	ts_chunk_tuple_routing_decompress_for_insert(cis, slot, ctr->estate, update_counter);
 
 	MemoryContextSwitchTo(old);
 
@@ -334,20 +327,4 @@ ts_is_chunk_dispatch_state(PlanState *state)
 		return false;
 
 	return csstate->methods == &chunk_dispatch_state_methods;
-}
-
-/*
- * This function is called during the init phase of the INSERT (ModifyTable)
- * plan, and gives the ChunkDispatchState node the access it needs to the
- * internals of the ModifyTableState node.
- *
- * Note that the function is called by the parent of the ModifyTableState node,
- * which guarantees that the ModifyTableState is fully initialized even though
- * ChunkDispatchState is a child of ModifyTableState.
- */
-void
-ts_chunk_dispatch_state_set_parent(ChunkDispatchState *state, ModifyTableState *mtstate)
-{
-	/* Inserts on hypertables should always have one subplan */
-	state->mtstate = mtstate;
 }
