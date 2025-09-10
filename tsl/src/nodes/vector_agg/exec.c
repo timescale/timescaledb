@@ -229,26 +229,28 @@ arrow_from_constant(MemoryContext mcxt, int nrows, const Const *c)
 }
 
 static CompressedColumnValues
-evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid)
+evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args, Oid funcoid,
+				  Oid inputcollid)
 {
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 
-	Ensure(list_length(args) == 2, "only 2 args supported");
+	Ensure(list_length(args) <= 5, "only <= 5 args supported");
 
 	FmgrInfo flinfo;
 	fmgr_info(funcoid, &flinfo);
-	LOCAL_FCINFO(fcinfo, 2);
-	InitFunctionCallInfoData(*fcinfo, &flinfo, 2, inputcollid, NULL, NULL);
+	LOCAL_FCINFO(fcinfo, 5);
+	InitFunctionCallInfoData(*fcinfo, &flinfo, list_length(args), inputcollid, NULL, NULL);
 
 	const int nrows = batch_state->total_batch_rows;
 
-	const ArrowArray *arrow_args[2];
-	CompressedColumnValues arg_values[2];
+	const ArrowArray *arrow_args[5];
+	CompressedColumnValues arg_values[5];
 	ListCell *lc;
 	bool have_nulls = false;
 	foreach (lc, args)
 	{
-		CompressedColumnValues arg = vector_slot_get_compressed_column_values(slot, lfirst(lc));
+		CompressedColumnValues arg =
+			vector_slot_get_compressed_column_values(dcontext, slot, lfirst(lc));
 		Ensure(arg.arrow != NULL, "no arrow for arg");
 		arrow_args[foreach_current_index(lc)] = arg.arrow;
 		have_nulls = (arg.arrow->null_count > 0) || have_nulls;
@@ -298,7 +300,7 @@ evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid
 			case 8:
 				((uint64 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt64(result);
 				//				fprintf(stderr, "rtl %d row %d result %ld\n", rettyplen, i,
-				//DatumGetUInt64(result);
+				// DatumGetUInt64(result);
 				break;
 			default:
 				elog(ERROR, "wrong size %d", rettyplen);
@@ -336,7 +338,8 @@ evaluate_function(TupleTableSlot *slot, List *args, Oid funcoid, Oid inputcollid
  * given attribute as a CompressedColumnValues struct.
  */
 CompressedColumnValues
-vector_slot_get_compressed_column_values(TupleTableSlot *slot, const Expr *argument)
+vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTableSlot *slot,
+										 const Expr *argument)
 {
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 	switch (((Node *) argument)->type)
@@ -357,19 +360,20 @@ vector_slot_get_compressed_column_values(TupleTableSlot *slot, const Expr *argum
 		case T_Var:
 		{
 			const Var *var = (const Var *) argument;
-			const uint16 offset = AttrNumberGetAttrOffset(var->varattno);
+			const uint16 offset =
+				get_input_offset(dcontext, var); // AttrNumberGetAttrOffset(var->varattno);
 			const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
 			return *values;
 		}
 		case T_OpExpr:
 		{
 			const OpExpr *o = (const OpExpr *) argument;
-			return evaluate_function(slot, o->args, o->opfuncid, o->inputcollid);
+			return evaluate_function(dcontext, slot, o->args, o->opfuncid, o->inputcollid);
 		}
 		case T_FuncExpr:
 		{
 			const FuncExpr *f = (const FuncExpr *) argument;
-			return evaluate_function(slot, f->args, f->funcid, f->inputcollid);
+			return evaluate_function(dcontext, slot, f->args, f->funcid, f->inputcollid);
 		}
 		default:
 			fprintf(stderr, "%s\n", ts_get_node_name((Node *) argument));
@@ -682,6 +686,11 @@ static TupleTableSlot *
 vector_agg_exec(CustomScanState *node)
 {
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
+
+	DecompressChunkState *decompress_state =
+		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+	DecompressContext *dcontext = &decompress_state->decompress_context;
+
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	ResetExprContext(econtext);
 
@@ -761,7 +770,7 @@ vector_agg_exec(CustomScanState *node)
 		/*
 		 * Finally, pass the compressed batch to the grouping policy.
 		 */
-		grouping->gp_add_batch(grouping, slot);
+		grouping->gp_add_batch(grouping, dcontext, slot);
 	}
 
 	/*

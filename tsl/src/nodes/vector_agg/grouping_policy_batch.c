@@ -114,8 +114,9 @@ gp_batch_reset(GroupingPolicy *obj)
 }
 
 static void
-compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slot,
-						 VectorAggDef *agg_def, void *agg_state, MemoryContext agg_extra_mctx)
+compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontext,
+						 TupleTableSlot *vector_slot, VectorAggDef *agg_def, void *agg_state,
+						 MemoryContext agg_extra_mctx)
 {
 	const ArrowArray *arg_arrow = NULL;
 	const uint64 *arg_validity_bitmap = NULL;
@@ -131,7 +132,7 @@ compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slo
 	if (agg_def->argument != NULL)
 	{
 		const CompressedColumnValues values =
-			vector_slot_get_compressed_column_values(vector_slot, agg_def->argument);
+			vector_slot_get_compressed_column_values(dcontext, vector_slot, agg_def->argument);
 
 		Assert(values.decompression_type != DT_Invalid);
 		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
@@ -186,7 +187,7 @@ compute_single_aggregate(GroupingPolicyBatch *policy, TupleTableSlot *vector_slo
 }
 
 static void
-gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
+gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlot *vector_slot)
 {
 	GroupingPolicyBatch *policy = (GroupingPolicyBatch *) gp;
 	uint16 total_batch_rows = 0;
@@ -217,7 +218,12 @@ gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 	{
 		VectorAggDef *agg_def = &policy->agg_defs[i];
 		void *agg_state = policy->agg_states[i];
-		compute_single_aggregate(policy, vector_slot, agg_def, agg_state, policy->agg_extra_mctx);
+		compute_single_aggregate(policy,
+								 dcontext,
+								 vector_slot,
+								 agg_def,
+								 agg_state,
+								 policy->agg_extra_mctx);
 	}
 
 	/*
@@ -231,7 +237,7 @@ gp_batch_add_batch(GroupingPolicy *gp, TupleTableSlot *vector_slot)
 		Assert(col->output_offset >= 0);
 
 		const CompressedColumnValues values =
-			vector_slot_get_compressed_column_values(vector_slot, col->expr);
+			vector_slot_get_compressed_column_values(dcontext, vector_slot, col->expr);
 		Assert(values.decompression_type == DT_Scalar);
 
 		/*

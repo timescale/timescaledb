@@ -185,16 +185,16 @@ is_vector_type(Oid typeoid)
 {
 	switch (typeoid)
 	{
-		case BOOLOID:
+			//		case BOOLOID:
 		case FLOAT4OID:
 		case FLOAT8OID:
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-		case TEXTOID:
+			//		case TEXTOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
-		case UUIDOID:
+			//		case UUIDOID:
 			return true;
 		default:
 			return false;
@@ -207,6 +207,11 @@ static bool
 is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid resulttype,
 				   Oid inputcollid)
 {
+	if (list_length(args) > 5)
+	{
+		return false;
+	}
+
 	if (!is_vector_type(resulttype))
 	{
 		return false;
@@ -272,6 +277,12 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 			if (var->varattno <= 0)
 			{
 				/* Can't work with special attributes like tableoid. */
+				return false;
+			}
+
+			/* FIXME */
+			if (!is_vector_type(var->vartype))
+			{
 				return false;
 			}
 
