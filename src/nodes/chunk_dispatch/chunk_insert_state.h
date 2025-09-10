@@ -110,8 +110,6 @@ typedef struct ChunkInsertState
 	bool skip_generated_column_computations;
 } ChunkInsertState;
 
-typedef struct ChunkDispatch ChunkDispatch;
-
 extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,
 													  const ChunkTupleRouting *ctr);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);

@@ -90,12 +90,7 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 		ChunkDispatchState *cds = get_chunk_dispatch_state(subplan);
 		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
 		state->ctr->mht_state = state;
-		cds->dispatch->ctr = state->ctr;
-
-		/* Ensure that we found at least one ChunkDispatchState node */
-		Assert(cds);
-
-		ts_chunk_dispatch_state_set_parent(cds, mtstate);
+		cds->ctr = state->ctr;
 	}
 }
 
@@ -166,8 +161,7 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 	if ((mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE) &&
 		outerPlanState(mtstate))
 	{
-		ChunkDispatchState *cds = get_chunk_dispatch_state(outerPlanState(mtstate));
-		SharedCounters *counters = cds->dispatch->ctr->counters;
+		SharedCounters *counters = state->ctr->counters;
 
 		state->batches_deleted += counters->batches_deleted;
 		state->batches_filtered += counters->batches_filtered;
