@@ -20,16 +20,6 @@
 
 typedef struct ChunkTupleRouting ChunkTupleRouting;
 
-/*
- * ChunkDispatch keeps cached state needed to dispatch tuples to chunks. It is
- * separate from any plan and executor nodes, since it is used both for INSERT
- * and COPY.
- */
-typedef struct ChunkDispatch
-{
-	ChunkTupleRouting *ctr;
-} ChunkDispatch;
-
 typedef struct ChunkDispatchPath
 {
 	CustomPath cpath;
@@ -47,11 +37,7 @@ typedef struct ChunkDispatchState
 	Cache *hypertable_cache;
 	Oid hypertable_relid;
 
-	/*
-	 * The chunk dispatch state. Keeps cached chunk insert states (with result
-	 * relations) for each chunk.
-	 */
-	ChunkDispatch *dispatch;
+	ChunkTupleRouting *ctr;
 
 	/*
 	 * Keep the chunk insert state available to pass it from
@@ -65,14 +51,5 @@ typedef struct ChunkDispatchState
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
-typedef struct Point Point;
-
-extern ChunkDispatch *ts_chunk_dispatch_create(Hypertable *ht, EState *estate);
-extern void ts_chunk_dispatch_destroy(ChunkDispatch *chunk_dispatch);
-extern ChunkInsertState *ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch,
-																  Point *p);
-extern void ts_chunk_dispatch_decompress_batches_for_insert(ChunkInsertState *cis,
-															TupleTableSlot *slot, EState *estate,
-															bool update_counter);
 
 extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath);

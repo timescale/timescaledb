@@ -113,10 +113,7 @@ static void
 chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	ChunkDispatchState *state = (ChunkDispatchState *) node;
-	PlanState *ps;
-
-	ps = ExecInitNode(state->subplan, estate, eflags);
-	state->dispatch = palloc0(sizeof(ChunkDispatch));
+	PlanState *ps = ExecInitNode(state->subplan, estate, eflags);
 	node->custom_ps = list_make1(ps);
 }
 
@@ -152,7 +149,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	TupleTableSlot *slot;
 	Point *point;
 	ChunkInsertState *cis;
-	ChunkTupleRouting *ctr = state->dispatch->ctr;
+	ChunkTupleRouting *ctr = state->ctr;
 	Hypertable *ht = ctr->hypertable;
 	EState *estate = node->ss.ps.state;
 	MemoryContext old;

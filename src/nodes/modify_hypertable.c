@@ -90,7 +90,7 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 		ChunkDispatchState *cds = get_chunk_dispatch_state(subplan);
 		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
 		state->ctr->mht_state = state;
-		cds->dispatch->ctr = state->ctr;
+		cds->ctr = state->ctr;
 	}
 }
 
