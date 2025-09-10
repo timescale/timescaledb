@@ -13,7 +13,6 @@
 #include "hypertable.h"
 
 /* Forward declarations */
-struct ChunkDispatchState;
 struct ModifyTableContext;
 
 typedef struct ModifyHypertablePath
@@ -50,4 +49,4 @@ extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
 TupleTableSlot *ExecModifyTable(CustomScanState *cs_node, PlanState *pstate);
 TupleTableSlot *ExecInsert(struct ModifyTableContext *context, ResultRelInfo *resultRelInfo,
-						   struct ChunkDispatchState *cds, TupleTableSlot *slot, bool canSetTag);
+						   struct ChunkTupleRouting *ctr, TupleTableSlot *slot, bool canSetTag);

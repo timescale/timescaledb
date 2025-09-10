@@ -24,7 +24,6 @@ typedef struct ChunkDispatchPath
 {
 	CustomPath cpath;
 	ModifyTablePath *mtpath;
-	Oid hypertable_relid;
 } ChunkDispatchPath;
 
 typedef struct Cache Cache;
@@ -34,20 +33,8 @@ typedef struct ChunkDispatchState
 {
 	CustomScanState cscan_state;
 	Plan *subplan;
-	Cache *hypertable_cache;
-	Oid hypertable_relid;
 
 	ChunkTupleRouting *ctr;
-
-	/*
-	 * Keep the chunk insert state available to pass it from
-	 * ExecGetInsertNewTuple() to ExecInsert(), where the actual slot to
-	 * use is decided.
-	 */
-	ChunkInsertState *cis;
-
-	/* flag to represent dropped attributes */
-	bool is_dropped_attr_exists;
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
