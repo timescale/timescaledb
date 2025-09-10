@@ -24,7 +24,6 @@ typedef struct ChunkDispatchPath
 {
 	CustomPath cpath;
 	ModifyTablePath *mtpath;
-	Oid hypertable_relid;
 } ChunkDispatchPath;
 
 typedef struct Cache Cache;
@@ -34,8 +33,6 @@ typedef struct ChunkDispatchState
 {
 	CustomScanState cscan_state;
 	Plan *subplan;
-	Cache *hypertable_cache;
-	Oid hypertable_relid;
 
 	ChunkTupleRouting *ctr;
 
