@@ -166,7 +166,7 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'bloom("u"),minmax("ts")');
 select * from settings;
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
 vacuum full analyze test_sparse_index;
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
@@ -243,7 +243,7 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'minmax("x")');
 
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
     where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
@@ -261,7 +261,7 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'x');
 
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
     where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
@@ -278,7 +278,7 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = '');
 
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
 vacuum full analyze test_sparse_index;
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
@@ -295,7 +295,7 @@ set timescaledb.enable_sparse_index_bloom to false;
 alter table test_sparse_index reset (timescaledb.compress_segmentby,
     timescaledb.compress_orderby,
     timescaledb.compress_index);
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
 vacuum full analyze test_sparse_index;
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
