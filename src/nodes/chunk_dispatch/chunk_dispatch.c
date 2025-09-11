@@ -227,7 +227,7 @@ chunk_dispatch_exec(CustomScanState *node)
 	 * We can probably improve this code by removing ChunkDispatch. See
 	 * hypertable_modify.c for more information.
 	 */
-	state->cis = cis;
+	state->ctr->cis = cis;
 
 	return slot;
 }

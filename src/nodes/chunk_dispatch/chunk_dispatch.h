@@ -41,7 +41,7 @@ typedef struct ChunkDispatchState
 	 * ExecGetInsertNewTuple() to ExecInsert(), where the actual slot to
 	 * use is decided.
 	 */
-	ChunkInsertState *cis;
+	//	ChunkInsertState *cis;
 
 } ChunkDispatchState;
 
