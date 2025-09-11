@@ -1103,6 +1103,16 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 	{
 		RangeTblEntry *in_rte = root->simple_rte_array[i];
 
+#if PG18_GE
+		/* RTE could be removed due to self-join
+		 * elimination optimization.
+		 *
+		 * https://github.com/postgres/postgres/commit/5f6f95
+		 */
+		if (!in_rte)
+			continue;
+#endif
+
 		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
 		{
 			RelOptInfo *in_rel = root->simple_rel_array[i];
