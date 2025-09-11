@@ -150,11 +150,12 @@ SET enable_seqscan = false;
 -- restrict so that we select only 1 chunk.
 :PREFIX
 WITH lookup as ( SELECT * from (values( 3, 5) , (3, 4) ) as lu( did, version) )
-SELECT met.*, lookup.*
+SELECT met.*, lookup.*, 'query no. 9'
 FROM metrics_ordered_idx met join lookup
 ON met.device_id = lookup.did and met.v0 = lookup.version
 WHERE met.time > '2000-01-19 19:00:00-05'
-      and met.time < '2000-01-20 20:00:00-05';
+      and met.time < '2000-01-20 20:00:00-05'
+ORDER BY v0;
 
 --add filter to segment by (device_id) and compressed attr column (v0)
 :PREFIX
