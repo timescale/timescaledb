@@ -16,6 +16,7 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "api.h"
 #include "compression.h"
 #include "compression_dml.h"
 #include "create.h"
@@ -25,7 +26,9 @@
 #include "recompress.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/chunk_column_stats.h"
+#include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
+#include "with_clause/alter_table_with_clause.h"
 
 /*
  * Timing parameters for spin locking heuristics.
@@ -111,6 +114,107 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
+static RecompressContext *
+compress_chunk_populate_recompress_ctx(CompressionSettings *settings,
+									   Relation uncompressed_chunk_rel,
+									   Relation compressed_chunk_rel, Relation index_rel,
+									   const bool for_uncompressed)
+{
+	RecompressContext *recompress_ctx;
+	int n;
+	int position;
+	const char *attname;
+	AttrNumber col_attno;
+	Relation chunk_rel = for_uncompressed ? uncompressed_chunk_rel : compressed_chunk_rel;
+	/* Initialize sort info structure */
+	recompress_ctx = palloc0(sizeof(RecompressContext));
+
+	/* Calculate array sizes */
+	recompress_ctx->num_segmentby = ts_array_length(settings->fd.segmentby);
+	recompress_ctx->num_orderby = ts_array_length(settings->fd.orderby);
+	recompress_ctx->n_keys = recompress_ctx->num_segmentby + recompress_ctx->num_orderby;
+
+	/* Allocate arrays */
+	recompress_ctx->sort_keys = palloc(sizeof(*recompress_ctx->sort_keys) * recompress_ctx->n_keys);
+	recompress_ctx->sort_operators =
+		palloc(sizeof(*recompress_ctx->sort_operators) * recompress_ctx->n_keys);
+	recompress_ctx->sort_collations =
+		palloc(sizeof(*recompress_ctx->sort_collations) * recompress_ctx->n_keys);
+	recompress_ctx->nulls_first =
+		palloc(sizeof(*recompress_ctx->nulls_first) * recompress_ctx->n_keys);
+	recompress_ctx->current_segment =
+		palloc0(sizeof(CompressedSegmentInfo) * recompress_ctx->n_keys);
+
+	/* Populate sort information for each column */
+	for (n = 0; n < recompress_ctx->n_keys; n++)
+	{
+		if (n < recompress_ctx->num_segmentby)
+		{
+			position = n + 1;
+			attname = ts_array_get_element_text(settings->fd.segmentby, position);
+			col_attno = get_attnum(chunk_rel->rd_id, attname);
+			recompress_ctx->current_segment[n].chunk_offset = AttrNumberGetAttrOffset(col_attno);
+			recompress_ctx->current_segment[n].segment_info =
+				segment_info_new(TupleDescAttr(RelationGetDescr(chunk_rel),
+											   recompress_ctx->current_segment[n].chunk_offset));
+		}
+		else
+		{
+			position = n - recompress_ctx->num_segmentby + 1;
+			attname = ts_array_get_element_text(settings->fd.orderby, position);
+			col_attno = get_attnum(chunk_rel->rd_id, attname);
+			recompress_ctx->current_segment[n].chunk_offset = AttrNumberGetAttrOffset(col_attno);
+		}
+		compress_chunk_populate_sort_info_for_column(settings,
+													 RelationGetRelid(uncompressed_chunk_rel),
+													 attname,
+													 &recompress_ctx->sort_keys[n],
+													 &recompress_ctx->sort_operators[n],
+													 &recompress_ctx->sort_collations[n],
+													 &recompress_ctx->nulls_first[n]);
+	}
+
+	/* Allocate scankeys */
+	recompress_ctx->index_scankeys = palloc(sizeof(ScanKeyData) * recompress_ctx->num_segmentby);
+	recompress_ctx->orderby_scankeys =
+		palloc(sizeof(ScanKeyData) * recompress_ctx->num_orderby * 2);
+
+	/* Populate scankeys */
+	create_segmentby_scankeys(settings,
+							  index_rel,
+							  compressed_chunk_rel,
+							  recompress_ctx->index_scankeys);
+	create_orderby_scankeys(settings,
+							index_rel,
+							compressed_chunk_rel,
+							recompress_ctx->orderby_scankeys);
+
+	return recompress_ctx;
+}
+
+static void
+free_chunk_recompress_ctx(RecompressContext *recompress_ctx)
+{
+	if (recompress_ctx == NULL)
+		return;
+
+	if (recompress_ctx->sort_keys)
+		pfree(recompress_ctx->sort_keys);
+	if (recompress_ctx->sort_operators)
+		pfree(recompress_ctx->sort_operators);
+	if (recompress_ctx->sort_collations)
+		pfree(recompress_ctx->sort_collations);
+	if (recompress_ctx->nulls_first)
+		pfree(recompress_ctx->nulls_first);
+	if (recompress_ctx->current_segment)
+		pfree(recompress_ctx->current_segment);
+	if (recompress_ctx->index_scankeys)
+		pfree(recompress_ctx->index_scankeys);
+	if (recompress_ctx->orderby_scankeys)
+		pfree(recompress_ctx->orderby_scankeys);
+	pfree(recompress_ctx);
+}
+
 Oid
 recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 {
@@ -190,47 +294,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
 	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
-
-	int num_segmentby = ts_array_length(settings->fd.segmentby);
-	int num_orderby = ts_array_length(settings->fd.orderby);
-	int n_keys = num_segmentby + num_orderby;
-
-	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
-	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
-	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
-	bool *nulls_first = palloc(sizeof(*nulls_first) * n_keys);
-
-	CompressedSegmentInfo *current_segment = palloc0(sizeof(CompressedSegmentInfo) * n_keys);
-
-	for (int n = 0; n < n_keys; n++)
-	{
-		const char *attname;
-		int position;
-		if (n < num_segmentby)
-		{
-			position = n + 1;
-			attname = ts_array_get_element_text(settings->fd.segmentby, position);
-		}
-		else
-		{
-			position = n - num_segmentby + 1;
-			attname = ts_array_get_element_text(settings->fd.orderby, position);
-		}
-
-		AttrNumber col_attno = get_attnum(uncompressed_chunk_rel->rd_id, attname);
-		current_segment[n].decompressed_chunk_offset = AttrNumberGetAttrOffset(col_attno);
-		current_segment[n].segment_info = segment_info_new(
-			TupleDescAttr(uncompressed_rel_tupdesc, current_segment[n].decompressed_chunk_offset));
-
-		compress_chunk_populate_sort_info_for_column(settings,
-													 RelationGetRelid(uncompressed_chunk_rel),
-													 attname,
-													 &sort_keys[n],
-													 &sort_operators[n],
-													 &sort_collations[n],
-													 &nulls_first[n]);
-	}
-
 	/******************** row decompressor **************/
 
 	RowDecompressor decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
@@ -262,22 +325,23 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 					NameStr(uncompressed_chunk->fd.schema_name),
 					NameStr(uncompressed_chunk->fd.table_name))));
 
-	/* Setting up scankeys */
-	ScanKeyData *index_scankeys = palloc(sizeof(ScanKeyData) * num_segmentby);
-	ScanKeyData *orderby_scankeys = palloc(sizeof(ScanKeyData) * num_orderby * 2);
-	create_segmentby_scankeys(settings, index_rel, compressed_chunk_rel, index_scankeys);
-	create_orderby_scankeys(settings, index_rel, compressed_chunk_rel, orderby_scankeys);
-
+	/* Need to populate recompress context of an uncompressed chunk */
+	RecompressContext *recompress_ctx =
+		compress_chunk_populate_recompress_ctx(settings,
+											   uncompressed_chunk_rel,
+											   compressed_chunk_rel,
+											   index_rel,
+											   true);
 	/* Used for sorting and iterating over all the uncompressed tuples that have
 	 * to be recompressed. These tuples are sorted based on the segmentby and
 	 * orderby settings.
 	 */
 	Tuplesortstate *input_tuplesortstate = tuplesort_begin_heap(uncompressed_rel_tupdesc,
-																n_keys,
-																sort_keys,
-																sort_operators,
-																sort_collations,
-																nulls_first,
+																recompress_ctx->n_keys,
+																recompress_ctx->sort_keys,
+																recompress_ctx->sort_operators,
+																recompress_ctx->sort_collations,
+																recompress_ctx->nulls_first,
 																maintenance_work_mem,
 																NULL,
 																false);
@@ -288,11 +352,11 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	 */
 	Tuplesortstate *recompress_tuplesortstate =
 		tuplesort_begin_heap(uncompressed_rel_tupdesc,
-							 num_orderby,
-							 &sort_keys[num_segmentby],
-							 &sort_operators[num_segmentby],
-							 &sort_collations[num_segmentby],
-							 &nulls_first[num_segmentby],
+							 recompress_ctx->num_orderby,
+							 &recompress_ctx->sort_keys[recompress_ctx->num_segmentby],
+							 &recompress_ctx->sort_operators[recompress_ctx->num_segmentby],
+							 &recompress_ctx->sort_collations[recompress_ctx->num_segmentby],
+							 &recompress_ctx->nulls_first[recompress_ctx->num_segmentby],
 							 maintenance_work_mem,
 							 NULL,
 							 false);
@@ -305,8 +369,12 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	TupleTableSlot *compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
 
 	HeapTuple compressed_tuple;
-	IndexScanDesc index_scan =
-		index_beginscan_compat(compressed_chunk_rel, index_rel, snapshot, NULL, num_segmentby, 0);
+	IndexScanDesc index_scan = index_beginscan_compat(compressed_chunk_rel,
+													  index_rel,
+													  snapshot,
+													  NULL,
+													  recompress_ctx->num_segmentby,
+													  0);
 
 	bool found_tuple = fetch_uncompressed_chunk_into_tuplesort(input_tuplesortstate,
 															   uncompressed_chunk_rel,
@@ -324,21 +392,27 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	{
 		CHECK_FOR_INTERRUPTS();
 
-		update_current_segment(current_segment, uncompressed_slot, num_segmentby);
+		update_current_segment(recompress_ctx->current_segment,
+							   uncompressed_slot,
+							   recompress_ctx->num_segmentby);
 
 		/* Build scankeys based on uncompressed tuple values */
 		update_segmentby_scankeys(uncompressed_slot,
-								  current_segment,
-								  num_segmentby,
-								  index_scankeys);
+								  recompress_ctx->current_segment,
+								  recompress_ctx->num_segmentby,
+								  recompress_ctx->index_scankeys);
 
 		update_orderby_scankeys(uncompressed_slot,
-								current_segment,
-								num_segmentby,
-								num_orderby,
-								orderby_scankeys);
+								recompress_ctx->current_segment,
+								recompress_ctx->num_segmentby,
+								recompress_ctx->num_orderby,
+								recompress_ctx->orderby_scankeys);
 
-		index_rescan(index_scan, index_scankeys, num_segmentby, NULL, 0);
+		index_rescan(index_scan,
+					 recompress_ctx->index_scankeys,
+					 recompress_ctx->num_segmentby,
+					 NULL,
+					 0);
 
 		bool done_with_segment = false;
 		bool tuples_for_recompression = false;
@@ -348,9 +422,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 		{
 			/* Check if the uncompressed tuple is before, inside, or after the compressed batch */
 			result = match_tuple_batch(compressed_slot,
-									   num_orderby,
-									   orderby_scankeys,
-									   &nulls_first[num_segmentby]);
+									   recompress_ctx->num_orderby,
+									   recompress_ctx->orderby_scankeys,
+									   &recompress_ctx->nulls_first[recompress_ctx->num_segmentby]);
 
 			/* If the tuple is before the batch, add it for recompression
 			 * also keep adding uncompressed tuples while they are:
@@ -370,8 +444,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 				/* If we happen to hit the end of uncompressed tuples or tuple changed segment group
 				 * we are done with the segment group
 				 */
-				if (!found_tuple ||
-					check_changed_group(current_segment, uncompressed_slot, num_segmentby))
+				if (!found_tuple || check_changed_group(recompress_ctx->current_segment,
+														uncompressed_slot,
+														recompress_ctx->num_segmentby))
 				{
 					done_with_segment = true;
 					break;
@@ -380,14 +455,15 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 				slot_getallattrs(uncompressed_slot);
 
 				update_orderby_scankeys(uncompressed_slot,
-										current_segment,
-										num_segmentby,
-										num_orderby,
-										orderby_scankeys);
-				result = match_tuple_batch(compressed_slot,
-										   num_orderby,
-										   orderby_scankeys,
-										   &nulls_first[num_segmentby]);
+										recompress_ctx->current_segment,
+										recompress_ctx->num_segmentby,
+										recompress_ctx->num_orderby,
+										recompress_ctx->orderby_scankeys);
+				result =
+					match_tuple_batch(compressed_slot,
+									  recompress_ctx->num_orderby,
+									  recompress_ctx->orderby_scankeys,
+									  &recompress_ctx->nulls_first[recompress_ctx->num_segmentby]);
 			}
 
 			/* If we are done with segment, recompress everything we have so far
@@ -467,7 +543,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 		 * Everything after this point goes into new batches
 		 * until we hit a new segment group or exhaust the uncompressed tuples
 		 */
-		while (!check_changed_group(current_segment, uncompressed_slot, num_segmentby))
+		while (!check_changed_group(recompress_ctx->current_segment,
+									uncompressed_slot,
+									recompress_ctx->num_segmentby))
 		{
 			tuples_for_recompression = true;
 			tuplesort_puttupleslot(recompress_tuplesortstate, uncompressed_slot);
@@ -511,9 +589,7 @@ finish:
 	tuplesort_end(input_tuplesortstate);
 	tuplesort_end(recompress_tuplesortstate);
 
-	pfree(current_segment);
-	pfree(index_scankeys);
-	pfree(orderby_scankeys);
+	free_chunk_recompress_ctx(recompress_ctx);
 
 	/* If we can quickly upgrade the lock, lets try updating the chunk status to fully
 	 * compressed. But we need to check if there are any uncompressed tuples in the
@@ -580,6 +656,211 @@ finish:
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
+/*
+ * perform_recompression expects appropriate permissions and checks have already been done.
+ * Relations must have appropriate locks and the CompressionSettings of compressed_chunk and
+ * new_compressed_chunk should match
+ */
+static void
+perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chunk_rel,
+					  Relation uncompressed_chunk_rel, Relation index_rel,
+					  CompressionSettings *new_settings, Relation new_compressed_chunk_rel)
+{
+	RowDecompressor decompressor;
+	Tuplesortstate *tuplesortstate;
+	RowCompressor row_compressor;
+	BulkWriter writer;
+	TupleTableSlot *compressed_slot;
+	bool first_iteration = true;
+	IndexScanDesc index_scan;
+	HeapTuple compressed_tuple;
+
+	PushActiveSnapshot(GetTransactionSnapshot());
+
+	decompressor = build_decompressor(RelationGetDescr(compressed_chunk_rel),
+									  RelationGetDescr(uncompressed_chunk_rel));
+
+	tuplesortstate = tuplesort_begin_heap(RelationGetDescr(uncompressed_chunk_rel),
+										  recompress_ctx->n_keys,
+										  recompress_ctx->sort_keys,
+										  recompress_ctx->sort_operators,
+										  recompress_ctx->sort_collations,
+										  recompress_ctx->nulls_first,
+										  maintenance_work_mem,
+										  NULL,
+										  false);
+
+	row_compressor_init(&row_compressor,
+						new_settings,
+						RelationGetDescr(uncompressed_chunk_rel),
+						RelationGetDescr(new_compressed_chunk_rel));
+
+	writer = bulk_writer_build(new_compressed_chunk_rel, 0);
+	compressed_slot = table_slot_create(compressed_chunk_rel, NULL);
+
+	/*
+	 * we use the compressed chunk's index to scan so that we get the compressed tuples sorted
+	 * by segment-by and order-by minmax
+	 */
+	index_scan =
+		index_beginscan_compat(compressed_chunk_rel, index_rel, GetActiveSnapshot(), NULL, 0, 0);
+	index_rescan(index_scan, NULL, 0, NULL, 0);
+
+	while (index_getnext_slot(index_scan, ForwardScanDirection, compressed_slot))
+	{
+		if (first_iteration)
+		{
+			update_current_segment(recompress_ctx->current_segment,
+								   compressed_slot,
+								   recompress_ctx->num_segmentby);
+			first_iteration = false;
+		}
+		else if (check_changed_group(recompress_ctx->current_segment,
+									 compressed_slot,
+									 recompress_ctx->num_segmentby))
+		{
+			recompress_segment(tuplesortstate, uncompressed_chunk_rel, &row_compressor, &writer);
+			update_current_segment(recompress_ctx->current_segment,
+								   compressed_slot,
+								   recompress_ctx->num_segmentby);
+		}
+
+		bool should_free;
+
+		compressed_tuple = ExecFetchSlotHeapTuple(compressed_slot, false, &should_free);
+
+		heap_deform_tuple(compressed_tuple,
+						  RelationGetDescr(compressed_chunk_rel),
+						  decompressor.compressed_datums,
+						  decompressor.compressed_is_nulls);
+
+		row_decompressor_decompress_row_to_tuplesort(&decompressor, tuplesortstate);
+
+		if (should_free)
+			heap_freetuple(compressed_tuple);
+	}
+
+	recompress_segment(tuplesortstate, uncompressed_chunk_rel, &row_compressor, &writer);
+
+	row_compressor_close(&row_compressor);
+	bulk_writer_close(&writer);
+	ExecDropSingleTupleTableSlot(compressed_slot);
+	index_endscan(index_scan);
+	row_decompressor_close(&decompressor);
+	tuplesort_end(tuplesortstate);
+	PopActiveSnapshot();
+}
+
+/*
+ * Perform per segment in-memory recompression of a compressed chunk.
+ *
+ * Note: This function will early return if the chunk is not suitable for
+ * recompression (e.g., partial, unordered, frozen).
+ */
+bool
+recompress_chunk_impl(Chunk *uncompressed_chunk)
+{
+	if (uncompressed_chunk == NULL)
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("chunk cannot be NULL")));
+
+	/*
+	 * Only proceed if chunk is in compressed state without partial or unordered status
+	 * Status meanings:
+	 * 1: compressed
+	 * 2: compressed_unordered TODO: add support
+	 * 4: frozen
+	 * 8: compressed_partial
+	 */
+	if (!ts_chunk_is_compressed(uncompressed_chunk) || ts_chunk_is_partial(uncompressed_chunk) ||
+		ts_chunk_is_unordered(uncompressed_chunk) || ts_chunk_is_frozen(uncompressed_chunk))
+		return false;
+
+	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	Ensure(compressed_chunk != NULL,
+		   "compressed chunk not found for chunk \"%s\"",
+		   get_rel_name(uncompressed_chunk->table_id));
+
+	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
+	Ensure(settings != NULL,
+		   "compression settings not found for chunk \"%s\"",
+		   get_rel_name(uncompressed_chunk->table_id));
+
+	LOCKMODE lockmode = ExclusiveLock;
+	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, lockmode);
+	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, lockmode);
+
+	/* Check new chunk will have the same compression settings */
+	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
+	CompressionSettings *check_new_settings =
+		ts_compression_settings_get(uncompressed_chunk->hypertable_relid);
+	compression_settings_set_defaults(ht,
+									  check_new_settings,
+									  ts_alter_table_with_clause_parse(NIL));
+
+	/* TODO: evaluate which settings would affect this and only check inquality for those */
+	if (!ts_compression_settings_equal(check_new_settings, settings))
+	{
+		table_close(uncompressed_chunk_rel, lockmode);
+		table_close(compressed_chunk_rel, lockmode);
+		return false;
+	}
+
+	/* Check that the compressed chunk's index exist. TODO: Add support for this scenario */
+	CatalogIndexState indstate = CatalogOpenIndexes(compressed_chunk_rel);
+	Oid index_oid = get_compressed_chunk_index(indstate, settings);
+	CatalogCloseIndexes(indstate);
+
+	if (!OidIsValid(index_oid))
+	{
+		table_close(uncompressed_chunk_rel, lockmode);
+		table_close(compressed_chunk_rel, lockmode);
+		return false;
+	}
+
+	Relation index_rel = index_open(index_oid, lockmode);
+	RecompressContext *recompress_ctx =
+		compress_chunk_populate_recompress_ctx(settings,
+											   uncompressed_chunk_rel,
+											   compressed_chunk_rel,
+											   index_rel,
+											   false);
+
+	/* Delete old compression settings before creating new compressed chunk to avoid conflict */
+	ts_compression_settings_delete(uncompressed_chunk->table_id);
+	Hypertable *compressed_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+	Chunk *new_compressed_chunk =
+		create_compress_chunk(compressed_ht, uncompressed_chunk, InvalidOid);
+	/* The old compression settings were deleted above to avoid catalog conflicts. */
+	CompressionSettings *new_settings = ts_compression_settings_get(uncompressed_chunk->table_id);
+	Relation new_compressed_chunk_rel = table_open(new_compressed_chunk->table_id, lockmode);
+
+	Ensure(ts_compression_settings_equal(new_settings, settings),
+		   "compression settings mismatch during recompression of \"%s.%s\"",
+		   NameStr(uncompressed_chunk->fd.schema_name),
+		   NameStr(uncompressed_chunk->fd.table_name));
+
+	perform_recompression(recompress_ctx,
+						  compressed_chunk_rel,
+						  uncompressed_chunk_rel,
+						  index_rel,
+						  new_settings,
+						  new_compressed_chunk_rel);
+
+	free_chunk_recompress_ctx(recompress_ctx);
+	index_close(index_rel, NoLock);
+	table_close(uncompressed_chunk_rel, NoLock);
+	table_close(compressed_chunk_rel, NoLock);
+	table_close(new_compressed_chunk_rel, NoLock);
+
+	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
+	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
+	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
+	ts_chunk_set_compressed_chunk(uncompressed_chunk, new_compressed_chunk->fd.id);
+
+	/* recompress successful */
+	return true;
+}
+
 static void
 update_segmentby_scankeys(TupleTableSlot *uncompressed_slot, CompressedSegmentInfo *current_segment,
 						  int num_segmentby, ScanKey index_scankeys)
@@ -588,8 +869,7 @@ update_segmentby_scankeys(TupleTableSlot *uncompressed_slot, CompressedSegmentIn
 	bool is_null;
 	for (int i = 0; i < num_segmentby; i++)
 	{
-		AttrNumber in_attnum =
-			AttrOffsetGetAttrNumber(current_segment[i].decompressed_chunk_offset);
+		AttrNumber in_attnum = AttrOffsetGetAttrNumber(current_segment[i].chunk_offset);
 		val = slot_getattr(uncompressed_slot, in_attnum, &is_null);
 		index_scankeys[i].sk_flags = is_null ? SK_ISNULL | SK_SEARCHNULL : 0;
 		index_scankeys[i].sk_argument = val;
@@ -606,7 +886,7 @@ update_orderby_scankeys(TupleTableSlot *uncompressed_slot, CompressedSegmentInfo
 	for (int i = 0; i < num_orderby; i++)
 	{
 		AttrNumber in_attnum =
-			AttrOffsetGetAttrNumber(current_segment[num_segmentby + i].decompressed_chunk_offset);
+			AttrOffsetGetAttrNumber(current_segment[num_segmentby + i].chunk_offset);
 		val = slot_getattr(uncompressed_slot, in_attnum, &is_null);
 		min_index = i * 2;
 		max_index = min_index + 1;
@@ -693,7 +973,7 @@ update_current_segment(CompressedSegmentInfo *current_segment, TupleTableSlot *s
 	for (int i = 0; i < nsegmentby_cols; i++)
 	{
 		curr = current_segment[i];
-		val = slot_getattr(slot, AttrOffsetGetAttrNumber(curr.decompressed_chunk_offset), &is_null);
+		val = slot_getattr(slot, AttrOffsetGetAttrNumber(curr.chunk_offset), &is_null);
 		/* new segment, need to do per-segment processing */
 		segment_info_update(curr.segment_info, val, is_null);
 	}
@@ -710,7 +990,7 @@ check_changed_group(CompressedSegmentInfo *current_segment, TupleTableSlot *slot
 	for (int i = 0; i < nsegmentby_cols; i++)
 	{
 		curr = current_segment[i];
-		val = slot_getattr(slot, AttrOffsetGetAttrNumber(curr.decompressed_chunk_offset), &is_null);
+		val = slot_getattr(slot, AttrOffsetGetAttrNumber(curr.chunk_offset), &is_null);
 		if (!segment_info_datum_is_in_group(curr.segment_info, val, is_null))
 		{
 			changed_segment = true;

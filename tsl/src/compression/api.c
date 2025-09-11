@@ -769,14 +769,23 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
 
+			/* try recompression first */
 			if (!valid_orderby_settings ||
-				!ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
+				!ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings) ||
+				!recompress_chunk_impl(chunk))
 			{
+				/* TODO: move away from manual decompression/compression */
+				elog(NOTICE,
+					 "falling back to compress/decompress, performing full "
+					 "recompression on "
+					 "chunk \"%s.%s\"",
+					 NameStr(chunk->fd.schema_name),
+					 NameStr(chunk->fd.table_name));
 				decompress_chunk_impl(chunk, false);
 				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
-				write_logical_replication_msg_compression_end();
-				return uncompressed_chunk_id;
 			}
+			write_logical_replication_msg_compression_end();
+			return uncompressed_chunk_id;
 		}
 		if (!ts_chunk_needs_recompression(chunk))
 		{
@@ -805,8 +814,13 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 						  ""),
 					 NameStr(chunk->fd.schema_name),
 					 NameStr(chunk->fd.table_name));
-			decompress_chunk_impl(chunk, false);
-			compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+			/* try recompression first */
+			if (!recompress_chunk_impl(chunk))
+			{
+				/* TODO: move away from manual decompression/compression */
+				decompress_chunk_impl(chunk, false);
+				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+			}
 		}
 	}
 	else

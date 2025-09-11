@@ -2463,6 +2463,7 @@ NOTICE:  chunk "_hyper_47_102_chunk" is already converted to columnstore
 
 -- unless we specify recompress := true
 SELECT compress_chunk(:'CHUNK', recompress := true);
+NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_47_102_chunk"
               compress_chunk               
 -------------------------------------------
  _timescaledb_internal._hyper_47_102_chunk
