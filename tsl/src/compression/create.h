@@ -34,3 +34,6 @@ int compressed_column_metadata_attno(const CompressionSettings *settings, Oid ch
 									 char *metadata_type);
 
 void tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options);
+
+void compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
+									   WithClauseResult *with_clause_options);
