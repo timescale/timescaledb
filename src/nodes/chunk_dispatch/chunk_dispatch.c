@@ -109,30 +109,6 @@ chunk_dispatch_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = list_make1(ps);
 }
 
-static AttrNumber
-rel_get_natts(Oid relid)
-{
-	HeapTuple tp = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tp))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-	AttrNumber natts = ((Form_pg_class) GETSTRUCT(tp))->relnatts;
-	ReleaseSysCache(tp);
-	return natts;
-}
-
-static bool
-attr_is_dropped_or_missing(Oid relid, AttrNumber attno)
-{
-	HeapTuple tp = SearchSysCache2(ATTNUM, ObjectIdGetDatum(relid), Int16GetDatum(attno));
-	if (!HeapTupleIsValid(tp))
-		return false;
-	Form_pg_attribute att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-	bool result = att_tup->attisdropped || att_tup->atthasmissing;
-	ReleaseSysCache(tp);
-	return result;
-}
-
 static TupleTableSlot *
 chunk_dispatch_exec(CustomScanState *node)
 {
@@ -161,15 +137,6 @@ chunk_dispatch_exec(CustomScanState *node)
 	TupleTableSlot *newslot = NULL;
 	if (ctr->mht_state->mt->operation == CMD_MERGE)
 	{
-		const AttrNumber natts = rel_get_natts(ht->main_table_relid);
-		for (AttrNumber attno = 1; attno <= natts; attno++)
-		{
-			if (attr_is_dropped_or_missing(ht->main_table_relid, attno))
-			{
-				state->ctr->has_dropped_attrs = true;
-				break;
-			}
-		}
 		for (int i = 0; i < ht->space->num_dimensions; i++)
 		{
 			/*
