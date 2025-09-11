@@ -35,14 +35,6 @@ typedef struct ChunkDispatchState
 	Plan *subplan;
 
 	ChunkTupleRouting *ctr;
-
-	/*
-	 * Keep the chunk insert state available to pass it from
-	 * ExecGetInsertNewTuple() to ExecInsert(), where the actual slot to
-	 * use is decided.
-	 */
-	//	ChunkInsertState *cis;
-
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
