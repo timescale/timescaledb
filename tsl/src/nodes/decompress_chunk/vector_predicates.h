@@ -66,3 +66,26 @@ get_vector_qual_summary(const uint64 *qual_result, size_t n_rows)
 
 	return SomeRowsPass;
 }
+
+static pg_attribute_always_inline uint16
+get_qual_result_block_count(size_t n_rows)
+{
+	return (n_rows + 63) / 64;
+}
+
+static pg_attribute_always_inline uint16
+get_valid_qual_result_block_count(const uint64 *qual_result, size_t n_rows)
+{
+	uint16 blocks_valid = 0;
+	for (size_t i = 0; i < n_rows / 64; i++)
+	{
+		blocks_valid += (qual_result[i] != 0);
+	}
+	if (n_rows % 64 != 0)
+	{
+		const uint64 last_word_mask = ~0ULL >> (64 - n_rows % 64);
+		blocks_valid += (qual_result[n_rows / 64] & last_word_mask) != 0;
+	}
+
+	return blocks_valid;
+}

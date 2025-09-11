@@ -670,11 +670,27 @@ static void
 compute_qual_conjunction(VectorQualState *vqstate, TupleTableSlot *compressed_slot, List *quals,
 						 uint64 *restrict result)
 {
-	ListCell *lc;
+	uint16 total_blocks = get_qual_result_block_count(vqstate->num_results);
+	uint16 valid_blocks = get_valid_qual_result_block_count(result, vqstate->num_results);
+	uint16 prev_valid_blocks = valid_blocks;
+	uint16 prev_filtered_blocks = total_blocks - valid_blocks;
+
+	ListCell *lc, *prev_lc=NULL;
 	foreach (lc, quals)
 	{
 		compute_one_qual(vqstate, compressed_slot, lfirst(lc), result);
-		if (get_vector_qual_summary(result, vqstate->num_results) == NoRowsPass)
+		valid_blocks = get_valid_qual_result_block_count(result, vqstate->num_results);
+		uint16 filtered_blocks = prev_valid_blocks - valid_blocks;
+
+		if (prev_lc != NULL && filtered_blocks > prev_filtered_blocks)
+		{
+			/* swap the qual pointers between prev_lc and lc */
+			void *tmp = prev_lc->ptr_value;
+			prev_lc->ptr_value = lc->ptr_value;
+			lc->ptr_value = tmp;
+		}
+
+		if (valid_blocks == 0)
 		{
 			/*
 			 * Exit early if no rows pass already. This might allow us to avoid
@@ -682,6 +698,9 @@ compute_qual_conjunction(VectorQualState *vqstate, TupleTableSlot *compressed_sl
 			 */
 			return;
 		}
+		prev_valid_blocks = valid_blocks;
+		prev_filtered_blocks = filtered_blocks;
+		prev_lc = lc;
 	}
 }
 
