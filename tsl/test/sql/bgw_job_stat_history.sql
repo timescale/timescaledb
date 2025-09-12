@@ -18,6 +18,17 @@ BEGIN
 END
 $$;
 
+CREATE VIEW job_history_summary AS
+SELECT job_id, succeeded, count(*) AS record_count
+  FROM _timescaledb_internal.bgw_job_stat_history
+GROUP BY job_id, succeeded;
+
+CREATE VIEW recent_job_history_summary AS
+SELECT job_id, succeeded, count(*) AS record_count
+  FROM _timescaledb_internal.bgw_job_stat_history
+ WHERE execution_finish > now() - interval '30 days'
+GROUP BY job_id, succeeded;
+
 -- Do not log all jobs, only FAILED executions
 SHOW timescaledb.enable_job_execution_logging;
 
@@ -185,6 +196,17 @@ SELECT _timescaledb_functions.stop_background_workers();
 SELECT config AS config FROM _timescaledb_config.bgw_job WHERE id = 3 \gset
 SELECT config FROM alter_job(3, config => jsonb_set(:'config', '{drop_after}', '"30 days"'));
 
+-- These configuration should fail since they are not valid.
+\set ON_ERROR_STOP 0
+SELECT config FROM alter_job(3, config => :'config'::jsonb - 'drop_after');
+SELECT config FROM alter_job(3, config => :'config'::jsonb - 'max_successes_per_job');
+SELECT config FROM alter_job(3, config => :'config'::jsonb - 'max_failures_per_job');
+SELECT config FROM alter_job(3, config => jsonb_set(:'config', '{max_successes_per_job}', '0'));
+SELECT config FROM alter_job(3, config => jsonb_set(:'config', '{max_failures_per_job}', '0'));
+SELECT config FROM alter_job(3, config => jsonb_set(:'config', '{max_successes_per_job}', '"none"'));
+SELECT config FROM alter_job(3, config => jsonb_set(:'config', '{max_failures_per_job}', '"none"'));
+\set ON_ERROR_STOP 1
+
 -- Test 1
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 
@@ -204,34 +226,26 @@ SELECT
 FROM generate_series(now() - interval '90 days', now(), interval '15 minutes') as ts;
 
 -- Check data after insertion
-SELECT count(*) as total_records FROM _timescaledb_internal.bgw_job_stat_history;
+select * from job_history_summary;
 
 -- Test the retention job (job id 3)
 CALL run_job(3);
 
 -- Check data after retention
-SELECT count(*) as total_records FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 
 -- Verify only recent records remain
-SELECT
-count(*) as record_count
-FROM _timescaledb_internal.bgw_job_stat_history
-WHERE
-execution_finish > now() - interval '30 days';
+SELECT * FROM recent_job_history_summary;
 
 -- Cleanup
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 
 -- Test 2: Empty table (no job history)
 CALL run_job(3);
-SELECT count(*) as records_after_retention FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 
 -- Verify only recent records remain
-SELECT
-count(*) as record_count
-FROM _timescaledb_internal.bgw_job_stat_history
-WHERE
-execution_finish > now() - interval '30 days';
+SELECT * FROM recent_job_history_summary;
 
 -- Test 3: Odd number of entries (5 entries)
 INSERT INTO _timescaledb_internal.bgw_job_stat_history
@@ -243,16 +257,12 @@ VALUES
 (301, 3001, true, now() - interval '2 weeks', now() - interval '2 weeks' + interval '5 minutes', '{}'),
 (304, 3004, true, now() - interval '1 week', now() - interval '1 week' + interval '5 minutes', '{}');
 
-SELECT count(*) as records_before_retention FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 CALL run_job(3);
-SELECT count(*) as records_after_retention FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 
 -- Verify only recent records remain
-SELECT
-count(*) as record_count
-FROM _timescaledb_internal.bgw_job_stat_history
-WHERE
-execution_finish > now() - interval '30 days';
+SELECT * FROM recent_job_history_summary;
 
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 
@@ -267,16 +277,12 @@ VALUES
 (404, 4004, true, now() - interval '2 weeks', now() - interval '2 weeks' + interval '5 minutes', '{}'),
 (402, 4002, true, now() - interval '1 week', now() - interval '1 week' + interval '5 minutes', '{}');
 
-SELECT count(*) as records_before_retention FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 CALL run_job(3);
-SELECT count(*) as records_after_retention FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 
 -- Verify only recent records remain
-SELECT
-count(*) as record_count
-FROM _timescaledb_internal.bgw_job_stat_history
-WHERE
-execution_finish > now() - interval '30 days';
+SELECT * FROM recent_job_history_summary;
 
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 
@@ -296,16 +302,12 @@ FROM generate_series(now() - interval '60 days', now() - interval '1 week', inte
 DELETE FROM _timescaledb_internal.bgw_job_stat_history
 WHERE id IN (SELECT id FROM _timescaledb_internal.bgw_job_stat_history ORDER BY id LIMIT 2 OFFSET 2);
 
-SELECT count(*) as records_before_retention FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 CALL run_job(3);
-SELECT count(*) as records_after_retention FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 
 -- Verify only recent records remain
-SELECT
-count(*) as record_count
-FROM _timescaledb_internal.bgw_job_stat_history
-WHERE
-execution_finish > now() - interval '30 days';
+SELECT * FROM recent_job_history_summary;
 
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 
@@ -317,16 +319,12 @@ VALUES
 (602, 6002, true, now() - interval '60 days', now() - interval '60 days' + interval '5 minutes', '{}'),
 (601, 6001, true, now() - interval '6 weeks', now() - interval '6 weeks' + interval '5 minutes', '{}');
 
-SELECT count(*) as records_before_retention FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 CALL run_job(3);
-SELECT count(*) as records_after_retention FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 
 -- Verify only recent records remain
-SELECT
-count(*) as record_count
-FROM _timescaledb_internal.bgw_job_stat_history
-WHERE
-execution_finish > now() - interval '30 days';
+SELECT * FROM recent_job_history_summary;
 
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
 
@@ -339,16 +337,42 @@ VALUES
 (703, 7003, true, now() - interval '7 days', now() - interval '7 days' + interval '7 minutes', '{}'),
 (701, 7001, true, now() - interval '4 days', now() - interval '4 days' + interval '7 minutes', '{}');
 
-SELECT count(*) as records_before_removal FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 CALL run_job(3);
-SELECT count(*) as records_after_removal FROM _timescaledb_internal.bgw_job_stat_history;
+SELECT * FROM job_history_summary;
 
 -- Verify only recent records remain
-SELECT
-count(*) as record_count
-FROM _timescaledb_internal.bgw_job_stat_history
-WHERE
-execution_finish > now() - interval '30 days';
+SELECT * FROM recent_job_history_summary;
+
+TRUNCATE _timescaledb_internal.bgw_job_stat_history;
+
+-- Test 8: No records older than retention period and not more than
+-- the expected number of successes and failures per job.
+SELECT config AS config FROM _timescaledb_config.bgw_job WHERE id = 3 \gset
+SELECT config FROM alter_job(3,
+    config => jsonb_set(jsonb_set(:'config', '{max_failures_per_job}', '15'), '{max_successes_per_job}', '10'));
+INSERT INTO _timescaledb_internal.bgw_job_stat_history
+(job_id, pid, succeeded, execution_start, execution_finish, data)
+VALUES
+(803, 7003, true, now() - interval '7 days', now() - interval '7 days' + interval '7 minutes', '{}'),
+(801, 7001, true, now() - interval '4 days', now() - interval '4 days' + interval '7 minutes', '{}');
+
+INSERT INTO
+   _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
+SELECT 801, 7001, true, now() - format('%s hour', hours)::interval, now() - interval '1 week' + interval '7 minutes', '{}'
+FROM generate_series(1,20) hours;
+
+INSERT INTO
+   _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
+SELECT 802, 7001, false, now() - format('%s minutes', hours)::interval, now() - interval '6 days' + interval '7 minutes', '{}'
+FROM generate_series(1,20) hours;
+
+SELECT * FROM job_history_summary;
+CALL run_job(3);
+SELECT * FROM job_history_summary;
+
+-- Verify only recent records remain
+SELECT * FROM recent_job_history_summary;
 
 -- Cleanup
 TRUNCATE _timescaledb_internal.bgw_job_stat_history;
