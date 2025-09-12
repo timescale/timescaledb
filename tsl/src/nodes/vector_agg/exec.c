@@ -9,6 +9,7 @@
 #include <commands/explain.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
+#include <fmgr.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -25,6 +26,7 @@
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "nodes/vector_agg/plan.h"
+#include "nodes/vector_agg/vector_slot.h"
 
 #if PG18_GE
 #include "commands/explain_format.h"
@@ -32,20 +34,8 @@
 #endif
 
 static int
-get_input_offset(const DecompressChunkState *decompress_state, const Var *var)
+get_input_offset(const DecompressContext *dcontext, const Var *var)
 {
-	const DecompressContext *dcontext = &decompress_state->decompress_context;
-
-	/*
-	 * All variable references in the vectorized aggregation node were
-	 * translated to uncompressed chunk variables when it was created.
-	 */
-	const CustomScan *cscan = castNode(CustomScan, decompress_state->csstate.ss.ps.plan);
-	Ensure((Index) var->varno == (Index) cscan->scan.scanrelid,
-		   "got vector varno %d expected %d",
-		   var->varno,
-		   cscan->scan.scanrelid);
-
 	const CompressionColumnDescription *value_column_description = NULL;
 	for (int i = 0; i < dcontext->num_data_columns; i++)
 	{
@@ -73,6 +63,324 @@ get_column_storage_properties(const DecompressChunkState *state, int input_offse
 	const CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[input_offset];
 	result->value_bytes = desc->value_bytes;
 	result->by_value = desc->by_value;
+}
+
+/*
+ * Create an arrow array with memory for buffers.
+ *
+ * The space for buffers are allocated after the main structure.
+ */
+static ArrowArray *
+arrow_create_with_buffers(MemoryContext mcxt, int n_buffers)
+{
+	struct
+	{
+		ArrowArray array;
+		const void *buffers[FLEXIBLE_ARRAY_MEMBER];
+	} *array_with_buffers =
+		MemoryContextAllocZero(mcxt, sizeof(ArrowArray) + (sizeof(const void *) * n_buffers));
+
+	ArrowArray *array = &array_with_buffers->array;
+
+	array->n_buffers = n_buffers;
+	array->buffers = array_with_buffers->buffers;
+
+	return array;
+}
+
+/*
+ * Variable-size primitive layout ArrowArray from decompression iterator.
+ */
+static ArrowArray *
+arrow_from_const_varlen(MemoryContext mcxt, int nrows, Datum value)
+{
+	const int value_bytes = VARSIZE_ANY_EXHDR(value);
+
+	int32 *restrict offsets_buffer = MemoryContextAlloc(mcxt, nrows * sizeof(*offsets_buffer));
+	for (int i = 0; i < nrows; i++)
+	{
+		offsets_buffer[i] = value_bytes * i;
+	}
+
+	uint8 *restrict data_buffer = MemoryContextAlloc(mcxt, nrows * value_bytes);
+	for (int i = 0; i < nrows; i++)
+	{
+		memcpy(data_buffer + value_bytes * i, DatumGetPointer(value), value_bytes);
+	}
+
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 3);
+	array->length = nrows;
+	array->buffers[0] = NULL;
+	array->buffers[1] = offsets_buffer;
+	array->buffers[2] = data_buffer;
+
+	return array;
+}
+
+/*
+ * Fixed-Size Primitive layout ArrowArray from decompression iterator.
+ */
+static ArrowArray *
+arrow_from_const_fixlen(MemoryContext mcxt, int nrows, Datum value, int16 typlen, bool typbyval)
+{
+	/* Just a precaution: this should not be a varlen type */
+	Assert(typlen > 0);
+
+	uint8 *restrict data_buffer = MemoryContextAlloc(mcxt, nrows * typlen);
+	for (int i = 0; i < nrows; i++)
+	{
+		if (typbyval)
+		{
+			/*
+			 * We use unsigned integers to avoid conversions between signed
+			 * and unsigned values (which in theory could change the value)
+			 * when converting to datum (which is an unsigned value).
+			 *
+			 * Conversions between unsigned values is well-defined in the C
+			 * standard and will work here.
+			 */
+			switch (typlen)
+			{
+				case sizeof(uint8):
+					data_buffer[i] = DatumGetUInt8(value);
+					break;
+				case sizeof(uint16):
+					((uint16 *) data_buffer)[i] = DatumGetUInt16(value);
+					break;
+				case sizeof(uint32):
+					((uint32 *) data_buffer)[i] = DatumGetUInt32(value);
+					break;
+				case sizeof(uint64):
+					/* This branch is not called for by-reference 64-bit values */
+					((uint64 *) data_buffer)[i] = DatumGetUInt64(value);
+					break;
+				default:
+					ereport(ERROR,
+							errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("not supporting writing by value length %d", typlen));
+			}
+		}
+		else
+		{
+			memcpy(&data_buffer[typlen * i], DatumGetPointer(value), typlen);
+		}
+	}
+
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
+	array->length = nrows;
+	array->buffers[0] = NULL;
+	array->buffers[1] = data_buffer;
+	return array;
+}
+
+static ArrowArray *
+arrow_from_const_bool(MemoryContext mcxt, int nrows, Datum value)
+{
+	const size_t words = (size_t) ((nrows + 63) / 64);
+	uint64 *values = (uint64 *) MemoryContextAlloc(mcxt, words * sizeof(*values));
+	memset(values, DatumGetBool(value) ? (uint8) -1 : 0, words * sizeof(*values));
+
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
+	array->length = nrows;
+	array->buffers[0] = NULL;
+	array->buffers[1] = values;
+	return array;
+}
+
+static ArrowArray *
+arrow_from_const_null(MemoryContext mcxt, int nrows)
+{
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
+	array->length = nrows;
+	array->null_count = nrows;
+
+	const size_t words = (size_t) ((nrows + 63) / 64);
+	uint64 *validity = (uint64 *) MemoryContextAllocZero(mcxt, words * sizeof(uint64));
+	array->buffers[0] = validity;
+	return array;
+}
+
+/*
+ * Read the entire contents of a decompression iterator into the arrow array.
+ */
+static ArrowArray *
+arrow_from_constant(MemoryContext mcxt, int nrows, const Const *c)
+{
+	int16 typlen;
+	bool typbyval;
+	get_typlenbyval(c->consttype, &typlen, &typbyval);
+
+	if (c->constisnull)
+	{
+		return arrow_from_const_null(mcxt, nrows);
+	}
+	else if (c->consttype == BOOLOID)
+	{
+		return arrow_from_const_bool(mcxt, nrows, c->constvalue);
+	}
+	else if (typlen == -1)
+	{
+		return arrow_from_const_varlen(mcxt, nrows, c->constvalue);
+	}
+	else
+	{
+		return arrow_from_const_fixlen(mcxt, nrows, c->constvalue, typlen, typbyval);
+	}
+}
+
+static CompressedColumnValues
+evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args, Oid funcoid,
+				  Oid inputcollid)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+
+	Ensure(list_length(args) <= 5, "only <= 5 args supported");
+
+	FmgrInfo flinfo;
+	fmgr_info(funcoid, &flinfo);
+	LOCAL_FCINFO(fcinfo, 5);
+	InitFunctionCallInfoData(*fcinfo, &flinfo, list_length(args), inputcollid, NULL, NULL);
+
+	const int nrows = batch_state->total_batch_rows;
+
+	const ArrowArray *arrow_args[5];
+	CompressedColumnValues arg_values[5];
+	ListCell *lc;
+	bool have_nulls = false;
+	foreach (lc, args)
+	{
+		CompressedColumnValues arg =
+			vector_slot_get_compressed_column_values(dcontext, slot, lfirst(lc));
+		Ensure(arg.arrow != NULL, "no arrow for arg");
+		arrow_args[foreach_current_index(lc)] = arg.arrow;
+		have_nulls = (arg.arrow->null_count > 0) || have_nulls;
+		arg_values[foreach_current_index(lc)] = arg;
+
+		arg_values[foreach_current_index(lc)].output_value =
+			&fcinfo->args[foreach_current_index(lc)].value;
+		arg_values[foreach_current_index(lc)].output_isnull =
+			&fcinfo->args[foreach_current_index(lc)].isnull;
+	}
+
+	Oid rettype = get_func_rettype(funcoid);
+	int16 rettyplen;
+	bool rettypbyval;
+	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
+
+	if (!rettypbyval)
+	{
+		elog(ERROR, "only byval for now");
+	}
+
+	ArrowArray *arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+													  sizeof(ArrowArray) + 2 * sizeof(void *));
+	arrow_result->length = nrows;
+	arrow_result->buffers = (void *) &arrow_result[1];
+	arrow_result->buffers[1] =
+		MemoryContextAllocZero(batch_state->per_batch_context, rettyplen * nrows);
+
+	// vector_function(arrow_args, list_length(f->args), arrow_result);
+
+	for (int i = 0; i < nrows; i++)
+	{
+		compressed_columns_to_postgres_data(arg_values, 2, i);
+
+		Datum result = FunctionCallInvoke(fcinfo);
+
+		(void) result;
+
+		switch (rettyplen)
+		{
+			case 2:
+				((uint16 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt16(result);
+				break;
+			case 4:
+				((uint32 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt32(result);
+				break;
+			case 8:
+				((uint64 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt64(result);
+				//				fprintf(stderr, "rtl %d row %d result %ld\n", rettyplen, i,
+				// DatumGetUInt64(result);
+				break;
+			default:
+				elog(ERROR, "wrong size %d", rettyplen);
+		}
+	}
+
+	/*
+	 * Our functions are strict so we handle validity separately.
+	 */
+	if (have_nulls)
+	{
+		const size_t num_words = (nrows + 63) / 64;
+		arrow_result->buffers[0] =
+			MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_words);
+		arrow_combine_validity(num_words,
+							   (uint64 *) arrow_result->buffers[0],
+							   (uint64 *) arrow_args[0]->buffers[0],
+							   (uint64 *) arrow_args[1]->buffers[0],
+							   NULL);
+		arrow_result->null_count =
+			arrow_result->length - arrow_num_valid(arrow_result->buffers[0], arrow_result->length);
+	}
+
+	CompressedColumnValues result = {
+		.decompression_type = rettyplen,
+		.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
+		.arrow = arrow_result,
+	};
+
+	return result;
+}
+
+/*
+ * Return the arrow array or the datum (in case of single scalar value) for a
+ * given attribute as a CompressedColumnValues struct.
+ */
+CompressedColumnValues
+vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTableSlot *slot,
+										 const Expr *argument)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+	switch (((Node *) argument)->type)
+	{
+		case T_Const:
+		{
+			const Const *c = (const Const *) argument;
+			ArrowArray *arrow_result = arrow_from_constant(batch_state->per_batch_context,
+														   batch_state->total_batch_rows,
+														   c);
+			CompressedColumnValues result = {
+				.decompression_type = get_typlen(c->consttype),
+				.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
+				.arrow = arrow_result,
+			};
+			return result;
+		}
+		case T_Var:
+		{
+			const Var *var = (const Var *) argument;
+			const uint16 offset =
+				get_input_offset(dcontext, var); // AttrNumberGetAttrOffset(var->varattno);
+			const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
+			return *values;
+		}
+		case T_OpExpr:
+		{
+			const OpExpr *o = (const OpExpr *) argument;
+			return evaluate_function(dcontext, slot, o->args, o->opfuncid, o->inputcollid);
+		}
+		case T_FuncExpr:
+		{
+			const FuncExpr *f = (const FuncExpr *) argument;
+			return evaluate_function(dcontext, slot, f->args, f->funcid, f->inputcollid);
+		}
+		default:
+			fprintf(stderr, "%s\n", ts_get_node_name((Node *) argument));
+			Ensure(false,
+				   "wrong node type %s for vector expression",
+				   ts_get_node_name((Node *) argument));
+	}
 }
 
 static void
@@ -172,13 +480,15 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				/* The aggregate should be a partial aggregate */
 				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
-				Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
-				def->input_offset =
-					get_input_offset((const DecompressChunkState *) childstate, var);
+				def->argument = castNode(TargetEntry, linitial(aggref->args))->expr;
+				//				Var *var = castNode(Var, ;
+				//				def->input_offset =
+				//					get_input_offset((const DecompressChunkState *) childstate,
+				// var);
 			}
 			else
 			{
-				def->input_offset = -1;
+				def->argument = NULL;
 			}
 
 			if (aggref->aggfilter != NULL)
@@ -193,10 +503,13 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			Assert(IsA(tlentry->expr, Var));
 
 			GroupingColumn *col = &vector_agg_state->grouping_columns[grouping_column_counter++];
+			col->expr = tlentry->expr;
 			col->output_offset = i;
 
 			Var *var = castNode(Var, tlentry->expr);
-			col->input_offset = get_input_offset((const DecompressChunkState *) childstate, var);
+			col->input_offset =
+				get_input_offset(&((const DecompressChunkState *) childstate)->decompress_context,
+								 var);
 			get_column_storage_properties((const DecompressChunkState *) childstate,
 										  col->input_offset,
 										  col);
@@ -373,6 +686,11 @@ static TupleTableSlot *
 vector_agg_exec(CustomScanState *node)
 {
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
+
+	DecompressChunkState *decompress_state =
+		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+	DecompressContext *dcontext = &decompress_state->decompress_context;
+
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	ResetExprContext(econtext);
 
@@ -452,7 +770,7 @@ vector_agg_exec(CustomScanState *node)
 		/*
 		 * Finally, pass the compressed batch to the grouping policy.
 		 */
-		grouping->gp_add_batch(grouping, slot);
+		grouping->gp_add_batch(grouping, dcontext, slot);
 	}
 
 	/*
