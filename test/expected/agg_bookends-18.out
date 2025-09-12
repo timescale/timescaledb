@@ -9,7 +9,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 \gset
 SELECT format('\! diff -u  --label "Unoptimized result" --label "Optimized result" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -55,62 +55,41 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
 ----------------------------------------------------------------------------------------------------------
  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=6.00 loops=1)
    Index Searches: 1
-   Buffers: shared hit=2
- Planning:
-   Buffers: shared hit=37 read=1
-(5 rows)
+(2 rows)
 
 :PREFIX SELECT last(temp, time) FROM btest;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
-           ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+           ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                  Index Searches: 1
-                 Buffers: shared hit=2
- Planning:
-   Buffers: shared hit=78
-(10 rows)
+(5 rows)
 
 :PREFIX SELECT first(temp, time) FROM btest;
                                                        QUERY PLAN                                                       
 ------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                  Index Searches: 1
-                 Buffers: shared hit=2
- Planning:
-   Buffers: shared hit=31
-(10 rows)
+(5 rows)
 
 :PREFIX SELECT last(temp, time_alt) FROM btest;
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=7
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-         Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=35
-(6 rows)
+(2 rows)
 
 :PREFIX SELECT first(temp, time_alt) FROM btest;
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=1
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-         Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=35
-(6 rows)
+(2 rows)
 
 :PREFIX SELECT gp, last(temp, time) FROM btest GROUP BY gp ORDER BY gp;
                              QUERY PLAN                              
@@ -118,15 +97,10 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
  Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   Buffers: shared hit=1
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=21
-(12 rows)
+(7 rows)
 
 :PREFIX SELECT gp, first(temp, time) FROM btest GROUP BY gp ORDER BY gp;
                              QUERY PLAN                              
@@ -134,15 +108,10 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
  Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   Buffers: shared hit=1
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=13
-(12 rows)
+(7 rows)
 
 --check whole row
 :PREFIX SELECT gp, first(btest, time) FROM btest GROUP BY gp ORDER BY gp;
@@ -151,15 +120,10 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
  Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   Buffers: shared hit=10
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Buffers: shared hit=10
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=10
- Planning:
-   Buffers: shared hit=13
-(12 rows)
+(7 rows)
 
 --check toasted col
 :PREFIX SELECT gp, left(last(strid, time), 10) FROM btest GROUP BY gp ORDER BY gp;
@@ -168,15 +132,10 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
  Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   Buffers: shared hit=3
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Buffers: shared hit=3
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=13
-(12 rows)
+(7 rows)
 
 :PREFIX SELECT gp, last(temp, strid) FROM btest GROUP BY gp ORDER BY gp;
                              QUERY PLAN                              
@@ -184,15 +143,10 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
  Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   Buffers: shared hit=13
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Buffers: shared hit=13
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=13
-(12 rows)
+(7 rows)
 
 :PREFIX SELECT gp, last(strid, temp) FROM btest GROUP BY gp ORDER BY gp;
                              QUERY PLAN                              
@@ -200,62 +154,45 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
  Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   Buffers: shared hit=7
    ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Buffers: shared hit=7
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=13
-(12 rows)
+(7 rows)
 
 BEGIN;
 --check null value as last element
 INSERT INTO btest VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
 :PREFIX SELECT last(temp, time) FROM btest;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=70
-(15 rows)
+(9 rows)
 
 --check non-null element "overrides" NULL because it comes after.
 INSERT INTO btest VALUES('2019-01-20T09:00:43', '2018-01-20T09:00:55', 2, 30.5);
 :PREFIX SELECT last(temp, time) FROM btest;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=96
-(17 rows)
+(11 rows)
 
 --check null cmp element is skipped
 INSERT INTO btest VALUES('2018-01-20T09:00:43', NULL, 2, 32.3);
@@ -263,36 +200,22 @@ INSERT INTO btest VALUES('2018-01-20T09:00:43', NULL, 2, 32.3);
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=3
    ->  Append (actual rows=9.00 loops=1)
-         Buffers: shared hit=3
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=87
-(12 rows)
+(5 rows)
 
 -- fist returns NULL value
 :PREFIX SELECT first(temp, time_alt) FROM btest;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=3
    ->  Append (actual rows=9.00 loops=1)
-         Buffers: shared hit=3
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=87
-(12 rows)
+(5 rows)
 
 -- test first return non NULL value
 INSERT INTO btest VALUES('2016-01-20T09:00:00', '2016-01-20T09:00:00', 2, 36.5);
@@ -300,20 +223,12 @@ INSERT INTO btest VALUES('2016-01-20T09:00:00', '2016-01-20T09:00:00', 2, 36.5);
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=4
    ->  Append (actual rows=10.00 loops=1)
-         Buffers: shared hit=4
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=121
-(14 rows)
+(6 rows)
 
 --check non null cmp element insert after null cmp
 INSERT INTO btest VALUES('2020-01-20T09:00:43', '2020-01-20T09:00:43', 2, 35.3);
@@ -321,152 +236,103 @@ INSERT INTO btest VALUES('2020-01-20T09:00:43', '2020-01-20T09:00:43', 2, 35.3);
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=5
    ->  Append (actual rows=11.00 loops=1)
-         Buffers: shared hit=5
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=147
-(16 rows)
+(7 rows)
 
 :PREFIX SELECT first(temp, time_alt) FROM btest;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=5
    ->  Append (actual rows=11.00 loops=1)
-         Buffers: shared hit=5
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=139
-(16 rows)
+(7 rows)
 
 --cmp nulls should be ignored and not present in groups
 :PREFIX SELECT gp, last(temp, time_alt) FROM btest GROUP BY gp ORDER BY gp;
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  Sort (actual rows=2.00 loops=1)
-   Sort Key: _hyper_1_1_chunk.gp
+   Sort Key: btest.gp
    Sort Method: quicksort 
-   Buffers: shared hit=5
    ->  HashAggregate (actual rows=2.00 loops=1)
-         Group Key: _hyper_1_1_chunk.gp
-         Buffers: shared hit=5
+         Group Key: btest.gp
          ->  Append (actual rows=11.00 loops=1)
-               Buffers: shared hit=5
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=53
-(22 rows)
+(12 rows)
 
 --Previously, some bugs were found with NULLS and numeric types, so test that
 INSERT INTO btest_numeric VALUES ('2019-01-20T09:00:43', NULL);
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
-           ->  Index Scan Backward using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (actual rows=1.00 loops=1)
+           ->  Index Scan using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (actual rows=1.00 loops=1)
                  Index Searches: 1
-                 Buffers: shared hit=2
- Planning:
-   Buffers: shared hit=43 read=1
-(10 rows)
+(5 rows)
 
 --check non-null element "overrides" NULL because it comes after.
 INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
-                 Order: btest_numeric."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_2_7_chunk_btest_numeric_time_idx on _hyper_2_7_chunk (actual rows=1.00 loops=1)
+                 Order: btest_numeric."time" DESC
+                 ->  Index Scan using _hyper_2_7_chunk_btest_numeric_time_idx on _hyper_2_7_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (never executed)
+                 ->  Index Scan using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=70
-(15 rows)
+(9 rows)
 
 -- do index scan for last
 :PREFIX SELECT last(temp, time) FROM btest;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=140
-(21 rows)
+(15 rows)
 
 -- do index scan for first
 :PREFIX SELECT first(temp, time) FROM btest;
                                                           QUERY PLAN                                                          
 ------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time"
-                 Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Searches: 0
                  ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
@@ -475,145 +341,105 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
                        Index Searches: 0
                  ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=97
-(21 rows)
+(15 rows)
 
 -- can't do index scan when ordering on non-index column
 :PREFIX SELECT first(temp, time_alt) FROM btest;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=5
    ->  Append (actual rows=11.00 loops=1)
-         Buffers: shared hit=5
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=139
-(16 rows)
+(7 rows)
 
 -- do index scan for subquery
 :PREFIX SELECT * FROM (SELECT last(temp, time) FROM btest) last;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=140
-(21 rows)
+(15 rows)
 
 -- can't do index scan when using group by
 :PREFIX SELECT last(temp, time) FROM btest GROUP BY gp ORDER BY gp;
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  Sort (actual rows=2.00 loops=1)
-   Sort Key: _hyper_1_1_chunk.gp
+   Sort Key: btest.gp
    Sort Method: quicksort 
-   Buffers: shared hit=5
    ->  HashAggregate (actual rows=2.00 loops=1)
-         Group Key: _hyper_1_1_chunk.gp
-         Buffers: shared hit=5
+         Group Key: btest.gp
          ->  Append (actual rows=11.00 loops=1)
-               Buffers: shared hit=5
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=53
-(22 rows)
+(12 rows)
 
 -- do index scan when agg function is used in CTE subquery
 :PREFIX WITH last_temp AS (SELECT last(temp, time) FROM btest) SELECT * from last_temp;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=140
-(21 rows)
+(15 rows)
 
 -- do index scan when using both FIRST and LAST aggregate functions
 :PREFIX SELECT first(temp, time), last(temp, time) FROM btest;
                                                                    QUERY PLAN                                                                    
 -------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=4
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Searches: 0
    InitPlan 2
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1.00 loops=1)
                  Order: btest_1."time"
-                 Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
                        Index Searches: 0
                  ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (never executed)
@@ -622,42 +448,33 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
                        Index Searches: 0
                  ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk _hyper_1_5_chunk_1 (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=184
-(38 rows)
+(29 rows)
 
 -- verify results when using both FIRST and LAST
 :PREFIX SELECT first(temp, time), last(temp, time) FROM btest;
                                                                    QUERY PLAN                                                                    
 -------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=4
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Searches: 0
    InitPlan 2
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1.00 loops=1)
                  Order: btest_1."time"
-                 Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
                        Index Searches: 0
                  ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (never executed)
@@ -666,118 +483,82 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
                        Index Searches: 0
                  ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk _hyper_1_5_chunk_1 (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=184
-(38 rows)
+(29 rows)
 
 -- do index scan when using WHERE
 :PREFIX SELECT last(temp, time) FROM btest WHERE time <= '2017-01-20T09:00:02';
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                        Index Cond: ("time" <= 'Fri Jan 20 09:00:02 2017'::timestamp without time zone)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Cond: ("time" <= 'Fri Jan 20 09:00:02 2017'::timestamp without time zone)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=91
-(17 rows)
+(11 rows)
 
 -- can't do index scan for MAX and LAST combined (MinMax optimization fails when having different aggregate functions)
 :PREFIX SELECT max(time), last(temp, time) FROM btest;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=5
    ->  Append (actual rows=11.00 loops=1)
-         Buffers: shared hit=5
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=56
-(16 rows)
+(7 rows)
 
 -- can't do index scan when using FIRST/LAST in ORDER BY
 :PREFIX SELECT last(temp, time) FROM btest ORDER BY last(temp, time);
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  Sort (actual rows=1.00 loops=1)
-   Sort Key: (last(_hyper_1_1_chunk.temp, _hyper_1_1_chunk."time"))
+   Sort Key: (last(btest.temp, btest."time"))
    Sort Method: quicksort 
-   Buffers: shared hit=8
    ->  Aggregate (actual rows=1.00 loops=1)
-         Buffers: shared hit=5
          ->  Append (actual rows=11.00 loops=1)
-               Buffers: shared hit=5
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=66
-(20 rows)
+(10 rows)
 
 -- do index scan
 :PREFIX SELECT last(temp, time) FROM btest WHERE temp < 30;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=8
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=8
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=8
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=0.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=0.00 loops=1)
                        Filter: (temp < '30'::double precision)
                        Rows Removed by Filter: 1
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=0.00 loops=1)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=0.00 loops=1)
                        Filter: (temp < '30'::double precision)
                        Rows Removed by Filter: 1
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=0.00 loops=1)
                        Filter: (temp < '30'::double precision)
                        Rows Removed by Filter: 2
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                        Filter: (temp < '30'::double precision)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Filter: (temp < '30'::double precision)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=140
-(32 rows)
+(23 rows)
 
 -- SELECT first(temp, time) FROM btest WHERE time >= '2017-01-20 09:00:47';
 -- do index scan
@@ -785,17 +566,13 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
                                                           QUERY PLAN                                                          
 ------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time"
-                 Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                        Index Cond: ("time" >= 'Fri Jan 20 09:00:47 2017'::timestamp without time zone)
                        Index Searches: 1
-                       Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Cond: ("time" >= 'Fri Jan 20 09:00:47 2017'::timestamp without time zone)
                        Index Searches: 0
@@ -805,145 +582,105 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
                  ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (never executed)
                        Index Cond: ("time" >= 'Fri Jan 20 09:00:47 2017'::timestamp without time zone)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=106
-(23 rows)
+(17 rows)
 
 -- can't do index scan when using WINDOW function
 :PREFIX SELECT gp, last(temp, time) OVER (PARTITION BY gp) AS last FROM btest;
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  WindowAgg (actual rows=11.00 loops=1)
-   Window: w1 AS (PARTITION BY _hyper_1_1_chunk.gp)
+   Window: w1 AS (PARTITION BY btest.gp)
    Storage: Memory  Maximum Storage: 17kB
-   Buffers: shared hit=5
    ->  Sort (actual rows=11.00 loops=1)
-         Sort Key: _hyper_1_1_chunk.gp
+         Sort Key: btest.gp
          Sort Method: quicksort 
-         Buffers: shared hit=5
          ->  Append (actual rows=11.00 loops=1)
-               Buffers: shared hit=5
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=53
-(22 rows)
+(12 rows)
 
 -- test constants
 :PREFIX SELECT first(100, 100) FROM btest;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=1
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=1
            ->  Result (actual rows=1.00 loops=1)
-                 Buffers: shared hit=1
                  ->  Append (actual rows=1.00 loops=1)
-                       Buffers: shared hit=1
                        ->  Seq Scan on _hyper_1_1_chunk (actual rows=1.00 loops=1)
-                             Buffers: shared hit=1
                        ->  Seq Scan on _hyper_1_2_chunk (never executed)
                        ->  Seq Scan on _hyper_1_3_chunk (never executed)
                        ->  Seq Scan on _hyper_1_4_chunk (never executed)
                        ->  Seq Scan on _hyper_1_5_chunk (never executed)
- Planning:
-   Buffers: shared hit=96
-(17 rows)
+(10 rows)
 
 -- create an index so we can test optimization
 CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 :PREFIX SELECT last(temp, time_alt) FROM btest;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=5 read=5
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=5 read=5
            ->  Merge Append (actual rows=1.00 loops=1)
-                 Sort Key: _hyper_1_1_chunk.time_alt
-                 Buffers: shared hit=5 read=5
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_alt_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                 Sort Key: btest.time_alt DESC
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_alt_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                       Index Cond: (time_alt IS NOT NULL)
                        Index Searches: 1
-                       Buffers: shared hit=1 read=1
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_alt_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_alt_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+                       Index Cond: (time_alt IS NOT NULL)
                        Index Searches: 1
-                       Buffers: shared hit=1 read=1
-                 ->  Index Scan using _hyper_1_3_chunk_btest_time_alt_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_alt_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+                       Index Cond: (time_alt IS NOT NULL)
                        Index Searches: 1
-                       Buffers: shared hit=1 read=1
-                 ->  Index Scan using _hyper_1_4_chunk_btest_time_alt_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_alt_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+                       Index Cond: (time_alt IS NOT NULL)
                        Index Searches: 1
-                       Buffers: shared hit=1 read=1
-                 ->  Index Scan using _hyper_1_5_chunk_btest_time_alt_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_alt_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                       Index Cond: (time_alt IS NOT NULL)
                        Index Searches: 1
-                       Buffers: shared hit=1 read=1
- Planning:
-   Buffers: shared hit=202 read=6
-(25 rows)
+(20 rows)
 
 --test nested FIRST/LAST - should optimize
 :PREFIX SELECT abs(last(temp, time)) FROM btest;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
-                 Order: btest."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
+                 Order: btest."time" DESC
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                        Index Searches: 0
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
+                 ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=143
-(21 rows)
+(15 rows)
 
 -- test nested FIRST/LAST in ORDER BY - no optimization possible
 :PREFIX SELECT abs(last(temp, time)) FROM btest ORDER BY abs(last(temp,time));
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  Sort (actual rows=1.00 loops=1)
-   Sort Key: (abs(last(_hyper_1_1_chunk.temp, _hyper_1_1_chunk."time")))
+   Sort Key: (abs(last(btest.temp, btest."time")))
    Sort Method: quicksort 
-   Buffers: shared hit=5
    ->  Aggregate (actual rows=1.00 loops=1)
-         Buffers: shared hit=5
          ->  Append (actual rows=11.00 loops=1)
-               Buffers: shared hit=5
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
                ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
-                     Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=149
-(20 rows)
+(10 rows)
 
 ROLLBACK;
 -- Test with NULL numeric values
@@ -956,9 +693,7 @@ TRUNCATE btest_numeric;
  Aggregate (actual rows=1.00 loops=1)
    ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
- Planning:
-   Buffers: shared hit=5 read=1
-(5 rows)
+(3 rows)
 
 :PREFIX SELECT last(btest_numeric, time) FROM btest_numeric;
                QUERY PLAN                
@@ -966,9 +701,7 @@ TRUNCATE btest_numeric;
  Aggregate (actual rows=1.00 loops=1)
    ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
- Planning:
-   Buffers: shared hit=2
-(5 rows)
+(3 rows)
 
 -- Only NULL values
 INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
@@ -977,53 +710,35 @@ INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
                                                            QUERY PLAN                                                           
 --------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
                  Index Searches: 1
-                 Buffers: shared hit=2
- Planning:
-   Buffers: shared hit=32
-(10 rows)
+(5 rows)
 
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
-           ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
+           ->  Index Scan using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
                  Index Searches: 1
-                 Buffers: shared hit=2
- Planning:
-   Buffers: shared hit=36
-(10 rows)
+(5 rows)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=1
    ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
-         Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=96
-(6 rows)
+(2 rows)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
                           QUERY PLAN                           
 ---------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=1
    ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
-         Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=39
-(6 rows)
+(2 rows)
 
 -- NULL values followed by non-NULL values
 INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 1);
@@ -1032,71 +747,47 @@ INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 2);
                                                               QUERY PLAN                                                              
 --------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time"
-                 Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=50
-(15 rows)
+(9 rows)
 
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+                                                         QUERY PLAN                                                          
+-----------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
-                 Order: btest_numeric."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (actual rows=1.00 loops=1)
+                 Order: btest_numeric."time" DESC
+                 ->  Index Scan using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (never executed)
+                 ->  Index Scan using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=62
-(15 rows)
+(9 rows)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=8
    ->  Append (actual rows=4.00 loops=1)
-         Buffers: shared hit=2
          ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_2_9_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=61
-(10 rows)
+(4 rows)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=8
    ->  Append (actual rows=4.00 loops=1)
-         Buffers: shared hit=2
          ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_2_9_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=61
-(10 rows)
+(4 rows)
 
 TRUNCATE btest_numeric;
 -- non-NULL values followed by NULL values
@@ -1108,71 +799,47 @@ INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
                                                                QUERY PLAN                                                               
 ----------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time"
-                 Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
                  ->  Index Scan Backward using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=51 read=1
-(15 rows)
+(9 rows)
 
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    InitPlan 1
      ->  Limit (actual rows=1.00 loops=1)
-           Buffers: shared hit=2
            ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
-                 Order: btest_numeric."time"
-                 Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
+                 Order: btest_numeric."time" DESC
+                 ->  Index Scan using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
                        Index Searches: 1
-                       Buffers: shared hit=2
-                 ->  Index Scan Backward using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (never executed)
+                 ->  Index Scan using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (never executed)
                        Index Searches: 0
- Planning:
-   Buffers: shared hit=62
-(15 rows)
+(9 rows)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
                               QUERY PLAN                              
 ----------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    ->  Append (actual rows=4.00 loops=1)
-         Buffers: shared hit=2
          ->  Seq Scan on _hyper_2_10_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_2_11_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=61
-(10 rows)
+(4 rows)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
                               QUERY PLAN                              
 ----------------------------------------------------------------------
  Aggregate (actual rows=1.00 loops=1)
-   Buffers: shared hit=2
    ->  Append (actual rows=4.00 loops=1)
-         Buffers: shared hit=2
          ->  Seq Scan on _hyper_2_10_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
          ->  Seq Scan on _hyper_2_11_chunk (actual rows=2.00 loops=1)
-               Buffers: shared hit=1
- Planning:
-   Buffers: shared hit=61
-(10 rows)
+(4 rows)
 
 ROLLBACK;
 -- we want test results as part of the output too to make sure we produce correct output

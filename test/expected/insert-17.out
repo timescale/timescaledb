@@ -313,12 +313,12 @@ WITH insert_cte as (
 SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
                                QUERY PLAN                                
 -------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    CTE insert_cte
-     ->  Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-           ->  Insert on one_space_test (actual rows=0 loops=1)
-                 ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-                       ->  Result (actual rows=1 loops=1)
+     ->  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+           ->  Insert on one_space_test (actual rows=0.00 loops=1)
+                 ->  Custom Scan (ChunkDispatch) (actual rows=1.00 loops=1)
+                       ->  Result (actual rows=1.00 loops=1)
 (8 rows)
 
 -- INSERTs can exclude chunks based on constraints

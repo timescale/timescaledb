@@ -676,10 +676,10 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 timestamp BETWEEN now() - interval '1 day' AND now()
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 QUERY PLAN
- Sort (actual rows=0 loops=1)
+ Sort (actual rows=0.00 loops=1)
    Sort Key: "timestamp"
    Sort Method: quicksort 
-   ->  Result (actual rows=0 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
 (5 rows)
 
@@ -687,10 +687,10 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 QUERY PLAN
- Sort (actual rows=0 loops=1)
+ Sort (actual rows=0.00 loops=1)
    Sort Key: "timestamp"
    Sort Method: quicksort 
-   ->  Result (actual rows=0 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
 (5 rows)
 
@@ -698,10 +698,10 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 ORDER BY "timestamp" ASC;
 QUERY PLAN
- Sort (actual rows=0 loops=1)
+ Sort (actual rows=0.00 loops=1)
    Sort Key: "timestamp"
    Sort Method: quicksort 
-   ->  Result (actual rows=0 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
 (5 rows)
 

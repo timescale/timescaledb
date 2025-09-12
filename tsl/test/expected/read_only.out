@@ -23,7 +23,7 @@ SET transaction_read_only TO on;
 EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
                    QUERY PLAN                   
 ------------------------------------------------
- Seq Scan on test_table (actual rows=0 loops=1)
+ Seq Scan on test_table (actual rows=0.00 loops=1)
 (1 row)
 
 ROLLBACK;
@@ -62,7 +62,7 @@ SET transaction_read_only TO on;
 EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_table;
                    QUERY PLAN                   
 ------------------------------------------------
- Seq Scan on test_table (actual rows=0 loops=1)
+ Seq Scan on test_table (actual rows=0.00 loops=1)
 (1 row)
 
 ROLLBACK;
