@@ -12,6 +12,8 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include <nodes/memnodes.h>
+
 #include <math.h>
 
 #include "compression.h"
@@ -443,6 +445,9 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 
 		MemoryContextRegisterResetCallback(fcinfo->flinfo->fn_mcxt,
 										   &context->memoryContextCallback);
+
+		Ensure(strcmp(fcinfo->flinfo->fn_mcxt->name, "ExecutorState") == 0,
+			"wrong context %s", fcinfo->flinfo->fn_mcxt->name);
 
 		context->element_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 		if (use_element_type)
