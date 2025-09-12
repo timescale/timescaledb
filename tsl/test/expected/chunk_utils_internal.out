@@ -1016,12 +1016,12 @@ Child tables: _timescaledb_internal._hyper_5_10_chunk,
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
- Append (actual rows=3 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on compress_hyper_10_19_chunk (actual rows=1 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_5_18_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on compress_hyper_10_20_chunk (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_5_18_chunk (actual rows=1 loops=1)
+ Append (actual rows=3.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on compress_hyper_10_19_chunk (actual rows=1.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_5_18_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on compress_hyper_10_20_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_5_18_chunk (actual rows=1.00 loops=1)
 (6 rows)
 
 ROLLBACK;

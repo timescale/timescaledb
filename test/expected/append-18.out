@@ -66,7 +66,6 @@ END;
 $$;
 CREATE TABLE append_test(time timestamptz, temp float, colorid integer, attr jsonb);
 SELECT create_hypertable('append_test', 'time', chunk_time_interval => 2628000000000);
-psql:include/append_load.sql:56: NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (1,public,append_test,t)
@@ -82,7 +81,6 @@ VACUUM (ANALYZE) append_test;
 -- Create another hypertable to join with
 CREATE TABLE join_test(time timestamptz, temp float, colorid integer);
 SELECT create_hypertable('join_test', 'time', chunk_time_interval => 2628000000000);
-psql:include/append_load.sql:68: NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (2,public,join_test,t)
@@ -981,7 +979,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_22_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
@@ -992,7 +990,7 @@ reset enable_material;
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
    ->  Merge Append (actual rows=7670.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
@@ -1003,7 +1001,7 @@ reset enable_material;
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
    ->  Merge Append (actual rows=3850.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
@@ -1021,7 +1019,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_22_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
@@ -1032,7 +1030,7 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
    ->  Merge Append (actual rows=7670.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
@@ -1043,7 +1041,7 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
    ->  Merge Append (actual rows=3850.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
@@ -1061,7 +1059,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=7670.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Index Searches: 1
@@ -1072,7 +1070,7 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Index Searches: 1
    ->  Merge Append (actual rows=3850.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Index Searches: 1
@@ -1092,7 +1090,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_22_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
@@ -1103,7 +1101,7 @@ reset enable_material;
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
    ->  Merge Append (actual rows=7670.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
@@ -1114,7 +1112,7 @@ reset enable_material;
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
    ->  Merge Append (actual rows=3850.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                Index Cond: ("time" > '01-10-2000'::date)
                Index Searches: 1
@@ -1132,7 +1130,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_22_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
@@ -1143,7 +1141,7 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
    ->  Merge Append (actual rows=7670.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
@@ -1154,7 +1152,7 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
    ->  Merge Append (actual rows=3850.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
                Index Searches: 1
@@ -1172,7 +1170,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=7670.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Index Searches: 1
@@ -1183,7 +1181,7 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Index Searches: 1
    ->  Merge Append (actual rows=3850.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Index Searches: 1
@@ -1203,7 +1201,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_22_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
                Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
                Index Searches: 1
@@ -1214,7 +1212,7 @@ reset enable_material;
                Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
                Index Searches: 1
    ->  Merge Append (actual rows=7670.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
                Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
                Index Searches: 1
@@ -1225,7 +1223,7 @@ reset enable_material;
                Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
                Index Searches: 1
    ->  Merge Append (actual rows=3850.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
                Index Searches: 1
@@ -1243,7 +1241,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_22_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
                Index Searches: 1
@@ -1254,7 +1252,7 @@ reset enable_material;
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
                Index Searches: 1
    ->  Merge Append (actual rows=7670.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
                Index Searches: 1
@@ -1265,7 +1263,7 @@ reset enable_material;
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
                Index Searches: 1
    ->  Merge Append (actual rows=3850.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
                Index Searches: 1
@@ -1283,7 +1281,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=7670.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=3068.00 loops=1)
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
                Index Searches: 1
@@ -1294,7 +1292,7 @@ reset enable_material;
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
                Index Searches: 1
    ->  Merge Append (actual rows=3850.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
                Index Searches: 1
@@ -1326,7 +1324,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=2304.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=1534.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=767.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Filter: (device_id = ANY ('{1,2}'::integer[]))
@@ -1338,7 +1336,7 @@ reset enable_material;
                Rows Removed by Filter: 2301
                Index Searches: 1
    ->  Merge Append (actual rows=770.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=385.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Filter: (device_id = ANY ('{1,2}'::integer[]))
@@ -1370,7 +1368,7 @@ reset enable_material;
  Custom Scan (ChunkAppend) on metrics_space (actual rows=1152.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=767.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=767.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Filter: (v3 = '1'::text)
@@ -1387,7 +1385,7 @@ reset enable_material;
                Rows Removed by Filter: 1534
                Index Searches: 1
    ->  Merge Append (actual rows=385.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=385.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Filter: (v3 = '1'::text)
@@ -1487,7 +1485,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_22_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > CURRENT_DATE)
                Index Searches: 1
@@ -1498,7 +1496,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
                Index Cond: ("time" > CURRENT_DATE)
                Index Searches: 1
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > CURRENT_DATE)
                Index Searches: 1
@@ -1509,7 +1507,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
                Index Cond: ("time" > CURRENT_DATE)
                Index Searches: 1
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > CURRENT_DATE)
                Index Searches: 1
@@ -1553,7 +1551,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_22_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > CURRENT_TIMESTAMP)
                Index Searches: 1
@@ -1564,7 +1562,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
                Index Cond: ("time" > CURRENT_TIMESTAMP)
                Index Searches: 1
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > CURRENT_TIMESTAMP)
                Index Searches: 1
@@ -1575,7 +1573,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
                Index Cond: ("time" > CURRENT_TIMESTAMP)
                Index Searches: 1
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > CURRENT_TIMESTAMP)
                Index Searches: 1
@@ -1619,7 +1617,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_22_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_22_chunk_metrics_space_time_idx on _hyper_6_22_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > now())
                Index Searches: 1
@@ -1630,7 +1628,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
                Index Cond: ("time" > now())
                Index Searches: 1
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_25_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_time_idx on _hyper_6_25_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > now())
                Index Searches: 1
@@ -1641,7 +1639,7 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
                Index Cond: ("time" > now())
                Index Searches: 1
    ->  Merge Append (actual rows=0.00 loops=1)
-         Sort Key: _hyper_6_28_chunk."time"
+         Sort Key: metrics_space."time"
          ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_time_idx on _hyper_6_28_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > now())
                Index Searches: 1
@@ -1661,7 +1659,7 @@ ORDER BY time DESC;
                                     QUERY PLAN                                    
 ----------------------------------------------------------------------------------
  Sort (actual rows=217.00 loops=1)
-   Sort Key: _hyper_3_11_chunk."time" DESC
+   Sort Key: metrics_date."time" DESC
    Sort Method: quicksort 
    ->  Append (actual rows=217.00 loops=1)
          ->  Sample Scan on _hyper_3_11_chunk (actual rows=72.00 loops=1)
@@ -1708,7 +1706,7 @@ ORDER BY time DESC, device_id;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Sort (actual rows=522.00 loops=1)
-   Sort Key: _hyper_6_30_chunk."time" DESC, _hyper_6_30_chunk.device_id
+   Sort Key: metrics_space."time" DESC, metrics_space.device_id
    Sort Method: quicksort 
    ->  Append (actual rows=522.00 loops=1)
          ->  Sample Scan on _hyper_6_30_chunk (actual rows=35.00 loops=1)
@@ -2069,7 +2067,7 @@ ORDER BY time DESC, device_id;
    Hypertable: metrics_timestamptz
    Chunks excluded during startup: 3
    ->  Merge Append (actual rows=7776.00 loops=1)
-         Sort Key: _hyper_5_17_chunk.device_id, _hyper_5_17_chunk."time"
+         Sort Key: metrics_timestamptz.device_id, metrics_timestamptz."time"
          ->  Index Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=4032.00 loops=1)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                Index Searches: 1
@@ -2170,7 +2168,7 @@ SET enable_hashagg TO false;
  Limit (actual rows=3.00 loops=1)
    ->  Unique (actual rows=3.00 loops=1)
          ->  Merge Append (actual rows=17859.00 loops=1)
-               Sort Key: _hyper_5_17_chunk.device_id
+               Sort Key: metrics_timestamptz.device_id
                ->  Index Scan using _hyper_5_17_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_17_chunk (actual rows=2689.00 loops=1)
                      Index Searches: 1
                ->  Index Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=4033.00 loops=1)
@@ -2189,7 +2187,7 @@ SET enable_hashagg TO false;
  Limit (actual rows=3.00 loops=1)
    ->  Unique (actual rows=3.00 loops=1)
          ->  Merge Append (actual rows=7491.00 loops=1)
-               Sort Key: _hyper_6_22_chunk.device_id
+               Sort Key: metrics_space.device_id
                ->  Index Scan using _hyper_6_22_chunk_metrics_space_device_id_time_idx on _hyper_6_22_chunk (actual rows=1345.00 loops=1)
                      Index Searches: 1
                ->  Index Scan using _hyper_6_23_chunk_metrics_space_device_id_time_idx on _hyper_6_23_chunk (actual rows=1345.00 loops=1)
@@ -2217,7 +2215,6 @@ RESET enable_hashagg;
 -- to trigger this we need a Sort node that is below ChunkAppend
 CREATE TABLE join_limit (time timestamptz, device_id int);
 SELECT table_name FROM create_hypertable('join_limit','time',create_default_indexes:=false);
-psql:include/append_query.sql:315: NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  join_limit
@@ -2289,23 +2286,27 @@ FROM (
 ) ts
 LEFT JOIN i2661 ht ON
   (FLOOR(EXTRACT (EPOCH FROM ht."timestamp") / 300) * 300 = EXTRACT (EPOCH FROM ts.timestamp))
-  AND ht.timestamp > '2019-12-30T00:00:00Z'::timestamp;
-                                                                                                                                   QUERY PLAN                                                                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Hash Right Join (actual rows=33.00 loops=1)
-   Hash Cond: ((floor((EXTRACT(epoch FROM ht."timestamp") / '300'::numeric)) * '300'::numeric) = EXTRACT(epoch FROM (generate_series('Wed Jan 01 00:00:00 2020'::timestamp without time zone, 'Wed Jan 01 01:00:00 2020'::timestamp without time zone, '@ 5 mins'::interval))))
-   ->  Custom Scan (ChunkAppend) on i2661 ht (actual rows=7201.00 loops=1)
-         Chunks excluded during startup: 0
-         ->  Seq Scan on _hyper_7_31_chunk ht_1 (actual rows=1200.00 loops=1)
-               Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
-         ->  Seq Scan on _hyper_7_32_chunk ht_2 (actual rows=5040.00 loops=1)
-               Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
-         ->  Seq Scan on _hyper_7_33_chunk ht_3 (actual rows=961.00 loops=1)
-               Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
-   ->  Hash (actual rows=13.00 loops=1)
-         ->  ProjectSet (actual rows=13.00 loops=1)
-               ->  Result (actual rows=1.00 loops=1)
-(14 rows)
+  AND ht.timestamp > '2019-12-30T00:00:00Z'::timestamp
+ORDER BY ts.timestamp, ht.timestamp;
+                                                                                                                                      QUERY PLAN                                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort (actual rows=33.00 loops=1)
+   Sort Key: (generate_series('Wed Jan 01 00:00:00 2020'::timestamp without time zone, 'Wed Jan 01 01:00:00 2020'::timestamp without time zone, '@ 5 mins'::interval)), ht."timestamp"
+   Sort Method: quicksort 
+   ->  Hash Right Join (actual rows=33.00 loops=1)
+         Hash Cond: ((floor((EXTRACT(epoch FROM ht."timestamp") / '300'::numeric)) * '300'::numeric) = EXTRACT(epoch FROM (generate_series('Wed Jan 01 00:00:00 2020'::timestamp without time zone, 'Wed Jan 01 01:00:00 2020'::timestamp without time zone, '@ 5 mins'::interval))))
+         ->  Custom Scan (ChunkAppend) on i2661 ht (actual rows=7201.00 loops=1)
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_7_31_chunk ht_1 (actual rows=1200.00 loops=1)
+                     Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
+               ->  Seq Scan on _hyper_7_32_chunk ht_2 (actual rows=5040.00 loops=1)
+                     Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
+               ->  Seq Scan on _hyper_7_33_chunk ht_3 (actual rows=961.00 loops=1)
+                     Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
+         ->  Hash (actual rows=13.00 loops=1)
+               ->  ProjectSet (actual rows=13.00 loops=1)
+                     ->  Result (actual rows=1.00 loops=1)
+(17 rows)
 
 -- #3030 test chunkappend keeps pathkeys when subpath is append
 -- on PG11 this will not use ChunkAppend but MergeAppend
@@ -2365,7 +2366,7 @@ WHERE a.attr @> ANY((SELECT attr FROM join_test_plain WHERE temp > 100));
                                QUERY PLAN                                
 -------------------------------------------------------------------------
  Nested Loop Semi Join (actual rows=0.00 loops=1)
-   Join Filter: (a_1.attr @> join_test_plain.attr)
+   Join Filter: (a.attr @> join_test_plain.attr)
    ->  Append (actual rows=5.00 loops=1)
          ->  Seq Scan on _hyper_1_1_chunk a_1 (actual rows=2.00 loops=1)
          ->  Seq Scan on _hyper_1_2_chunk a_2 (actual rows=2.00 loops=1)
@@ -2460,19 +2461,19 @@ call force_parallel(true);
 select time, avg(temp), colorid from append_test
 where time > now_s() - interval '3 months 20 days'
 group by time, colorid;
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
-psql:include/append_query.sql:414: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
+psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
                                       QUERY PLAN                                       
 ---------------------------------------------------------------------------------------
  Gather (actual rows=3.00 loops=1)
