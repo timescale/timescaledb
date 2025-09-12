@@ -274,7 +274,6 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 -- regerssion test for bug fixed by PR #1008.
 -- this caused an assertion failure when a MergeAppend node contained unsorted children
-SET enable_seqscan TO false;
 SET enable_bitmapscan TO false;
 EXPLAIN (verbose, buffers off, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
                                                         QUERY PLAN                                                        

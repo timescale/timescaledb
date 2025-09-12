@@ -744,13 +744,13 @@ ALTER TABLE p_hypertable DROP COLUMN b, ADD COLUMN d boolean;
 CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
 END;
 INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
-\d+ _timescaledb_internal._hyper_14_28_chunk
-                     Table "_timescaledb_internal._hyper_14_28_chunk"
- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
---------+---------+-----------+----------+---------+---------+--------------+-------------
- a      | integer |           | not null |         | plain   |              | 
- c      | integer |           |          |         | plain   |              | 
- d      | boolean |           |          |         | plain   |              | 
+\d _timescaledb_internal._hyper_14_28_chunk
+ Table "_timescaledb_internal._hyper_14_28_chunk"
+ Column |  Type   | Collation | Nullable | Default 
+--------+---------+-----------+----------+---------
+ a      | integer |           | not null | 
+ c      | integer |           |          | 
+ d      | boolean |           |          | 
 Indexes:
     "_hyper_14_28_chunk_idx_ht" btree (a, c) WHERE NOT d
     "_hyper_14_28_chunk_p_hypertable_a_idx" btree (a DESC)

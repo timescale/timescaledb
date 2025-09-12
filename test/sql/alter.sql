@@ -426,7 +426,7 @@ CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
 END;
 INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
 
-\d+ _timescaledb_internal._hyper_14_28_chunk
+\d _timescaledb_internal._hyper_14_28_chunk
 
 DROP TABLE p_hypertable;
 

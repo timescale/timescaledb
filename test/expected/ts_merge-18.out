@@ -613,7 +613,7 @@ CREATE TRIGGER merge_ard AFTER DELETE ON target FOR EACH ROW EXECUTE PROCEDURE m
 -- now the classic UPSERT, with a DELETE
 BEGIN;
 UPDATE target SET balance = 0 WHERE tid = 3;
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 MERGE INTO target t
 USING source AS s
 ON t.tid = s.sid
@@ -764,7 +764,7 @@ USING (SELECT 1) s
 ON t.tid = $1
 WHEN MATCHED THEN
 UPDATE SET balance = $2;
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 execute foom2 (1, 1);
 ROLLBACK;
 -- subqueries in source relation
@@ -914,7 +914,7 @@ $$
 DECLARE ln text;
 BEGIN
     FOR ln IN
-        EXECUTE 'explain (analyze, timing off, summary off, costs off) ' ||
+        EXECUTE 'explain (analyze, timing off, summary off, buffers off, costs off) ' ||
 		  query
     LOOP
         ln := regexp_replace(ln, '(Memory( Usage)?|Buckets|Batches): \S*',  '\1: xxx', 'g');
@@ -1703,7 +1703,7 @@ USING source AS s
 ON t.tid = s.sid
 WHEN NOT MATCHED THEN
   INSERT VALUES (4, NULL);
-psql:include/ts_merge_query.sql:265: ERROR:  duplicate key value violates unique constraint "2_507_target_pkey"
+psql:include/ts_merge_query.sql:265: ERROR:  duplicate key value violates unique constraint "2_2_target_pkey"
 DETAIL:  Key (tid)=(4) already exists.
 SELECT * FROM target ORDER BY tid;
 psql:include/ts_merge_query.sql:266: ERROR:  current transaction is aborted, commands ignored until end of transaction block
@@ -1960,7 +1960,7 @@ CREATE TRIGGER merge_ard AFTER DELETE ON target FOR EACH ROW EXECUTE PROCEDURE m
 -- now the classic UPSERT, with a DELETE
 BEGIN;
 UPDATE target SET balance = 0 WHERE tid = 3;
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 MERGE INTO target t
 USING source AS s
 ON t.tid = s.sid
@@ -2114,7 +2114,7 @@ ON t.tid = $1
 WHEN MATCHED THEN
 UPDATE SET balance = $2;
 psql:include/ts_merge_query.sql:695: ERROR:  prepared statement "foom2" already exists
---EXPLAIN (ANALYZE ON, COSTS OFF, SUMMARY OFF, TIMING OFF)
+--EXPLAIN (ANALYZE ON, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)
 execute foom2 (1, 1);
 psql:include/ts_merge_query.sql:697: ERROR:  current transaction is aborted, commands ignored until end of transaction block
 ROLLBACK;
@@ -2265,7 +2265,7 @@ $$
 DECLARE ln text;
 BEGIN
     FOR ln IN
-        EXECUTE 'explain (analyze, timing off, summary off, costs off) ' ||
+        EXECUTE 'explain (analyze, timing off, summary off, buffers off, costs off) ' ||
 		  query
     LOOP
         ln := regexp_replace(ln, '(Memory( Usage)?|Buckets|Batches): \S*',  '\1: xxx', 'g');

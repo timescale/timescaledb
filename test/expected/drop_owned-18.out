@@ -7,7 +7,6 @@ GRANT ALL ON SCHEMA hypertable_schema TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE hypertable_schema.default_perm_user (time timestamptz, temp float, location int);
 SELECT create_hypertable('hypertable_schema.default_perm_user', 'time', 'location', 2);
-NOTICE:  adding not-null constraint to column "time"
              create_hypertable             
 -------------------------------------------
  (1,hypertable_schema,default_perm_user,t)
@@ -17,7 +16,6 @@ INSERT INTO hypertable_schema.default_perm_user VALUES ('2001-01-01 01:01:01', 2
 RESET ROLE;
 CREATE TABLE hypertable_schema.superuser (time timestamptz, temp float, location int);
 SELECT create_hypertable('hypertable_schema.superuser', 'time', 'location', 2);
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable         
 -----------------------------------
  (2,hypertable_schema,superuser,t)
@@ -71,11 +69,6 @@ SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM _timescaledb_catalog.dimension_slice;
  id | dimension_id | range_start | range_end 
 ----+--------------+-------------+-----------
-(0 rows)
-
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id | index_name | hypertable_id | hypertable_index_name 
-----------+------------+---------------+-----------------------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;

@@ -2456,7 +2456,7 @@ set enable_indexscan = on;
 :EXPLAIN_ANALYZE select * from mytab where lower(col1::text) = 'meter1';
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
- Index Scan using _hyper_37_141_chunk_myidx_unique on _hyper_37_141_chunk (actual rows=3 loops=1)
+ Index Scan using _hyper_37_141_chunk_myidx_unique on _hyper_37_141_chunk (actual rows=3.00 loops=1)
    Index Cond: (lower((col1)::text) = 'meter1'::text)
 (2 rows)
 
@@ -2486,7 +2486,7 @@ select decompress_chunk(show_chunks('mytab'));
 :EXPLAIN_ANALYZE SELECT * FROM mytab WHERE value BETWEEN 2.4 AND 2.8;
                                       QUERY PLAN                                       
 ---------------------------------------------------------------------------------------
- Seq Scan on _hyper_37_141_chunk (actual rows=1 loops=1)
+ Seq Scan on _hyper_37_141_chunk (actual rows=1.00 loops=1)
    Filter: ((value >= '2.4'::double precision) AND (value <= '2.8'::double precision))
    Rows Removed by Filter: 2
 (3 rows)

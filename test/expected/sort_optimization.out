@@ -44,6 +44,7 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
            0 |        10 |   0.5
 (3 rows)
 
+SET enable_seqscan TO default;
 -- must not use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
                                      QUERY PLAN                                     
@@ -54,6 +55,7 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
          ->  Seq Scan on _hyper_1_1_chunk
 (4 rows)
 
+SET enable_seqscan TO off;
 -- test sort optimization with ordering by multiple columns and time_bucket as last member
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;
  time_bucket | device_id | value 

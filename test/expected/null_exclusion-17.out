@@ -18,19 +18,19 @@ select * from metrics
 where ts >= (select max(ts) from metrics);
                                                                     QUERY PLAN                                                                    
 --------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
+ Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
    Chunks excluded during runtime: 1
    InitPlan 2
-     ->  Result (actual rows=1 loops=1)
+     ->  Result (actual rows=1.00 loops=1)
            InitPlan 1
-             ->  Limit (actual rows=1 loops=1)
-                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=1 loops=1)
+             ->  Limit (actual rows=1.00 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=1.00 loops=1)
                          Order: metrics_1.ts DESC
-                         ->  Index Only Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1 loops=1)
+                         ->  Index Only Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1.00 loops=1)
                          ->  Index Only Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
    ->  Seq Scan on _hyper_1_1_chunk (never executed)
          Filter: (ts >= (InitPlan 2).col1)
-   ->  Seq Scan on _hyper_1_2_chunk (actual rows=1 loops=1)
+   ->  Seq Scan on _hyper_1_2_chunk (actual rows=1.00 loops=1)
          Filter: (ts >= (InitPlan 2).col1)
 (16 rows)
 
@@ -41,19 +41,19 @@ where ts >= (select max(ts) from metrics)
     and id = 1;
                                                                     QUERY PLAN                                                                    
 --------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics (actual rows=0 loops=1)
+ Custom Scan (ChunkAppend) on metrics (actual rows=0.00 loops=1)
    Chunks excluded during runtime: 1
    InitPlan 2
-     ->  Result (actual rows=1 loops=1)
+     ->  Result (actual rows=1.00 loops=1)
            InitPlan 1
-             ->  Limit (actual rows=1 loops=1)
-                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=1 loops=1)
+             ->  Limit (actual rows=1.00 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=1.00 loops=1)
                          Order: metrics_1.ts DESC
-                         ->  Index Only Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1 loops=1)
+                         ->  Index Only Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=1.00 loops=1)
                          ->  Index Only Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
    ->  Seq Scan on _hyper_1_1_chunk (never executed)
          Filter: ((ts >= (InitPlan 2).col1) AND (id = 1))
-   ->  Seq Scan on _hyper_1_2_chunk (actual rows=0 loops=1)
+   ->  Seq Scan on _hyper_1_2_chunk (actual rows=0.00 loops=1)
          Filter: ((ts >= (InitPlan 2).col1) AND (id = 1))
          Rows Removed by Filter: 1
 (17 rows)
@@ -64,18 +64,18 @@ select * from metrics
 where ts >= (select max(ts) from metrics where id = -1);
                                                                  QUERY PLAN                                                                  
 ---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics (actual rows=0 loops=1)
+ Custom Scan (ChunkAppend) on metrics (actual rows=0.00 loops=1)
    Chunks excluded during runtime: 2
    InitPlan 2
-     ->  Result (actual rows=1 loops=1)
+     ->  Result (actual rows=1.00 loops=1)
            InitPlan 1
-             ->  Limit (actual rows=0 loops=1)
-                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=0 loops=1)
+             ->  Limit (actual rows=0.00 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=0.00 loops=1)
                          Order: metrics_1.ts DESC
-                         ->  Index Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=0 loops=1)
+                         ->  Index Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=0.00 loops=1)
                                Filter: (id = '-1'::integer)
                                Rows Removed by Filter: 1
-                         ->  Index Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=0 loops=1)
+                         ->  Index Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=0.00 loops=1)
                                Filter: (id = '-1'::integer)
                                Rows Removed by Filter: 1
    ->  Seq Scan on _hyper_1_1_chunk (never executed)
@@ -91,18 +91,18 @@ where ts >= (select max(ts) from metrics where id = -1)
     and id = 1;
                                                                  QUERY PLAN                                                                  
 ---------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (ChunkAppend) on metrics (actual rows=0 loops=1)
+ Custom Scan (ChunkAppend) on metrics (actual rows=0.00 loops=1)
    Chunks excluded during runtime: 2
    InitPlan 2
-     ->  Result (actual rows=1 loops=1)
+     ->  Result (actual rows=1.00 loops=1)
            InitPlan 1
-             ->  Limit (actual rows=0 loops=1)
-                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=0 loops=1)
+             ->  Limit (actual rows=0.00 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics metrics_1 (actual rows=0.00 loops=1)
                          Order: metrics_1.ts DESC
-                         ->  Index Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=0 loops=1)
+                         ->  Index Scan using _hyper_1_2_chunk_metrics_ts_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=0.00 loops=1)
                                Filter: (id = '-1'::integer)
                                Rows Removed by Filter: 1
-                         ->  Index Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=0 loops=1)
+                         ->  Index Scan using _hyper_1_1_chunk_metrics_ts_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=0.00 loops=1)
                                Filter: (id = '-1'::integer)
                                Rows Removed by Filter: 1
    ->  Seq Scan on _hyper_1_1_chunk (never executed)

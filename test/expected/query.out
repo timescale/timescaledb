@@ -9,7 +9,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 \gset
 SELECT format('\! diff -u  --label "Unoptimized result" --label "Optimized result" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
-\set PREFIX 'EXPLAIN (costs OFF)'
+\set PREFIX 'EXPLAIN (buffers OFF, costs OFF)'
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and

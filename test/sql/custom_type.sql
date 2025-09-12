@@ -4,6 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+SET client_min_messages TO WARNING;
+
 CREATE OR REPLACE FUNCTION customtype_in(cstring) RETURNS customtype AS
 'timestamptz_in'
 LANGUAGE internal IMMUTABLE STRICT;
@@ -17,6 +19,7 @@ CREATE OR REPLACE FUNCTION customtype_send(customtype) RETURNS bytea AS
 'timestamptz_send'
 LANGUAGE internal IMMUTABLE STRICT;
 
+SET client_min_messages TO DEFAULT;
 
 CREATE TYPE customtype (
  INPUT = customtype_in,
