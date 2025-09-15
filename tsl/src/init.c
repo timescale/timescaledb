@@ -137,6 +137,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
 	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
+	.continuous_agg_get_grouping_columns = continuous_agg_get_grouping_columns,
 
 	/* Compression */
 	.compressed_data_decompress_forward = tsl_compressed_data_decompress_forward,
