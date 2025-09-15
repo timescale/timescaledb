@@ -4065,8 +4065,8 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
  * and as argument and returns cstrings extracted from funcctx->user_fctx (which is a List).
  * Note that the caller needs to be registered as a set returning function for this to work.
  */
-static Datum
-list_return_srf(FunctionCallInfo fcinfo)
+extern Datum
+ts_list_return_srf(FunctionCallInfo fcinfo)
 {
 	FuncCallContext *funcctx;
 	uint64 call_cntr;
@@ -4166,7 +4166,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	 * so we just return the next chunk in the list of dropped chunks.
 	 */
 	if (!SRF_IS_FIRSTCALL())
-		return list_return_srf(fcinfo);
+		return ts_list_return_srf(fcinfo);
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -4331,7 +4331,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	funcctx->max_calls = list_length(dc_names);
 	funcctx->user_fctx = dc_names;
 
-	return list_return_srf(fcinfo);
+	return ts_list_return_srf(fcinfo);
 }
 
 /* Return the compression status for the chunk
