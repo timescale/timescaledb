@@ -8,8 +8,8 @@
 #include <postgres.h>
 #include <executor/nodeModifyTable.h>
 
+#include "chunk_insert_state.h"
 #include "hypertable.h"
-#include "nodes/chunk_dispatch/chunk_insert_state.h"
 
 typedef struct ModifyHypertableState ModifyHypertableState;
 
@@ -19,7 +19,6 @@ typedef struct ChunkTupleRouting
 	Hypertable *hypertable;
 	ResultRelInfo *hypertable_rri;
 	Cache *hypertable_cache;
-	MemoryContext memcxt;
 
 	SubspaceStore *subspace;
 	EState *estate;

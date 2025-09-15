@@ -3767,37 +3767,36 @@ SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
 
 INSERT INTO t2 (SELECT * FROM t1);
 EXPLAIN (BUFFERS OFF, COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
-                          QUERY PLAN                          
---------------------------------------------------------------
+                       QUERY PLAN                       
+--------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on t2
-         ->  Custom Scan (ChunkDispatch)
-               ->  Append
-                     ->  Seq Scan on t1 t1_1
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_69_chunk t1_2
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_70_chunk t1_3
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_71_chunk t1_4
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_72_chunk t1_5
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_73_chunk t1_6
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_74_chunk t1_7
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_75_chunk t1_8
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_76_chunk t1_9
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_77_chunk t1_10
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_78_chunk t1_11
-                           Filter: ((a % 2) = 0)
-                     ->  Seq Scan on _hyper_15_79_chunk t1_12
-                           Filter: ((a % 2) = 0)
-(28 rows)
+         ->  Append
+               ->  Seq Scan on t1 t1_1
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_69_chunk t1_2
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_70_chunk t1_3
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_71_chunk t1_4
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_72_chunk t1_5
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_73_chunk t1_6
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_74_chunk t1_7
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_75_chunk t1_8
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_76_chunk t1_9
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_77_chunk t1_10
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_78_chunk t1_11
+                     Filter: ((a % 2) = 0)
+               ->  Seq Scan on _hyper_15_79_chunk t1_12
+                     Filter: ((a % 2) = 0)
+(27 rows)
 
 SELECT * FROM t2;
  a  |                b                 

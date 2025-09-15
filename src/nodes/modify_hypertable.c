@@ -12,32 +12,11 @@
 #include "compat/compat.h"
 #include "chunk_tuple_routing.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/modify_hypertable.h"
 
 #if PG18_GE
 #include <commands/explain_format.h>
 #endif
-
-static ChunkDispatchState *
-get_chunk_dispatch_state(PlanState *substate)
-{
-	switch (nodeTag(substate))
-	{
-		case T_CustomScanState:
-		{
-			if (ts_is_chunk_dispatch_state(substate))
-				return (ChunkDispatchState *) substate;
-			break;
-		}
-		case T_ResultState:
-			return get_chunk_dispatch_state(castNode(ResultState, substate)->ps.lefttree);
-		default:
-			break;
-	}
-
-	return NULL;
-}
 
 static AttrNumber
 rel_get_natts(Oid relid)
@@ -73,11 +52,6 @@ rel_has_dropped_attrs(Oid relid)
  * ModifyHypertable is a plan node that implements DML for hypertables.
  * It is a wrapper around the ModifyTable plan node that calls the wrapped ModifyTable
  * plan.
- *
- * The wrapping is needed to setup state in the execution phase, and give access
- * to the ModifyTableState node to sub-plan states in the PlanState tree. For
- * instance, the ChunkDispatchState node needs to set the arbiter index list in
- * the ModifyTableState node whenever it inserts into a new chunk.
  */
 static void
 modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
@@ -109,23 +83,17 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	if (estate->es_auxmodifytables && linitial(estate->es_auxmodifytables) == mtstate)
 		linitial(estate->es_auxmodifytables) = node;
 
-	/*
-	 * Find the ChunkDispatchState subnode and set their parent
-	 * ModifyTableState node
-	 */
-	PlanState *subplan = outerPlanState(mtstate);
-
 	if (mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE)
 	{
-		/* setup chunk dispatch state only for INSERTs */
-		ChunkDispatchState *cds = get_chunk_dispatch_state(subplan);
+		/* setup chunk tuple routing state for INSERT/MERGE */
 		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
 		state->ctr->mht_state = state;
 		if (mtstate->operation == CMD_MERGE)
 			state->ctr->has_dropped_attrs =
 				rel_has_dropped_attrs(state->ctr->hypertable->main_table_relid);
-
-		cds->ctr = state->ctr;
+		/* setup per tuple exprcontext for tuple routing */
+		if (!estate->es_per_tuple_exprcontext)
+			estate->es_per_tuple_exprcontext = CreateExprContext(estate);
 	}
 }
 
@@ -191,7 +159,7 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 
 	/*
 	 * For INSERT we have to read the number of decompressed batches and
-	 * tuples from the ChunkDispatchState below the ModifyTable.
+	 * tuples from the ChunkTupleRouting state below the ModifyTable.
 	 */
 	if ((mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE) &&
 		outerPlanState(mtstate))
@@ -429,26 +397,14 @@ Path *
 ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hypertable *ht,
 								 RelOptInfo *rel)
 {
-	Path *path = &mtpath->path;
-	Cache *hcache = ts_hypertable_cache_pin();
-	ModifyHypertablePath *hmpath;
-
-	if (mtpath->operation == CMD_INSERT || mtpath->operation == CMD_MERGE)
-	{
-		mtpath->subpath = ts_chunk_dispatch_path_create(root, mtpath);
-	}
-
-	hmpath = palloc0(sizeof(ModifyHypertablePath));
+	ModifyHypertablePath *mht_path = palloc0(sizeof(ModifyHypertablePath));
 
 	/* Copy costs, etc. */
-	memcpy(&hmpath->cpath.path, path, sizeof(Path));
-	hmpath->cpath.path.type = T_CustomPath;
-	hmpath->cpath.path.pathtype = T_CustomScan;
-	hmpath->cpath.custom_paths = list_make1(mtpath);
-	hmpath->cpath.methods = &modify_hypertable_path_methods;
-	path = &hmpath->cpath.path;
+	memcpy(&mht_path->cpath.path, &mtpath->path, sizeof(Path));
+	mht_path->cpath.path.type = T_CustomPath;
+	mht_path->cpath.path.pathtype = T_CustomScan;
+	mht_path->cpath.custom_paths = list_make1(mtpath);
+	mht_path->cpath.methods = &modify_hypertable_path_methods;
 
-	ts_cache_release(&hcache);
-
-	return path;
+	return &mht_path->cpath.path;
 }

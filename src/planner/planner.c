@@ -1537,7 +1537,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
 }
 
 /*
- * Replace INSERT (ModifyTablePath) paths on hypertables.
+ * Replace ModifyTablePath paths on hypertables.
  *
  * From the ModifyTable description: "Each ModifyTable node contains
  * a list of one or more subplans, much like an Append node.  There
@@ -1545,14 +1545,6 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *
  * The subplans produce the tuples for INSERT, while the result relation is the
  * table we'd like to insert into.
- *
- * The way we redirect tuples to chunks is to insert an intermediate "chunk
- * dispatch" plan node, between the ModifyTable and its subplan that produces
- * the tuples. When the ModifyTable plan is executed, it tries to read a tuple
- * from the intermediate chunk dispatch plan instead of the original
- * subplan. The chunk plan reads the tuple from the original subplan, looks up
- * the chunk, sets the executor's resultRelation to the chunk table and finally
- * returns the tuple to the ModifyTable node.
  *
  * Conceptually, the plan modification looks like this:
  *
@@ -1573,10 +1565,6 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *		  ^
  *		  |
  *	[ ModifyTable ] -> resultRelation
- *		  ^			   ^
- *		  | Tuple	  / <Set resultRelation to the matching chunk table>
- *		  |			 /
- * [ ChunkDispatch ]
  *		  ^
  *		  | Tuple
  *		  |

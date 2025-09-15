@@ -25,7 +25,6 @@
 #include <utils/rls.h>
 
 #include "compat/compat.h"
-#include "chunk_dispatch.h"
 #include "chunk_index.h"
 #include "chunk_insert_state.h"
 #include "chunk_tuple_routing.h"
@@ -435,6 +434,8 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support row-level security")));
 
+	MemoryContext old_mcxt =
+		MemoryContextSwitchTo(ctr->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
 	/*
 	 * Since we insert data and won't modify metadata, a RowExclusiveLock
 	 * should be sufficient. This should conflict with any metadata-modifying
@@ -455,7 +456,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	Assert(chunk->relkind == RELKIND_RELATION);
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
-	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
+	MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(ctr->hypertable_rri, rel, ctr->estate);
 	if (ctr->mht_state)
 		CheckValidResultRelCompat(relinfo, ctr->mht_state->mt->operation, NIL);
@@ -580,61 +581,5 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	if (state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
 
-	/*
-	 * Postgres stores cached row types from `get_cached_rowtype` in the
-	 * constraint expression and tries to free this type via a callback from the
-	 * `per_tuple_exprcontext`. Since we create constraint expressions within
-	 * the chunk insert state memory context, this leads to a series of pointers
-	 * structured like: `per_tuple_exprcontext -> constraint expr (in chunk
-	 * insert state) -> cached row type` if we try to free the the chunk insert
-	 * state MemoryContext while the `es_per_tuple_exprcontext` is live,
-	 * postgres tries to dereference a dangling pointer in one of
-	 * `es_per_tuple_exprcontext`'s callbacks. Normally postgres allocates the
-	 * constraint expressions in a parent context of per_tuple_exprcontext so
-	 * there is no issue, however we've run into excessive memory usage due to
-	 * too many constraints, and want to allocate them for a shorter lifetime so
-	 * we free them when SubspaceStore gets to full. This leaves us with a
-	 * memory context relationship like the following:
-	 *
-	 *     query_ctx
-	 *       / \
-	 *      /   \
-	 *   CIS    per_tuple
-	 *
-	 *
-	 * To ensure this doesn't create dangling pointers from the per-tuple
-	 * context to the chunk insert state (CIS) when we destroy the CIS, we avoid
-	 * freeing the CIS memory context immediately. Instead we change its parent
-	 * to be the per-tuple context (if it is still alive) so that it is only
-	 * freed once that context is freed:
-	 *
-	 *     query_ctx
-	 *        \
-	 *         \
-	 *         per_tuple
-	 *           \
-	 *            \
-	 *            CIS
-	 *
-	 * Note that a previous approach registered the chunk insert state (CIS) to
-	 * be freed by a reset callback on the per-tuple context. That caused a
-	 * subtle bug because both the per-tuple context and the CIS share the same
-	 * parent. Thus, the callback on a child would trigger the deletion of a
-	 * sibling, leading to a cyclic relationship:
-	 *
-	 *     query_ctx
-	 *       / \
-	 *      /   \
-	 *   CIS <-- per_tuple
-	 *
-	 *
-	 * With this cycle, a delete of the query_ctx could first trigger a delete
-	 * of the CIS (if not already deleted), then the per_tuple context, followed
-	 * by the CIS again (via the callback), and thus a crash.
-	 */
-	if (state->estate->es_per_tuple_exprcontext)
-		MemoryContextSetParent(state->mctx,
-							   state->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
-	else
-		MemoryContextDelete(state->mctx);
+	MemoryContextDelete(state->mctx);
 }

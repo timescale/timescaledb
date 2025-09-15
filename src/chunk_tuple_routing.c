@@ -6,12 +6,12 @@
 #include <postgres.h>
 #include <utils/rls.h>
 
+#include "chunk_insert_state.h"
 #include "chunk_tuple_routing.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
 #include "guc.h"
 #include "hypercube.h"
-#include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
@@ -30,7 +30,6 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 	ctr = (ChunkTupleRouting *) palloc0(sizeof(ChunkTupleRouting));
 	ctr->hypertable_rri = rri;
 	ctr->partition_root = rri->ri_RelationDesc;
-	ctr->memcxt = CurrentMemoryContext;
 	ctr->estate = estate;
 	ctr->counters = palloc0(sizeof(SharedCounters));
 
