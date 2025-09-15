@@ -10,6 +10,7 @@
 #include <executor/executor.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
+#include <funcapi.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -53,16 +54,6 @@ get_input_offset(const DecompressContext *dcontext, const Var *var)
 
 	const int index = value_column_description - dcontext->compressed_chunk_columns;
 	return index;
-}
-
-static void
-get_column_storage_properties(const DecompressChunkState *state, int input_offset,
-							  GroupingColumn *result)
-{
-	const DecompressContext *dcontext = &state->decompress_context;
-	const CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[input_offset];
-	result->value_bytes = desc->value_bytes;
-	result->by_value = desc->by_value;
 }
 
 /*
@@ -392,7 +383,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
 	vector_agg_state->input_ended = false;
-	CustomScanState *childstate = (CustomScanState *) linitial(vector_agg_state->custom.custom_ps);
 
 	/*
 	 * Set up the helper structures used to evaluate stable expressions in
@@ -500,19 +490,18 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		else
 		{
 			/* This is a grouping column. */
-			Assert(IsA(tlentry->expr, Var));
 
 			GroupingColumn *col = &vector_agg_state->grouping_columns[grouping_column_counter++];
 			col->expr = tlentry->expr;
 			col->output_offset = i;
 
-			Var *var = castNode(Var, tlentry->expr);
-			col->input_offset =
-				get_input_offset(&((const DecompressChunkState *) childstate)->decompress_context,
-								 var);
-			get_column_storage_properties((const DecompressChunkState *) childstate,
-										  col->input_offset,
-										  col);
+			TupleDesc tdesc = NULL;
+			Oid type = InvalidOid;
+			TypeFuncClass type_class = get_expr_result_type((Node *) tlentry->expr, &type, &tdesc);
+			Ensure(type_class == TYPEFUNC_SCALAR,
+				   "wrong grouping column type class %d",
+				   type_class);
+			get_typlenbyval(type, &col->value_bytes, &col->by_value);
 		}
 	}
 

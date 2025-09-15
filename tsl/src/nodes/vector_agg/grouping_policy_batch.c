@@ -233,7 +233,6 @@ gp_batch_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSl
 	for (int i = 0; i < ngrp; i++)
 	{
 		GroupingColumn *col = &policy->grouping_columns[i];
-		Assert(col->input_offset >= 0);
 		Assert(col->output_offset >= 0);
 
 		const CompressedColumnValues values =
@@ -289,7 +288,6 @@ gp_batch_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 	for (int i = 0; i < ngrp; i++)
 	{
 		GroupingColumn *col = &policy->grouping_columns[i];
-		Assert(col->input_offset >= 0);
 		Assert(col->output_offset >= 0);
 
 		aggregated_slot->tts_values[col->output_offset] = policy->output_grouping_values[i];
