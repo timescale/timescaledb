@@ -36,3 +36,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_parse_invalidation_record
 RETURNS RECORD
 AS '@MODULE_PATHNAME@', 'ts_continuous_agg_read_invalidation_record'
 LANGUAGE C STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_get_groupingcols(
+    cagg REGCLASS )
+    RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_continuous_agg_get_groupingcols'
+LANGUAGE C VOLATILE PARALLEL UNSAFE;
+

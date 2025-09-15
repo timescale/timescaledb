@@ -120,6 +120,7 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_migrate_to_time_bucket;
 	PGFunction cagg_try_repair;
 	PGFunction continuous_agg_read_invalidation_record;
+        PGFunction continuous_agg_get_groupingcols;
 
 	PGFunction compressed_data_send;
 	PGFunction compressed_data_recv;

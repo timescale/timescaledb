@@ -4074,7 +4074,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
  * and as argument and returns cstrings extracted from funcctx->user_fctx (which is a List).
  * Note that the caller needs to be registered as a set returning function for this to work.
  */
-static Datum
+extern Datum
 list_return_srf(FunctionCallInfo fcinfo)
 {
 	FuncCallContext *funcctx;
