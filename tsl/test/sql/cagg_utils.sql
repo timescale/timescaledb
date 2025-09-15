@@ -104,6 +104,20 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 day', bucket) AS buck
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 month', bucket) AS bucket, sum(count) AS count FROM metrics_by_hour GROUP BY 1 $$);
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 year', bucket) AS bucket, sum(count) AS count FROM metrics_by_month GROUP BY 1 $$);
 
+--get grouping cols for cagg
+SELECT _timescaledb_functions.cagg_get_grouping_columns('metrics_by_hour'::regclass);
+SELECT _timescaledb_functions.cagg_get_grouping_columns('metrics_by_month'::regclass);
+
+CREATE MATERIALIZED VIEW cagg_test_groupingcols
+WITH( timescaledb.continuous ) AS
+SELECT device_id, count(*), max(value),
+       time_bucket('1 day'::interval, time) as bkt,
+       min( value)
+FROM
+metrics
+GROUP BY 4, 1 WITH NO DATA;
+SELECT unnest(_timescaledb_functions.cagg_get_grouping_columns('cagg_test_groupingcols'::regclass));
+
 --
 -- Test bucket Oid recovery
 --
