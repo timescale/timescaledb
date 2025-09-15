@@ -78,7 +78,6 @@
 #include "hypertable_cache.h"
 #include "modify_hypertable.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "utils.h"
 
 /*
@@ -2443,17 +2442,56 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 		context.planSlot = ExecProcNode(subplanstate);
 
-		if (ctr && ctr->cis && operation == CMD_INSERT && ctr->cis->skip_current_tuple)
-		{
-			ctr->cis->skip_current_tuple = false;
-			if (node->ps.instrument)
-				node->ps.instrument->ntuples2++;
-			continue;
-		}
-
 		/* No more tuples to process? */
 		if (TupIsNull(context.planSlot))
 			break;
+
+		if (operation == CMD_INSERT || operation == CMD_MERGE)
+		{
+			TupleTableSlot *slot = context.planSlot;
+			if (operation == CMD_MERGE)
+			{
+				/*
+				 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+				 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
+				 */
+#if PG17_GE
+				List *actionStates = ctr->hypertable_rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#else
+				List *actionStates = ctr->hypertable_rri->ri_notMatchedMergeAction;
+#endif
+				ListCell *l;
+				foreach (l, actionStates)
+				{
+					MergeActionState *action = (MergeActionState *) lfirst(l);
+					CmdType commandType = action->mas_action->commandType;
+					if (commandType == CMD_INSERT)
+					{
+						action->mas_proj->pi_exprContext->ecxt_innertuple = slot;
+						slot = ExecProject(action->mas_proj);
+						break;
+					}
+				}
+			}
+
+			/* do tuple routing in short lived memory context */
+			MemoryContext oldctx = MemoryContextSwitchTo(estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
+			Point *point = ts_hyperspace_calculate_point(ctr->hypertable->space, slot);
+
+			/* Find or create the insert state matching the point */
+			ctr->cis = ts_chunk_tuple_routing_find_chunk(ctr, point);
+			bool update_counter = ctr->cis->onConflictAction == ONCONFLICT_UPDATE;
+			ts_chunk_tuple_routing_decompress_for_insert(ctr->cis, slot, ctr->estate, update_counter);
+			MemoryContextSwitchTo(oldctx);
+
+			if (operation == CMD_INSERT && ctr->cis->skip_current_tuple)
+			{
+				ctr->cis->skip_current_tuple = false;
+				if (node->ps.instrument)
+					node->ps.instrument->ntuples2++;
+				continue;
+			}
+		}
 
 		/*
 		 * copy INSERT merge action list to result relation info of corresponding chunk

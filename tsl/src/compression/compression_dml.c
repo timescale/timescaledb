@@ -20,6 +20,7 @@
 #include <utils/typcache.h>
 
 #include <compat/compat.h>
+#include <chunk_insert_state.h>
 #include <compression/arrow_c_data_interface.h>
 #include <compression/compression.h>
 #include <compression/compression_dml.h>
@@ -27,8 +28,6 @@
 #include <compression/wal_utils.h>
 #include <expression_utils.h>
 #include <indexing.h>
-#include <nodes/chunk_dispatch/chunk_dispatch.h>
-#include <nodes/chunk_dispatch/chunk_insert_state.h>
 #include <nodes/decompress_chunk/vector_dict.h>
 #include <nodes/decompress_chunk/vector_predicates.h>
 #include <nodes/modify_hypertable.h>
