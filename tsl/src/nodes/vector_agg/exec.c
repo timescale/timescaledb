@@ -245,6 +245,11 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 		CompressedColumnValues arg =
 			vector_slot_get_compressed_column_values(dcontext, slot, lfirst(lc));
 		Ensure(arg.arrow != NULL, "no arrow for arg");
+		if (arg.decompression_type == DT_Invalid)
+		{
+//			my_print(lfirst(lc));
+			elog(ERROR, "got DT_Invalid for argument %d ^^^", foreach_current_index(lc));
+		}
 		arrow_args[foreach_current_index(lc)] = arg.arrow;
 		have_nulls = (arg.arrow->null_count > 0) || have_nulls;
 		arg_values[foreach_current_index(lc)] = arg;
@@ -271,7 +276,7 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 
 	for (int i = 0; i < nrows; i++)
 	{
-		compressed_columns_to_postgres_data(arg_values, 2, i);
+		compressed_columns_to_postgres_data(arg_values, list_length(args), i);
 
 		Datum result = FunctionCallInvoke(fcinfo);
 
@@ -350,6 +355,9 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 	{
 		case T_Const:
 		{
+			/*
+			 * FIXME use DT_Scalar?
+			 */
 			const Const *c = (const Const *) argument;
 			ArrowArray *arrow_result = arrow_from_constant(batch_state->per_batch_context,
 														   batch_state->total_batch_rows,
@@ -367,6 +375,11 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 			const uint16 offset =
 				get_input_offset(dcontext, var); // AttrNumberGetAttrOffset(var->varattno);
 			const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
+			if (values->decompression_type == DT_Invalid)
+			{
+//				my_print((void *) var);
+				elog(ERROR, "got invalid decompression type at offset %d for var ^^^\n", offset);
+			}
 			return *values;
 		}
 		case T_OpExpr:
