@@ -7,6 +7,7 @@
 #include <access/attnum.h>
 #include <commands/explain.h>
 #include <executor/executor.h>
+#include <funcapi.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -231,6 +232,11 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
 		return false;
 	}
 
+	if (func_volatile(funcoid) != PROVOLATILE_IMMUTABLE)
+	{
+		return false;
+	}
+
 	return true;
 }
 
@@ -367,7 +373,10 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 	 */
 	int num_grouping_columns = 0;
 	bool all_segmentby = true;
-	Var *single_grouping_var = NULL;
+
+	Oid single_grouping_var_type = InvalidOid;
+	int16 typlen = 0;
+	bool typbyval = false;
 
 	ListCell *lc;
 	foreach (lc, resolved_targetlist)
@@ -378,37 +387,48 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			continue;
 		}
 
-		if (!IsA(target_entry->expr, Var))
-		{
-			/*
-			 * We shouldn't see anything except Vars or Aggrefs in the
-			 * aggregated targetlists. Just say it's not vectorizable, because
-			 * here we are working with arbitrary plans that we don't control.
-			 */
-			return VAGT_Invalid;
-		}
-
 		num_grouping_columns++;
 
 		if (!is_vector_var(vqinfo, target_entry->expr))
 			return VAGT_Invalid;
 
-		Var *var = castNode(Var, target_entry->expr);
-		all_segmentby &= vqinfo->segmentby_attrs[var->varattno];
+		/*
+		 * Detect whether we're only grouping by segmentby columns, in which
+		 * case we can use the whole-batch grouping strategy. Probably this
+		 * could be extended to allow arbitrary expressions referencing only the
+		 * segmentby columns.
+		 */
+		if (IsA(target_entry->expr, Var))
+		{
+			Var *var = castNode(Var, target_entry->expr);
+			all_segmentby &= vqinfo->segmentby_attrs[var->varattno];
+		}
+		else
+		{
+			all_segmentby = false;
+		}
 
 		/*
 		 * If we have a single grouping column, record it for the additional
 		 * checks later.
 		 */
-		single_grouping_var = var;
+		if (num_grouping_columns != 1)
+		{
+			continue;
+		}
+
+		TupleDesc tdesc = NULL;
+		TypeFuncClass type_class =
+			get_expr_result_type((Node *) target_entry->expr, &single_grouping_var_type, &tdesc);
+		if (type_class != TYPEFUNC_SCALAR)
+		{
+			continue;
+		}
+
+		get_typlenbyval(single_grouping_var_type, &typlen, &typbyval);
+		Ensure(typlen != 0, "invalid zero typlen for type %d", single_grouping_var_type);
 	}
 
-	if (num_grouping_columns != 1)
-	{
-		single_grouping_var = NULL;
-	}
-
-	Assert(num_grouping_columns == 1 || single_grouping_var == NULL);
 	Assert(num_grouping_columns >= agg->numCols);
 
 	/*
@@ -433,12 +453,8 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 	 * We can use our hash table for GroupAggregate as well, because it preserves
 	 * the input order of the keys, but only for the direct order, not reverse.
 	 */
-	if (num_grouping_columns == 1)
+	if (num_grouping_columns == 1 && typlen != 0)
 	{
-		int16 typlen;
-		bool typbyval;
-
-		get_typlenbyval(single_grouping_var->vartype, &typlen, &typbyval);
 		if (typbyval)
 		{
 			switch (typlen)
@@ -461,7 +477,7 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		 * vectorized grouping support. It can use the serialized grouping
 		 * strategy.
 		 */
-		else if (single_grouping_var->vartype == TEXTOID)
+		else if (single_grouping_var_type == TEXTOID)
 		{
 			return VAGT_HashSingleText;
 		}
@@ -725,23 +741,6 @@ try_insert_vector_agg_node(Plan *plan, List *rtable)
 				/* Aggregate function not vectorizable. */
 				return plan;
 			}
-		}
-		else if (IsA(target_entry->expr, Var))
-		{
-			if (!is_vector_var(&vqi, target_entry->expr))
-			{
-				/* Variable not vectorizable. */
-				return plan;
-			}
-		}
-		else
-		{
-			/*
-			 * Sometimes the plan can require this node to perform a projection,
-			 * e.g. we can see a nested loop param in its output targetlist. We
-			 * can't handle this case currently.
-			 */
-			return plan;
 		}
 	}
 

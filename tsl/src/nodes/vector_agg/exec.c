@@ -87,13 +87,15 @@ arrow_from_const_varlen(MemoryContext mcxt, int nrows, Datum value)
 {
 	const int value_bytes = VARSIZE_ANY_EXHDR(value);
 
-	int32 *restrict offsets_buffer = MemoryContextAlloc(mcxt, nrows * sizeof(*offsets_buffer));
+	int32 *restrict offsets_buffer =
+		MemoryContextAlloc(mcxt, pad_to_multiple(64, nrows * sizeof(*offsets_buffer)));
 	for (int i = 0; i < nrows; i++)
 	{
 		offsets_buffer[i] = value_bytes * i;
 	}
 
-	uint8 *restrict data_buffer = MemoryContextAlloc(mcxt, nrows * value_bytes);
+	uint8 *restrict data_buffer =
+		MemoryContextAlloc(mcxt, pad_to_multiple(64, nrows * value_bytes));
 	for (int i = 0; i < nrows; i++)
 	{
 		memcpy(data_buffer + value_bytes * i, DatumGetPointer(value), value_bytes);
@@ -117,7 +119,7 @@ arrow_from_const_fixlen(MemoryContext mcxt, int nrows, Datum value, int16 typlen
 	/* Just a precaution: this should not be a varlen type */
 	Assert(typlen > 0);
 
-	uint8 *restrict data_buffer = MemoryContextAlloc(mcxt, nrows * typlen);
+	uint8 *restrict data_buffer = MemoryContextAlloc(mcxt, pad_to_multiple(64, nrows * typlen));
 	for (int i = 0; i < nrows; i++)
 	{
 		if (typbyval)
@@ -425,7 +427,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		else
 		{
 			/* This is a grouping column. */
-			Assert(IsA(tlentry->expr, Var));
 			grouping_column_counter++;
 		}
 	}
