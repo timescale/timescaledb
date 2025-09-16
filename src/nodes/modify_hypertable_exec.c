@@ -2491,21 +2491,22 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					node->ps.instrument->ntuples2++;
 				continue;
 			}
+
+			/*
+			 * copy INSERT merge action list to result relation info of corresponding chunk
+			 *
+			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
+			 */
+			if (operation == CMD_MERGE)
+#if PG17_GE
+				ctr->cis->result_relation_info->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
+					resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#else
+				ctr->cis->result_relation_info->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
+#endif
 		}
 
-		/*
-		 * copy INSERT merge action list to result relation info of corresponding chunk
-		 *
-		 * XXX do we need an additional support of NOT MATCHED BY SOURCE
-		 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
-		 */
-		if (ctr && ctr->cis && operation == CMD_MERGE)
-#if PG17_GE
-			ctr->cis->result_relation_info->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
-				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
-#else
-			ctr->cis->result_relation_info->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
-#endif
 		/*
 		 * When there are multiple result relations, each tuple contains a
 		 * junk column that gives the OID of the rel from which it came.
