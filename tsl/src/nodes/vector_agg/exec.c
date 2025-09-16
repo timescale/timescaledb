@@ -260,11 +260,6 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 	bool rettypbyval;
 	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
 
-	if (!rettypbyval)
-	{
-		elog(ERROR, "only byval for now");
-	}
-
 	ArrowArray *arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
 													  sizeof(ArrowArray) + 2 * sizeof(void *));
 	arrow_result->length = nrows;
@@ -282,21 +277,37 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 
 		(void) result;
 
-		switch (rettyplen)
+		if (rettypbyval)
 		{
-			case 2:
-				((uint16 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt16(result);
-				break;
-			case 4:
-				((uint32 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt32(result);
-				break;
-			case 8:
-				((uint64 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt64(result);
-				//				fprintf(stderr, "rtl %d row %d result %ld\n", rettyplen, i,
-				// DatumGetUInt64(result);
-				break;
-			default:
-				elog(ERROR, "wrong size %d", rettyplen);
+			switch (rettyplen)
+			{
+				case 2:
+					((uint16 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt16(result);
+					break;
+				case 4:
+					((uint32 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt32(result);
+					break;
+				case 8:
+					((uint64 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt64(result);
+					//				fprintf(stderr, "rtl %d row %d result %ld\n", rettyplen, i,
+					// DatumGetUInt64(result);
+					break;
+				default:
+					elog(ERROR, "wrong size %d", rettyplen);
+			}
+		}
+		else
+		{
+			if (rettyplen == -1)
+			{
+				elog(ERROR, "varlena return type not supported");
+			}
+			else
+			{
+				memcpy(i * rettyplen + (uint8 *restrict) arrow_result->buffers[1],
+					   DatumGetPointer(result),
+					   rettyplen);
+			}
 		}
 	}
 

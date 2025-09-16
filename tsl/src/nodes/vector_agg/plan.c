@@ -195,7 +195,9 @@ is_vector_type(Oid typeoid)
 			//		case TEXTOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
-			//		case UUIDOID:
+		case DATEOID:
+		case UUIDOID:
+		case INTERVALOID:
 			return true;
 		default:
 			return false;
@@ -232,7 +234,7 @@ is_vector_function(const VectorQualInfo *vqinfo, List *args, Oid funcoid, Oid re
 		return false;
 	}
 
-	if (func_volatile(funcoid) != PROVOLATILE_IMMUTABLE)
+	if (func_volatile(funcoid) == PROVOLATILE_VOLATILE)
 	{
 		return false;
 	}
