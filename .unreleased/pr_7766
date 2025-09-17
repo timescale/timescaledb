@@ -1,0 +1,1 @@
+Fixes: #7766 Load OSM extension in retention background worker to drop tiered chunks
