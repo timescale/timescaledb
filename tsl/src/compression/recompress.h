@@ -29,7 +29,7 @@ typedef struct RecompressContext
 extern Datum tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS);
 
 Oid recompress_chunk_segmentwise_impl(Chunk *chunk);
-bool recompress_chunk_impl(Chunk *uncompressed_chunk);
+bool recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk);
 
 /* Result of matching an uncompressed tuple against a compressed batch */
 enum Batch_match_result
