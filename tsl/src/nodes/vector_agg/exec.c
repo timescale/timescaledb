@@ -227,37 +227,49 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 {
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 
-	Ensure(list_length(args) <= 5, "only <= 5 args supported");
+	const int nargs = list_length(args);
+	Ensure(nargs <= 5, "only <= 5 args supported");
 
 	FmgrInfo flinfo;
 	fmgr_info(funcoid, &flinfo);
 	LOCAL_FCINFO(fcinfo, 5);
-	InitFunctionCallInfoData(*fcinfo, &flinfo, list_length(args), inputcollid, NULL, NULL);
+	InitFunctionCallInfoData(*fcinfo, &flinfo, nargs, inputcollid, NULL, NULL);
 
-	const int nrows = batch_state->total_batch_rows;
-
-	const ArrowArray *arrow_args[5];
-	CompressedColumnValues arg_values[5];
+	CompressedColumnValues arg_values[5] = { 0 };
 	ListCell *lc;
 	bool have_nulls = false;
 	foreach (lc, args)
 	{
 		CompressedColumnValues arg =
 			vector_slot_get_compressed_column_values(dcontext, slot, lfirst(lc));
-		Ensure(arg.arrow != NULL, "no arrow for arg");
 		if (arg.decompression_type == DT_Invalid)
 		{
-//			my_print(lfirst(lc));
+			//			my_print(lfirst(lc));
 			elog(ERROR, "got DT_Invalid for argument %d ^^^", foreach_current_index(lc));
 		}
-		arrow_args[foreach_current_index(lc)] = arg.arrow;
-		have_nulls = (arg.arrow->null_count > 0) || have_nulls;
 		arg_values[foreach_current_index(lc)] = arg;
 
-		arg_values[foreach_current_index(lc)].output_value =
-			&fcinfo->args[foreach_current_index(lc)].value;
-		arg_values[foreach_current_index(lc)].output_isnull =
-			&fcinfo->args[foreach_current_index(lc)].isnull;
+		if (arg.decompression_type == DT_Scalar)
+		{
+			have_nulls = *arg_values[foreach_current_index(lc)].output_isnull;
+
+			fcinfo->args[foreach_current_index(lc)].value =
+				*arg_values[foreach_current_index(lc)].output_value;
+			fcinfo->args[foreach_current_index(lc)].isnull =
+				*arg_values[foreach_current_index(lc)].output_isnull;
+		}
+		else
+		{
+			Ensure(arg.arrow != NULL, "no arrow for arg");
+			have_nulls = (arg.arrow->null_count > 0) || have_nulls;
+
+			arg_values[foreach_current_index(lc)].output_value =
+				&fcinfo->args[foreach_current_index(lc)].value;
+			arg_values[foreach_current_index(lc)].output_isnull =
+				&fcinfo->args[foreach_current_index(lc)].isnull;
+		}
+
+		(void) arrow_from_constant;
 	}
 
 	Oid rettype = get_func_rettype(funcoid);
@@ -265,54 +277,49 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 	bool rettypbyval;
 	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
 
+	const int nrows = batch_state->total_batch_rows;
+
 	ArrowArray *arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
 													  sizeof(ArrowArray) + 2 * sizeof(void *));
 	arrow_result->length = nrows;
 	arrow_result->buffers = (void *) &arrow_result[1];
-	arrow_result->buffers[1] =
+	void *restrict result_buffer_1 =
 		MemoryContextAllocZero(batch_state->per_batch_context, rettyplen * nrows);
-
-	// vector_function(arrow_args, list_length(f->args), arrow_result);
+	arrow_result->buffers[1] = result_buffer_1;
 
 	for (int i = 0; i < nrows; i++)
 	{
-		compressed_columns_to_postgres_data(arg_values, list_length(args), i);
+		compressed_columns_to_postgres_data(arg_values, nargs, i);
 
 		Datum result = FunctionCallInvoke(fcinfo);
 
 		(void) result;
 
-		if (rettypbyval)
+		switch (rettyplen)
 		{
-			switch (rettyplen)
-			{
-				case 2:
-					((uint16 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt16(result);
-					break;
-				case 4:
-					((uint32 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt32(result);
-					break;
-				case 8:
-					((uint64 *restrict) arrow_result->buffers[1])[i] = DatumGetUInt64(result);
-					//				fprintf(stderr, "rtl %d row %d result %ld\n", rettyplen, i,
-					// DatumGetUInt64(result);
-					break;
-				default:
-					elog(ERROR, "wrong size %d", rettyplen);
-			}
-		}
-		else
-		{
-			if (rettyplen == -1)
-			{
-				elog(ERROR, "varlena return type not supported");
-			}
-			else
-			{
-				memcpy(i * rettyplen + (uint8 *restrict) arrow_result->buffers[1],
+			/* FIXME bool */
+			/* FIXME per-type code actually faster? */
+			case 2:
+			case 4:
+#ifdef USE_FLOAT8_BYVAL
+			case 8:
+#endif
+				memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1, &result, sizeof(Datum));
+				break;
+#ifndef USE_FLOAT8_BYVAL
+			case 8:
+#endif
+			case 16:
+				Assert(!rettypbyval);
+				memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
 					   DatumGetPointer(result),
 					   rettyplen);
-			}
+				break;
+			case -1:
+				Assert(!rettypbyval);
+				elog(ERROR, "varlena return type not supported");
+			default:
+				elog(ERROR, "wrong size %d", rettyplen);
 		}
 	}
 
@@ -326,9 +333,9 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 			MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_words);
 		arrow_combine_validity(num_words,
 							   (uint64 *) arrow_result->buffers[0],
-							   (uint64 *) arrow_args[0]->buffers[0],
-							   (uint64 *) arrow_args[1]->buffers[0],
-							   NULL);
+							   (uint64 *) arg_values[0].buffers[0],
+							   (uint64 *) arg_values[1].buffers[0],
+							   (uint64 *) arg_values[2].buffers[0]);
 		arrow_result->null_count =
 			arrow_result->length - arrow_num_valid(arrow_result->buffers[0], arrow_result->length);
 	}
@@ -359,14 +366,16 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 			 * FIXME use DT_Scalar?
 			 */
 			const Const *c = (const Const *) argument;
-			ArrowArray *arrow_result = arrow_from_constant(batch_state->per_batch_context,
-														   batch_state->total_batch_rows,
-														   c);
-			CompressedColumnValues result = {
-				.decompression_type = get_typlen(c->consttype),
-				.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
-				.arrow = arrow_result,
-			};
+			//			ArrowArray *arrow_result =
+			//arrow_from_constant(batch_state->per_batch_context, 														   batch_state->total_batch_rows, 														   c);
+			//			CompressedColumnValues result = {
+			//				.decompression_type = get_typlen(c->consttype),
+			//				.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
+			//				.arrow = arrow_result,
+			//			};
+			CompressedColumnValues result = { .decompression_type = DT_Scalar,
+											  .output_value = (Datum *) &c->constvalue,
+											  .output_isnull = (bool *) &c->constisnull };
 			return result;
 		}
 		case T_Var:
@@ -377,7 +386,7 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 			const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
 			if (values->decompression_type == DT_Invalid)
 			{
-//				my_print((void *) var);
+				//				my_print((void *) var);
 				elog(ERROR, "got invalid decompression type at offset %d for var ^^^\n", offset);
 			}
 			return *values;

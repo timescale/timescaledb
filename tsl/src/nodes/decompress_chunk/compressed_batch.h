@@ -130,9 +130,6 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 											  DecompressBatchState *batch_state,
 											  TupleTableSlot *first_tuple_slot);
 
-void compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_data_columns,
-										 uint16 arrow_row);
-
 /*
  * Initialize the batch memory context and bulk decompression context.
  *
@@ -200,3 +197,118 @@ typedef struct CompressedBatchVectorQualState
 
 const ArrowArray *compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr,
 												   bool *is_default_value);
+
+inline static void
+store_text_datum(CompressedColumnValues *column_values, int arrow_row)
+{
+	const uint32 start = ((uint32 *) column_values->buffers[1])[arrow_row];
+	const int32 value_bytes = ((uint32 *) column_values->buffers[1])[arrow_row + 1] - start;
+	Assert(value_bytes >= 0);
+
+	const int total_bytes = value_bytes + VARHDRSZ;
+	Assert(DatumGetPointer(*column_values->output_value) != NULL);
+	SET_VARSIZE(*column_values->output_value, total_bytes);
+	memcpy(VARDATA(*column_values->output_value),
+		   &((uint8 *) column_values->buffers[2])[start],
+		   value_bytes);
+}
+
+inline static void
+compressed_columns_to_postgres_data(CompressedColumnValues *columns, int num_data_columns,
+									uint16 arrow_row)
+{
+	for (int i = 0; i < num_data_columns; i++)
+	{
+		CompressedColumnValues *column_values = &columns[i];
+		switch ((int) column_values->decompression_type)
+		{
+			case DT_Iterator:
+			{
+				DecompressionIterator *iterator =
+					(DecompressionIterator *) column_values->buffers[0];
+				DecompressResult result = iterator->try_next(iterator);
+
+				if (result.is_done)
+				{
+					elog(ERROR, "compressed column out of sync with batch counter");
+				}
+
+				*column_values->output_isnull = result.is_null;
+				*column_values->output_value = result.val;
+				break;
+			}
+#ifndef USE_FLOAT8_BYVAL
+			case 8:
+#endif
+			case 16:
+			{
+				/*
+				 * Fixed-width by-reference type that doesn't fit into a Datum.
+				 * For now this only happens for 8-byte types on 32-bit systems,
+				 * but eventually we could also use it for bigger by-value types
+				 * such as UUID.
+				 */
+				const uint8 value_bytes = column_values->decompression_type;
+				const char *src = column_values->buffers[1];
+				*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
+				*column_values->output_isnull =
+					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+				break;
+			}
+			case DT_ArrowBits:
+			{
+				/*
+				 * The DT_ArrowBits type is a special case, because the value is
+				 * stored as an Array of bits.
+				 */
+				*column_values->output_value =
+					BoolGetDatum(arrow_row_is_valid(column_values->buffers[1], arrow_row));
+				*column_values->output_isnull =
+					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+				break;
+			}
+			case 2:
+			case 4:
+#ifdef USE_FLOAT8_BYVAL
+			case 8:
+#endif
+			{
+				/*
+				 * Fixed-width by-value type that fits into a Datum.
+				 *
+				 * The conversion of Datum to more narrow types will truncate
+				 * the higher bytes, so we don't care if we read some garbage
+				 * into them, and can always read 8 bytes. These are unaligned
+				 * reads, so technically we have to do memcpy.
+				 */
+				const uint8 value_bytes = column_values->decompression_type;
+				Assert(value_bytes <= SIZEOF_DATUM);
+				const char *src = column_values->buffers[1];
+				memcpy(column_values->output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
+				*column_values->output_isnull =
+					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+				break;
+			}
+			case DT_ArrowText:
+			{
+				store_text_datum(column_values, arrow_row);
+				*column_values->output_isnull =
+					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+				break;
+			}
+			case DT_ArrowTextDict:
+			{
+				const int16 index = ((int16 *) column_values->buffers[3])[arrow_row];
+				store_text_datum(column_values, index);
+				*column_values->output_isnull =
+					!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+				break;
+			}
+			default:
+			{
+				/* A compressed column with default value, do nothing. */
+				Assert(column_values->decompression_type == DT_Scalar);
+			}
+		}
+	}
+}
