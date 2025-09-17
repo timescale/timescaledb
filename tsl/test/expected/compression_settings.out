@@ -247,7 +247,6 @@ ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL ORDER BY id LIMIT 1 OFFSET 1\gset
 -- recompressing chunks should apply current hypertable settings
 SELECT compress_chunk(:'CHUNK', recompress:=true);
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_3_8_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_8_chunk
@@ -274,7 +273,6 @@ SELECT * FROM settings;
 ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='');
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL ORDER BY id LIMIT 1 OFFSET 1\gset
 SELECT compress_chunk(:'CHUNK', recompress:=true);
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_3_8_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_8_chunk
@@ -327,8 +325,6 @@ SELECT * FROM ht_settings;
 -- test decompression uses the correct settings
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='');
 SELECT compress_chunk(show_chunks('metrics'), recompress:=true);
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_3_6_chunk"
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_3_8_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_6_chunk

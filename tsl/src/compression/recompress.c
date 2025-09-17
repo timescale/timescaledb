@@ -764,7 +764,7 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
  * recompression (e.g., partial, unordered, frozen).
  */
 bool
-recompress_chunk_impl(Chunk *uncompressed_chunk)
+recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 {
 	if (uncompressed_chunk == NULL)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("chunk cannot be NULL")));
@@ -790,6 +790,8 @@ recompress_chunk_impl(Chunk *uncompressed_chunk)
 	Ensure(settings != NULL,
 		   "compression settings not found for chunk \"%s\"",
 		   get_rel_name(uncompressed_chunk->table_id));
+
+	Ensure(settings->fd.orderby, "empty order by, cannot recompress in-memory");
 
 	LOCKMODE lockmode = ExclusiveLock;
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, lockmode);
