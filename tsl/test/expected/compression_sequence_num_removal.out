@@ -300,6 +300,7 @@ INSERT INTO hyper VALUES (20, 1, 1);
 SELECT compress_chunk(show_chunks('hyper'));
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
 NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  in-memory recompression is disabled due to no compressed chunk index, performing decompress/compress on chunk "_timescaledb_internal._hyper_1_3_chunk"
 NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
