@@ -4926,7 +4926,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 
 	if (!parse_results[AlterTableFlagOrderBy].is_default)
 	{
-		ts_remove_orderby_sparse_index(settings);
+		settings->fd.index = ts_remove_orderby_sparse_index(settings);
 		settings->fd.orderby = NULL;
 		settings->fd.orderby_desc = NULL;
 		settings->fd.orderby_nullsfirst = NULL;
