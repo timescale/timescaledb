@@ -238,38 +238,81 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 	CompressedColumnValues arg_values[5] = { 0 };
 	ListCell *lc;
 	bool have_nulls = false;
+	bool have_null_scalars = false;
 	foreach (lc, args)
 	{
-		CompressedColumnValues arg =
-			vector_slot_get_compressed_column_values(dcontext, slot, lfirst(lc));
-		if (arg.decompression_type == DT_Invalid)
+		const int i = foreach_current_index(lc);
+		arg_values[i] = vector_slot_get_compressed_column_values(dcontext, slot, lfirst(lc));
+//		fprintf(stderr, "column %d decompression type %d\n", i, arg_values[i].decompression_type);
+
+		if (arg_values[i].decompression_type == DT_Invalid)
 		{
 			//			my_print(lfirst(lc));
 			elog(ERROR, "got DT_Invalid for argument %d ^^^", foreach_current_index(lc));
 		}
-		arg_values[foreach_current_index(lc)] = arg;
 
-		if (arg.decompression_type == DT_Scalar)
+		if (arg_values[i].decompression_type == DT_Scalar)
 		{
-			have_nulls = *arg_values[foreach_current_index(lc)].output_isnull;
+			have_nulls = *arg_values[i].output_isnull || have_nulls;
+			have_null_scalars = *arg_values[i].output_isnull || have_null_scalars;
 
-			fcinfo->args[foreach_current_index(lc)].value =
-				*arg_values[foreach_current_index(lc)].output_value;
-			fcinfo->args[foreach_current_index(lc)].isnull =
-				*arg_values[foreach_current_index(lc)].output_isnull;
+			fcinfo->args[i].value = *arg_values[i].output_value;
+			fcinfo->args[i].isnull = *arg_values[i].output_isnull;
 		}
 		else
 		{
-			Ensure(arg.arrow != NULL, "no arrow for arg");
-			have_nulls = (arg.arrow->null_count > 0) || have_nulls;
+			Ensure(arg_values[i].arrow != NULL, "no arrow for arg");
+			have_nulls = (arg_values[i].arrow->null_count > 0) || have_nulls;
 
-			arg_values[foreach_current_index(lc)].output_value =
-				&fcinfo->args[foreach_current_index(lc)].value;
-			arg_values[foreach_current_index(lc)].output_isnull =
-				&fcinfo->args[foreach_current_index(lc)].isnull;
+			arg_values[i].output_value = &fcinfo->args[i].value;
+			arg_values[i].output_isnull = &fcinfo->args[i].isnull;
+
+			if (arg_values[i].decompression_type == DT_ArrowText ||
+				arg_values[i].decompression_type == DT_ArrowTextDict)
+			{
+				const int maxbytes =
+					VARHDRSZ + (arg_values[i].arrow->dictionary ?
+									get_max_text_datum_size(arg_values[i].arrow->dictionary) :
+									get_max_text_datum_size(arg_values[i].arrow));
+
+				*arg_values[i].output_value =
+					PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+			}
 		}
 
 		(void) arrow_from_constant;
+
+		Assert(arg_values[i].decompression_type != DT_Invalid);
+	}
+
+	Assert(arg_values[0].decompression_type != DT_Invalid);
+
+	const int nrows = batch_state->total_batch_rows;
+
+	if (have_null_scalars)
+	{
+		/* The function is strict, so we return a null scalar. */
+		CompressedColumnValues result = {
+			.decompression_type = DT_Scalar,
+			.output_isnull = MemoryContextAlloc(batch_state->per_batch_context, sizeof(bool))
+		};
+		*result.output_isnull = true;
+		return result;
+	}
+
+	/*
+	 * Our functions are strict so we handle validity separately.
+	 */
+	uint64 const *validity = NULL;
+	if (have_nulls)
+	{
+		const size_t num_words = (nrows + 63) / 64;
+		validity = MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_words);
+		validity = arrow_combine_validity(num_words,
+										  (uint64 *) validity,
+										  (uint64 *) arg_values[0].buffers[0],
+										  (uint64 *) arg_values[1].buffers[0],
+										  (uint64 *) arg_values[2].buffers[0]);
 	}
 
 	Oid rettype = get_func_rettype(funcoid);
@@ -277,72 +320,132 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 	bool rettypbyval;
 	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
 
-	const int nrows = batch_state->total_batch_rows;
+	ArrowArray *arrow_result = NULL;
 
-	ArrowArray *arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
-													  sizeof(ArrowArray) + 2 * sizeof(void *));
-	arrow_result->length = nrows;
-	arrow_result->buffers = (void *) &arrow_result[1];
-	void *restrict result_buffer_1 =
-		MemoryContextAllocZero(batch_state->per_batch_context, rettyplen * nrows);
-	arrow_result->buffers[1] = result_buffer_1;
-
-	for (int i = 0; i < nrows; i++)
+	if (rettyplen != -1)
 	{
-		compressed_columns_to_postgres_data(arg_values, nargs, i);
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 2 * sizeof(void *));
+		arrow_result->length = nrows;
+		arrow_result->buffers = (void *) &arrow_result[1];
+		void *restrict result_buffer_1 =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   pad_to_multiple(64, rettyplen * nrows));
+		arrow_result->buffers[1] = result_buffer_1;
 
-		Datum result = FunctionCallInvoke(fcinfo);
-
-		(void) result;
-
-		switch (rettyplen)
+		for (int i = 0; i < nrows; i++)
 		{
-			/* FIXME bool */
-			/* FIXME per-type code actually faster? */
-			case 2:
-			case 4:
+			if (!arrow_row_is_valid(validity, i))
+			{
+				continue;
+			}
+
+			compressed_columns_to_postgres_data(arg_values, nargs, i);
+
+			Datum result = FunctionCallInvoke(fcinfo);
+
+			(void) result;
+
+			switch (rettyplen)
+			{
+				/* FIXME bool */
+				/* FIXME per-type code actually faster? */
+				case 2:
+				case 4:
 #ifdef USE_FLOAT8_BYVAL
-			case 8:
+				case 8:
 #endif
-				memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1, &result, sizeof(Datum));
-				break;
+					memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
+						   &result,
+						   sizeof(Datum));
+					break;
 #ifndef USE_FLOAT8_BYVAL
-			case 8:
+				case 8:
 #endif
-			case 16:
-				Assert(!rettypbyval);
-				memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
-					   DatumGetPointer(result),
-					   rettyplen);
-				break;
-			case -1:
-				Assert(!rettypbyval);
-				elog(ERROR, "varlena return type not supported");
-			default:
-				elog(ERROR, "wrong size %d", rettyplen);
+				case 16:
+					Assert(!rettypbyval);
+					memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
+						   DatumGetPointer(result),
+						   rettyplen);
+					break;
+				case -1:
+					Assert(!rettypbyval);
+					elog(ERROR, "varlena return type not supported");
+				default:
+					elog(ERROR, "wrong size %d", rettyplen);
+			}
 		}
 	}
-
-	/*
-	 * Our functions are strict so we handle validity separately.
-	 */
-	if (have_nulls)
+	else
 	{
-		const size_t num_words = (nrows + 63) / 64;
-		arrow_result->buffers[0] =
-			MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_words);
-		arrow_combine_validity(num_words,
-							   (uint64 *) arrow_result->buffers[0],
-							   (uint64 *) arg_values[0].buffers[0],
-							   (uint64 *) arg_values[1].buffers[0],
-							   (uint64 *) arg_values[2].buffers[0]);
-		arrow_result->null_count =
-			arrow_result->length - arrow_num_valid(arrow_result->buffers[0], arrow_result->length);
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 3 * sizeof(void *));
+		arrow_result->length = nrows;
+		arrow_result->buffers = (void *) &arrow_result[1];
+		uint32 *restrict offset_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
+		uint32 current_offset = 0;
+
+		int allocated_body_bytes = pad_to_multiple(64, 10);
+		uint8 *restrict body_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context, allocated_body_bytes);
+
+		for (int i = 0; i < nrows; i++)
+		{
+			if (!arrow_row_is_valid(validity, i))
+			{
+				continue;
+			}
+
+			Assert(arg_values[0].decompression_type != DT_Invalid);
+
+			compressed_columns_to_postgres_data(arg_values, nargs, i);
+
+			Assert(arg_values[0].decompression_type != DT_Invalid);
+
+			Datum result = FunctionCallInvoke(fcinfo);
+
+			const int result_bytes = VARSIZE_ANY_EXHDR(result);
+			const int required_body_bytes = pad_to_multiple(64, current_offset + result_bytes);
+			if (required_body_bytes > allocated_body_bytes)
+			{
+				const int new_body_bytes =
+					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) i + 1))) + 1;
+//				fprintf(stderr,
+//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
+//						new_body_bytes,
+//						new_body_bytes / (float) required_body_bytes,
+//						i,
+//						nrows);
+				Assert(new_body_bytes >= required_body_bytes);
+				body_buffer = repalloc(body_buffer, new_body_bytes);
+				allocated_body_bytes = new_body_bytes;
+			}
+
+			(void) result;
+
+			offset_buffer[i] = current_offset;
+			memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
+			current_offset += result_bytes;
+
+//			fprintf(stderr, "row %d next offset %d\n", i, current_offset);
+		}
+
+		offset_buffer[nrows] = current_offset;
+		arrow_result->buffers[1] = offset_buffer;
+		arrow_result->buffers[2] = body_buffer;
 	}
 
+	arrow_result->buffers[0] = validity;
+	arrow_result->null_count =
+		arrow_result->length - arrow_num_valid(validity, arrow_result->length);
+
 	CompressedColumnValues result = {
-		.decompression_type = rettyplen,
-		.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
+		.decompression_type = rettyplen == -1 ? DT_ArrowText : rettyplen,
+		.buffers = { arrow_result->buffers[0],
+					 arrow_result->buffers[1],
+					 rettyplen == -1 ? arrow_result->buffers[2] : NULL },
 		.arrow = arrow_result,
 	};
 
@@ -367,8 +470,8 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 			 */
 			const Const *c = (const Const *) argument;
 			//			ArrowArray *arrow_result =
-			//arrow_from_constant(batch_state->per_batch_context, 														   batch_state->total_batch_rows, 														   c);
-			//			CompressedColumnValues result = {
+			// arrow_from_constant(batch_state->per_batch_context,
+			// batch_state->total_batch_rows, c); 			CompressedColumnValues result = {
 			//				.decompression_type = get_typlen(c->consttype),
 			//				.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
 			//				.arrow = arrow_result,

@@ -192,7 +192,7 @@ is_vector_type(Oid typeoid)
 		case INT2OID:
 		case INT4OID:
 		case INT8OID:
-			//		case TEXTOID:
+		case TEXTOID:
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
 		case DATEOID:

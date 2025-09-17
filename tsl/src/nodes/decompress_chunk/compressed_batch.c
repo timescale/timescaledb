@@ -143,7 +143,7 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	return make_single_value_arrow_arithmetic(pgtype, datum, isnull);
 }
 
-static int
+int
 get_max_text_datum_size(ArrowArray *text_array)
 {
 	int maxbytes = 0;

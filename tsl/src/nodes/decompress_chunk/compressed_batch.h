@@ -197,6 +197,7 @@ typedef struct CompressedBatchVectorQualState
 
 const ArrowArray *compressed_batch_get_arrow_array(VectorQualState *vqstate, Expr *expr,
 												   bool *is_default_value);
+int get_max_text_datum_size(ArrowArray *text_array);
 
 inline static void
 store_text_datum(CompressedColumnValues *column_values, int arrow_row)
