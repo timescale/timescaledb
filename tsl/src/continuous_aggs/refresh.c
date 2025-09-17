@@ -697,12 +697,15 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * This is supposed to be a short transaction and in the future we can consider
 	 * relaxing this lock.
 	 */
-	LockRelationOid(hyper_relid, ExclusiveLock);
+	LockRelationOid(hyper_relid, ShareUpdateExclusiveLock);
 	invalidations = invalidation_process_cagg_log(cagg,
 												  refresh_window,
 												  ts_guc_cagg_max_individual_materializations,
 												  context,
 												  force);
+
+	DEBUG_WAITPOINT("before_process_cagg_invalidations_for_refresh_lock");
+
 	SPI_commit_and_chain();
 
 	DEBUG_WAITPOINT("after_process_cagg_invalidations_for_refresh_lock");
@@ -956,6 +959,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 
 	if (!refreshed && !has_pending_materializations)
 		emit_up_to_date_notice(cagg, context);
+
+	DEBUG_WAITPOINT("after_process_cagg_materializations");
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
