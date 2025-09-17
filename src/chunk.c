@@ -25,6 +25,7 @@
 #include <commands/trigger.h>
 #include <executor/executor.h>
 #include <fmgr.h>
+#include <foreign/fdwapi.h>
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <nodes/execnodes.h>
@@ -4034,8 +4035,20 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	// if we have tiered chunks cascade drop to tiering layer as well
 	if (osm_chunk_id != INVALID_CHUNK_ID)
 	{
+		Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
+
 		hypertable_drop_chunks_hook_type osm_drop_chunks_hook =
 			ts_get_osm_hypertable_drop_chunks_hook();
+
+		/*
+		 * The OSM library may not be loaded at the moment if
+		 * `ts_chunk_do_drop_chunks` is called from the a background worker
+		 * (e.g. from a retention policy). We call `GetFdwRoutineByRelId` to
+		 * ensure the library is loaded.
+		 */
+		if (!osm_drop_chunks_hook && GetFdwRoutineByRelId(osm_chunk->table_id))
+			osm_drop_chunks_hook = ts_get_osm_hypertable_drop_chunks_hook();
+
 		if (osm_drop_chunks_hook)
 		{
 			ListCell *lc;
@@ -4043,7 +4056,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			/* convert to PG timestamp from timescaledb internal format */
 			int64 range_start = ts_internal_to_time_int64(newer_than, dim->fd.column_type);
 			int64 range_end = ts_internal_to_time_int64(older_than, dim->fd.column_type);
-			Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
 			List *osm_dropped_names = osm_drop_chunks_hook(osm_chunk->table_id,
 														   NameStr(ht->fd.schema_name),
 														   NameStr(ht->fd.table_name),
