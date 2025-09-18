@@ -184,9 +184,10 @@ arrow_set_row_validity(uint64 *bitmap, size_t row_number, bool value)
 }
 
 /*
- * Combine the validity bitmaps into the given storage.
+ * Combine the validity bitmaps into the given storage. Can return one of the
+ * input filters if the others are NULL.
  */
-static inline const uint64 *
+static inline pg_nodiscard const uint64 *
 arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
 					   const uint64 *filter2, const uint64 *filter3)
 {
@@ -254,6 +255,23 @@ arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 
 	}
 
 	return storage;
+}
+
+/*
+ * Do the &= operation on bitmaps. The right argument can be NULL.
+ */
+static inline void
+arrow_validity_and(int num_words, uint64 *restrict left, const uint64 *right)
+{
+	if (right == NULL)
+	{
+		return;
+	}
+
+	for (int i = 0; i < num_words; i++)
+	{
+		left[i] &= right[i];
+	}
 }
 
 /*

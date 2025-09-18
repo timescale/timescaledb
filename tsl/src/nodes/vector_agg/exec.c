@@ -245,7 +245,7 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 		arg_values[i] =
 			vector_slot_get_compressed_column_values(dcontext, slot, filter, lfirst(lc));
 		//		fprintf(stderr, "column %d decompression type %d\n", i,
-		//arg_values[i].decompression_type);
+		// arg_values[i].decompression_type);
 
 		if (arg_values[i].decompression_type == DT_Invalid)
 		{
@@ -307,17 +307,20 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 	/*
 	 * Our functions are strict so we handle validity separately.
 	 */
-	uint64 const *validity = NULL;
+	const size_t num_validity_words = (nrows + 63) / 64;
+	uint64 const *input_validity = NULL;
 	if (have_null_bitmap || filter != NULL)
 	{
-		const size_t num_words = (nrows + 63) / 64;
-		validity = MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_words);
-		validity = arrow_combine_validity(num_words,
-										  (uint64 *) validity,
-										  filter,
-										  (uint64 *) arg_values[0].buffers[0],
-										  (uint64 *) arg_values[1].buffers[0]);
+		input_validity =
+			MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_validity_words);
+		input_validity = arrow_combine_validity(num_validity_words,
+												(uint64 *) input_validity,
+												filter,
+												(uint64 *) arg_values[0].buffers[0],
+												(uint64 *) arg_values[1].buffers[0]);
 	}
+
+	uint64 *restrict result_validity = NULL;
 
 	Oid rettype = get_func_rettype(funcoid);
 	int16 rettyplen;
@@ -339,7 +342,7 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 
 		for (int i = 0; i < nrows; i++)
 		{
-			if (!arrow_row_is_valid(validity, i))
+			if (!arrow_row_is_valid(input_validity, i))
 			{
 				continue;
 			}
@@ -347,6 +350,27 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 			compressed_columns_to_postgres_data(arg_values, nargs, i);
 
 			Datum result = FunctionCallInvoke(fcinfo);
+
+			if (fcinfo->isnull)
+			{
+				/*
+				 * A strict function can still return a null for a non-null
+				 * argument.
+				 */
+				if (result_validity == NULL)
+				{
+					result_validity =
+						MemoryContextAlloc(batch_state->per_batch_context,
+										   num_validity_words * sizeof(*result_validity));
+					memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
+					const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+					result_validity[nrows / 64] &= tail_mask;
+				}
+
+				arrow_set_row_validity(result_validity, i, false);
+
+				continue;
+			}
 
 			(void) result;
 
@@ -397,7 +421,7 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 
 		for (int i = 0; i < nrows; i++)
 		{
-			if (!arrow_row_is_valid(validity, i))
+			if (!arrow_row_is_valid(input_validity, i))
 			{
 				continue;
 			}
@@ -409,6 +433,27 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 			Assert(arg_values[0].decompression_type != DT_Invalid);
 
 			Datum result = FunctionCallInvoke(fcinfo);
+
+			if (fcinfo->isnull)
+			{
+				/*
+				 * A strict function can still return a null for a non-null
+				 * argument.
+				 */
+				if (result_validity == NULL)
+				{
+					result_validity =
+						MemoryContextAlloc(batch_state->per_batch_context,
+										   num_validity_words * sizeof(*result_validity));
+					memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
+					const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+					result_validity[nrows / 64] &= tail_mask;
+				}
+
+				arrow_set_row_validity(result_validity, i, false);
+
+				continue;
+			}
 
 			const int result_bytes = VARSIZE_ANY_EXHDR(result);
 			const int required_body_bytes = pad_to_multiple(64, current_offset + result_bytes);
@@ -432,8 +477,6 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 			offset_buffer[i] = current_offset;
 			memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
 			current_offset += result_bytes;
-
-			//			fprintf(stderr, "row %d next offset %d\n", i, current_offset);
 		}
 
 		offset_buffer[nrows] = current_offset;
@@ -441,9 +484,21 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 		arrow_result->buffers[2] = body_buffer;
 	}
 
-	arrow_result->buffers[0] = validity;
+	/*
+	 * Figure out the nullability of the result. Besides the null inputs, we
+	 * have to AND a separate bitmap if the function returned nulls for some rows.
+	 */
+	if (result_validity != NULL)
+	{
+		arrow_validity_and(num_validity_words, result_validity, input_validity);
+		arrow_result->buffers[0] = result_validity;
+	}
+	else
+	{
+		arrow_result->buffers[0] = input_validity;
+	}
 	arrow_result->null_count =
-		arrow_result->length - arrow_num_valid(validity, arrow_result->length);
+		arrow_result->length - arrow_num_valid(arrow_result->buffers[0], arrow_result->length);
 
 	CompressedColumnValues result = {
 		.decompression_type = rettyplen == -1 ? DT_ArrowText : rettyplen,
@@ -452,7 +507,6 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 					 rettyplen == -1 ? arrow_result->buffers[2] : NULL },
 		.arrow = arrow_result,
 	};
-
 	return result;
 }
 
