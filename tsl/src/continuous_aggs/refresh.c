@@ -925,6 +925,11 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 															INVALID_CHUNK_ID,
 															force);
 
+	/* check if we have any pending materializations in our refresh window range,
+	 * if so, we need to process them
+	 * Note that we use the original refresh window range here, not the one that has been processed
+	 * by the refresh function*/
+	refresh_window = *refresh_window_arg;
 	bool has_pending_materializations =
 		continuous_agg_has_pending_materializations(cagg, refresh_window);
 
