@@ -135,13 +135,26 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 	const uint64 *vector_qual_result = vector_slot_get_qual_result(vector_slot, &total_batch_rows);
 
 	/*
+	 * Compute the unified validity bitmap.
+	 */
+	const size_t num_words = (total_batch_rows + 63) / 64;
+	const uint64 *filter = arrow_combine_validity(num_words,
+												  policy->tmp_filter,
+												  agg_def->filter_result,
+												  vector_qual_result,
+												  arg_validity_bitmap);
+
+	/*
 	 * We have functions with one argument, and one function with no arguments
 	 * (count(*)). Collect the arguments.
 	 */
 	if (agg_def->argument != NULL)
 	{
 		const CompressedColumnValues values =
-			vector_slot_get_compressed_column_values(dcontext, vector_slot, agg_def->argument);
+			vector_slot_get_compressed_column_values(dcontext,
+													 vector_slot,
+													 filter,
+													 agg_def->argument);
 
 		Assert(values.decompression_type != DT_Invalid);
 		Ensure(values.decompression_type != DT_Iterator, "expected arrow array but got iterator");
@@ -158,16 +171,6 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 			arg_isnull = *values.output_isnull;
 		}
 	}
-
-	/*
-	 * Compute the unified validity bitmap.
-	 */
-	const size_t num_words = (total_batch_rows + 63) / 64;
-	const uint64 *filter = arrow_combine_validity(num_words,
-												  policy->tmp_filter,
-												  agg_def->filter_result,
-												  vector_qual_result,
-												  arg_validity_bitmap);
 
 	/*
 	 * Now call the function.
@@ -337,7 +340,7 @@ gp_hash_add_batch(GroupingPolicy *gp, DecompressContext *dcontext, TupleTableSlo
 		const GroupingColumn *def = &policy->grouping_columns[i];
 
 		policy->current_batch_grouping_column_values[i] =
-			vector_slot_get_compressed_column_values(dcontext, vector_slot, def->expr);
+			vector_slot_get_compressed_column_values(dcontext, vector_slot, filter, def->expr);
 	}
 
 	/*

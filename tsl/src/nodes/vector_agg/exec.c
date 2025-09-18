@@ -222,8 +222,8 @@ arrow_from_constant(MemoryContext mcxt, int nrows, const Const *c)
 }
 
 static CompressedColumnValues
-evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args, Oid funcoid,
-				  Oid inputcollid)
+evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 const *filter,
+				  List *args, Oid funcoid, Oid inputcollid)
 {
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 
@@ -237,13 +237,15 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 
 	CompressedColumnValues arg_values[5] = { 0 };
 	ListCell *lc;
-	bool have_nulls = false;
+	bool have_null_bitmap = false;
 	bool have_null_scalars = false;
 	foreach (lc, args)
 	{
 		const int i = foreach_current_index(lc);
-		arg_values[i] = vector_slot_get_compressed_column_values(dcontext, slot, lfirst(lc));
-//		fprintf(stderr, "column %d decompression type %d\n", i, arg_values[i].decompression_type);
+		arg_values[i] =
+			vector_slot_get_compressed_column_values(dcontext, slot, filter, lfirst(lc));
+		//		fprintf(stderr, "column %d decompression type %d\n", i,
+		//arg_values[i].decompression_type);
 
 		if (arg_values[i].decompression_type == DT_Invalid)
 		{
@@ -253,7 +255,6 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 
 		if (arg_values[i].decompression_type == DT_Scalar)
 		{
-			have_nulls = *arg_values[i].output_isnull || have_nulls;
 			have_null_scalars = *arg_values[i].output_isnull || have_null_scalars;
 
 			fcinfo->args[i].value = *arg_values[i].output_value;
@@ -262,7 +263,7 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 		else
 		{
 			Ensure(arg_values[i].arrow != NULL, "no arrow for arg");
-			have_nulls = (arg_values[i].arrow->null_count > 0) || have_nulls;
+			have_null_bitmap = (arg_values[i].arrow->null_count > 0) || have_null_bitmap;
 
 			arg_values[i].output_value = &fcinfo->args[i].value;
 			arg_values[i].output_isnull = &fcinfo->args[i].isnull;
@@ -291,7 +292,10 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 
 	if (have_null_scalars)
 	{
-		/* The function is strict, so we return a null scalar. */
+		/*
+		 * The function is strict, and we have a scalar null argument, so we
+		 * return a scalar null.
+		 */
 		CompressedColumnValues result = {
 			.decompression_type = DT_Scalar,
 			.output_isnull = MemoryContextAlloc(batch_state->per_batch_context, sizeof(bool))
@@ -304,15 +308,15 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 	 * Our functions are strict so we handle validity separately.
 	 */
 	uint64 const *validity = NULL;
-	if (have_nulls)
+	if (have_null_bitmap || filter != NULL)
 	{
 		const size_t num_words = (nrows + 63) / 64;
 		validity = MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_words);
 		validity = arrow_combine_validity(num_words,
 										  (uint64 *) validity,
+										  filter,
 										  (uint64 *) arg_values[0].buffers[0],
-										  (uint64 *) arg_values[1].buffers[0],
-										  (uint64 *) arg_values[2].buffers[0]);
+										  (uint64 *) arg_values[1].buffers[0]);
 	}
 
 	Oid rettype = get_func_rettype(funcoid);
@@ -412,12 +416,12 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 			{
 				const int new_body_bytes =
 					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) i + 1))) + 1;
-//				fprintf(stderr,
-//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
-//						new_body_bytes,
-//						new_body_bytes / (float) required_body_bytes,
-//						i,
-//						nrows);
+				//				fprintf(stderr,
+				//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
+				//						new_body_bytes,
+				//						new_body_bytes / (float) required_body_bytes,
+				//						i,
+				//						nrows);
 				Assert(new_body_bytes >= required_body_bytes);
 				body_buffer = repalloc(body_buffer, new_body_bytes);
 				allocated_body_bytes = new_body_bytes;
@@ -429,7 +433,7 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
 			memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
 			current_offset += result_bytes;
 
-//			fprintf(stderr, "row %d next offset %d\n", i, current_offset);
+			//			fprintf(stderr, "row %d next offset %d\n", i, current_offset);
 		}
 
 		offset_buffer[nrows] = current_offset;
@@ -458,24 +462,14 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, List *args,
  */
 CompressedColumnValues
 vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTableSlot *slot,
-										 const Expr *argument)
+										 uint64 const *filter, const Expr *argument)
 {
 	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
 	switch (((Node *) argument)->type)
 	{
 		case T_Const:
 		{
-			/*
-			 * FIXME use DT_Scalar?
-			 */
 			const Const *c = (const Const *) argument;
-			//			ArrowArray *arrow_result =
-			// arrow_from_constant(batch_state->per_batch_context,
-			// batch_state->total_batch_rows, c); 			CompressedColumnValues result = {
-			//				.decompression_type = get_typlen(c->consttype),
-			//				.buffers = { arrow_result->buffers[0], arrow_result->buffers[1] },
-			//				.arrow = arrow_result,
-			//			};
 			CompressedColumnValues result = { .decompression_type = DT_Scalar,
 											  .output_value = (Datum *) &c->constvalue,
 											  .output_isnull = (bool *) &c->constisnull };
@@ -497,12 +491,12 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 		case T_OpExpr:
 		{
 			const OpExpr *o = (const OpExpr *) argument;
-			return evaluate_function(dcontext, slot, o->args, o->opfuncid, o->inputcollid);
+			return evaluate_function(dcontext, slot, filter, o->args, o->opfuncid, o->inputcollid);
 		}
 		case T_FuncExpr:
 		{
 			const FuncExpr *f = (const FuncExpr *) argument;
-			return evaluate_function(dcontext, slot, f->args, f->funcid, f->inputcollid);
+			return evaluate_function(dcontext, slot, filter, f->args, f->funcid, f->inputcollid);
 		}
 		default:
 			fprintf(stderr, "%s\n", ts_get_node_name((Node *) argument));

@@ -36,4 +36,5 @@ vector_slot_get_qual_result(const TupleTableSlot *slot, uint16 *num_rows)
  */
 CompressedColumnValues vector_slot_get_compressed_column_values(DecompressContext *dcontext,
 																TupleTableSlot *slot,
+																uint64 const *filter,
 																const Expr *argument);
