@@ -332,7 +332,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	/* Get reloid of the previous compressed chunk via settings */
 	CompressionSettings *prev_comp_settings = ts_compression_settings_get(previous_chunk->table_id);
 	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
-	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
+	if (!ts_compression_settings_equal_with_defaults(ht_comp_settings, prev_comp_settings))
 		return NULL;
 
 	/* We don't support merging chunks with sequence numbers */
@@ -772,7 +772,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
 
 			if (!valid_orderby_settings ||
-				!ts_compression_settings_equal(ht_settings, chunk_settings))
+				!ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
 			{
 				decompress_chunk_impl(chunk, false);
 				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);

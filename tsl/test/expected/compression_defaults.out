@@ -86,9 +86,9 @@ SET timescaledb.compression_orderby_default_function = '';
 ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_orderby = '"time" desc', timescaledb.compress_segmentby = '');
 WARNING:  column "device_id" should be used for segmenting or ordering
 SELECT * FROM _timescaledb_catalog.compression_settings;
-  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
----------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
- metrics |                | {}        | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+---------+----------------+-----------+---------+--------------+--------------------+-------
+ metrics |                | {}        | {time}  | {t}          | {t}                | 
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
