@@ -11,10 +11,8 @@
 
 #include "cache.h"
 #include "chunk.h"
-#include "cross_module_fn.h"
 
-typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
-typedef struct ChunkDispatchState ChunkDispatchState;
+typedef struct ChunkTupleRouting ChunkTupleRouting;
 typedef struct CompressionSettings CompressionSettings;
 typedef struct tuple_filtering_constraints tuple_filtering_constraints;
 
@@ -66,7 +64,6 @@ typedef struct ChunkInsertState
 {
 	Relation rel;
 	ResultRelInfo *result_relation_info;
-	ChunkDispatchState *cds;
 
 	/* When the tuple descriptors for the main hypertable (root) and a chunk
 	 * differs, it is necessary to convert tuples to chunk format before
@@ -104,6 +101,7 @@ typedef struct ChunkInsertState
 	/* To speedup repeated calls of `decompress_batches_for_insert` */
 	CachedDecompressionState *cached_decompression_state;
 
+	OnConflictAction onConflictAction;
 	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
 	bool skip_current_tuple;
 	SharedCounters *counters;
@@ -112,14 +110,10 @@ typedef struct ChunkInsertState
 	bool skip_generated_column_computations;
 } ChunkInsertState;
 
-typedef struct ChunkDispatch ChunkDispatch;
-
 extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,
-													  const ChunkDispatch *dispatch);
+													  const ChunkTupleRouting *ctr);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
 ResultRelInfo *create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel,
 												 EState *estate);
 
-TSDLLEXPORT OnConflictAction
-ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);
 void ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk);

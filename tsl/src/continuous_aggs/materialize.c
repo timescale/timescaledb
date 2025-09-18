@@ -52,6 +52,7 @@ typedef enum MaterializationPlanType
 	PLAN_TYPE_MERGE_DELETE,
 	PLAN_TYPE_RANGES_SELECT,
 	PLAN_TYPE_RANGES_DELETE,
+	PLAN_TYPE_RANGES_PENDING,
 	_MAX_MATERIALIZATION_PLAN_TYPES
 } MaterializationPlanType;
 
@@ -91,6 +92,7 @@ static char *create_materialization_merge_statement(MaterializationContext *cont
 static char *create_materialization_merge_delete_statement(MaterializationContext *context);
 static char *create_materialization_ranges_select_statement(MaterializationContext *context);
 static char *create_materialization_ranges_delete_statement(MaterializationContext *context);
+static char *create_materialization_ranges_pending_statement(MaterializationContext *context);
 
 static void emit_materialization_insert_error(MaterializationContext *context);
 static void emit_materialization_delete_error(MaterializationContext *context);
@@ -98,6 +100,7 @@ static void emit_materialization_exists_error(MaterializationContext *context);
 static void emit_materialization_merge_error(MaterializationContext *context);
 static void emit_materialization_ranges_select_error(MaterializationContext *context);
 static void emit_materialization_ranges_delete_error(MaterializationContext *context);
+static void emit_materialization_ranges_pending_error(MaterializationContext *context);
 
 static void emit_materialization_insert_progress(MaterializationContext *context,
 												 uint64 rows_processed);
@@ -137,6 +140,11 @@ static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES
 								  .create_statement =
 									  create_materialization_ranges_delete_statement,
 								  .emit_error = emit_materialization_ranges_delete_error },
+	[PLAN_TYPE_RANGES_PENDING] = { .read_only = true,
+								   .nargs = 3,
+								   .create_statement =
+									   create_materialization_ranges_pending_statement,
+								   .emit_error = emit_materialization_ranges_pending_error },
 };
 
 static Oid *create_materialization_plan_argtypes(MaterializationContext *context,
@@ -199,6 +207,32 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 
 	/* Restore search_path */
 	AtEOXact_GUC(false, save_nestlevel);
+}
+
+/* API to check for pending materialization ranges */
+bool
+continuous_agg_has_pending_materializations(const ContinuousAgg *cagg,
+											InternalTimeRange materialization_range)
+{
+	MaterializationContext context = {
+		.cagg = cagg,
+		.internal_materialization_range = materialization_range,
+	};
+
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
+	if (materialization_range.start > materialization_range.end)
+		materialization_range.start = materialization_range.end;
+
+	bool has_pending_materializations =
+		(execute_materialization_plan(&context, PLAN_TYPE_RANGES_PENDING) > 0);
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
+	return has_pending_materializations;
 }
 
 static Datum
@@ -558,6 +592,23 @@ create_materialization_ranges_delete_statement(MaterializationContext *context)
 	return query.data;
 }
 
+static char *
+create_materialization_ranges_pending_statement(MaterializationContext *context)
+{
+	StringInfoData query;
+	initStringInfo(&query);
+
+	appendStringInfo(&query,
+					 "SELECT * "
+					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
+					 "WHERE materialization_id = $1 "
+					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
+					 "pg_catalog.int8range($2, $3) "
+					 "LIMIT 1 ");
+
+	return query.data;
+}
+
 static void
 emit_materialization_insert_error(MaterializationContext *context)
 {
@@ -613,6 +664,15 @@ emit_materialization_ranges_delete_error(MaterializationContext *context)
 }
 
 static void
+emit_materialization_ranges_pending_error(MaterializationContext *context)
+{
+	elog(ERROR,
+		 "could not select pending materialization ranges \"%s.%s\"",
+		 NameStr(*context->materialization_table.schema),
+		 NameStr(*context->materialization_table.name));
+}
+
+static void
 emit_materialization_insert_progress(MaterializationContext *context, uint64 rows_processed)
 {
 	elog(LOG,
@@ -651,7 +711,8 @@ create_materialization_plan_argtypes(MaterializationContext *context,
 	switch (plan_type)
 	{
 		case PLAN_TYPE_RANGES_SELECT: /* 3 arguments */
-			argtypes[0] = INT4OID;	  /* materialization_id */
+		case PLAN_TYPE_RANGES_PENDING:
+			argtypes[0] = INT4OID; /* materialization_id */
 			argtypes[1] = INT8OID;
 			argtypes[2] = INT8OID;
 			break;
@@ -703,6 +764,7 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 	switch (plan_type)
 	{
 		case PLAN_TYPE_RANGES_SELECT: /* 3 arguments */
+		case PLAN_TYPE_RANGES_PENDING:
 		{
 			(*values)[0] = Int32GetDatum(context->cagg->data.mat_hypertable_id);
 			(*values)[1] = Int64GetDatum(context->internal_materialization_range.start);

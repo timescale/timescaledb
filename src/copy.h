@@ -15,7 +15,6 @@
 
 #include "chunk_tuple_routing.h"
 
-typedef struct ChunkDispatch ChunkDispatch;
 typedef struct CopyChunkState CopyChunkState;
 typedef struct Hypertable Hypertable;
 
@@ -26,7 +25,6 @@ typedef struct CopyChunkState
 {
 	Relation rel;
 	EState *estate;
-	ChunkDispatch *dispatch;
 	ChunkTupleRouting *ctr;
 	CopyFromFunc next_copy_from;
 	CopyFromState cstate;

@@ -715,7 +715,14 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 static bool
 chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 {
-	if (conform->contype == CONSTRAINT_CHECK)
+	if (conform->contype == CONSTRAINT_CHECK
+#if PG18_GE
+		/* Avoid NOT NULL constraints
+		 * https://github.com/postgres/postgres/commit/b0e96f31
+		 */
+		|| conform->contype == CONSTRAINT_NOTNULL
+#endif
+	)
 	{
 		/*
 		 * check and not null constraints handled by regular inheritance (from
@@ -1290,6 +1297,8 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 	TupleTableSlot *slot;
 	TableScanDesc scandesc;
 	bool isnull;
+	int attno = get_attnum(chunk_relid, NameStr(dim->fd.column_name));
+	Ensure(attno != InvalidAttrNumber, "invalid attribute number");
 
 	PushActiveSnapshot(GetLatestSnapshot());
 	rel = table_open(chunk_relid, AccessShareLock);
@@ -1301,11 +1310,15 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 		Datum datum;
 		int64 value;
 
-		if (NULL != dim->partitioning)
-			datum = ts_partitioning_func_apply_slot(dim->partitioning, slot, &isnull);
-		else
-			datum = slot_getattr(slot, dim->column_attno, &isnull);
+		datum = slot_getattr(slot, attno, &isnull);
 		Assert(!isnull);
+
+		if (NULL != dim->partitioning)
+		{
+			Oid collation = TupleDescAttr(slot->tts_tupleDescriptor, AttrNumberGetAttrOffset(attno))
+								->attcollation;
+			datum = ts_partitioning_func_apply(dim->partitioning, collation, datum);
+		}
 
 		if (dim->type == DIMENSION_TYPE_OPEN)
 			value = ts_time_value_to_internal(datum, ts_dimension_get_partition_type(dim));

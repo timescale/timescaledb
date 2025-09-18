@@ -226,7 +226,7 @@ test_gorilla_int()
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
-	TestAssertInt64Eq(VARSIZE(compressed), 1344);
+	TestAssertInt64Eq(VARSIZE(compressed), 1312);
 
 	i = 0;
 	iter = gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), INT8OID);
@@ -291,7 +291,7 @@ test_gorilla_float()
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
-	TestAssertInt64Eq(VARSIZE(compressed), 1200);
+	TestAssertInt64Eq(VARSIZE(compressed), 1168);
 
 	float i = 0;
 	iter =
@@ -381,7 +381,7 @@ test_gorilla_double(bool have_nulls, bool have_random)
 	TestAssertTrue(compressed != NULL);
 	if (!have_nulls && !have_random)
 	{
-		TestAssertInt64Eq(VARSIZE(compressed), 1200);
+		TestAssertInt64Eq(VARSIZE(compressed), 1176);
 	}
 
 	/* Forward decompression. */

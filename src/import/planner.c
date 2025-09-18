@@ -822,3 +822,35 @@ inject_projection_plan(Plan *subplan, List *tlist, bool parallel_safe)
 
 	return plan;
 }
+
+/* In PG18, child ems are not added to ec_members
+ * but need to be maintained in separate Lists.
+ *
+ * https://github.com/postgres/postgres/commit/d69d45a5
+ */
+/* copied from add_child_eq_member */
+#if PG18_GE
+void
+ts_add_child_eq_member(PlannerInfo *root, EquivalenceClass *ec, EquivalenceMember *em,
+					   int child_relid)
+{
+	/*
+	 * Allocate the array to store child members; an array of Lists indexed by
+	 * relid, or expand the existing one, if necessary.
+	 */
+	if (unlikely(ec->ec_childmembers_size < root->simple_rel_array_size))
+	{
+		ec->ec_relids = bms_add_members(ec->ec_relids, em->em_relids);
+		if (ec->ec_childmembers == NULL)
+			ec->ec_childmembers = palloc0_array(List *, root->simple_rel_array_size);
+		else
+			ec->ec_childmembers = repalloc0_array(ec->ec_childmembers,
+												  List *,
+												  ec->ec_childmembers_size,
+												  root->simple_rel_array_size);
+		ec->ec_childmembers_size = root->simple_rel_array_size;
+	}
+	/* add member to the ec_childmembers List for the given child_relid */
+	ec->ec_childmembers[child_relid] = lappend(ec->ec_childmembers[child_relid], em);
+}
+#endif

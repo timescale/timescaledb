@@ -1,5 +1,5 @@
 # Test rpm package installation for latest version
-name: RPM packages
+name: "Packaging tests: RPM"
 "on":
   schedule:
     # run daily 0:00 on main branch
@@ -107,4 +107,13 @@ jobs:
         if [ "$prev_version" != "$installed_version" ];then
           false
         fi
+
+    - name: Install toolkit
+      run: |
+        yum install -y timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
+    - name: List available toolkit versions
+      run: |
+        yum --showduplicates list timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
 

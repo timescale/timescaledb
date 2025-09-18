@@ -202,16 +202,16 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::reg
 
 ALTER TABLE foo RESET (timescaledb.compress_orderby);
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
- relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                      index                                                       
--------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------
- foo   |                | {c}       |         |              |                    | [{"type": "minmax", "column": "a", "source": "orderby"}, {"type": "minmax", "column": "b", "source": "orderby"}]
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+---------+--------------+--------------------+-------
+ foo   |                | {c}       |         |              |                    | 
 (1 row)
 
 ALTER TABLE foo RESET (timescaledb.compress_segmentby);
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
- relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                      index                                                       
--------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------
- foo   |                |           |         |              |                    | [{"type": "minmax", "column": "a", "source": "orderby"}, {"type": "minmax", "column": "b", "source": "orderby"}]
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+---------+--------------+--------------------+-------
+ foo   |                |           |         |              |                    | 
 (1 row)
 
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_index = 'bloom(c)');

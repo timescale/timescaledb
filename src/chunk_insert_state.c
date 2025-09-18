@@ -25,12 +25,13 @@
 #include <utils/rls.h>
 
 #include "compat/compat.h"
-#include "chunk_dispatch.h"
 #include "chunk_index.h"
 #include "chunk_insert_state.h"
+#include "chunk_tuple_routing.h"
 #include "debug_point.h"
 #include "errors.h"
 #include "indexing.h"
+#include "nodes/modify_hypertable.h"
 #include "ts_catalog/continuous_agg.h"
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
@@ -43,34 +44,6 @@ prepare_constr_expr(Expr *node)
 	result = ExecInitExpr(node, NULL);
 
 	return result;
-}
-
-static inline ModifyTableState *
-get_modifytable_state(const ChunkDispatch *dispatch)
-{
-	return dispatch->dispatch_state->mtstate;
-}
-
-static inline ModifyTable *
-get_modifytable(const ChunkDispatch *dispatch)
-{
-	return castNode(ModifyTable, get_modifytable_state(dispatch)->ps.plan);
-}
-
-OnConflictAction
-ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
-{
-	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
-		return ONCONFLICT_NONE;
-	return get_modifytable(dispatch)->onConflictAction;
-}
-
-static CmdType
-chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
-{
-	return (dispatch->dispatch_state == NULL || dispatch->dispatch_state->mtstate == NULL) ?
-			   CMD_INSERT :
-			   dispatch->dispatch_state->mtstate->operation;
 }
 
 /*
@@ -445,14 +418,13 @@ adjust_projections(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkInsert
  * ResultRelInfo should be similar to ExecInitModifyTable().
  */
 extern ChunkInsertState *
-ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
+ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 {
 	ChunkInsertState *state;
 	Relation rel, parent_rel;
-	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
+	MemoryContext cis_context = AllocSetContextCreate(ctr->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
-	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
 	ResultRelInfo *relinfo;
 	const Chunk *chunk;
 
@@ -462,6 +434,8 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support row-level security")));
 
+	MemoryContext old_mcxt =
+		MemoryContextSwitchTo(ctr->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
 	/*
 	 * Since we insert data and won't modify metadata, a RowExclusiveLock
 	 * should be sufficient. This should conflict with any metadata-modifying
@@ -482,23 +456,23 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	Assert(chunk->relkind == RELKIND_RELATION);
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
-	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
-	relinfo = create_chunk_result_relation_info(dispatch->hypertable_result_rel_info,
-												rel,
-												dispatch->estate);
-	CheckValidResultRelCompat(relinfo, chunk_dispatch_get_cmd_type(dispatch), NIL);
+	MemoryContextSwitchTo(cis_context);
+	relinfo = create_chunk_result_relation_info(ctr->hypertable_rri, rel, ctr->estate);
+	if (ctr->mht_state)
+		CheckValidResultRelCompat(relinfo, ctr->mht_state->mt->operation, NIL);
 
 	state = palloc0(sizeof(ChunkInsertState));
-	state->cds = dispatch->dispatch_state;
-	state->counters = dispatch->counters;
+	state->counters = ctr->counters;
+	if (ctr->mht_state)
+		state->onConflictAction = ctr->mht_state->mt->onConflictAction;
 	state->mctx = cis_context;
 	state->rel = rel;
 	state->result_relation_info = relinfo;
-	state->estate = dispatch->estate;
+	state->estate = ctr->estate;
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(relinfo, onconflict_action != ONCONFLICT_NONE);
+		ExecOpenIndices(relinfo, state->onConflictAction != ONCONFLICT_NONE);
 
 	if (relinfo->ri_TrigDesc != NULL)
 	{
@@ -520,7 +494,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 			elog(ERROR, "statement trigger on chunk table not supported");
 	}
 
-	parent_rel = table_open(dispatch->hypertable->main_table_relid, AccessShareLock);
+	parent_rel = table_open(ctr->hypertable->main_table_relid, AccessShareLock);
 
 	/* Set tuple conversion map, if tuple needs conversion. We don't want to
 	 * convert tuples going into foreign tables since these are actually sent to
@@ -529,10 +503,11 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 		state->hyper_to_chunk_map =
 			convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
 
-	adjust_projections(dispatch->hypertable_result_rel_info,
-					   dispatch->dispatch_state->mtstate,
-					   state,
-					   RelationGetForm(rel)->reltype);
+	if (ctr->mht_state)
+		adjust_projections(ctr->hypertable_rri,
+						   linitial_node(ModifyTableState, ctr->mht_state->cscan_state.custom_ps),
+						   state,
+						   RelationGetForm(rel)->reltype);
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
 	 * want this slot tied to the executor's tuple table, since that would tie
@@ -551,14 +526,13 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
 #if PG16_LT
-		RangeTblEntry *rte =
-			rt_fetch(relinfo->ri_RangeTableIndex, dispatch->estate->es_range_table);
+		RangeTblEntry *rte = rt_fetch(relinfo->ri_RangeTableIndex, ctr->estate->es_range_table);
 
 		Assert(rte != NULL);
 
 		state->user_id = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
 #else
-		state->user_id = ExecGetResultRelCheckAsUser(relinfo, state->estate);
+		state->user_id = ExecGetResultRelCheckAsUser(relinfo, ctr->estate);
 #endif
 	}
 
@@ -607,61 +581,5 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	if (state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
 
-	/*
-	 * Postgres stores cached row types from `get_cached_rowtype` in the
-	 * constraint expression and tries to free this type via a callback from the
-	 * `per_tuple_exprcontext`. Since we create constraint expressions within
-	 * the chunk insert state memory context, this leads to a series of pointers
-	 * structured like: `per_tuple_exprcontext -> constraint expr (in chunk
-	 * insert state) -> cached row type` if we try to free the the chunk insert
-	 * state MemoryContext while the `es_per_tuple_exprcontext` is live,
-	 * postgres tries to dereference a dangling pointer in one of
-	 * `es_per_tuple_exprcontext`'s callbacks. Normally postgres allocates the
-	 * constraint expressions in a parent context of per_tuple_exprcontext so
-	 * there is no issue, however we've run into excessive memory usage due to
-	 * too many constraints, and want to allocate them for a shorter lifetime so
-	 * we free them when SubspaceStore gets to full. This leaves us with a
-	 * memory context relationship like the following:
-	 *
-	 *     query_ctx
-	 *       / \
-	 *      /   \
-	 *   CIS    per_tuple
-	 *
-	 *
-	 * To ensure this doesn't create dangling pointers from the per-tuple
-	 * context to the chunk insert state (CIS) when we destroy the CIS, we avoid
-	 * freeing the CIS memory context immediately. Instead we change its parent
-	 * to be the per-tuple context (if it is still alive) so that it is only
-	 * freed once that context is freed:
-	 *
-	 *     query_ctx
-	 *        \
-	 *         \
-	 *         per_tuple
-	 *           \
-	 *            \
-	 *            CIS
-	 *
-	 * Note that a previous approach registered the chunk insert state (CIS) to
-	 * be freed by a reset callback on the per-tuple context. That caused a
-	 * subtle bug because both the per-tuple context and the CIS share the same
-	 * parent. Thus, the callback on a child would trigger the deletion of a
-	 * sibling, leading to a cyclic relationship:
-	 *
-	 *     query_ctx
-	 *       / \
-	 *      /   \
-	 *   CIS <-- per_tuple
-	 *
-	 *
-	 * With this cycle, a delete of the query_ctx could first trigger a delete
-	 * of the CIS (if not already deleted), then the per_tuple context, followed
-	 * by the CIS again (via the callback), and thus a crash.
-	 */
-	if (state->estate->es_per_tuple_exprcontext)
-		MemoryContextSetParent(state->mctx,
-							   state->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
-	else
-		MemoryContextDelete(state->mctx);
+	MemoryContextDelete(state->mctx);
 }

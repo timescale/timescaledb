@@ -51,13 +51,12 @@
 #include <utils/rls.h>
 
 #include "compat/compat.h"
+#include "chunk_insert_state.h"
 #include "copy.h"
 #include "cross_module_fn.h"
 #include "dimension.h"
 #include "hypertable.h"
 #include "indexing.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
-#include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "subspace_store.h"
 
 /*
@@ -776,6 +775,68 @@ has_other_before_insert_row_trigger_than_ts(ResultRelInfo *resultRelInfo)
 	return false;
 }
 
+static TSCopyInsertMethod
+choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resultRelInfo)
+{
+	/*
+	 * Multi-insert buffers (TS_CIM_MULTI_CONDITIONAL) can only be used if no triggers are
+	 * defined on the target table. Otherwise, the tuples may be inserted in an out-of-order
+	 * manner, which might violate the semantics of the triggers. So, they are inserted
+	 * tuple-per-tuple (TS_CIM_SINGLE). However, the ts_block trigger on the hypertable can
+	 * be ignored.
+	 */
+
+	/* Before INSERT Triggers */
+	bool has_before_insert_row_trig = has_other_before_insert_row_trigger_than_ts(resultRelInfo);
+
+	/* Instead of INSERT Triggers */
+	bool has_instead_insert_row_trig =
+		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_instead_row);
+
+	bool has_after_insert_statement_trig =
+		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_new_table);
+
+	/* Depending on the configured trigger, enable or disable the multi-insert buffers */
+	if (has_after_insert_statement_trig || has_before_insert_row_trig ||
+		has_instead_insert_row_trig)
+	{
+		ereport(DEBUG1,
+				(errmsg("Using normal unbuffered copy operation (TS_CIM_SINGLE) "
+						"because triggers are defined on the destination table.")));
+		if (ts_guc_enable_direct_compress_copy)
+			ereport(WARNING,
+					(errmsg("disabling direct compress copy due to presence of triggers on the "
+							"destination table")));
+		return TS_CIM_SINGLE;
+	}
+
+	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && ts_guc_enable_direct_compress_copy)
+	{
+		if (ts_indexing_relation_has_primary_or_unique_index(ccstate->rel))
+		{
+			ereport(WARNING,
+					(errmsg("disabling direct compress because the destination table has unique "
+							"constraints")));
+		}
+		else if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->numtriggers > 1)
+		{
+			ereport(WARNING,
+					(errmsg(
+						"disabling direct compress because the destination table has triggers")));
+		}
+		else
+		{
+			ccstate->ctr->create_compressed_chunk = true;
+			ereport(DEBUG1, (errmsg("Using compressed copy operation (TS_CIM_COMPRESSION).")));
+			return TS_CIM_COMPRESSION;
+		}
+	}
+
+	ereport(DEBUG1,
+			(errmsg("Using optimized multi-buffer copy operation (TS_CIM_MULTI_CONDITIONAL).")));
+	return TS_CIM_MULTI_CONDITIONAL;
+}
+
 /*
  * Use COPY FROM to copy data from file to relation.
  */
@@ -799,9 +860,6 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	int ti_options = 0;							   /* start with default options for insert */
 	BulkInsertState bistate = NULL;
 	uint64 processed = 0;
-	bool has_before_insert_row_trig;
-	bool has_instead_insert_row_trig;
-	bool has_after_insert_statement_trig;
 	ExprState *qualexpr = NULL;
 
 	Assert(pstate->p_rtable);
@@ -956,48 +1014,8 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		error_context_stack = &errcallback;
 	}
 
-	/*
-	 * Multi-insert buffers (TS_CIM_MULTI_CONDITIONAL) can only be used if no triggers are
-	 * defined on the target table. Otherwise, the tuples may be inserted in an out-of-order
-	 * manner, which might violate the semantics of the triggers. So, they are inserted
-	 * tuple-per-tuple (TS_CIM_SINGLE). However, the ts_block trigger on the hypertable can
-	 * be ignored.
-	 */
+	insertMethod = choose_copy_method(ht, ccstate, resultRelInfo);
 
-	/* Before INSERT Triggers */
-	has_before_insert_row_trig = has_other_before_insert_row_trigger_than_ts(resultRelInfo);
-
-	/* Instead of INSERT Triggers */
-	has_instead_insert_row_trig =
-		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_instead_row);
-
-	has_after_insert_statement_trig =
-		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_new_table);
-
-	/* Depending on the configured trigger, enable or disable the multi-insert buffers */
-	if (has_after_insert_statement_trig || has_before_insert_row_trig ||
-		has_instead_insert_row_trig)
-	{
-		insertMethod = TS_CIM_SINGLE;
-		ereport(DEBUG1,
-				(errmsg("Using normal unbuffered copy operation (TS_CIM_SINGLE) "
-						"because triggers are defined on the destination table.")));
-	}
-	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) &&
-			 !ts_indexing_relation_has_primary_or_unique_index(ccstate->rel) &&
-			 ts_guc_enable_direct_compress_copy)
-	{
-		insertMethod = TS_CIM_COMPRESSION;
-		ccstate->ctr->create_compressed_chunk = true;
-		ereport(DEBUG1, (errmsg("Using compressed copy operation (TS_CIM_COMPRESSION).")));
-	}
-	else
-	{
-		insertMethod = TS_CIM_MULTI_CONDITIONAL;
-		ereport(DEBUG1,
-				(errmsg(
-					"Using optimized multi-buffer copy operation (TS_CIM_MULTI_CONDITIONAL).")));
-	}
 	TSCopyMultiInsertInfoInit(&multiInsertInfo,
 							  resultRelInfo,
 							  ccstate,

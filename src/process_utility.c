@@ -2676,6 +2676,17 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 					 */
 				case CONSTR_FOREIGN:
 					break;
+#if PG18_GE
+					/* NULL and NOT NULL constraints have been added to
+					 * pg_constraints in PG18, we can safely ignore them at end
+					 * just like at beginning.
+					 *
+					 * https://github.com/postgres/postgres/commit/b0e96f31
+					 */
+				case CONSTR_NULL:
+				case CONSTR_NOTNULL:
+					break;
+#endif
 				case CONSTR_CHECK:
 				{
 					validate_check_constraint(chunk, con);
@@ -3421,24 +3432,6 @@ chunk_index_mappings_cmp(const void *p1, const void *p2)
 	return 0;
 }
 
-static DDLResult
-process_explain_start(ProcessUtilityArgs *args)
-{
-	ExplainStmt *stmt = castNode(ExplainStmt, args->parsetree);
-	ListCell *lc;
-
-	if (ts_cm_functions->process_explain_def)
-	{
-		foreach (lc, stmt->options)
-		{
-			DefElem *opt = (DefElem *) lfirst(lc);
-			if (ts_cm_functions->process_explain_def(opt))
-				foreach_delete_current(stmt->options, lc);
-		}
-	}
-	return DDL_CONTINUE;
-}
-
 /*
  * Cluster a hypertable.
  *
@@ -3623,6 +3616,43 @@ typedef struct CreateTableInfo
 } CreateTableInfo;
 
 static CreateTableInfo create_table_info = { 0 };
+
+/*
+ * Scan the table for a suitable default partitioning column.
+ *
+ * The default partitioning column is the first timestamp column
+ *
+ * Caller is expected to have appropriate lock on the table.
+ */
+static char *
+get_default_partition_column(Oid relid)
+{
+	Relation rel;
+	TupleDesc tupdesc;
+	int i;
+	char *column_name = NULL;
+
+	rel = relation_open(relid, NoLock);
+	tupdesc = RelationGetDescr(rel);
+
+	for (i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupdesc, i);
+
+		if (att->attisdropped)
+			continue;
+
+		if (att->atttypid == TIMESTAMPOID || att->atttypid == TIMESTAMPTZOID)
+		{
+			column_name = pstrdup(NameStr(att->attname));
+			break;
+		}
+	}
+
+	relation_close(rel, NoLock);
+	return column_name;
+}
+
 /*
  * Process create table statements.
  *
@@ -3671,8 +3701,28 @@ process_create_table_end(Node *parsetree)
 	if (create_table_info.hypertable)
 	{
 		Oid table_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-		char *time_column =
-			TextDatumGetCString(create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+		char *time_column = NULL;
+		if (create_table_info.with_clauses[CreateTableFlagTimeColumn].is_default)
+		{
+			time_column = get_default_partition_column(table_relid);
+			if (time_column)
+				ereport(NOTICE,
+						(errmsg("using column \"%s\" as partitioning column", time_column),
+						 errhint("Use \"timescaledb.partition_column\" to specify a different "
+								 "column to use as "
+								 "partitioning column.")));
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("partition column could not be determined"),
+						 errhint(
+							 "Use \"timescaledb.partition_column\" to specify the column to use as "
+							 "partitioning column.")));
+		}
+		else
+			time_column = TextDatumGetCString(
+				create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+
 		NameData time_column_name;
 		NameData associated_schema_name;
 		NameData associated_table_prefix;
@@ -3765,7 +3815,7 @@ process_create_table_end(Node *parsetree)
 			if (enable_columnstore)
 			{
 				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
-				ts_cm_functions->compression_enable(ht, create_table_info.with_clauses);
+				ts_cm_functions->columnstore_setup(ht, create_table_info.with_clauses);
 			}
 		}
 	}
@@ -4854,25 +4904,16 @@ check_no_timescale_options(AlterTableCmd *cmd, Oid reloid)
 static DDLResult
 process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 {
-	List *pg_options = NIL, *compress_options = NIL;
+	List *pg_options = NIL, *tsdb_options = NIL;
 	WithClauseResult *parse_results = NULL;
-	List *inpdef = NIL;
-	/* is this a compress table stmt */
-	Assert(IsA(cmd->def, List));
-	inpdef = (List *) cmd->def;
-	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
 
-	if (!compress_options)
+	/* split postgres and timescaledb options */
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
+
+	if (!tsdb_options)
 		return DDL_CONTINUE;
 
-	if (pg_options != NIL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only timescaledb.enable_columnstore parameters allowed when specifying "
-						"columnstore "
-						"parameters for hypertable")));
-
-	parse_results = ts_alter_table_with_clause_parse(compress_options);
+	parse_results = ts_alter_table_with_clause_parse(tsdb_options);
 
 	if (ht && !parse_results[AlterTableFlagChunkTimeInterval].is_default)
 	{
@@ -4897,25 +4938,24 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		!parse_results[AlterTableFlagIndex].is_default)
 		ts_cm_functions->process_compress_table(ht, parse_results);
 
-	return DDL_DONE;
+	cmd->def = (Node *) pg_options;
+
+	return cmd->def ? DDL_CONTINUE : DDL_DONE;
 }
 
 static DDLResult
 process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 {
-	List *pg_options = NIL, *compress_options = NIL;
-	List *inpdef = NIL;
+	List *pg_options = NIL, *tsdb_options = NIL;
 	WithClauseResult *parse_results = NULL;
 
-	/* is this a compress table stmt */
-	Assert(IsA(cmd->def, List));
-	inpdef = (List *) cmd->def;
-	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
+	/* split postgres and timescaledb options */
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
 
-	if (!compress_options)
+	if (!tsdb_options)
 		return DDL_CONTINUE;
 
-	parse_results = ts_alter_table_reset_with_clause_parse(compress_options);
+	parse_results = ts_alter_table_reset_with_clause_parse(tsdb_options);
 	if (parse_results[AlterTableFlagOrderBy].is_default &&
 		parse_results[AlterTableFlagSegmentBy].is_default &&
 		parse_results[AlterTableFlagIndex].is_default)
@@ -4938,7 +4978,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 
 	if (!parse_results[AlterTableFlagOrderBy].is_default)
 	{
-		ts_remove_orderby_sparse_index(settings);
+		settings->fd.index = ts_remove_orderby_sparse_index(settings);
 		settings->fd.orderby = NULL;
 		settings->fd.orderby_desc = NULL;
 		settings->fd.orderby_nullsfirst = NULL;
@@ -4951,6 +4991,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	}
 
 	ts_compression_settings_update(settings);
+
 	return DDL_CONTINUE;
 }
 
@@ -5044,17 +5085,6 @@ process_create_stmt(ProcessUtilityArgs *args)
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("timescaledb options requires hypertable option"),
 					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
-
-		if (create_table_info.hypertable)
-		{
-			if (!create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed)
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("hypertable option requires partition_column"),
-						 errhint(
-							 "Use \"timescaledb.partition_column\" to specify the column to use as "
-							 "partitioning column.")));
-		}
 	}
 
 	return DDL_CONTINUE;
@@ -5187,10 +5217,6 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_ExecuteStmt:
 			check_read_only = false;
 			handler = preprocess_execute;
-			break;
-		case T_ExplainStmt:
-			check_read_only = false;
-			handler = process_explain_start;
 			break;
 
 		default:

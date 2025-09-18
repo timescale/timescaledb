@@ -10,10 +10,10 @@ CREATE TABLE t1(time timestamptz, device text, value float) WITH (autovacuum_ena
 DROP TABLE t1;
 -- test error cases
 \set ON_ERROR_STOP 0
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
-ERROR:  hypertable option requires partition_column
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
-ERROR:  hypertable option requires partition_column
+CREATE TABLE t2(time float, device text, value float) WITH (tsdb.hypertable);
+ERROR:  partition column could not be determined
+CREATE TABLE t2(time float, device text, value float) WITH (timescaledb.hypertable);
+ERROR:  partition column could not be determined
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
 ERROR:  column "null" does not exist
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='');
@@ -399,6 +399,80 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't25'::reg
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------
  t25   |                |           |         |              |                    | 
+(1 row)
+
+ROLLBACK;
+-- test compression policy creation with columnstore
+BEGIN;
+CREATE TABLE t25_policy(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=true);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy';
+ hypertable_name | compression_enabled 
+-----------------+---------------------
+ t25_policy      | t
+(1 row)
+
+SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy' AND proc_name = 'policy_compression';
+ hypertable_name | schedule_interval |                       config                        
+-----------------+-------------------+-----------------------------------------------------
+ t25_policy      | @ 1 day           | {"hypertable_id": 70, "compress_after": "@ 7 days"}
+(1 row)
+
+ROLLBACK;
+-- test compression policy creation with custom chunk interval
+BEGIN;
+CREATE TABLE t25_policy_custom(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='3 days',tsdb.columnstore=true);
+SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_custom' AND proc_name = 'policy_compression';
+  hypertable_name  | schedule_interval |                       config                        
+-------------------+-------------------+-----------------------------------------------------
+ t25_policy_custom | @ 1 day           | {"hypertable_id": 72, "compress_after": "@ 3 days"}
+(1 row)
+
+ROLLBACK;
+-- test compression policy creation with integer partition column (int2)
+BEGIN;
+CREATE TABLE t25_policy_int2(time int2 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=100,tsdb.columnstore=true);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy_int2';
+ hypertable_name | compression_enabled 
+-----------------+---------------------
+ t25_policy_int2 | t
+(1 row)
+
+SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int2' AND proc_name = 'policy_compression';
+ hypertable_name | schedule_interval |                    config                    
+-----------------+-------------------+----------------------------------------------
+ t25_policy_int2 | @ 1 day           | {"hypertable_id": 74, "compress_after": 100}
+(1 row)
+
+ROLLBACK;
+-- test compression policy creation with integer partition column (int4)
+BEGIN;
+CREATE TABLE t25_policy_int4(time int4 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=1000,tsdb.columnstore=true);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy_int4';
+ hypertable_name | compression_enabled 
+-----------------+---------------------
+ t25_policy_int4 | t
+(1 row)
+
+SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int4' AND proc_name = 'policy_compression';
+ hypertable_name | schedule_interval |                    config                     
+-----------------+-------------------+-----------------------------------------------
+ t25_policy_int4 | @ 1 day           | {"hypertable_id": 76, "compress_after": 1000}
+(1 row)
+
+ROLLBACK;
+-- test compression policy creation with integer partition column (int8)
+BEGIN;
+CREATE TABLE t25_policy_int8(time int8 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=10000,tsdb.columnstore=true);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy_int8';
+ hypertable_name | compression_enabled 
+-----------------+---------------------
+ t25_policy_int8 | t
+(1 row)
+
+SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int8' AND proc_name = 'policy_compression';
+ hypertable_name | schedule_interval |                     config                     
+-----------------+-------------------+------------------------------------------------
+ t25_policy_int8 | @ 1 day           | {"hypertable_id": 78, "compress_after": 10000}
 (1 row)
 
 ROLLBACK;

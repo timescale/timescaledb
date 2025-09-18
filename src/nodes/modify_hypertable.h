@@ -9,10 +9,10 @@
 #include <foreign/fdwapi.h>
 #include <nodes/execnodes.h>
 
+#include "chunk_tuple_routing.h"
 #include "hypertable.h"
 
 /* Forward declarations */
-struct ChunkDispatchState;
 struct ModifyTableContext;
 
 typedef struct ModifyHypertablePath
@@ -30,6 +30,8 @@ typedef struct ModifyHypertableState
 {
 	CustomScanState cscan_state;
 	ModifyTable *mt;
+	ChunkTupleRouting *ctr;
+
 	bool comp_chunks_processed;
 	Snapshot snapshot;
 	int64 tuples_decompressed;
@@ -37,6 +39,7 @@ typedef struct ModifyHypertableState
 	int64 batches_filtered;
 	int64 batches_deleted;
 	int64 tuples_deleted;
+
 } ModifyHypertableState;
 
 extern void ts_modify_hypertable_fixup_tlist(Plan *plan);
@@ -46,4 +49,4 @@ extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
 TupleTableSlot *ExecModifyTable(CustomScanState *cs_node, PlanState *pstate);
 TupleTableSlot *ExecInsert(struct ModifyTableContext *context, ResultRelInfo *resultRelInfo,
-						   struct ChunkDispatchState *cds, TupleTableSlot *slot, bool canSetTag);
+						   struct ChunkTupleRouting *ctr, TupleTableSlot *slot, bool canSetTag);

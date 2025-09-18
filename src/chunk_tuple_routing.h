@@ -8,8 +8,10 @@
 #include <postgres.h>
 #include <executor/nodeModifyTable.h>
 
+#include "chunk_insert_state.h"
 #include "hypertable.h"
-#include "nodes/chunk_dispatch/chunk_insert_state.h"
+
+typedef struct ModifyHypertableState ModifyHypertableState;
 
 typedef struct ChunkTupleRouting
 {
@@ -17,14 +19,14 @@ typedef struct ChunkTupleRouting
 	Hypertable *hypertable;
 	ResultRelInfo *hypertable_rri;
 	Cache *hypertable_cache;
-	MemoryContext memcxt;
 
 	SubspaceStore *subspace;
 	EState *estate;
 	bool create_compressed_chunk;
+	bool has_dropped_attrs;
 
-	ModifyHypertableState *mht_state;  /* state for the ModifyHypertable custom scan node */
-	OnConflictAction onConflictAction; /* ON CONFLICT action for the current statement */
+	ModifyHypertableState *mht_state; /* state for the ModifyHypertable custom scan node */
+	ChunkInsertState *cis;
 
 	SharedCounters *counters; /* shared counters for the current statement */
 } ChunkTupleRouting;

@@ -810,11 +810,24 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 Expr *
 ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
+	EquivalenceMember *em;
+#if PG18_GE
+	/* Use specialized iterator to include child ems.
+	 *
+	 * https://github.com/postgres/postgres/commit/d69d45a5
+	 */
+	EquivalenceMemberIterator it;
+
+	setup_eclass_member_iterator(&it, ec, bms_make_singleton(rel->relid));
+	while ((em = eclass_member_iterator_next(&it)) != NULL)
+	{
+#else
 	ListCell *lc_em;
 
 	foreach (lc_em, ec->ec_members)
 	{
-		EquivalenceMember *em = lfirst(lc_em);
+		em = lfirst(lc_em);
+#endif
 
 		if (bms_is_subset(em->em_relids, rel->relids) && !bms_is_empty(em->em_relids))
 		{

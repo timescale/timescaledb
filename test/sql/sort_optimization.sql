@@ -26,8 +26,10 @@ SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1;
 
 -- test sort optimization with ordering by multiple columns and time_bucket not last
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
+SET enable_seqscan TO default;
 -- must not use index scan
 :PREFIX SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 1,2;
+SET enable_seqscan TO off;
 
 -- test sort optimization with ordering by multiple columns and time_bucket as last member
 SELECT time_bucket(10,time),device_id,value FROM order_test ORDER BY 2,1;

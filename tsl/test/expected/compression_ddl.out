@@ -2456,7 +2456,7 @@ set enable_indexscan = on;
 :EXPLAIN_ANALYZE select * from mytab where lower(col1::text) = 'meter1';
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
- Index Scan using _hyper_37_141_chunk_myidx_unique on _hyper_37_141_chunk (actual rows=3 loops=1)
+ Index Scan using _hyper_37_141_chunk_myidx_unique on _hyper_37_141_chunk (actual rows=3.00 loops=1)
    Index Cond: (lower((col1)::text) = 'meter1'::text)
 (2 rows)
 
@@ -2486,7 +2486,7 @@ select decompress_chunk(show_chunks('mytab'));
 :EXPLAIN_ANALYZE SELECT * FROM mytab WHERE value BETWEEN 2.4 AND 2.8;
                                       QUERY PLAN                                       
 ---------------------------------------------------------------------------------------
- Seq Scan on _hyper_37_141_chunk (actual rows=1 loops=1)
+ Seq Scan on _hyper_37_141_chunk (actual rows=1.00 loops=1)
    Filter: ((value >= '2.4'::double precision) AND (value <= '2.8'::double precision))
    Rows Removed by Filter: 2
 (3 rows)
@@ -2786,5 +2786,46 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('alias') ch;
  count 
 -------
      1
+(1 row)
+
+-- test mixing postgres and timescaledb options
+CREATE TABLE mix_pg_ts(time timestamptz, device text) WITH (tsdb.hypertable,tsdb.partition_column='time',fillfactor=90);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+   reloptions    
+-----------------
+ {fillfactor=90}
+(1 row)
+
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
+ hypertable | segmentby | orderby | compress_interval_length | index 
+------------+-----------+---------+--------------------------+-------
+ mix_pg_ts  |           |         |                          | 
+(1 row)
+
+ALTER TABLE mix_pg_ts SET (timescaledb.compress, fillfactor=70, tsdb.orderby='time', timescaledb.compress_segmentby='device', autovacuum_enabled=true);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+               reloptions                
+-----------------------------------------
+ {fillfactor=70,autovacuum_enabled=true}
+(1 row)
+
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
+ hypertable | segmentby | orderby | compress_interval_length |                            index                            
+------------+-----------+---------+--------------------------+-------------------------------------------------------------
+ mix_pg_ts  | device    | "time"  |                          | [{"type": "minmax", "column": "time", "source": "orderby"}]
+(1 row)
+
+-- test resetting options
+ALTER TABLE mix_pg_ts RESET (fillfactor, tsdb.segmentby);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+        reloptions         
+---------------------------
+ {autovacuum_enabled=true}
+(1 row)
+
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
+ hypertable | segmentby | orderby | compress_interval_length |                            index                            
+------------+-----------+---------+--------------------------+-------------------------------------------------------------
+ mix_pg_ts  |           | "time"  |                          | [{"type": "minmax", "column": "time", "source": "orderby"}]
 (1 row)
 
