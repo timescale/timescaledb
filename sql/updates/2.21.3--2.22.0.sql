@@ -236,7 +236,9 @@ SET index = COALESCE(index, '[]'::jsonb) ||
                                 'column', elem))
             FROM unnest(cs.orderby) AS elem
             )
-WHERE cs.orderby IS NOT NULL AND cardinality(cs.orderby) > 0;
+WHERE cs.orderby IS NOT NULL
+AND cardinality(cs.orderby) > 0
+AND compress_relid IS NOT NULL;
 
 DROP FUNCTION IF EXISTS _timescaledb_internal.indexes_local_size;
 DROP FUNCTION IF EXISTS _timescaledb_functions.indexes_local_size;
