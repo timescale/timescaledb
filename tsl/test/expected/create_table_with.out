@@ -287,18 +287,18 @@ ROLLBACK;
 BEGIN;
 CREATE TABLE t14(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.order_by='value');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
--------+----------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
- t14   |                |           | {value,time} | {f,t}        | {f,t}              | [{"type": "minmax", "column": "value", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+--------------+--------------+--------------------+-------
+ t14   |                |           | {value,time} | {f,t}        | {f,t}              | 
 (1 row)
 
 ROLLBACK;
 BEGIN;
 CREATE TABLE t15(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.order_by='time');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                            index                            
--------+----------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------
- t15   |                |           | {time}  | {f}          | {f}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
+ relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+---------+--------------+--------------------+-------
+ t15   |                |           | {time}  | {f}          | {f}                | 
 (1 row)
 
 ROLLBACK;
@@ -314,27 +314,27 @@ ROLLBACK;
 BEGIN;
 CREATE TABLE t17(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.segment_by='device', tsdb.order_by='time,value');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
--------+----------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
- t17   |                | {device}  | {time,value} | {f,f}        | {f,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}]
+ relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+--------------+--------------+--------------------+-------
+ t17   |                | {device}  | {time,value} | {f,f}        | {f,f}              | 
 (1 row)
 
 ROLLBACK;
 BEGIN;
 CREATE TABLE t18(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.segmentby='device', tsdb.orderby='time,value');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
--------+----------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
- t18   |                | {device}  | {time,value} | {f,f}        | {f,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}]
+ relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+--------------+--------------+--------------------+-------
+ t18   |                | {device}  | {time,value} | {f,f}        | {f,f}              | 
 (1 row)
 
 ROLLBACK;
 BEGIN;
 CREATE TABLE t18(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.compress_segmentby='device', tsdb.compress_orderby='time,value');
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst |                                                          index                                                          
--------+----------------+-----------+--------------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
- t18   |                | {device}  | {time,value} | {f,f}        | {f,f}              | [{"type": "minmax", "column": "time", "source": "orderby"}, {"type": "minmax", "column": "value", "source": "orderby"}]
+ relid | compress_relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst | index 
+-------+----------------+-----------+--------------+--------------+--------------------+-------
+ t18   |                | {device}  | {time,value} | {f,f}        | {f,f}              | 
 (1 row)
 
 ROLLBACK;

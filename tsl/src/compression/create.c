@@ -1408,7 +1408,7 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 		settings->fd.orderby = obs.orderby;
 		settings->fd.orderby_desc = obs.orderby_desc;
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
-		add_orderby_sparse_index = true;
+		add_orderby_sparse_index = settings->fd.index != NULL;
 	}
 
 	if (ts_guc_auto_sparse_indexes && can_set_default_sparse_index(settings))
@@ -1453,7 +1453,7 @@ compression_settings_set_manually_for_alter(Hypertable *ht, CompressionSettings 
 		settings->fd.orderby = obs.orderby;
 		settings->fd.orderby_desc = obs.orderby_desc;
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
-		add_orderby_sparse_index = true;
+		add_orderby_sparse_index = settings->fd.index != NULL;
 	}
 
 	if (!with_clause_options[AlterTableFlagIndex].is_default)
@@ -1505,7 +1505,7 @@ compression_settings_set_manually_for_create(Hypertable *ht, CompressionSettings
 		settings->fd.orderby = obs.orderby;
 		settings->fd.orderby_desc = obs.orderby_desc;
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
-		add_orderby_sparse_index = true;
+		add_orderby_sparse_index = settings->fd.index != NULL;
 	}
 
 	if (!with_clause_options[CreateTableFlagIndex].is_default)
