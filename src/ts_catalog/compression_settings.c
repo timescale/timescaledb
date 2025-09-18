@@ -22,14 +22,30 @@ TSDLLEXPORT const char *ts_sparse_index_common_keys[] = { "type", "column", "sou
 static ScanTupleResult compression_settings_tuple_update(TupleInfo *ti, void *data);
 static HeapTuple compression_settings_formdata_make_tuple(const FormData_compression_settings *fd,
 														  TupleDesc desc);
+
+/* Compare two compression settings for equality
+ *
+ * NULL index value means default value which can be populated by
+ * auto sparse indexing. We can only have NULL values
+ * on hypertable settings because orderby sparse indexing will
+ * always be materialized for chunks.
+ */
 bool
 ts_compression_settings_equal(const CompressionSettings *left, const CompressionSettings *right)
 {
+	/*
+	 * Either we have index value or we are dealing with a hypertable which
+	 * has no compressed relation and has default sparse indexes.
+	 */
+	Assert(left->fd.index != NULL || !OidIsValid(left->fd.compress_relid));
+	Assert(right->fd.index != NULL || !OidIsValid(right->fd.compress_relid));
+	bool index_equal = (left->fd.index == NULL || right->fd.index == NULL) ?
+						   true :
+						   ts_jsonb_equal(left->fd.index, right->fd.index);
 	return ts_array_equal(left->fd.segmentby, right->fd.segmentby) &&
 		   ts_array_equal(left->fd.orderby, right->fd.orderby) &&
 		   ts_array_equal(left->fd.orderby_desc, right->fd.orderby_desc) &&
-		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst) &&
-		   ts_jsonb_equal(left->fd.index, right->fd.index);
+		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst) && index_equal;
 }
 
 CompressionSettings *

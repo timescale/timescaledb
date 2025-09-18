@@ -12,13 +12,40 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
  (1,public,test_settings,t)
 (1 row)
 
+-- defaults
+alter table test_settings set (timescaledb.compress);
+select * from settings;
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+---------------+----------------+-----------+---------+--------------+--------------------+-------
+ test_settings |                |           |         |              |                    | 
+(1 row)
+
+-- no custom sparse indexes
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x');
+select * from settings;
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
+---------------+----------------+-----------+---------+--------------+--------------------+-------
+ test_settings |                |           | {x}     | {f}          | {f}                | 
+(1 row)
+
+-- one sparse index
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
-    timescaledb.compress_index = 'bloom("u"),minmax("ts")');
+    timescaledb.compress_index = 'bloom("u")');
 select * from settings;
-     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                 index                                                                                  
----------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                     index                                                      
+---------------+----------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+(1 row)
+
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'minmax("ts")');
+select * from settings;
+     relid     | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                      index                                                       
+---------------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------
+ test_settings |                |           | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
 (1 row)
 
 --multi column
@@ -455,7 +482,7 @@ Options: toast_tuple_target=128
 select * from settings;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                          index                                                          
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
- test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
+ test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | 
  _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_7_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value_new", "source": "default"}, {"type": "minmax", "column": "x", "source": "orderby"}]
 (2 rows)
 
@@ -498,7 +525,7 @@ select * from settings;
  _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_8_chunk | {}        | {x}     | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
 (2 rows)
 
--- Test deafult orderby without sparse index
+-- Test default orderby without sparse index
 set timescaledb.enable_sparse_index_bloom to false;
 alter table test_sparse_index reset (timescaledb.compress_segmentby,
     timescaledb.compress_orderby,
