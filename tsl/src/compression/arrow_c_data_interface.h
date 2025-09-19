@@ -191,6 +191,8 @@ static inline pg_nodiscard const uint64 *
 arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 *filter1,
 					   const uint64 *filter2, const uint64 *filter3)
 {
+	Assert(num_words != 0);
+
 	/*
 	 * Any and all of the filters can be null. For simplicity, move the non-null
 	 * filters to the leading positions.
@@ -286,6 +288,8 @@ pad_to_multiple(uint64 pad_to, uint64 source_value)
 static inline int
 arrow_num_valid(const uint64 *bitmap, size_t total_rows)
 {
+	Assert(total_rows != 0);
+
 	if (bitmap == NULL)
 	{
 		return total_rows;

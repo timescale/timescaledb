@@ -142,7 +142,11 @@ select sum(t) from long group by a order by 1;
 -- No scalar columns
 select sum(t) from long group by b, c, d order by 1 limit 10;
 
+-- Expressions with scalar column
+select substr(a || b, 1, 10), sum(t) from long group by a || b order by 1, 2 limit 10;
+
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
 
 
 -- Test various serialized key lengths. We want to touch the transition from short
@@ -163,6 +167,7 @@ select sum(t) from keylength group by a, b order by 1 desc limit 10;
 select sum(t) from keylength group by b, a order by 1 desc limit 10;
 
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
 
 
 -- Add a very simple test for NULLs. We also have some null values in the general
@@ -180,4 +185,7 @@ set timescaledb.debug_require_vector_agg = 'require';
 
 select sum(t), a, b from groupnull group by a, b order by 1;
 select sum(t), a, b from groupnull group by b, a order by 1;
+
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
+

@@ -20,7 +20,12 @@ typedef struct VectorAggDef
 	Expr *argument;
 	int output_offset;
 	List *filter_clauses;
-	uint64 *filter_result;
+
+	/*
+	 * This filter bitmap ANDs the batch filter and the aggregate function
+	 * FILTER clause, if present.
+	 */
+	uint64 const *effective_batch_filter;
 } VectorAggDef;
 
 typedef struct GroupingColumn

@@ -125,35 +125,24 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 						 TupleTableSlot *vector_slot, int start_row, int end_row,
 						 const VectorAggDef *agg_def, void *agg_states)
 {
-	const ArrowArray *arg_arrow = NULL;
-	const uint64 *arg_validity_bitmap = NULL;
-	Datum arg_datum = 0;
-	bool arg_isnull = true;
-	uint16 total_batch_rows = 0;
 	const uint32 *offsets = policy->key_index_for_row;
 	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
-	const uint64 *vector_qual_result = vector_slot_get_qual_result(vector_slot, &total_batch_rows);
 
-	/*
-	 * Compute the unified validity bitmap.
-	 */
-	const size_t num_words = (total_batch_rows + 63) / 64;
-	const uint64 *filter = arrow_combine_validity(num_words,
-												  policy->tmp_filter,
-												  agg_def->filter_result,
-												  vector_qual_result,
-												  arg_validity_bitmap);
 
 	/*
 	 * We have functions with one argument, and one function with no arguments
 	 * (count(*)). Collect the arguments.
 	 */
+	const ArrowArray *arg_arrow = NULL;
+	const uint64 *arg_validity_bitmap = NULL;
+	Datum arg_datum = 0;
+	bool arg_isnull = true;
 	if (agg_def->argument != NULL)
 	{
 		const CompressedColumnValues values =
 			vector_slot_get_compressed_column_values(dcontext,
 													 vector_slot,
-													 filter,
+													 agg_def->effective_batch_filter,
 													 agg_def->argument);
 
 		Assert(values.decompression_type != DT_Invalid);
@@ -173,6 +162,17 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 	}
 
 	/*
+	 * Compute the combined validity bitmap that includes the argument validity.
+	 */
+	DecompressBatchState *batch_state = (DecompressBatchState *) vector_slot;
+	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
+	const uint64 *combined_validity = arrow_combine_validity(num_words,
+												  policy->tmp_filter,
+												  agg_def->effective_batch_filter,
+												  arg_validity_bitmap,
+												  NULL);
+
+	/*
 	 * Now call the function.
 	 */
 	if (arg_arrow != NULL)
@@ -180,7 +180,7 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 		/* Arrow argument. */
 		agg_def->func.agg_many_vector(agg_states,
 									  offsets,
-									  filter,
+									  combined_validity,
 									  start_row,
 									  end_row,
 									  arg_arrow,
@@ -196,7 +196,7 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 		{
 			agg_def->func.agg_many_scalar(agg_states,
 										  offsets,
-										  filter,
+										  combined_validity,
 										  start_row,
 										  end_row,
 										  arg_datum,
@@ -207,7 +207,7 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 		{
 			for (int i = start_row; i < end_row; i++)
 			{
-				if (!arrow_row_is_valid(filter, i))
+				if (!arrow_row_is_valid(combined_validity, i))
 				{
 					continue;
 				}

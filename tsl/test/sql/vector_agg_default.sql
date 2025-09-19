@@ -35,18 +35,36 @@ set timescaledb.debug_require_vector_agg = 'require';
 --set timescaledb.debug_require_vector_agg = 'forbid';
 --set timescaledb.enable_vectorized_aggregation to off;
 
--- Vectorized aggregation should work with vectorized filters.
-select sum(c) from dvagg where b >= 0;
-select sum(c) from dvagg where b = 0;
-select sum(c) from dvagg where b in (0, 1);
-select sum(c) from dvagg where b in (0, 1, 3);
-select sum(c) from dvagg where b > 10;
+-- Test vectorized aggregation, filters and expressions with a default column.
+select
+    format('select %s%s from dvagg%s%s%s;',
+            grouping || ', ',
+            function,
+            ' where ' || condition,
+            ' group by ' || grouping,
+            format(' order by %s, ', function) || grouping || ' limit 10')
+from
+    unnest(array[
+        'count(*)',
+        'sum(c)',
+        'sum(b + c)']) function,
+    unnest(array[
+        null,
+        'b >= 0',
+        'b = 0',
+        'b in (0, 1)',
+        'b in (0, 1, 3)',
+        'b > 10',
+        'c != 7',
+        'c > 1000',
+        'c < 1000']) with ordinality as condition(condition, n),
+    unnest(array[
+        null,
+        'b',
+        'c',
+        'b + c']) with ordinality as grouping(grouping, n)
+\gexec
 
-select count(*) from dvagg where b >= 0;
-select count(*) from dvagg where b = 0;
-select count(*) from dvagg where b in (0, 1);
-select count(*) from dvagg where b in (0, 1, 3);
-select count(*) from dvagg where b > 10;
 
 explain (buffers off, costs off) select sum(c) from dvagg where b in (0, 1, 3);
 

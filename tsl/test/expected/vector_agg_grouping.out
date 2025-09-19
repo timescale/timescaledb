@@ -1998,7 +1998,24 @@ select sum(t) from long group by b, c, d order by 1 limit 10;
   16
 (5 rows)
 
+-- Expressions with scalar column
+select substr(a || b, 1, 10), sum(t) from long group by a || b order by 1, 2 limit 10;
+   substr   | sum 
+------------+-----
+ ab         |  -1
+ longlonglo |  -2
+ short11111 |   1
+ short11111 |   2
+ short11111 |   3
+ short11111 |   4
+ short21111 |   1
+ short21111 |   2
+ short21111 |   3
+ short21111 |   4
+(10 rows)
+
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
 -- Test various serialized key lengths. We want to touch the transition from short
 -- to long varlena header for the serialized key.
 create table keylength(t int, a text, b text);
@@ -2052,6 +2069,7 @@ select sum(t) from keylength group by b, a order by 1 desc limit 10;
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;
 -- Add a very simple test for NULLs. We also have some null values in the general
 -- grouping test above.
 create table groupnull(t int, a text, b text);
@@ -2090,3 +2108,4 @@ select sum(t), a, b from groupnull group by b, a order by 1;
 (3 rows)
 
 reset timescaledb.debug_require_vector_agg;
+reset timescaledb.enable_vectorized_aggregation;

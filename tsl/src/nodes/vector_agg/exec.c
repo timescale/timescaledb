@@ -930,15 +930,29 @@ vector_agg_exec(CustomScanState *node)
 		for (int i = 0; i < naggs; i++)
 		{
 			VectorAggDef *agg_def = &vector_agg_state->agg_defs[i];
-			if (agg_def->filter_clauses == NIL)
+			uint64 *filter_clause_result = NULL;
+			if (agg_def->filter_clauses != NIL)
 			{
-				continue;
+				VectorQualState *vqstate =
+					vector_agg_state->init_vector_quals(vector_agg_state, agg_def, slot);
+				if (vector_qual_compute(vqstate) != AllRowsPass)
+				{
+					filter_clause_result = vqstate->vector_qual_result;
+				}
 			}
 
-			VectorQualState *vqstate =
-				vector_agg_state->init_vector_quals(vector_agg_state, agg_def, slot);
-			vector_qual_compute(vqstate);
-			agg_def->filter_result = vqstate->vector_qual_result;
+			DecompressBatchState *batch_state = (DecompressBatchState *) slot;
+			if (filter_clause_result != NULL)
+			{
+				const int num_validity_words = (batch_state->total_batch_rows + 63) / 64;
+				arrow_validity_and(num_validity_words, filter_clause_result,
+					batch_state->vector_qual_result);
+				agg_def->effective_batch_filter = filter_clause_result;
+			}
+			else
+			{
+				agg_def->effective_batch_filter = batch_state->vector_qual_result;
+			}
 		}
 
 		/*
