@@ -55,16 +55,16 @@ ts_chunk_tuple_routing_destroy(ChunkTupleRouting *ctr)
 	ts_subspace_store_free(ctr->subspace);
 	ts_cache_release(&ctr->hypertable_cache);
 
-	pfree(ctr);
   ctr_context = NULL;
+	pfree(ctr);
 }
 
 static void
 destroy_chunk_insert_state(void *cis)
 {
 	ts_chunk_insert_state_destroy((ChunkInsertState *) cis);
-  if (ctr_context)
-  ctr_context->cis = NULL;
+//  if (ctr_context)
+//    ctr_context->cis = NULL;
 }
 
 extern ChunkInsertState *
