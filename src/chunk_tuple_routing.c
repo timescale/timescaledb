@@ -63,6 +63,7 @@ static void
 destroy_chunk_insert_state(void *cis)
 {
 	ts_chunk_insert_state_destroy((ChunkInsertState *) cis);
+  if (ctr_context)
   ctr_context->cis = NULL;
 }
 
