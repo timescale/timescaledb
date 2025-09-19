@@ -557,6 +557,7 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 			Ensure(false,
 				   "wrong node type %s for vector expression",
 				   ts_get_node_name((Node *) argument));
+			return (CompressedColumnValues) { .decompression_type = DT_Invalid };
 	}
 }
 
