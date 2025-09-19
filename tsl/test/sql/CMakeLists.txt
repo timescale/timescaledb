@@ -36,6 +36,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
+    compressed_insert.sql
     compression.sql
     compression_allocation.sql
     compression_conflicts.sql

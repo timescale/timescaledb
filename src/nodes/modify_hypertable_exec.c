@@ -2484,11 +2484,44 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 			ts_chunk_tuple_routing_decompress_for_insert(ctr->cis, slot, ctr->estate, update_counter);
 			MemoryContextSwitchTo(oldctx);
 
+			/* ON CONFLICT DO NOTHING optimization for columnstore */
 			if (operation == CMD_INSERT && ctr->cis->skip_current_tuple)
 			{
 				ctr->cis->skip_current_tuple = false;
 				if (node->ps.instrument)
 					node->ps.instrument->ntuples2++;
+				continue;
+			}
+
+			/* direct compress */
+			if (operation == CMD_INSERT && ht_state->columnstore_insert)
+			{
+        ctr->cis->columnstore_insert = true;
+				/* Flush on chunk change */
+				if (ht_state->compressor && ht_state->compressor_relid != RelationGetRelid(ctr->cis->rel))
+				{
+				  ts_cm_functions->compressor_flush(ht_state->compressor, ht_state->bulk_writer);
+				  ts_cm_functions->compressor_free(ht_state->compressor, ht_state->bulk_writer);
+				  ht_state->compressor = NULL;
+				  ht_state->compressor_relid = InvalidOid;
+				}
+
+				if (!ht_state->compressor)
+				{
+					bool sort = ts_guc_enable_direct_compress_insert_sort_batches && !ts_guc_enable_direct_compress_insert_client_sorted;
+					ht_state->compressor = ts_cm_functions->compressor_init(ctr->cis->rel, &ht_state->bulk_writer, sort);
+					ht_state->compressor_relid = RelationGetRelid(ctr->cis->rel);
+					/* if client does not commit to global ordering, set chunk to unordered */
+					if (!ts_guc_enable_direct_compress_insert_client_sorted)
+					{
+						Chunk *chunk = ts_chunk_get_by_id(ctr->cis->chunk_id, true);
+						if (!ts_chunk_is_unordered(chunk))
+							ts_chunk_set_unordered(chunk);
+					}
+				}
+
+				ts_cm_functions->compressor_add_slot(ht_state->compressor, ht_state->bulk_writer, slot);
+				estate->es_processed++;
 				continue;
 			}
 
@@ -2505,6 +2538,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 #else
 				ctr->cis->result_relation_info->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
 #endif
+
 		}
 
 		/*

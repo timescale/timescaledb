@@ -11,6 +11,9 @@
 
 #include "compat/compat.h"
 #include "chunk_tuple_routing.h"
+#include "cross_module_fn.h"
+#include "guc.h"
+#include "indexing.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/modify_hypertable.h"
 
@@ -46,6 +49,44 @@ rel_has_dropped_attrs(Oid relid)
 			return true;
 	}
 	return false;
+}
+
+static bool
+should_use_direct_compress(ModifyHypertableState *state)
+{
+	if (!ts_guc_enable_direct_compress_insert)
+		return false;
+
+	ModifyTableState *mtstate = linitial_node(ModifyTableState, state->cscan_state.custom_ps);
+	ResultRelInfo *resultRelInfo = mtstate->resultRelInfo;
+	Hypertable *ht = state->ctr->hypertable;
+
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		return false;
+
+	if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->numtriggers > 1)
+	{
+		ereport(WARNING,
+				(errmsg("disabling direct compress because the destination table has triggers")));
+		return false;
+	}
+
+	if (ts_indexing_relation_has_primary_or_unique_index(state->ctr->partition_root))
+	{
+		ereport(WARNING,
+				(errmsg("disabling direct compress because the destination table has unique "
+						"constraints")));
+		return false;
+	}
+
+	Plan *subplan = mtstate->ps.plan->lefttree;
+	if (subplan->plan_rows < 10)
+	{
+		ereport(WARNING, (errmsg("disabling direct compress because of too small batch size")));
+		return false;
+	}
+
+	return true;
 }
 
 /*
@@ -88,9 +129,17 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 		/* setup chunk tuple routing state for INSERT/MERGE */
 		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
 		state->ctr->mht_state = state;
+
+		if (mtstate->operation == CMD_INSERT && should_use_direct_compress(state))
+		{
+			state->columnstore_insert = true;
+			state->ctr->create_compressed_chunk = true;
+		}
+
 		if (mtstate->operation == CMD_MERGE)
 			state->ctr->has_dropped_attrs =
 				rel_has_dropped_attrs(state->ctr->hypertable->main_table_relid);
+
 		/* setup per tuple exprcontext for tuple routing */
 		if (!estate->es_per_tuple_exprcontext)
 			estate->es_per_tuple_exprcontext = CreateExprContext(estate);
@@ -108,6 +157,13 @@ static void
 modify_hypertable_end(CustomScanState *node)
 {
 	ModifyHypertableState *state = (ModifyHypertableState *) node;
+	if (state->compressor)
+	{
+		ts_cm_functions->compressor_flush(state->compressor, state->bulk_writer);
+		ts_cm_functions->compressor_free(state->compressor, state->bulk_writer);
+		state->compressor = NULL;
+		state->bulk_writer = NULL;
+	}
 	ExecEndNode(linitial(node->custom_ps));
 	if (state->ctr)
 		ts_chunk_tuple_routing_destroy(state->ctr);
@@ -179,6 +235,8 @@ modify_hypertable_explain(CustomScanState *node, List *ancestors, ExplainState *
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
 	if (state->batches_deleted > 0)
 		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
+	if (ts_guc_enable_direct_compress_insert && state->mt->operation == CMD_INSERT)
+		ExplainPropertyBool("Direct Compress", state->columnstore_insert, es);
 }
 
 static CustomExecMethods modify_hypertable_state_methods = {
