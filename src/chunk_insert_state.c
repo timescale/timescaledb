@@ -581,5 +581,9 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 	if (state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
 
-	MemoryContextDelete(state->mctx);
+  if (state->estate->es_per_tuple_exprcontext)
+  	MemoryContextSetParent(state->mctx, state->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
+  else
+    MemoryContextDelete(state->mctx);
+
 }
