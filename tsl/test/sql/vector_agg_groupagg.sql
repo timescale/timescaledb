@@ -63,8 +63,8 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
 insert into text_table select 1, '' from generate_series(1, 1000) x;
 insert into text_table select 2, 'same' from generate_series(1, 1000) x;
 insert into text_table select 3, 'different' || x from generate_series(1, 1000) x;
-insert into text_table select 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
-insert into text_table select 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
+insert into text_table select 4, case when x % 2 = 0 then null else 'samewithnulls' end from generate_series(1, 1000) x;
+insert into text_table select 5, case when x % 2 = 0 then null else 'differentwithnulls' || x end from generate_series(1, 1000) x;
 
 alter table text_table set (timescaledb.compress,
     timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
