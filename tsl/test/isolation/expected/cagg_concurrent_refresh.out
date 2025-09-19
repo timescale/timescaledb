@@ -704,7 +704,7 @@ debug_waitpoint_release
 
 step R3_refresh: <... completed>
 step R13_refresh: 
-    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+    CALL refresh_continuous_aggregate('cond_10', 65, 100);
 
 step R6_pending_materialization_ranges: 
     SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
