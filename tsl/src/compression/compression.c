@@ -508,7 +508,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			 RelationGetRelationName(in_rel));
 
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(settings, in_rel);
-		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_rel, &writer);
+		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_rel, &writer, true);
 		tuplesort_end(sorted_rel);
 	}
 
@@ -845,7 +845,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 					batch_metadata_builder_bloom1_create(attr->atttypid, bloom_attr_offset);
 			}
 
-			*column = (PerColumn){
+			*column = (PerColumn) {
 				.compressor = compressor_for_type(attr->atttypid),
 				.metadata_builder = batch_minmax_builder,
 				.segmentby_column_index = -1,
@@ -858,7 +858,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 					 "expected segment by column \"%s\" to be same type as uncompressed column",
 					 NameStr(attr->attname));
 			int16 index = ts_array_position(settings->fd.segmentby, NameStr(attr->attname));
-			*column = (PerColumn){
+			*column = (PerColumn) {
 				.segment_info = segment_info_new(attr),
 				.segmentby_column_index = index,
 			};
@@ -977,7 +977,7 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 			 "missing metadata column '%s' in columnstore table",
 			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
-	*row_compressor = (RowCompressor){
+	*row_compressor = (RowCompressor) {
 		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
 											 "compress chunk per-row",
 											 ALLOCSET_DEFAULT_SIZES),
@@ -1011,7 +1011,7 @@ row_compressor_init(RowCompressor *row_compressor, const CompressionSettings *se
 
 void
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
-								  Relation in_rel, BulkWriter *writer)
+								  Relation in_rel, BulkWriter *writer, bool flush_end)
 {
 	TupleTableSlot *slot = MakeTupleTableSlot(row_compressor->in_desc, &TTSOpsMinimalTuple);
 	int64 nrows_processed = 0;
@@ -1033,7 +1033,7 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 				 RelationGetRelationName(in_rel));
 	}
 
-	if (row_compressor->rows_compressed_into_current_value > 0)
+	if (flush_end && row_compressor->rows_compressed_into_current_value > 0)
 		row_compressor_flush(row_compressor, writer, true);
 	elog(DEBUG1,
 		 "finished compressing " INT64_FORMAT " rows from \"%s\"",
@@ -1383,7 +1383,7 @@ segment_info_new(Form_pg_attribute column_attr)
 
 	SegmentInfo *segment_info = palloc(sizeof(*segment_info));
 
-	*segment_info = (SegmentInfo){
+	*segment_info = (SegmentInfo) {
 		.typlen = column_attr->attlen,
 		.typ_by_val = column_attr->attbyval,
 	};
@@ -1708,7 +1708,7 @@ create_per_compressed_column(RowDecompressor *decompressor)
 
 		if (!AttributeNumberIsValid(decompressed_colnum))
 		{
-			*per_compressed_col = (PerCompressedColumn){
+			*per_compressed_col = (PerCompressedColumn) {
 				.decompressed_column_offset = -1,
 			};
 			continue;
@@ -1729,7 +1729,7 @@ create_per_compressed_column(RowDecompressor *decompressor)
 				 format_type_be(decompressed_type),
 				 col_name);
 
-		*per_compressed_col = (PerCompressedColumn){
+		*per_compressed_col = (PerCompressedColumn) {
 			.decompressed_column_offset = decompressed_column_offset,
 			.is_compressed = is_compressed,
 			.decompressed_type = decompressed_type,
@@ -2269,7 +2269,7 @@ tsl_compressed_data_in(PG_FUNCTION_ARGS)
 		elog(ERROR, "could not decode base64-encoded compressed data");
 
 	decoded[decoded_len] = '\0';
-	data = (StringInfoData){
+	data = (StringInfoData) {
 		.data = (char *) decoded,
 		.len = decoded_len,
 		.maxlen = decoded_len,

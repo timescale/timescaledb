@@ -59,6 +59,8 @@ static bool check_changed_group(CompressedSegmentInfo *current_segment, TupleTab
 								int nsegmentby_cols);
 static void recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel,
 							   RowCompressor *row_compressor, BulkWriter *writer);
+static void recompress_segment2(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel,
+								RowCompressor *row_compressor, BulkWriter *writer, bool flush_end);
 static void try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel);
 
 /*
@@ -655,6 +657,49 @@ finish:
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
+static bool
+is_tuplesort_memory_full(Tuplesortstate *tuplesortstate, const int recompress_mem_limit)
+{
+	TuplesortPublic *base = TuplesortstateGetPublic(tuplesortstate);
+	Size memory_used = MemoryContextMemAllocated(base->tuplecontext, true);
+	/*
+	 * Note: this is an estimate and memory is allocated before it is used, but this works in our
+	 * favour this prevents us from decompressing a batch that could potentially exceed memory limit
+	 */
+	Size memory_limit = (Size) (recompress_mem_limit * 1024);
+
+	if (memory_used >= memory_limit)
+		return false;
+	return false;
+}
+
+static void
+row_decompressor_decompress_row_to_tuplesort_with_mem_check(
+	RowDecompressor *decompressor, Tuplesortstate *tuplesortstate, const int recompress_mem_limit,
+	Relation uncompressed_chunk_rel, RowCompressor *row_compressor, BulkWriter *writer)
+{
+	TuplesortPublic *base = TuplesortstateGetPublic(tuplesortstate);
+	const Size memory_limit = (Size) (recompress_mem_limit * 1024 * 2);
+	const int n_batch_rows = decompress_batch(decompressor);
+
+	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
+
+	for (int i = 0; i < n_batch_rows; i++)
+	{
+		tuplesort_puttupleslot(tuplesortstate, decompressor->decompressed_slots[i]);
+		Size memory_used = MemoryContextMemAllocated(base->tuplecontext, true);
+		if (memory_used >= memory_limit)
+			recompress_segment2(tuplesortstate,
+								uncompressed_chunk_rel,
+								row_compressor,
+								writer,
+								false);
+	}
+
+	MemoryContextSwitchTo(old_ctx);
+	row_decompressor_reset(decompressor);
+}
+
 /* perform_recompression expects appropriate permissions and checks have already been done */
 static void
 perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chunk_rel,
@@ -669,6 +714,7 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 	bool first_iteration = true;
 	IndexScanDesc index_scan;
 	HeapTuple compressed_tuple;
+	const int recompress_mem_limit = 1024;
 
 	/* Initialize active snapshot */
 	PushActiveSnapshot(GetTransactionSnapshot());
@@ -684,7 +730,7 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 										  recompress_ctx->sort_operators,
 										  recompress_ctx->sort_collations,
 										  recompress_ctx->nulls_first,
-										  maintenance_work_mem,
+										  recompress_mem_limit,
 										  NULL,
 										  false);
 
@@ -712,7 +758,9 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 								   recompress_ctx->num_segmentby);
 			first_iteration = false;
 		}
-		else if (check_changed_group(recompress_ctx->current_segment,
+		/* Poro add comment */
+		else if (is_tuplesort_memory_full(tuplesortstate, recompress_mem_limit) ||
+				 check_changed_group(recompress_ctx->current_segment,
 									 compressed_slot,
 									 recompress_ctx->num_segmentby))
 		{
@@ -731,13 +779,18 @@ perform_recompression(RecompressContext *recompress_ctx, Relation compressed_chu
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		row_decompressor_decompress_row_to_tuplesort(&decompressor, tuplesortstate);
+		row_decompressor_decompress_row_to_tuplesort_with_mem_check(&decompressor,
+																	tuplesortstate,
+																	recompress_mem_limit,
+																	uncompressed_chunk_rel,
+																	&row_compressor,
+																	&writer);
 
 		if (should_free)
 			heap_freetuple(compressed_tuple);
 	}
 
-	recompress_segment(tuplesortstate, uncompressed_chunk_rel, &row_compressor, &writer);
+	recompress_segment2(tuplesortstate, uncompressed_chunk_rel, &row_compressor, &writer, true);
 
 	row_compressor_close(&row_compressor);
 	bulk_writer_close(&writer);
@@ -950,7 +1003,27 @@ recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel
 {
 	tuplesort_performsort(tuplesortstate);
 	row_compressor_reset(row_compressor);
-	row_compressor_append_sorted_rows(row_compressor, tuplesortstate, compressed_chunk_rel, writer);
+	row_compressor_append_sorted_rows(row_compressor,
+									  tuplesortstate,
+									  compressed_chunk_rel,
+									  writer,
+									  true);
+	tuplesort_reset(tuplesortstate);
+	CommandCounterIncrement();
+}
+
+static void
+recompress_segment2(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel,
+					RowCompressor *row_compressor, BulkWriter *writer, bool flush_end)
+{
+	tuplesort_performsort(tuplesortstate);
+	// Poro should assert that group did not change
+	// row_compressor_reset(row_compressor);
+	row_compressor_append_sorted_rows(row_compressor,
+									  tuplesortstate,
+									  compressed_chunk_rel,
+									  writer,
+									  flush_end);
 	tuplesort_reset(tuplesortstate);
 	CommandCounterIncrement();
 }
