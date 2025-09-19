@@ -60,7 +60,7 @@ else()
       --no-external # Do not include external source files
       --base-directory ${CMAKE_SOURCE_DIR} --directory ${CMAKE_BINARY_DIR}
       --output-file ${OUTPUT_FILE}.base --gcov-tool
-      ${CMAKE_CURRENT_BINARY_DIR}/gcov
+      ${CMAKE_CURRENT_BINARY_DIR}/gcov --ignore-errors mismatch
     DEPENDS timescaledb-tsl timescaledb timescaledb-loader
             ${CMAKE_CURRENT_BINARY_DIR}/gcov)
 
@@ -77,7 +77,7 @@ else()
       ${LCOV} --rc lcov_branch_coverage=1 --capture --no-external
       --base-directory ${CMAKE_SOURCE_DIR} --directory ${CMAKE_BINARY_DIR}
       --output-file ${OUTPUT_FILE}.test --gcov-tool
-      ${CMAKE_CURRENT_BINARY_DIR}/gcov
+      ${CMAKE_CURRENT_BINARY_DIR}/gcov --ignore-errors mismatch
     DEPENDS ${OUTPUT_FILE}.base coverage_base)
 
   # Make sure coverage_test runs after tests (installcheck) finish
@@ -92,7 +92,7 @@ else()
     COMMAND
       ${LCOV} --rc lcov_branch_coverage=1 --add-tracefile ${OUTPUT_FILE}.base
       --add-tracefile ${OUTPUT_FILE}.test --output-file ${OUTPUT_FILE}
-      --gcov-tool ${CMAKE_CURRENT_BINARY_DIR}/gcov
+      --gcov-tool ${CMAKE_CURRENT_BINARY_DIR}/gcov --ignore-errors mismatch
     DEPENDS ${OUTPUT_FILE}.test coverage_test)
 
   add_custom_target(coverage_final DEPENDS ${OUTPUT_FILE})
