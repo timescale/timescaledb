@@ -218,8 +218,9 @@ step "R12_refresh"
 session "R13"
 step "R13_refresh"
 {
-    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+    CALL refresh_continuous_aggregate('cond_10', 65, 100);
 }
+
 
 # Refresh that overlaps with R1
 session "R2"
