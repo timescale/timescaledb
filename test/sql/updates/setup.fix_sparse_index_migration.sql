@@ -1,6 +1,6 @@
-
-DROP VIEW IF EXISTS timescaledb_information.job_stats;
-
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 
 -- Fix wrong migration by removing all sparse index configurations
 -- which only contain auto sparse indexing definitions on hypertable
