@@ -581,6 +581,7 @@ TSCopyMultiInsertInfoFlush(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cur_
 	ListCell *lc;
 
 	current_multi_insert_buffers = hash_get_num_entries(miinfo->multiInsertBuffers);
+	int current_chunk_id = cur_cis ? cur_cis->chunk_id : 0;
 
 	/* Create a list of buffers that can be sorted by usage */
 	hash_seq_init(&status, miinfo->multiInsertBuffers);
@@ -607,7 +608,7 @@ TSCopyMultiInsertInfoFlush(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cur_
 			 * Reduce active multi-insert buffers. However, the current used buffer
 			 * should not be deleted because it might reused for the next insert.
 			 */
-			if (cur_cis == NULL || flushed_chunk_id != cur_cis->chunk_id)
+			if (current_chunk_id == 0 || flushed_chunk_id != current_chunk_id)
 			{
 				TSCopyMultiInsertBufferCleanup(miinfo, buffer);
 				hash_search(miinfo->multiInsertBuffers, &flushed_chunk_id, HASH_REMOVE, &found);
