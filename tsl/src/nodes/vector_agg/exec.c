@@ -9,6 +9,8 @@
 #include <commands/explain.h>
 #include <executor/executor.h>
 #include <executor/tuptable.h>
+#include <fmgr.h>
+#include <funcapi.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -25,6 +27,7 @@
 #include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "nodes/vector_agg/plan.h"
+#include "nodes/vector_agg/vector_slot.h"
 
 #if PG18_GE
 #include "commands/explain_format.h"
@@ -32,20 +35,8 @@
 #endif
 
 static int
-get_input_offset(const DecompressChunkState *decompress_state, const Var *var)
+get_input_offset(const DecompressContext *dcontext, const Var *var)
 {
-	const DecompressContext *dcontext = &decompress_state->decompress_context;
-
-	/*
-	 * All variable references in the vectorized aggregation node were
-	 * translated to uncompressed chunk variables when it was created.
-	 */
-	const CustomScan *cscan = castNode(CustomScan, decompress_state->csstate.ss.ps.plan);
-	Ensure((Index) var->varno == (Index) cscan->scan.scanrelid,
-		   "got vector varno %d expected %d",
-		   var->varno,
-		   cscan->scan.scanrelid);
-
 	const CompressionColumnDescription *value_column_description = NULL;
 	for (int i = 0; i < dcontext->num_data_columns; i++)
 	{
@@ -65,14 +56,509 @@ get_input_offset(const DecompressChunkState *decompress_state, const Var *var)
 	return index;
 }
 
-static void
-get_column_storage_properties(const DecompressChunkState *state, int input_offset,
-							  GroupingColumn *result)
+/*
+ * Create an arrow array with memory for buffers.
+ *
+ * The space for buffers are allocated after the main structure.
+ */
+static ArrowArray *
+arrow_create_with_buffers(MemoryContext mcxt, int n_buffers)
 {
-	const DecompressContext *dcontext = &state->decompress_context;
-	const CompressionColumnDescription *desc = &dcontext->compressed_chunk_columns[input_offset];
-	result->value_bytes = desc->value_bytes;
-	result->by_value = desc->by_value;
+	struct
+	{
+		ArrowArray array;
+		const void *buffers[FLEXIBLE_ARRAY_MEMBER];
+	} *array_with_buffers =
+		MemoryContextAllocZero(mcxt, sizeof(ArrowArray) + (sizeof(const void *) * n_buffers));
+
+	ArrowArray *array = &array_with_buffers->array;
+
+	array->n_buffers = n_buffers;
+	array->buffers = array_with_buffers->buffers;
+
+	return array;
+}
+
+/*
+ * Variable-size primitive layout ArrowArray from decompression iterator.
+ */
+static ArrowArray *
+arrow_from_const_varlen(MemoryContext mcxt, int nrows, Datum value)
+{
+	const int value_bytes = VARSIZE_ANY_EXHDR(value);
+
+	int32 *restrict offsets_buffer =
+		MemoryContextAlloc(mcxt, pad_to_multiple(64, nrows * sizeof(*offsets_buffer)));
+	for (int i = 0; i < nrows; i++)
+	{
+		offsets_buffer[i] = value_bytes * i;
+	}
+
+	uint8 *restrict data_buffer =
+		MemoryContextAlloc(mcxt, pad_to_multiple(64, nrows * value_bytes));
+	for (int i = 0; i < nrows; i++)
+	{
+		memcpy(data_buffer + value_bytes * i, DatumGetPointer(value), value_bytes);
+	}
+
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 3);
+	array->length = nrows;
+	array->buffers[0] = NULL;
+	array->buffers[1] = offsets_buffer;
+	array->buffers[2] = data_buffer;
+
+	return array;
+}
+
+/*
+ * Fixed-Size Primitive layout ArrowArray from decompression iterator.
+ */
+static ArrowArray *
+arrow_from_const_fixlen(MemoryContext mcxt, int nrows, Datum value, int16 typlen, bool typbyval)
+{
+	/* Just a precaution: this should not be a varlen type */
+	Assert(typlen > 0);
+
+	uint8 *restrict data_buffer = MemoryContextAlloc(mcxt, pad_to_multiple(64, nrows * typlen));
+	for (int i = 0; i < nrows; i++)
+	{
+		if (typbyval)
+		{
+			/*
+			 * We use unsigned integers to avoid conversions between signed
+			 * and unsigned values (which in theory could change the value)
+			 * when converting to datum (which is an unsigned value).
+			 *
+			 * Conversions between unsigned values is well-defined in the C
+			 * standard and will work here.
+			 */
+			switch (typlen)
+			{
+				case sizeof(uint8):
+					data_buffer[i] = DatumGetUInt8(value);
+					break;
+				case sizeof(uint16):
+					((uint16 *) data_buffer)[i] = DatumGetUInt16(value);
+					break;
+				case sizeof(uint32):
+					((uint32 *) data_buffer)[i] = DatumGetUInt32(value);
+					break;
+				case sizeof(uint64):
+					/* This branch is not called for by-reference 64-bit values */
+					((uint64 *) data_buffer)[i] = DatumGetUInt64(value);
+					break;
+				default:
+					ereport(ERROR,
+							errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("not supporting writing by value length %d", typlen));
+			}
+		}
+		else
+		{
+			memcpy(&data_buffer[typlen * i], DatumGetPointer(value), typlen);
+		}
+	}
+
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
+	array->length = nrows;
+	array->buffers[0] = NULL;
+	array->buffers[1] = data_buffer;
+	return array;
+}
+
+static ArrowArray *
+arrow_from_const_bool(MemoryContext mcxt, int nrows, Datum value)
+{
+	const size_t words = (size_t) ((nrows + 63) / 64);
+	uint64 *values = (uint64 *) MemoryContextAlloc(mcxt, words * sizeof(*values));
+	memset(values, DatumGetBool(value) ? (uint8) -1 : 0, words * sizeof(*values));
+
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
+	array->length = nrows;
+	array->buffers[0] = NULL;
+	array->buffers[1] = values;
+	return array;
+}
+
+static ArrowArray *
+arrow_from_const_null(MemoryContext mcxt, int nrows)
+{
+	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
+	array->length = nrows;
+	array->null_count = nrows;
+
+	const size_t words = (size_t) ((nrows + 63) / 64);
+	uint64 *validity = (uint64 *) MemoryContextAllocZero(mcxt, words * sizeof(uint64));
+	array->buffers[0] = validity;
+	return array;
+}
+
+/*
+ * Read the entire contents of a decompression iterator into the arrow array.
+ */
+static ArrowArray *
+arrow_from_constant(MemoryContext mcxt, int nrows, const Const *c)
+{
+	int16 typlen;
+	bool typbyval;
+	get_typlenbyval(c->consttype, &typlen, &typbyval);
+
+	if (c->constisnull)
+	{
+		return arrow_from_const_null(mcxt, nrows);
+	}
+	else if (c->consttype == BOOLOID)
+	{
+		return arrow_from_const_bool(mcxt, nrows, c->constvalue);
+	}
+	else if (typlen == -1)
+	{
+		return arrow_from_const_varlen(mcxt, nrows, c->constvalue);
+	}
+	else
+	{
+		return arrow_from_const_fixlen(mcxt, nrows, c->constvalue, typlen, typbyval);
+	}
+}
+
+static CompressedColumnValues
+evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 const *filter,
+				  List *args, Oid funcoid, Oid inputcollid)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+
+	const int nargs = list_length(args);
+	Ensure(nargs <= 5, "only <= 5 args supported");
+
+	FmgrInfo flinfo;
+	fmgr_info(funcoid, &flinfo);
+	LOCAL_FCINFO(fcinfo, 5);
+	InitFunctionCallInfoData(*fcinfo, &flinfo, nargs, inputcollid, NULL, NULL);
+
+	CompressedColumnValues arg_values[5] = { 0 };
+	ListCell *lc;
+	bool have_null_bitmap = false;
+	bool have_null_scalars = false;
+	foreach (lc, args)
+	{
+		const int i = foreach_current_index(lc);
+		arg_values[i] =
+			vector_slot_get_compressed_column_values(dcontext, slot, filter, lfirst(lc));
+		//		fprintf(stderr, "column %d decompression type %d\n", i,
+		// arg_values[i].decompression_type);
+
+		if (arg_values[i].decompression_type == DT_Invalid)
+		{
+			//			my_print(lfirst(lc));
+			elog(ERROR, "got DT_Invalid for argument %d ^^^", foreach_current_index(lc));
+		}
+
+		if (arg_values[i].decompression_type == DT_Scalar)
+		{
+			have_null_scalars = *arg_values[i].output_isnull || have_null_scalars;
+
+			fcinfo->args[i].value = *arg_values[i].output_value;
+			fcinfo->args[i].isnull = *arg_values[i].output_isnull;
+		}
+		else
+		{
+			Ensure(arg_values[i].arrow != NULL, "no arrow for arg");
+			have_null_bitmap = (arg_values[i].arrow->null_count > 0) || have_null_bitmap;
+
+			arg_values[i].output_value = &fcinfo->args[i].value;
+			arg_values[i].output_isnull = &fcinfo->args[i].isnull;
+
+			if (arg_values[i].decompression_type == DT_ArrowText ||
+				arg_values[i].decompression_type == DT_ArrowTextDict)
+			{
+				const int maxbytes =
+					VARHDRSZ + (arg_values[i].arrow->dictionary ?
+									get_max_text_datum_size(arg_values[i].arrow->dictionary) :
+									get_max_text_datum_size(arg_values[i].arrow));
+
+				*arg_values[i].output_value =
+					PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+			}
+		}
+
+		(void) arrow_from_constant;
+
+		Assert(arg_values[i].decompression_type != DT_Invalid);
+	}
+
+	Assert(arg_values[0].decompression_type != DT_Invalid);
+
+	const int nrows = batch_state->total_batch_rows;
+
+	if (have_null_scalars)
+	{
+		/*
+		 * The function is strict, and we have a scalar null argument, so we
+		 * return a scalar null.
+		 */
+		CompressedColumnValues result = {
+			.decompression_type = DT_Scalar,
+			.output_isnull = MemoryContextAlloc(batch_state->per_batch_context, sizeof(bool))
+		};
+		*result.output_isnull = true;
+		return result;
+	}
+
+	/*
+	 * Our functions are strict so we handle validity separately.
+	 */
+	const size_t num_validity_words = (nrows + 63) / 64;
+	uint64 const *input_validity = NULL;
+	if (have_null_bitmap || filter != NULL)
+	{
+		input_validity =
+			MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_validity_words);
+		input_validity = arrow_combine_validity(num_validity_words,
+												(uint64 *) input_validity,
+												filter,
+												(uint64 *) arg_values[0].buffers[0],
+												(uint64 *) arg_values[1].buffers[0]);
+	}
+
+	uint64 *restrict result_validity = NULL;
+
+	Oid rettype = get_func_rettype(funcoid);
+	int16 rettyplen;
+	bool rettypbyval;
+	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
+
+	ArrowArray *arrow_result = NULL;
+
+	if (rettyplen != -1)
+	{
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 2 * sizeof(void *));
+		arrow_result->length = nrows;
+		arrow_result->buffers = (void *) &arrow_result[1];
+		void *restrict result_buffer_1 =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   pad_to_multiple(64, rettyplen * nrows));
+		arrow_result->buffers[1] = result_buffer_1;
+
+		for (int i = 0; i < nrows; i++)
+		{
+			if (!arrow_row_is_valid(input_validity, i))
+			{
+				continue;
+			}
+
+			compressed_columns_to_postgres_data(arg_values, nargs, i);
+
+			Datum result = FunctionCallInvoke(fcinfo);
+
+			if (fcinfo->isnull)
+			{
+				/*
+				 * A strict function can still return a null for a non-null
+				 * argument.
+				 */
+				if (result_validity == NULL)
+				{
+					result_validity =
+						MemoryContextAlloc(batch_state->per_batch_context,
+										   num_validity_words * sizeof(*result_validity));
+					memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
+					const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+					result_validity[nrows / 64] &= tail_mask;
+				}
+
+				arrow_set_row_validity(result_validity, i, false);
+
+				continue;
+			}
+
+			(void) result;
+
+			switch (rettyplen)
+			{
+				/* FIXME bool */
+				/* FIXME per-type code actually faster? */
+				case 2:
+				case 4:
+#ifdef USE_FLOAT8_BYVAL
+				case 8:
+#endif
+					memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
+						   &result,
+						   sizeof(Datum));
+					break;
+#ifndef USE_FLOAT8_BYVAL
+				case 8:
+#endif
+				case 16:
+					Assert(!rettypbyval);
+					memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
+						   DatumGetPointer(result),
+						   rettyplen);
+					break;
+				case -1:
+					Assert(!rettypbyval);
+					elog(ERROR, "varlena return type not supported");
+				default:
+					elog(ERROR, "wrong size %d", rettyplen);
+			}
+		}
+	}
+	else
+	{
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 3 * sizeof(void *));
+		arrow_result->length = nrows;
+		arrow_result->buffers = (void *) &arrow_result[1];
+		uint32 *restrict offset_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context,
+								   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
+		uint32 current_offset = 0;
+
+		int allocated_body_bytes = pad_to_multiple(64, 10);
+		uint8 *restrict body_buffer =
+			MemoryContextAllocZero(batch_state->per_batch_context, allocated_body_bytes);
+
+		for (int i = 0; i < nrows; i++)
+		{
+			if (!arrow_row_is_valid(input_validity, i))
+			{
+				continue;
+			}
+
+			Assert(arg_values[0].decompression_type != DT_Invalid);
+
+			compressed_columns_to_postgres_data(arg_values, nargs, i);
+
+			Assert(arg_values[0].decompression_type != DT_Invalid);
+
+			Datum result = FunctionCallInvoke(fcinfo);
+
+			if (fcinfo->isnull)
+			{
+				/*
+				 * A strict function can still return a null for a non-null
+				 * argument.
+				 */
+				if (result_validity == NULL)
+				{
+					result_validity =
+						MemoryContextAlloc(batch_state->per_batch_context,
+										   num_validity_words * sizeof(*result_validity));
+					memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
+					const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+					result_validity[nrows / 64] &= tail_mask;
+				}
+
+				arrow_set_row_validity(result_validity, i, false);
+
+				continue;
+			}
+
+			const int result_bytes = VARSIZE_ANY_EXHDR(result);
+			const int required_body_bytes = pad_to_multiple(64, current_offset + result_bytes);
+			if (required_body_bytes > allocated_body_bytes)
+			{
+				const int new_body_bytes =
+					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) i + 1))) + 1;
+				//				fprintf(stderr,
+				//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
+				//						new_body_bytes,
+				//						new_body_bytes / (float) required_body_bytes,
+				//						i,
+				//						nrows);
+				Assert(new_body_bytes >= required_body_bytes);
+				body_buffer = repalloc(body_buffer, new_body_bytes);
+				allocated_body_bytes = new_body_bytes;
+			}
+
+			(void) result;
+
+			offset_buffer[i] = current_offset;
+			memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
+			current_offset += result_bytes;
+		}
+
+		offset_buffer[nrows] = current_offset;
+		arrow_result->buffers[1] = offset_buffer;
+		arrow_result->buffers[2] = body_buffer;
+	}
+
+	/*
+	 * Figure out the nullability of the result. Besides the null inputs, we
+	 * have to AND a separate bitmap if the function returned nulls for some rows.
+	 */
+	if (result_validity != NULL)
+	{
+		arrow_validity_and(num_validity_words, result_validity, input_validity);
+		arrow_result->buffers[0] = result_validity;
+	}
+	else
+	{
+		arrow_result->buffers[0] = input_validity;
+	}
+	arrow_result->null_count =
+		arrow_result->length - arrow_num_valid(arrow_result->buffers[0], arrow_result->length);
+
+	CompressedColumnValues result = {
+		.decompression_type = rettyplen == -1 ? DT_ArrowText : rettyplen,
+		.buffers = { arrow_result->buffers[0],
+					 arrow_result->buffers[1],
+					 rettyplen == -1 ? arrow_result->buffers[2] : NULL },
+		.arrow = arrow_result,
+	};
+	return result;
+}
+
+/*
+ * Return the arrow array or the datum (in case of single scalar value) for a
+ * given attribute as a CompressedColumnValues struct.
+ */
+CompressedColumnValues
+vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTableSlot *slot,
+										 uint64 const *filter, const Expr *argument)
+{
+	const DecompressBatchState *batch_state = (const DecompressBatchState *) slot;
+	switch (((Node *) argument)->type)
+	{
+		case T_Const:
+		{
+			const Const *c = (const Const *) argument;
+			CompressedColumnValues result = { .decompression_type = DT_Scalar,
+											  .output_value = (Datum *) &c->constvalue,
+											  .output_isnull = (bool *) &c->constisnull };
+			return result;
+		}
+		case T_Var:
+		{
+			const Var *var = (const Var *) argument;
+			const uint16 offset =
+				get_input_offset(dcontext, var); // AttrNumberGetAttrOffset(var->varattno);
+			const CompressedColumnValues *values = &batch_state->compressed_columns[offset];
+			if (values->decompression_type == DT_Invalid)
+			{
+				//				my_print((void *) var);
+				elog(ERROR, "got invalid decompression type at offset %d for var ^^^\n", offset);
+			}
+			return *values;
+		}
+		case T_OpExpr:
+		{
+			const OpExpr *o = (const OpExpr *) argument;
+			return evaluate_function(dcontext, slot, filter, o->args, o->opfuncid, o->inputcollid);
+		}
+		case T_FuncExpr:
+		{
+			const FuncExpr *f = (const FuncExpr *) argument;
+			return evaluate_function(dcontext, slot, filter, f->args, f->funcid, f->inputcollid);
+		}
+		default:
+			fprintf(stderr, "%s\n", ts_get_node_name((Node *) argument));
+			Ensure(false,
+				   "wrong node type %s for vector expression",
+				   ts_get_node_name((Node *) argument));
+			return (CompressedColumnValues) { .decompression_type = DT_Invalid };
+	}
 }
 
 static void
@@ -84,7 +570,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
 	vector_agg_state->input_ended = false;
-	CustomScanState *childstate = (CustomScanState *) linitial(vector_agg_state->custom.custom_ps);
 
 	/*
 	 * Set up the helper structures used to evaluate stable expressions in
@@ -127,7 +612,6 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		else
 		{
 			/* This is a grouping column. */
-			Assert(IsA(tlentry->expr, Var));
 			grouping_column_counter++;
 		}
 	}
@@ -172,13 +656,15 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				/* The aggregate should be a partial aggregate */
 				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
 
-				Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
-				def->input_offset =
-					get_input_offset((const DecompressChunkState *) childstate, var);
+				def->argument = castNode(TargetEntry, linitial(aggref->args))->expr;
+				//				Var *var = castNode(Var, ;
+				//				def->input_offset =
+				//					get_input_offset((const DecompressChunkState *) childstate,
+				// var);
 			}
 			else
 			{
-				def->input_offset = -1;
+				def->argument = NULL;
 			}
 
 			if (aggref->aggfilter != NULL)
@@ -190,16 +676,18 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		else
 		{
 			/* This is a grouping column. */
-			Assert(IsA(tlentry->expr, Var));
 
 			GroupingColumn *col = &vector_agg_state->grouping_columns[grouping_column_counter++];
+			col->expr = tlentry->expr;
 			col->output_offset = i;
 
-			Var *var = castNode(Var, tlentry->expr);
-			col->input_offset = get_input_offset((const DecompressChunkState *) childstate, var);
-			get_column_storage_properties((const DecompressChunkState *) childstate,
-										  col->input_offset,
-										  col);
+			TupleDesc tdesc = NULL;
+			Oid type = InvalidOid;
+			TypeFuncClass type_class = get_expr_result_type((Node *) tlentry->expr, &type, &tdesc);
+			Ensure(type_class == TYPEFUNC_SCALAR,
+				   "wrong grouping column type class %d",
+				   type_class);
+			get_typlenbyval(type, &col->value_bytes, &col->by_value);
 		}
 	}
 
@@ -373,6 +861,11 @@ static TupleTableSlot *
 vector_agg_exec(CustomScanState *node)
 {
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
+
+	DecompressChunkState *decompress_state =
+		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+	DecompressContext *dcontext = &decompress_state->decompress_context;
+
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;
 	ResetExprContext(econtext);
 
@@ -438,21 +931,35 @@ vector_agg_exec(CustomScanState *node)
 		for (int i = 0; i < naggs; i++)
 		{
 			VectorAggDef *agg_def = &vector_agg_state->agg_defs[i];
-			if (agg_def->filter_clauses == NIL)
+			uint64 *filter_clause_result = NULL;
+			if (agg_def->filter_clauses != NIL)
 			{
-				continue;
+				VectorQualState *vqstate =
+					vector_agg_state->init_vector_quals(vector_agg_state, agg_def, slot);
+				if (vector_qual_compute(vqstate) != AllRowsPass)
+				{
+					filter_clause_result = vqstate->vector_qual_result;
+				}
 			}
 
-			VectorQualState *vqstate =
-				vector_agg_state->init_vector_quals(vector_agg_state, agg_def, slot);
-			vector_qual_compute(vqstate);
-			agg_def->filter_result = vqstate->vector_qual_result;
+			DecompressBatchState *batch_state = (DecompressBatchState *) slot;
+			if (filter_clause_result != NULL)
+			{
+				const int num_validity_words = (batch_state->total_batch_rows + 63) / 64;
+				arrow_validity_and(num_validity_words, filter_clause_result,
+					batch_state->vector_qual_result);
+				agg_def->effective_batch_filter = filter_clause_result;
+			}
+			else
+			{
+				agg_def->effective_batch_filter = batch_state->vector_qual_result;
+			}
 		}
 
 		/*
 		 * Finally, pass the compressed batch to the grouping policy.
 		 */
-		grouping->gp_add_batch(grouping, slot);
+		grouping->gp_add_batch(grouping, dcontext, slot);
 	}
 
 	/*

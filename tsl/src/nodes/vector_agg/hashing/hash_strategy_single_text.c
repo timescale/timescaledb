@@ -89,9 +89,9 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 	}
 
 	DEBUG_PRINT("%p consider key row %d key index %d is %d bytes: ",
-				hashing,
+				params.hashing,
 				row,
-				hashing->last_used_key_index + 1,
+				params.hashing->last_used_key_index + 1,
 				output_key->len);
 	for (size_t i = 0; i < output_key->len; i++)
 	{

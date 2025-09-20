@@ -9345,18 +9345,16 @@ EXPLAIN (buffers off, costs off) SELECT time_bucket('10 minutes', time) bucket, 
    ->  Gather
          Workers Planned: 3
          ->  Parallel Append
-               ->  Partial HashAggregate
-                     Group Key: time_bucket('@ 10 mins'::interval, _hyper_1_1_chunk."time")
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                            ->  Parallel Seq Scan on compress_hyper_5_15_chunk
-               ->  Partial HashAggregate
-                     Group Key: time_bucket('@ 10 mins'::interval, _hyper_1_3_chunk."time")
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
                            ->  Parallel Seq Scan on compress_hyper_5_16_chunk
                ->  Partial HashAggregate
                      Group Key: time_bucket('@ 10 mins'::interval, _hyper_1_2_chunk."time")
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
-(16 rows)
+(14 rows)
 
 EXPLAIN (buffers off, costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
                                QUERY PLAN                               
