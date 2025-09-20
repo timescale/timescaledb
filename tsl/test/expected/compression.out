@@ -1249,11 +1249,12 @@ SELECT compress_chunk(c) FROM show_chunks('stattest') c;
  _timescaledb_internal._hyper_27_55_chunk
 (1 row)
 
+ANALYZE stattest;
 -- check that approximate_row_count works with all compressed chunks
 SELECT approximate_row_count('stattest');
  approximate_row_count 
 -----------------------
-                    26
+                  1000
 (1 row)
 
 -- actual count should match with the above
@@ -1280,7 +1281,7 @@ FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
 SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
  relpages | reltuples 
 ----------+-----------
-        0 |         0
+        1 |         1
 (1 row)
 
 -- Unfortunately, the stats on the hypertable won't find any rows to sample from the chunk
@@ -1307,7 +1308,7 @@ SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME'
 SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_COMP_CHUNK_NAME');
  approximate_row_count 
 -----------------------
-                    26
+                     1
 (1 row)
 
 -- Verify partial chunk stats are handled correctly when analyzing
@@ -1348,7 +1349,7 @@ SELECT table_name  as "STAT_CHUNK_NAME" from temptable \gset
 SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_CHUNK_NAME');
  approximate_row_count 
 -----------------------
-                    52
+                  1026
 (1 row)
 
 -- should match with the result via the hypertable post in-memory decompression
