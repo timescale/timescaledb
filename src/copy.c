@@ -581,7 +581,7 @@ TSCopyMultiInsertInfoFlush(TSCopyMultiInsertInfo *miinfo, ChunkInsertState *cur_
 	ListCell *lc;
 
 	current_multi_insert_buffers = hash_get_num_entries(miinfo->multiInsertBuffers);
-    int current_chunk_id = cur_cis ? cur_cis->chunk_id : 0;
+	int current_chunk_id = cur_cis ? cur_cis->chunk_id : 0;
 
 	/* Create a list of buffers that can be sorted by usage */
 	hash_seq_init(&status, miinfo->multiInsertBuffers);

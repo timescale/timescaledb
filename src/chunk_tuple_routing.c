@@ -15,8 +15,6 @@
 #include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
 
-static ChunkTupleRouting * ctr_context;
-
 ChunkTupleRouting *
 ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 {
@@ -45,7 +43,6 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 
 	ctr->has_dropped_attrs = false;
 
-  ctr_context = ctr;
 	return ctr;
 }
 
@@ -55,7 +52,6 @@ ts_chunk_tuple_routing_destroy(ChunkTupleRouting *ctr)
 	ts_subspace_store_free(ctr->subspace);
 	ts_cache_release(&ctr->hypertable_cache);
 
-  ctr_context = NULL;
 	pfree(ctr);
 }
 
@@ -63,8 +59,6 @@ static void
 destroy_chunk_insert_state(void *cis)
 {
 	ts_chunk_insert_state_destroy((ChunkInsertState *) cis);
-//  if (ctr_context)
-//    ctr_context->cis = NULL;
 }
 
 extern ChunkInsertState *
