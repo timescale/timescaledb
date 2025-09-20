@@ -321,114 +321,74 @@ RETURNS BIGINT
 LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 DECLARE
-    mat_ht           REGCLASS = NULL;
-    local_table_name       NAME = NULL;
-    local_schema_name      NAME = NULL;
-    is_compressed    BOOL = FALSE;
-    uncompressed_row_count BIGINT = 0;
-    compressed_row_count BIGINT = 0;
-    local_compressed_hypertable_id INTEGER = 0;
-    local_compressed_chunk_id INTEGER = 0;
-    compressed_hypertable_oid  OID;
-    local_compressed_chunk_oid  OID;
-    max_compressed_row_count BIGINT = 1000;
-    is_compressed_chunk INTEGER;
+    v_mat_ht REGCLASS = NULL;
+    v_name NAME = NULL;
+    v_schema NAME = NULL;
+    v_hypertable_id INTEGER;
 BEGIN
     -- Check if input relation is continuous aggregate view then
     -- get the corresponding materialized hypertable and schema name
-    SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass
-    INTO mat_ht
-    FROM pg_class c
-    JOIN pg_namespace n ON (n.OID = c.relnamespace)
-    JOIN _timescaledb_catalog.continuous_agg a ON (a.user_view_schema = n.nspname AND a.user_view_name = c.relname)
-    JOIN _timescaledb_catalog.hypertable ht ON (a.mat_hypertable_id = ht.id)
-    WHERE c.OID = relation;
+    SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass INTO v_mat_ht
+      FROM pg_class c
+      JOIN pg_namespace n ON (n.OID = c.relnamespace)
+      JOIN _timescaledb_catalog.continuous_agg a ON (a.user_view_schema = n.nspname AND a.user_view_name = c.relname)
+      JOIN _timescaledb_catalog.hypertable ht ON (a.mat_hypertable_id = ht.id)
+      WHERE c.OID = relation;
 
-    IF mat_ht IS NOT NULL THEN
-        relation = mat_ht;
+    IF FOUND THEN
+        relation = v_mat_ht;
     END IF;
 
-    SELECT relname, nspname FROM pg_class c
+    SELECT nspname, relname FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
-    INTO local_table_name, local_schema_name
+    INTO v_schema, v_name
     WHERE c.OID = relation;
 
-    -- Check for input relation is Hypertable
-    IF EXISTS (SELECT 1
-               FROM _timescaledb_catalog.hypertable WHERE table_name = local_table_name AND schema_name = local_schema_name) THEN
-        SELECT compressed_hypertable_id FROM _timescaledb_catalog.hypertable INTO local_compressed_hypertable_id
-        WHERE table_name = local_table_name AND schema_name = local_schema_name;
-        IF local_compressed_hypertable_id IS NOT NULL THEN
-           uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
-
-           -- use the compression_chunk_size stats to fetch precompressed num rows
-           SELECT COALESCE(SUM(numrows_pre_compression), 0) FROM _timescaledb_catalog.chunk srcch,
-                _timescaledb_catalog.compression_chunk_size map, _timescaledb_catalog.hypertable srcht
-                INTO compressed_row_count
-                WHERE map.chunk_id = srcch.id
-                AND srcht.id = srcch.hypertable_id AND srcht.table_name = local_table_name
-                AND srcht.schema_name = local_schema_name;
-
-           RETURN (uncompressed_row_count + compressed_row_count);
-        ELSE
-           uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
-           RETURN uncompressed_row_count;
-        END IF;
+    -- for hypertables return the sum of the row counts of all chunks
+    SELECT id FROM _timescaledb_catalog.hypertable INTO v_hypertable_id WHERE table_name = v_name AND schema_name = v_schema;
+    IF FOUND THEN
+        RETURN (SELECT coalesce(sum(_timescaledb_functions.get_approx_row_count(format('%I.%I',schema_name,table_name))),0)
+          FROM _timescaledb_catalog.chunk
+          WHERE hypertable_id = v_hypertable_id AND NOT dropped);
     END IF;
-    -- Check for input relation is CHUNK
-    IF EXISTS (SELECT 1 FROM _timescaledb_catalog.chunk WHERE table_name = local_table_name AND schema_name = local_schema_name) THEN
-        with compressed_chunk as (select 1 as is_compressed_chunk from _timescaledb_catalog.chunk c
-        inner join _timescaledb_catalog.hypertable h on (c.hypertable_id = h.compressed_hypertable_id)
-        where c.table_name = local_table_name and c.schema_name = local_schema_name ),
-        chunk_temp as (select compressed_chunk_id from _timescaledb_catalog.chunk c where c.table_name = local_table_name and c.schema_name = local_schema_name)
-        select ct.compressed_chunk_id, cc.is_compressed_chunk from chunk_temp ct LEFT OUTER JOIN compressed_chunk cc ON 1 = 1
-        INTO local_compressed_chunk_id, is_compressed_chunk;
-        -- 'input is chunk #1';
-        IF is_compressed_chunk IS NULL AND local_compressed_chunk_id IS NOT NULL THEN
-        -- 'Include both uncompressed  and compressed chunk #2';
-            -- use the compression_chunk_size stats to fetch precompressed num rows
-            SELECT COALESCE(numrows_pre_compression, 0) FROM _timescaledb_catalog.compression_chunk_size
-                INTO compressed_row_count
-                WHERE compressed_chunk_id = local_compressed_chunk_id;
 
-            uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
-            RETURN (uncompressed_row_count + compressed_row_count);
-        ELSIF is_compressed_chunk IS NULL AND local_compressed_chunk_id IS NULL THEN
-        -- 'input relation is uncompressed chunk #3';
-            uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
-            RETURN uncompressed_row_count;
-        ELSE
-        -- 'compressed chunk only #4';
-            -- use the compression_chunk_size stats to fetch precompressed num rows
-            SELECT COALESCE(SUM(numrows_pre_compression), 0) FROM _timescaledb_catalog.chunk srcch,
-                _timescaledb_catalog.compression_chunk_size map INTO compressed_row_count
-                WHERE map.compressed_chunk_id = srcch.id
-                AND srcch.table_name = local_table_name AND srcch.schema_name = local_schema_name;
-            RETURN compressed_row_count;
-        END IF;
+		IF EXISTS (SELECT FROM pg_inherits WHERE inhparent = relation) THEN
+		RETURN (
+        SELECT _timescaledb_functions.get_approx_row_count(relation) + COALESCE(SUM(@extschema@.approximate_row_count(i.inhrelid)),0) FROM pg_inherits i
+        WHERE i.inhparent = relation
+     );
     END IF;
+
     -- Check for input relation is Plain RELATION
-    uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
-    RETURN uncompressed_row_count;
+    RETURN _timescaledb_functions.get_approx_row_count(relation);
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.get_approx_row_count(relation REGCLASS)
 RETURNS BIGINT
-LANGUAGE SQL VOLATILE STRICT AS
+LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
-  WITH RECURSIVE inherited_id(oid) AS
-  (
-    SELECT relation
-    UNION ALL
-    SELECT i.inhrelid
-    FROM pg_inherits i
-    JOIN inherited_id b ON i.inhparent = b.oid
-  )
-  -- reltuples for partitioned tables is the sum of it's children in pg14 so we need to filter those out
-  SELECT COALESCE((SUM(reltuples) FILTER (WHERE reltuples > 0 AND relkind <> 'p')), 0)::BIGINT
-  FROM inherited_id
-  JOIN pg_class USING (oid);
+DECLARE
+  v_schema NAME;
+  v_name NAME;
+  v_chunk_id INTEGER;
+  v_oid OID;
+  row_count BIGINT = 0;
+BEGIN
+  SELECT nspname, relname INTO v_schema, v_name FROM pg_class c JOIN pg_namespace n ON (n.OID = c.relnamespace) WHERE c.OID = relation;
+
+  -- we only need to check if the relation has a compressed chunk if it is a chunk
+  SELECT compressed_chunk_id FROM _timescaledb_catalog.chunk INTO v_chunk_id WHERE table_name = v_name AND schema_name = v_schema;
+
+  IF v_chunk_id IS NOT NULL THEN
+    SELECT format('%I.%I', schema_name, table_name)::regclass INTO v_oid FROM _timescaledb_catalog.chunk WHERE id = v_chunk_id;
+    row_count := (SELECT row_count + CASE WHEN reltuples IS NULL THEN 0 WHEN reltuples < 0 THEN 0 ELSE reltuples * 1000 END FROM pg_class WHERE oid = v_oid);
+  END IF;
+
+  row_count := COALESCE((SELECT row_count + CASE WHEN reltuples < 0 OR relkind = 'p' THEN 0 ELSE reltuples END FROM pg_class WHERE oid = relation), 0);
+
+  RETURN row_count;
+END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -------- stats related to compression ------

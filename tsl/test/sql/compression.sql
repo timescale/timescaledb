@@ -524,6 +524,7 @@ ALTER TABLE stattest SET (timescaledb.compress);
 -- check that approximate_row_count works with all normal chunks
 SELECT approximate_row_count('stattest');
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
+ANALYZE stattest;
 -- check that approximate_row_count works with all compressed chunks
 SELECT approximate_row_count('stattest');
 -- actual count should match with the above
