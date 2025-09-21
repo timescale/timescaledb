@@ -452,8 +452,7 @@ static CustomPathMethods modify_hypertable_path_methods = {
 };
 
 Path *
-ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hypertable *ht,
-								 RelOptInfo *rel)
+ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath, RelOptInfo *rel)
 {
 	ModifyHypertablePath *mht_path = palloc0(sizeof(ModifyHypertablePath));
 
