@@ -51,7 +51,7 @@ typedef struct ModifyHypertableState
 
 extern void ts_modify_hypertable_fixup_tlist(Plan *plan);
 extern Path *ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
-											  Hypertable *ht, RelOptInfo *input_rel);
+											  RelOptInfo *input_rel);
 extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
 TupleTableSlot *ExecModifyTable(CustomScanState *cs_node, PlanState *pstate);
