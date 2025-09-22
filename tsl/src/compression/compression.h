@@ -94,12 +94,12 @@ typedef struct SegmentInfo
 } SegmentInfo;
 
 /* this struct holds information about a segmentby column,
- * and additionally stores the mapping for this column in
- * the uncompressed chunk. */
+ * and additionally stores the offset for this column in
+ * the chunk. */
 typedef struct CompressedSegmentInfo
 {
 	SegmentInfo *segment_info;
-	int16 decompressed_chunk_offset;
+	int16 chunk_offset;
 } CompressedSegmentInfo;
 
 typedef struct PerCompressedColumn
@@ -388,7 +388,7 @@ extern void row_compressor_clear_batch(RowCompressor *row_compressor, bool chang
 extern void row_compressor_append_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, Relation in_rel,
-											  BulkWriter *writer);
+											  BulkWriter *writer, bool flush_end);
 extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
 									  const CompressionSettings *settings);
 
