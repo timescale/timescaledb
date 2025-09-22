@@ -3942,6 +3942,13 @@ process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	AlterTableCmd *cmd = arg;
 
+	/* Don't propagate ALTER TABLE SET to foreign tables */
+	if (get_rel_relkind(chunk_relid) == RELKIND_FOREIGN_TABLE &&
+		(cmd->subtype == AT_SetOptions || cmd->subtype == AT_ResetOptions ||
+		 cmd->subtype == AT_SetRelOptions || cmd->subtype == AT_ReplaceRelOptions ||
+		 cmd->subtype == AT_ResetRelOptions))
+		return;
+
 	AlterTableInternal(chunk_relid, list_make1(cmd), false);
 }
 
