@@ -19,3 +19,23 @@ step s2_commit:
 step s1_commit: 
   COMMIT;
 
+
+starting permutation: s1_begin s2_begin s1_copy_february s2_copy_march s2_commit s1_commit
+step s1_begin: 
+  BEGIN;
+
+step s2_begin: 
+  BEGIN;
+
+step s1_copy_february: 
+COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-02-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
+
+step s2_copy_march: 
+COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-03-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
+
+step s2_commit: 
+  COMMIT;
+
+step s1_commit: 
+  COMMIT;
+
