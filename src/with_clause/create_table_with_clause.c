@@ -60,6 +60,7 @@ ts_create_table_parse_chunk_time_interval(WithClauseResult option, Oid column_ty
 			case TIMESTAMPOID:
 			case TIMESTAMPTZOID:
 			case DATEOID:
+			case UUIDOID:
 			{
 				*interval_type = INTERVALOID;
 				return DirectFunctionCall3(interval_in,

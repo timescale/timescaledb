@@ -1694,7 +1694,7 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 	{
 		Oid compress_after_type = ts_dimension_get_partition_type(time_dim);
 		Datum compress_after_datum;
-		if (IS_TIMESTAMP_TYPE(compress_after_type))
+		if (IS_TIMESTAMP_TYPE(compress_after_type) || IS_UUID_TYPE(compress_after_type))
 			compress_after_type = INTERVALOID;
 
 		compress_after_datum =

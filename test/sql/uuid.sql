@@ -144,3 +144,83 @@ INSERT INTO uuid_events SELECT 'a8961135-cd89-4c4b-aa05-79df642407dd', 5, 5.0;
 \set ON_ERROR_STOP 1
 
 DROP TABLE uuid_events;
+
+BEGIN;
+-- Test UUID partition when using CREATE TABLE ... WITH
+CREATE TABLE IF NOT EXISTS events (
+     event_id UUID NOT NULL,
+     entity_id VARCHAR(100) NOT NULL,
+     ts TIMESTAMPTZ NOT NULL,
+     event_type VARCHAR(100) NOT NULL,
+     metadata JSONB,
+     PRIMARY KEY (event_id)
+)
+WITH (
+     tsdb.hypertable,
+     tsdb.partition_column='event_id',
+     tsdb.chunk_interval='2 hours'
+);
+
+-- Verify that the chunk time interval is two hours
+SELECT ((interval_length/1000000)/60)/60 AS hours
+FROM _timescaledb_catalog.dimension d JOIN _timescaledb_catalog.hypertable h ON (h.id = d.hypertable_id)
+WHERE h.table_name='events';
+ROLLBACK;
+
+-- Test a different interval
+BEGIN;
+CREATE TABLE IF NOT EXISTS events (
+     event_id UUID NOT NULL,
+     entity_id VARCHAR(100) NOT NULL,
+     ts TIMESTAMPTZ NOT NULL,
+     event_type VARCHAR(100) NOT NULL,
+     metadata JSONB,
+     PRIMARY KEY (event_id)
+)
+WITH (
+     tsdb.hypertable,
+     tsdb.partition_column='event_id',
+     tsdb.chunk_interval='2 months'
+);
+
+-- Verify that the chunk time interval is two hours
+SELECT (((interval_length/1000000)/60)/60)/24 AS days
+FROM _timescaledb_catalog.dimension d JOIN _timescaledb_catalog.hypertable h ON (h.id = d.hypertable_id)
+WHERE h.table_name='events';
+ROLLBACK;
+
+-- Verify same behavior without CREATE TABLE WITH:
+BEGIN;
+CREATE TABLE IF NOT EXISTS events (
+     event_id UUID NOT NULL,
+     entity_id VARCHAR(100) NOT NULL,
+     ts TIMESTAMPTZ NOT NULL,
+     event_type VARCHAR(100) NOT NULL,
+     metadata JSONB,
+     PRIMARY KEY (event_id)
+);
+
+SELECT create_hypertable('events', 'event_id', chunk_time_interval => interval '2 hours');
+-- Verify that the chunk time interval is two hours
+SELECT ((interval_length/1000000)/60)/60 AS hours
+FROM _timescaledb_catalog.dimension d JOIN _timescaledb_catalog.hypertable h ON (h.id = d.hypertable_id)
+WHERE h.table_name='events';
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE IF NOT EXISTS events (
+     event_id UUID NOT NULL,
+     entity_id VARCHAR(100) NOT NULL,
+     ts TIMESTAMPTZ NOT NULL,
+     event_type VARCHAR(100) NOT NULL,
+     metadata JSONB,
+     PRIMARY KEY (event_id)
+);
+
+SELECT create_hypertable('events', 'event_id', chunk_time_interval => interval '2 months');
+-- Verify that the chunk time interval is two hours
+SELECT (((interval_length/1000000)/60)/60)/24 AS days
+FROM _timescaledb_catalog.dimension d JOIN _timescaledb_catalog.hypertable h ON (h.id = d.hypertable_id)
+WHERE h.table_name='events';
+ROLLBACK;
+
