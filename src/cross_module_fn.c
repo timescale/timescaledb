@@ -272,15 +272,6 @@ continuous_agg_invalidate_mat_ht_all_default(const Hypertable *raw_ht, const Hyp
 	pg_unreachable();
 }
 
-static void
-continuous_agg_call_invalidation_trigger_default(int32 hypertable_id, Relation chunk_rel,
-												 HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
-												 bool update)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 
 PGDLLEXPORT Datum
@@ -369,7 +360,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
-	.continuous_agg_call_invalidation_trigger = continuous_agg_call_invalidation_trigger_default,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
