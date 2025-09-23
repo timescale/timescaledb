@@ -135,7 +135,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
-	.continuous_agg_call_invalidation_trigger = execute_cagg_trigger,
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_process_hypertable_invalidations =
 		continuous_agg_process_hypertable_invalidations,
