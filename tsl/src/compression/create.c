@@ -1710,7 +1710,7 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 			true,								   /* user_defined_schedule_interval */
 			true,								   /* if_not_exists */
 			false,								   /* fixed_schedule */
-			0,									   /* initial_start */
+			GetCurrentTimestamp() + USECS_PER_DAY, /* initial_start */
 			NULL /* timezone */);
 	}
 }
