@@ -604,3 +604,18 @@ SELECT i4489('a'), i4489('a');
      0 |     0
 (1 row)
 
+-- test ALTER TABLE ONLY for hypertables
+CREATE TABLE at_test(time timestamptz) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+-- adding column only on the parent table should be blocked
+\set ON_ERROR_STOP 0
+ALTER TABLE ONLY at_test ADD COLUMN value INT;
+ERROR:  ONLY option not supported on hypertable operations
+\set ON_ERROR_STOP 1
+ALTER TABLE ONLY at_test SET (autovacuum_enabled = false);
+ALTER TABLE ONLY at_test RESET (autovacuum_enabled);
+-- test again after creating some chunks
+INSERT INTO at_test VALUES ('2025-01-01');
+INSERT INTO at_test VALUES ('2025-02-01');
+ALTER TABLE ONLY at_test SET (autovacuum_enabled = false);
+ALTER TABLE ONLY at_test RESET (autovacuum_enabled);
