@@ -886,7 +886,7 @@ update_watermark(MaterializationContext *context)
 	appendStringInfo(command,
 					 "SELECT %s FROM %s.%s AS I "
 					 "WHERE I.%s >= $1 %s "
-					 "ORDER BY 1 DESC LIMIT 1;",
+					 "ORDER BY 1 DESC LIMIT 1 FOR UPDATE;",
 					 quote_identifier(NameStr(*context->time_column_name)),
 					 quote_identifier(NameStr(*context->materialization_table.schema)),
 					 quote_identifier(NameStr(*context->materialization_table.name)),

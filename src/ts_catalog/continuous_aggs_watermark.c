@@ -302,22 +302,27 @@ cagg_watermark_update_internal(int32 mat_hypertable_id, Oid ht_relid, int64 new_
 							 .ht_relid = ht_relid };
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGGS_WATERMARK, RowExclusiveLock, CurrentMemoryContext);
-
-	cagg_watermark_init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 	iterator.ctx.tuple_found = cagg_watermark_update_scan_internal;
 	iterator.ctx.data = &data;
 	iterator.ctx.snapshot = RegisterSnapshot(GetLatestSnapshot());
 	ScanTupLock scantuplock = {
 		.waitpolicy = LockWaitBlock,
 		.lockmode = LockTupleExclusive,
-		.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+		/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
+		.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS,
 	};
+	if (!IsolationUsesXactSnapshot())
+	{
+		/* in read committed mode, we follow all updates to this tuple */
+		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
 	iterator.ctx.tuplock = &scantuplock;
 	iterator.ctx.flags = SCANNER_F_KEEPLOCK;
 
+	cagg_watermark_init_scan_by_mat_hypertable_id(&iterator, mat_hypertable_id);
+
 	bool watermark_updated =
 		ts_scanner_scan_one(&iterator.ctx, false, "continuous aggregate watermark");
-	ts_scan_iterator_close(&iterator);
 	UnregisterSnapshot(iterator.ctx.snapshot);
 
 	if (!watermark_updated)
