@@ -4138,7 +4138,28 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 		ts_hypertable_permissions_check_by_id(ht->fd.id);
 		check_continuous_agg_alter_table_allowed(ht, stmt);
 		check_alter_table_allowed_on_ht_with_compression(ht, stmt);
-		relation_not_only(stmt->relation);
+
+		if (!stmt->relation->inh)
+		{
+			/* only allow ALTER TABLE ... SET (option) with ONLY */
+			foreach (lc, stmt->cmds)
+			{
+				AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+				switch (cmd->subtype)
+				{
+					case AT_SetRelOptions:
+					case AT_ResetRelOptions:
+					case AT_ReplaceRelOptions:
+					case AT_SetOptions:
+					case AT_ResetOptions:
+						continue;
+
+					default:
+						relation_not_only(stmt->relation);
+						break;
+				}
+			}
+		}
 	}
 	foreach (lc, stmt->cmds)
 	{
