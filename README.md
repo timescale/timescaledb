@@ -1,7 +1,7 @@
 <div align=center>
 <picture align=center>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.tigerdata.com/timescale-web/brand/horizontal/yellow/logo-yellow.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://assets.tigerdata.com/timescale-web/brand/horizontal/black/logo-black.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.timescale.com/docs/images/tigerdata-gradient-white.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://assets.timescale.com/docs/images/tigerdata-gradient-black.svg">
     <img alt="TigerData logo" >
 </picture>
 </div>
