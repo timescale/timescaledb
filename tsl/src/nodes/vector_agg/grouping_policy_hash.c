@@ -128,7 +128,6 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 	const uint32 *offsets = policy->key_index_for_row;
 	MemoryContext agg_extra_mctx = policy->agg_extra_mctx;
 
-
 	/*
 	 * We have functions with one argument, and one function with no arguments
 	 * (count(*)). Collect the arguments.
@@ -167,10 +166,10 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 	DecompressBatchState *batch_state = (DecompressBatchState *) vector_slot;
 	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
 	const uint64 *combined_validity = arrow_combine_validity(num_words,
-												  policy->tmp_filter,
-												  agg_def->effective_batch_filter,
-												  arg_validity_bitmap,
-												  NULL);
+															 policy->tmp_filter,
+															 agg_def->effective_batch_filter,
+															 arg_validity_bitmap,
+															 NULL);
 
 	/*
 	 * Now call the function.

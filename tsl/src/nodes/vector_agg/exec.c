@@ -311,13 +311,16 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 	uint64 const *input_validity = NULL;
 	if (have_null_bitmap || filter != NULL)
 	{
-		input_validity =
-			MemoryContextAlloc(batch_state->per_batch_context, sizeof(uint64) * num_validity_words);
-		input_validity = arrow_combine_validity(num_validity_words,
-												(uint64 *) input_validity,
-												filter,
-												(uint64 *) arg_values[0].buffers[0],
-												(uint64 *) arg_values[1].buffers[0]);
+		uint64 *restrict combined_validity =
+			MemoryContextAlloc(batch_state->per_batch_context,
+							   sizeof(*combined_validity) * num_validity_words);
+		memset(combined_validity, -1, num_validity_words * sizeof(*combined_validity));
+		arrow_validity_and(num_validity_words, combined_validity, filter);
+		for (int i = 0; i < nargs; i++)
+		{
+			arrow_validity_and(num_validity_words, combined_validity, arg_values[i].buffers[0]);
+		}
+		input_validity = combined_validity;
 	}
 
 	uint64 *restrict result_validity = NULL;
@@ -329,159 +332,118 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 
 	ArrowArray *arrow_result = NULL;
 
+	void *restrict result_buffer_1 = NULL;
+	uint8 *restrict body_buffer = NULL;
+	uint32 *restrict offset_buffer = NULL;
+	uint32 current_offset = 0;
+	int allocated_body_bytes = pad_to_multiple(64, 10);
 	if (rettyplen != -1)
 	{
 		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
 											  sizeof(ArrowArray) + 2 * sizeof(void *));
-		arrow_result->length = nrows;
 		arrow_result->buffers = (void *) &arrow_result[1];
-		void *restrict result_buffer_1 =
-			MemoryContextAllocZero(batch_state->per_batch_context,
-								   pad_to_multiple(64, rettyplen * nrows));
+		result_buffer_1 = MemoryContextAllocZero(batch_state->per_batch_context,
+												 pad_to_multiple(64, rettyplen * nrows));
 		arrow_result->buffers[1] = result_buffer_1;
-
-		for (int i = 0; i < nrows; i++)
-		{
-			if (!arrow_row_is_valid(input_validity, i))
-			{
-				continue;
-			}
-
-			compressed_columns_to_postgres_data(arg_values, nargs, i);
-
-			Datum result = FunctionCallInvoke(fcinfo);
-
-			if (fcinfo->isnull)
-			{
-				/*
-				 * A strict function can still return a null for a non-null
-				 * argument.
-				 */
-				if (result_validity == NULL)
-				{
-					result_validity =
-						MemoryContextAlloc(batch_state->per_batch_context,
-										   num_validity_words * sizeof(*result_validity));
-					memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
-					const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
-					result_validity[nrows / 64] &= tail_mask;
-				}
-
-				arrow_set_row_validity(result_validity, i, false);
-
-				continue;
-			}
-
-			(void) result;
-
-			switch (rettyplen)
-			{
-				/* FIXME bool */
-				/* FIXME per-type code actually faster? */
-				case 2:
-				case 4:
-#ifdef USE_FLOAT8_BYVAL
-				case 8:
-#endif
-					memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
-						   &result,
-						   sizeof(Datum));
-					break;
-#ifndef USE_FLOAT8_BYVAL
-				case 8:
-#endif
-				case 16:
-					Assert(!rettypbyval);
-					memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
-						   DatumGetPointer(result),
-						   rettyplen);
-					break;
-				case -1:
-					Assert(!rettypbyval);
-					elog(ERROR, "varlena return type not supported");
-				default:
-					elog(ERROR, "wrong size %d", rettyplen);
-			}
-		}
 	}
 	else
 	{
 		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
 											  sizeof(ArrowArray) + 3 * sizeof(void *));
-		arrow_result->length = nrows;
 		arrow_result->buffers = (void *) &arrow_result[1];
-		uint32 *restrict offset_buffer =
-			MemoryContextAllocZero(batch_state->per_batch_context,
-								   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
-		uint32 current_offset = 0;
-
-		int allocated_body_bytes = pad_to_multiple(64, 10);
-		uint8 *restrict body_buffer =
-			MemoryContextAllocZero(batch_state->per_batch_context, allocated_body_bytes);
-
-		for (int i = 0; i < nrows; i++)
-		{
-			if (!arrow_row_is_valid(input_validity, i))
-			{
-				continue;
-			}
-
-			Assert(arg_values[0].decompression_type != DT_Invalid);
-
-			compressed_columns_to_postgres_data(arg_values, nargs, i);
-
-			Assert(arg_values[0].decompression_type != DT_Invalid);
-
-			Datum result = FunctionCallInvoke(fcinfo);
-
-			if (fcinfo->isnull)
-			{
-				/*
-				 * A strict function can still return a null for a non-null
-				 * argument.
-				 */
-				if (result_validity == NULL)
-				{
-					result_validity =
-						MemoryContextAlloc(batch_state->per_batch_context,
-										   num_validity_words * sizeof(*result_validity));
-					memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
-					const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
-					result_validity[nrows / 64] &= tail_mask;
-				}
-
-				arrow_set_row_validity(result_validity, i, false);
-
-				continue;
-			}
-
-			const int result_bytes = VARSIZE_ANY_EXHDR(result);
-			const int required_body_bytes = pad_to_multiple(64, current_offset + result_bytes);
-			if (required_body_bytes > allocated_body_bytes)
-			{
-				const int new_body_bytes =
-					required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) i + 1))) + 1;
-				//				fprintf(stderr,
-				//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
-				//						new_body_bytes,
-				//						new_body_bytes / (float) required_body_bytes,
-				//						i,
-				//						nrows);
-				Assert(new_body_bytes >= required_body_bytes);
-				body_buffer = repalloc(body_buffer, new_body_bytes);
-				allocated_body_bytes = new_body_bytes;
-			}
-
-			(void) result;
-
-			offset_buffer[i] = current_offset;
-			memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
-			current_offset += result_bytes;
-		}
-
-		offset_buffer[nrows] = current_offset;
+		offset_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
+											   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
+		body_buffer = MemoryContextAllocZero(batch_state->per_batch_context, allocated_body_bytes);
 		arrow_result->buffers[1] = offset_buffer;
 		arrow_result->buffers[2] = body_buffer;
+	}
+	arrow_result->length = nrows;
+
+	for (int i = 0; i < nrows; i++)
+	{
+		if (!arrow_row_is_valid(input_validity, i))
+		{
+			continue;
+		}
+
+		compressed_columns_to_postgres_data(arg_values, nargs, i);
+
+		Datum result = FunctionCallInvoke(fcinfo);
+
+		//		fprintf(stderr, "[%d]: %ld %d\n", i, result, fcinfo->isnull);
+
+		if (fcinfo->isnull)
+		{
+			/*
+			 * A strict function can still return a null for a non-null
+			 * argument.
+			 */
+			if (result_validity == NULL)
+			{
+				result_validity = MemoryContextAlloc(batch_state->per_batch_context,
+													 num_validity_words * sizeof(*result_validity));
+				memset(result_validity, -1, num_validity_words * sizeof(*result_validity));
+				const uint64 tail_mask = ~0ULL >> (64 - nrows % 64);
+				result_validity[nrows / 64] &= tail_mask;
+			}
+
+			arrow_set_row_validity(result_validity, i, false);
+
+			continue;
+		}
+
+		switch (rettyplen)
+		{
+			/* FIXME bool */
+			/* FIXME per-type code actually faster? */
+			case -1:
+			{
+				const int result_bytes = VARSIZE_ANY_EXHDR(result);
+				const int required_body_bytes = pad_to_multiple(64, current_offset + result_bytes);
+				if (required_body_bytes > allocated_body_bytes)
+				{
+					const int new_body_bytes =
+						required_body_bytes * Min(10, Max(1.2, 1.2 * nrows / ((float) i + 1))) + 1;
+					//				fprintf(stderr,
+					//						"repalloc to %d (ratio %.2f at %d/%d rows)\n",
+					//						new_body_bytes,
+					//						new_body_bytes / (float) required_body_bytes,
+					//						i,
+					//						nrows);
+					Assert(new_body_bytes >= required_body_bytes);
+					body_buffer = repalloc(body_buffer, new_body_bytes);
+					allocated_body_bytes = new_body_bytes;
+				}
+
+				offset_buffer[i] = current_offset;
+				memcpy(&body_buffer[current_offset], VARDATA_ANY(result), result_bytes);
+				current_offset += result_bytes;
+				break;
+			}
+			case 2:
+			case 4:
+#ifdef USE_FLOAT8_BYVAL
+			case 8:
+#endif
+				memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1, &result, sizeof(Datum));
+				break;
+#ifndef USE_FLOAT8_BYVAL
+			case 8:
+#endif
+			case 16:
+				Assert(!rettypbyval);
+				memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
+					   DatumGetPointer(result),
+					   rettyplen);
+				break;
+			default:
+				elog(ERROR, "wrong size %d", rettyplen);
+		}
+	}
+
+	if (offset_buffer != NULL)
+	{
+		offset_buffer[nrows] = current_offset;
 	}
 
 	/*
@@ -499,6 +461,9 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 	}
 	arrow_result->null_count =
 		arrow_result->length - arrow_num_valid(arrow_result->buffers[0], arrow_result->length);
+
+	//	fprintf(stderr, "length %ld, null count %ld\n", arrow_result->length,
+	//arrow_result->null_count);
 
 	CompressedColumnValues result = {
 		.decompression_type = rettyplen == -1 ? DT_ArrowText : rettyplen,
@@ -557,7 +522,7 @@ vector_slot_get_compressed_column_values(DecompressContext *dcontext, TupleTable
 			Ensure(false,
 				   "wrong node type %s for vector expression",
 				   ts_get_node_name((Node *) argument));
-			return (CompressedColumnValues) { .decompression_type = DT_Invalid };
+			return (CompressedColumnValues){ .decompression_type = DT_Invalid };
 	}
 }
 
@@ -946,8 +911,9 @@ vector_agg_exec(CustomScanState *node)
 			if (filter_clause_result != NULL)
 			{
 				const int num_validity_words = (batch_state->total_batch_rows + 63) / 64;
-				arrow_validity_and(num_validity_words, filter_clause_result,
-					batch_state->vector_qual_result);
+				arrow_validity_and(num_validity_words,
+								   filter_clause_result,
+								   batch_state->vector_qual_result);
 				agg_def->effective_batch_filter = filter_clause_result;
 			}
 			else

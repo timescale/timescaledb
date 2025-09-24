@@ -192,6 +192,9 @@ arrow_combine_validity(size_t num_words, uint64 *restrict storage, const uint64 
 					   const uint64 *filter2, const uint64 *filter3)
 {
 	Assert(num_words != 0);
+	Assert(storage != filter1);
+	Assert(storage != filter2);
+	Assert(storage != filter3);
 
 	/*
 	 * Any and all of the filters can be null. For simplicity, move the non-null

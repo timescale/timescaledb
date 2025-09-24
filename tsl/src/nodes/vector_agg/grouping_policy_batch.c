@@ -156,10 +156,10 @@ compute_single_aggregate(GroupingPolicyBatch *policy, DecompressContext *dcontex
 	DecompressBatchState *batch_state = (DecompressBatchState *) vector_slot;
 	const size_t num_words = (batch_state->total_batch_rows + 63) / 64;
 	const uint64 *combined_validity = arrow_combine_validity(num_words,
-												  policy->tmp_filter,
-												  agg_def->effective_batch_filter,
-												  arg_validity_bitmap,
-												  NULL);
+															 policy->tmp_filter,
+															 agg_def->effective_batch_filter,
+															 arg_validity_bitmap,
+															 NULL);
 
 	/*
 	 * Now call the function.
