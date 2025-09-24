@@ -13,7 +13,9 @@
 #include "hypertable.h"
 
 /* Forward declarations */
-struct ModifyTableContext;
+typedef struct ModifyTableContext ModifyTableContext;
+typedef struct RowCompressor RowCompressor;
+typedef struct BulkWriter BulkWriter;
 
 typedef struct ModifyHypertablePath
 {
@@ -32,6 +34,11 @@ typedef struct ModifyHypertableState
 	ModifyTable *mt;
 	ChunkTupleRouting *ctr;
 
+	RowCompressor *compressor;
+	BulkWriter *bulk_writer;
+	Oid compressor_relid;
+	bool columnstore_insert;
+
 	bool comp_chunks_processed;
 	Snapshot snapshot;
 	int64 tuples_decompressed;
@@ -44,9 +51,9 @@ typedef struct ModifyHypertableState
 
 extern void ts_modify_hypertable_fixup_tlist(Plan *plan);
 extern Path *ts_modify_hypertable_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
-											  Hypertable *ht, RelOptInfo *input_rel);
+											  RelOptInfo *input_rel);
 extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
 TupleTableSlot *ExecModifyTable(CustomScanState *cs_node, PlanState *pstate);
-TupleTableSlot *ExecInsert(struct ModifyTableContext *context, ResultRelInfo *resultRelInfo,
-						   struct ChunkTupleRouting *ctr, TupleTableSlot *slot, bool canSetTag);
+TupleTableSlot *ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
+						   ChunkTupleRouting *ctr, TupleTableSlot *slot, bool canSetTag);

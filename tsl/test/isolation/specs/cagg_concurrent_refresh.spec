@@ -113,21 +113,21 @@ setup
       FROM _timescaledb_catalog.continuous_agg
       WHERE user_view_name = cagg
       INTO mattable;
-      EXECUTE format('LOCK table %s IN ROW EXCLUSIVE MODE', mattable);
+      EXECUTE format('LOCK table %s IN SHARE UPDATE EXCLUSIVE MODE', mattable);
     END; $$ LANGUAGE plpgsql;
 
-    CREATE TABLE killpid (
+    CREATE TABLE cancelpid (
         pid INTEGER NOT NULL PRIMARY KEY
     );
-    CREATE OR REPLACE PROCEDURE killpids() AS 
+    CREATE OR REPLACE PROCEDURE cancelpids() AS 
     $$
     BEGIN
-        PERFORM pg_terminate_backend(pid) FROM killpid;
-        WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM killpid))
+        PERFORM pg_cancel_backend(pid) FROM cancelpid;
+        WHILE EXISTS (SELECT FROM pg_stat_activity WHERE pid IN (SELECT pid FROM cancelpid) AND state = 'active')
         LOOP
             PERFORM pg_sleep(0.01);
         END LOOP;
-        DELETE FROM killpid;
+        DELETE FROM cancelpid;
     END;
     $$ LANGUAGE plpgsql;
 
@@ -176,18 +176,38 @@ setup
 teardown {
     DROP TABLE conditions CASCADE;
     DROP TABLE conditions2 CASCADE;
-    DROP TABLE killpid;
+    DROP TABLE cancelpid;
 }
 
 # Waitpoint for cagg invalidation logs
-session "WP"
-step "WP_enable"
+session "WP_after"
+step "WP_after_enable"
 {
     SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
 }
-step "WP_release"
+step "WP_after_release"
 {
     SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+}
+
+session "WP_before"
+step "WP_before_enable"
+{
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+}
+step "WP_before_release"
+{
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+}
+
+session "WP_after_materialization"
+step "WP_after_materialization_enable"
+{
+    SELECT debug_waitpoint_enable('after_process_cagg_materializations');
+}
+step "WP_after_materialization_release"
+{
+    SELECT debug_waitpoint_release('after_process_cagg_materializations');
 }
 
 # Session to refresh the cond_10 continuous aggregate
@@ -196,7 +216,7 @@ setup
 {
     SET SESSION lock_timeout = '500ms';
     SET SESSION deadlock_timeout = '500ms';
-    INSERT INTO killpid VALUES (pg_backend_pid())
+    INSERT INTO cancelpid VALUES (pg_backend_pid())
     ON CONFLICT (pid) DO NOTHING;
 }
 step "R1_refresh"
@@ -218,8 +238,9 @@ step "R12_refresh"
 session "R13"
 step "R13_refresh"
 {
-    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+    CALL refresh_continuous_aggregate('cond_10', 65, 100);
 }
+
 
 # Refresh that overlaps with R1
 session "R2"
@@ -363,9 +384,9 @@ step "S1_select"
 }
 
 session "K1"
-step "K1_killpid"
+step "K1_cancelpid"
 {
-    CALL killpids();
+    CALL cancelpids();
 }
 
 ####################################################################
@@ -395,7 +416,7 @@ permutation "R3_refresh" "L2_read_lock_threshold_table" "R1_refresh" "L2_read_un
 ##################################################################
 #
 # Tests for concurrent refreshes of continuous aggregates (second
-# transaction of a refresh).
+# and third transactions of a refresh).
 #
 ##################################################################
 
@@ -405,8 +426,8 @@ permutation "L3_lock_cagg_table" "R1_refresh" "L3_unlock_cagg_table" "S1_select"
 # R1 and R2 queued to refresh
 permutation "L3_lock_cagg_table" "R1_refresh" "R2_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
-# R1 and R3 don't have overlapping refresh windows, but should skip
-# locks and process the materialization.
+# R1 and R3 don't have overlapping refresh windows, but should serialize
+# anyway cause we're locking the cagg hypertable
 permutation "L3_lock_cagg_table" "R1_refresh" "R3_refresh" "L3_unlock_cagg_table" "S1_select" "L1_unlock_threshold_table" "L2_read_unlock_threshold_table"
 
 # Concurrent refreshing across two different aggregates on same
@@ -419,8 +440,15 @@ permutation "R1_refresh" "R12_refresh"
 
 # CAgg invalidation logs processing in a separated transaction and the materialization
 # transaction can be executed concurrently
-permutation "WP_enable" "R1_refresh"("WP_enable") "R6_pending_materialization_ranges" "R5_refresh"("WP_enable") "R6_pending_materialization_ranges" "WP_release" "R6_pending_materialization_ranges" "S1_select"
+permutation "WP_after_enable" "R1_refresh"("WP_after_enable") "R6_pending_materialization_ranges" "R5_refresh"("WP_after_enable") "R6_pending_materialization_ranges" "WP_after_release" "R6_pending_materialization_ranges" "S1_select"
 
 # CAgg materialization phase (third trasaction of the refresh procedure) terminated by another session and then
 # refreshing again and make sure the pending ranges will be processed
-permutation "WP_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_enable") "R3_refresh"("WP_enable") "K1_killpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_release" "R13_refresh"("K1_killpid") "R6_pending_materialization_ranges"
+permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_after_enable") "R3_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_after_release" "R13_refresh"("K1_cancelpid") "R6_pending_materialization_ranges"
+
+# R3 should wait for R1 to finish because there are cagg invalidation rows locked
+permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "R3_refresh" "WP_before_release"
+
+# Concurrent refresh of caggs on non-overlapping ranges should not
+# block each other in the third transaction (materialization)
+permutation "WP_after_materialization_enable" "R1_refresh"("WP_after_materialization_enable") "WP_after_materialization_release" "R3_refresh" 

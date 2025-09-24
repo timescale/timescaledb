@@ -1,0 +1,1 @@
+Fixes: #8659 Don't propagate ALTER TABLE commands to FDW chunks

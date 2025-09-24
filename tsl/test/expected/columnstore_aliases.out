@@ -56,9 +56,9 @@ CALL convert_to_columnstore(:'chunk',
 CALL add_columnstore_policy('test1', interval '1 day');
 CALL remove_columnstore_policy('test1');
 SELECT * FROM timescaledb_information.hypertable_columnstore_settings;
- hypertable | segmentby | orderby | compress_interval_length |                           index                           
-------------+-----------+---------+--------------------------+-----------------------------------------------------------
- test1      | b         | ts DESC |                          | [{"type": "minmax", "column": "ts", "source": "orderby"}]
+ hypertable | segmentby | orderby | compress_interval_length | index 
+------------+-----------+---------+--------------------------+-------
+ test1      | b         | ts DESC |                          | 
 (1 row)
 
 SELECT * FROM timescaledb_information.chunk_columnstore_settings ORDER BY chunk;

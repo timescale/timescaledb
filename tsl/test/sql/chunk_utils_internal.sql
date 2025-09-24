@@ -842,5 +842,24 @@ DROP EVENT TRIGGER ddl_start_trigger;
 DROP EVENT TRIGGER ddl_end_trigger;
 DROP TABLE ht_try;
 
+--TEST ALTER TABLE propagation with foreign chunks
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE ht_alter(ts timestamptz) WITH (tsdb.hypertable,tsdb.compress=false);
+
+INSERT INTO ht_alter SELECT '2025-01-01';
+\c postgres_fdw_db :ROLE_4
+CREATE TABLE fdw_ht_alter(ts timestamptz NOT NULL, device text, value float);
+INSERT INTO fdw_ht_alter SELECT '2021-05-05';
+
+\c :TEST_DBNAME :ROLE_4
+-- this is a stand-in for the OSM table
+CREATE FOREIGN TABLE child_ht_alter(ts timestamptz NOT NULL)
+ SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_ht_alter');
+SELECT _timescaledb_functions.attach_osm_table_chunk('ht_alter', 'child_ht_alter');
+
+ALTER TABLE ht_alter SET (autovacuum_enabled = false);
+ALTER TABLE ht_alter RESET (autovacuum_enabled);
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
 -- clean up databases created
 DROP DATABASE postgres_fdw_db WITH (FORCE);

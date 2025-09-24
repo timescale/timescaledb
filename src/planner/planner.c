@@ -1605,7 +1605,7 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					case CMD_UPDATE:
 					case CMD_DELETE:
 					{
-						path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
+						path = ts_modify_hypertable_path_create(root, mt, input_rel);
 						break;
 					}
 					case CMD_MERGE:
@@ -1621,7 +1621,7 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 							MergeAction *action = (MergeAction *) lfirst(l);
 							if (action->commandType == CMD_INSERT)
 							{
-								path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
+								path = ts_modify_hypertable_path_create(root, mt, input_rel);
 								break;
 							}
 						}

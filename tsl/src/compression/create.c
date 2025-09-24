@@ -1408,7 +1408,7 @@ compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 		settings->fd.orderby = obs.orderby;
 		settings->fd.orderby_desc = obs.orderby_desc;
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
-		add_orderby_sparse_index = true;
+		add_orderby_sparse_index = settings->fd.index != NULL;
 	}
 
 	if (ts_guc_auto_sparse_indexes && can_set_default_sparse_index(settings))
@@ -1453,7 +1453,7 @@ compression_settings_set_manually_for_alter(Hypertable *ht, CompressionSettings 
 		settings->fd.orderby = obs.orderby;
 		settings->fd.orderby_desc = obs.orderby_desc;
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
-		add_orderby_sparse_index = true;
+		add_orderby_sparse_index = settings->fd.index != NULL;
 	}
 
 	if (!with_clause_options[AlterTableFlagIndex].is_default)
@@ -1505,7 +1505,7 @@ compression_settings_set_manually_for_create(Hypertable *ht, CompressionSettings
 		settings->fd.orderby = obs.orderby;
 		settings->fd.orderby_desc = obs.orderby_desc;
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;
-		add_orderby_sparse_index = true;
+		add_orderby_sparse_index = settings->fd.index != NULL;
 	}
 
 	if (!with_clause_options[CreateTableFlagIndex].is_default)
@@ -1694,7 +1694,7 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 	{
 		Oid compress_after_type = ts_dimension_get_partition_type(time_dim);
 		Datum compress_after_datum;
-		if (IS_TIMESTAMP_TYPE(compress_after_type))
+		if (IS_TIMESTAMP_TYPE(compress_after_type) || IS_UUID_TYPE(compress_after_type))
 			compress_after_type = INTERVALOID;
 
 		compress_after_datum =
@@ -1710,7 +1710,7 @@ tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options)
 			true,								   /* user_defined_schedule_interval */
 			true,								   /* if_not_exists */
 			false,								   /* fixed_schedule */
-			0,									   /* initial_start */
+			GetCurrentTimestamp() + USECS_PER_DAY, /* initial_start */
 			NULL /* timezone */);
 	}
 }

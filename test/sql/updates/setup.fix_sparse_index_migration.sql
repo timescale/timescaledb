@@ -1,17 +1,6 @@
-DO $$
-BEGIN
-    UPDATE _timescaledb_config.bgw_job
-      SET config = config || '{"max_successes_per_job": 1000, "max_failures_per_job": 1000}',
-          schedule_interval = '1 day'
-    WHERE id = 3; -- system job retention
-
-    RAISE WARNING 'job history configuration modified'
-    USING DETAIL = 'The job history will only keep the last 1000 successes and failures and run once each day.';
-END
-$$;
-
-DROP VIEW IF EXISTS timescaledb_information.job_stats;
-
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
 
 -- Fix wrong migration by removing all sparse index configurations
 -- which only contain auto sparse indexing definitions on hypertable
