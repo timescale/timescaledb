@@ -44,7 +44,7 @@ VACUUM ANALYZE ht_metrics_compressed;
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time" DESC, ht_metrics_compressed.device
          ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: _hyper_1_3_chunk."time" DESC, _hyper_1_3_chunk.device
+               Sort Key: ht_metrics_compressed."time" DESC, ht_metrics_compressed.device
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_1_3_chunk."time" DESC, _hyper_1_3_chunk.device
                      Sort Method: top-N heapsort 
@@ -55,7 +55,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      Sort Method: top-N heapsort 
                      ->  Seq Scan on _hyper_1_3_chunk (actual rows=18 loops=1)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_2_chunk."time" DESC, _hyper_1_2_chunk.device
+               Sort Key: ht_metrics_compressed."time" DESC, ht_metrics_compressed.device
                ->  Sort (never executed)
                      Sort Key: _hyper_1_2_chunk."time" DESC, _hyper_1_2_chunk.device
                      ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
@@ -64,7 +64,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      Sort Key: _hyper_1_2_chunk."time" DESC, _hyper_1_2_chunk.device
                      ->  Seq Scan on _hyper_1_2_chunk (never executed)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_1_chunk."time" DESC, _hyper_1_1_chunk.device
+               Sort Key: ht_metrics_compressed."time" DESC, ht_metrics_compressed.device
                ->  Sort (never executed)
                      Sort Key: _hyper_1_1_chunk."time" DESC, _hyper_1_1_chunk.device
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
@@ -75,11 +75,11 @@ VACUUM ANALYZE ht_metrics_compressed;
 (32 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('1d', time) DESC, device LIMIT 1;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")) DESC, _hyper_1_1_chunk.device
+         Sort Key: (time_bucket('@ 1 day'::interval, ht_metrics_compressed."time")) DESC, ht_metrics_compressed.device
          ->  Sort (actual rows=1 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")) DESC, _hyper_1_1_chunk.device
                Sort Method: top-N heapsort 
@@ -119,7 +119,7 @@ VACUUM ANALYZE ht_metrics_compressed;
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=10 loops=1)
          Order: ht_metrics_compressed."time" DESC
          ->  Merge Append (actual rows=10 loops=1)
-               Sort Key: _hyper_1_3_chunk."time" DESC
+               Sort Key: ht_metrics_compressed."time" DESC
                ->  Sort (actual rows=7 loops=1)
                      Sort Key: _hyper_1_3_chunk."time" DESC
                      Sort Method: top-N heapsort 
@@ -130,7 +130,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      Sort Method: quicksort 
                      ->  Seq Scan on _hyper_1_3_chunk (actual rows=18 loops=1)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_2_chunk."time" DESC
+               Sort Key: ht_metrics_compressed."time" DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_1_2_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
@@ -139,7 +139,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      Sort Key: _hyper_1_2_chunk."time" DESC
                      ->  Seq Scan on _hyper_1_2_chunk (never executed)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_1_chunk."time" DESC
+               Sort Key: ht_metrics_compressed."time" DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_1_1_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
@@ -156,7 +156,7 @@ VACUUM ANALYZE ht_metrics_compressed;
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: time_bucket('@ 2 days'::interval, ht_metrics_compressed."time") DESC
          ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_3_chunk."time")) DESC
+               Sort Key: (time_bucket('@ 2 days'::interval, ht_metrics_compressed."time")) DESC
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_3_chunk."time")) DESC
                      Sort Method: top-N heapsort 
@@ -168,7 +168,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      Sort Method: top-N heapsort 
                      ->  Seq Scan on _hyper_1_3_chunk (actual rows=18 loops=1)
          ->  Merge Append (never executed)
-               Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_2_chunk."time")) DESC
+               Sort Key: (time_bucket('@ 2 days'::interval, ht_metrics_compressed."time")) DESC
                ->  Sort (never executed)
                      Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_2_chunk."time")) DESC
                      ->  Result (never executed)
@@ -178,7 +178,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_2_chunk."time")) DESC
                      ->  Seq Scan on _hyper_1_2_chunk (never executed)
          ->  Merge Append (never executed)
-               Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_1_chunk."time")) DESC
+               Sort Key: (time_bucket('@ 2 days'::interval, ht_metrics_compressed."time")) DESC
                ->  Sort (never executed)
                      Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_1_chunk."time")) DESC
                      ->  Result (never executed)
@@ -196,7 +196,7 @@ VACUUM ANALYZE ht_metrics_compressed;
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time" DESC
          ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: _hyper_1_3_chunk."time" DESC
+               Sort Key: ht_metrics_compressed."time" DESC
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_1_3_chunk."time" DESC
                      Sort Method: top-N heapsort 
@@ -210,7 +210,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      ->  Seq Scan on _hyper_1_3_chunk (actual rows=18 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_2_chunk."time" DESC
+               Sort Key: ht_metrics_compressed."time" DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_1_2_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
@@ -222,7 +222,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      ->  Seq Scan on _hyper_1_2_chunk (never executed)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_1_chunk."time" DESC
+               Sort Key: ht_metrics_compressed."time" DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_1_1_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
@@ -242,7 +242,7 @@ VACUUM ANALYZE ht_metrics_compressed;
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time", ht_metrics_compressed.device DESC
          ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device DESC
+               Sort Key: ht_metrics_compressed."time", ht_metrics_compressed.device DESC
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device DESC
                      Sort Method: top-N heapsort 
@@ -256,7 +256,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      ->  Seq Scan on _hyper_1_1_chunk (actual rows=54 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device DESC
+               Sort Key: ht_metrics_compressed."time", ht_metrics_compressed.device DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
@@ -268,7 +268,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      ->  Seq Scan on _hyper_1_2_chunk (never executed)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device DESC
+               Sort Key: ht_metrics_compressed."time", ht_metrics_compressed.device DESC
                ->  Sort (never executed)
                      Sort Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
@@ -289,7 +289,7 @@ VACUUM ANALYZE ht_metrics_compressed;
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time" DESC
          ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: _hyper_1_3_chunk."time" DESC
+               Sort Key: ht_metrics_compressed."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=1 loops=1)
                      Filter: (device = 3)
                      ->  Sort (actual rows=1 loops=1)
@@ -305,7 +305,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                            Filter: (device = 3)
                            Rows Removed by Filter: 12
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_2_chunk."time" DESC
+               Sort Key: ht_metrics_compressed."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
                      Filter: (device = 3)
                      ->  Sort (never executed)
@@ -317,7 +317,7 @@ VACUUM ANALYZE ht_metrics_compressed;
                      ->  Seq Scan on _hyper_1_2_chunk (never executed)
                            Filter: (device = 3)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_1_chunk."time" DESC
+               Sort Key: ht_metrics_compressed."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
                      Filter: (device = 3)
                      ->  Sort (never executed)
@@ -341,7 +341,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
 --------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_1_chunk."time" DESC
+         Sort Key: ht_metrics_compressed."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
                Filter: (device = 3)
                ->  Sort (actual rows=1 loops=1)
@@ -399,7 +399,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time"
          ->  Merge Append (actual rows=1 loops=1)
-               Sort Key: _hyper_1_1_chunk."time"
+               Sort Key: ht_metrics_compressed."time"
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
                      Filter: (device = 3)
                      ->  Sort (actual rows=1 loops=1)
@@ -415,7 +415,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                            Filter: (device = 3)
                            Rows Removed by Filter: 36
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_2_chunk."time"
+               Sort Key: ht_metrics_compressed."time"
                ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
                      Filter: (device = 3)
                      ->  Sort (never executed)
@@ -427,7 +427,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
                      ->  Seq Scan on _hyper_1_2_chunk (never executed)
                            Filter: (device = 3)
          ->  Merge Append (never executed)
-               Sort Key: _hyper_1_3_chunk."time"
+               Sort Key: ht_metrics_compressed."time"
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
                      Filter: (device = 3)
                      ->  Sort (never executed)
@@ -452,7 +452,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time" DESC
+         Sort Key: ht_metrics_compressed.device, ht_metrics_compressed."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
@@ -487,7 +487,7 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time" DESC
+         Sort Key: ht_metrics_compressed.device, ht_metrics_compressed."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (actual rows=1 loops=1)
@@ -619,7 +619,7 @@ SELECT * FROM test1 ORDER BY time DESC LIMIT 10;
    ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
          Order: test1."time" DESC
          ->  Merge Append (actual rows=5 loops=1)
-               Sort Key: _hyper_3_7_chunk."time" DESC
+               Sort Key: test1."time" DESC
                ->  Sort (actual rows=4 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC
                      Sort Method: quicksort 
@@ -640,7 +640,7 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
    ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
          Order: test1."time" DESC, test1.x3
          ->  Merge Append (actual rows=5 loops=1)
-               Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3
+               Sort Key: test1."time" DESC, test1.x3
                ->  Sort (actual rows=4 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3
                      Sort Method: quicksort 
@@ -661,7 +661,7 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NU
    ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
          Order: test1."time" DESC, test1.x3, test1.x4
          ->  Merge Append (actual rows=5 loops=1)
-               Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
+               Sort Key: test1."time" DESC, test1.x3, test1.x4
                ->  Sort (actual rows=4 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
                      Sort Method: quicksort 
@@ -681,7 +681,7 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC N
    ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
          Order: test1."time" DESC, test1.x3, test1.x4 DESC
          ->  Merge Append (actual rows=5 loops=1)
-               Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4 DESC
+               Sort Key: test1."time" DESC, test1.x3, test1.x4 DESC
                ->  Sort (actual rows=4 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4 DESC
                      Sort Method: quicksort 
@@ -701,7 +701,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST LIMIT 10;
    ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
          Order: test1."time"
          ->  Merge Append (actual rows=5 loops=1)
-               Sort Key: _hyper_3_7_chunk."time"
+               Sort Key: test1."time"
                ->  Sort (actual rows=4 loops=1)
                      Sort Key: _hyper_3_7_chunk."time"
                      Sort Method: quicksort 
@@ -721,7 +721,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST LIMIT 10;
    ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
          Order: test1."time", test1.x3 DESC
          ->  Merge Append (actual rows=5 loops=1)
-               Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC
+               Sort Key: test1."time", test1.x3 DESC
                ->  Sort (actual rows=4 loops=1)
                      Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC
                      Sort Method: quicksort 
@@ -741,7 +741,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC N
    ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
          Order: test1."time", test1.x3 DESC, test1.x4 DESC
          ->  Merge Append (actual rows=5 loops=1)
-               Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC, _hyper_3_7_chunk.x4 DESC
+               Sort Key: test1."time", test1.x3 DESC, test1.x4 DESC
                ->  Sort (actual rows=4 loops=1)
                      Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC, _hyper_3_7_chunk.x4 DESC
                      Sort Method: quicksort 
@@ -761,7 +761,7 @@ SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC LI
    ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
          Order: test1."time" NULLS FIRST, test1.x3 DESC NULLS LAST, test1.x4
          ->  Merge Append (actual rows=5 loops=1)
-               Sort Key: _hyper_3_7_chunk."time" NULLS FIRST, _hyper_3_7_chunk.x3 DESC NULLS LAST, _hyper_3_7_chunk.x4
+               Sort Key: test1."time" NULLS FIRST, test1.x3 DESC NULLS LAST, test1.x4
                ->  Sort (actual rows=4 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" NULLS FIRST, _hyper_3_7_chunk.x3 DESC NULLS LAST, _hyper_3_7_chunk.x4
                      Sort Method: quicksort 
@@ -787,7 +787,7 @@ GROUP BY x1, x2, time ORDER BY time limit 10;
                      ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
                            Order: test1."time", test1.x1, test1.x2
                            ->  Merge Append (actual rows=5 loops=1)
-                                 Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
+                                 Sort Key: test1."time", test1.x1, test1.x2
                                  ->  Sort (actual rows=4 loops=1)
                                        Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
                                        Sort Method: quicksort 
@@ -806,7 +806,7 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, x4, time LIMIT 10;
 -------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk.x4, _hyper_3_7_chunk."time"
+         Sort Key: test1.x1, test1.x2, test1.x5, test1.x4, test1."time"
          ->  Sort (actual rows=4 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk.x4, _hyper_3_7_chunk."time"
                Sort Method: quicksort 
@@ -824,7 +824,7 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time, x4 LIMIT 10;
 -------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x4
+         Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x4
          ->  Sort (actual rows=4 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x4
                Sort Method: quicksort 
@@ -842,7 +842,7 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 LIMIT 10;
 -------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3
+         Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x3
          ->  Sort (actual rows=4 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3
                Sort Method: quicksort 
@@ -860,7 +860,7 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3, x4 LIMIT 10;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
+         Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x3, test1.x4
          ->  Sort (actual rows=4 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
                Sort Method: quicksort 
@@ -878,7 +878,7 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time, x4 DESC LIMIT 10; -- no pushdown 
 ------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x4 DESC
+         Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x4 DESC
          ->  Sort (actual rows=4 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x4 DESC
                Sort Method: quicksort 
@@ -897,7 +897,7 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time LIMIT 10;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time"
+         Sort Key: test1.x1, test1.x2, test1.x5, test1."time"
          ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
                      Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1
@@ -915,7 +915,7 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time DESC, x3 ASC, x4 ASC LIMIT 10; -- 
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
+         Sort Key: test1.x1, test1.x2, test1.x5, test1."time" DESC, test1.x3, test1.x4
          ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
                      Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1 DESC, compress_hyper_4_8_chunk._ts_meta_max_1 DESC, compress_hyper_4_8_chunk._ts_meta_min_2, compress_hyper_4_8_chunk._ts_meta_max_2, compress_hyper_4_8_chunk._ts_meta_min_3, compress_hyper_4_8_chunk._ts_meta_max_3
@@ -933,7 +933,7 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time ASC, x3 DESC, x4 DESC LIMIT 10; --
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC, _hyper_3_7_chunk.x4 DESC
+         Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x3 DESC, test1.x4 DESC
          ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
                      Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1, compress_hyper_4_8_chunk._ts_meta_min_2 DESC, compress_hyper_4_8_chunk._ts_meta_max_2 DESC, compress_hyper_4_8_chunk._ts_meta_min_3 DESC, compress_hyper_4_8_chunk._ts_meta_max_3 DESC
@@ -951,7 +951,7 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 10;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Merge Append (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC
+         Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x3 DESC
          ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
                      Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1, compress_hyper_4_8_chunk._ts_meta_min_2 DESC, compress_hyper_4_8_chunk._ts_meta_max_2 DESC
@@ -975,10 +975,10 @@ ORDER BY t1.x1, jt.y1;
                                                QUERY PLAN                                               
 --------------------------------------------------------------------------------------------------------
  Sort (actual rows=4 loops=1)
-   Sort Key: t1_1.x1, jt.y1
+   Sort Key: t1.x1, jt.y1
    Sort Method: quicksort 
    ->  Hash Join (actual rows=4 loops=1)
-         Hash Cond: (jt.x1 = t1_1.x1)
+         Hash Cond: (jt.x1 = t1.x1)
          ->  Seq Scan on join_table jt (actual rows=2 loops=1)
          ->  Hash (actual rows=5 loops=1)
                Buckets: 4096  Batches: 1 
@@ -1030,7 +1030,7 @@ set enable_indexscan = off;
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x3
+         Sort Key: test2.x1, test2.x2, test2.x5, test2.x3
          ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
                      Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_min_1, compress_hyper_6_11_chunk._ts_meta_max_1
@@ -1071,7 +1071,7 @@ SELECT * FROM test2 ORDER BY x1, x2, x5, x3 LIMIT 10;
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x3, _hyper_5_9_chunk.x4
+         Sort Key: test2.x1, test2.x2, test2.x5, test2.x3, test2.x4
          ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=4 loops=1)
                ->  Sort (actual rows=3 loops=1)
                      Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_min_1, compress_hyper_6_11_chunk._ts_meta_max_1, compress_hyper_6_11_chunk._ts_meta_min_2, compress_hyper_6_11_chunk._ts_meta_max_2
@@ -1113,7 +1113,7 @@ SELECT * FROM test2 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
 ----------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x3
+         Sort Key: test2.x1, test2.x2, test2.x3
          ->  Sort (actual rows=4 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x3
                Sort Method: quicksort 
@@ -1154,7 +1154,7 @@ SELECT * FROM test2 ORDER BY x1, x2, x3 LIMIT 10;
 ----------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x4
+         Sort Key: test2.x1, test2.x2, test2.x5, test2.x4
          ->  Sort (actual rows=4 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x4
                Sort Method: quicksort 
@@ -1195,7 +1195,7 @@ SELECT * FROM test2 ORDER BY x1, x2, x5, x4 LIMIT 10;
 --------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk."time"
+         Sort Key: test2.x1, test2.x2, test2.x5, test2."time"
          ->  Sort (actual rows=4 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk."time"
                Sort Method: quicksort 
@@ -1281,7 +1281,7 @@ set enable_indexscan = off;
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x3
+         Sort Key: test3.x1, test3.x2, test3.x5, test3.x3
          ->  Custom Scan (DecompressChunk) on _hyper_7_13_chunk (actual rows=3 loops=1)
                ->  Sort (actual rows=2 loops=1)
                      Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_min_1, compress_hyper_8_17_chunk._ts_meta_max_1
@@ -1332,7 +1332,7 @@ SELECT * FROM test3 ORDER BY x1, x2, x5, x3 LIMIT 10;
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x3, _hyper_7_13_chunk.x4
+         Sort Key: test3.x1, test3.x2, test3.x5, test3.x3, test3.x4
          ->  Custom Scan (DecompressChunk) on _hyper_7_13_chunk (actual rows=3 loops=1)
                ->  Sort (actual rows=2 loops=1)
                      Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_min_1, compress_hyper_8_17_chunk._ts_meta_max_1, compress_hyper_8_17_chunk._ts_meta_min_2, compress_hyper_8_17_chunk._ts_meta_max_2
@@ -1384,7 +1384,7 @@ SELECT * FROM test3 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
 ----------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x3
+         Sort Key: test3.x1, test3.x2, test3.x3
          ->  Sort (actual rows=3 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x3
                Sort Method: quicksort 
@@ -1435,7 +1435,7 @@ SELECT * FROM test3 ORDER BY x1, x2, x3 LIMIT 10;
 ----------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x4
+         Sort Key: test3.x1, test3.x2, test3.x5, test3.x4
          ->  Sort (actual rows=3 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x4
                Sort Method: quicksort 
@@ -1486,7 +1486,7 @@ SELECT * FROM test3 ORDER BY x1, x2, x5, x4 LIMIT 10;
 --------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Merge Append (actual rows=10 loops=1)
-         Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk."time"
+         Sort Key: test3.x1, test3.x2, test3.x5, test3."time"
          ->  Sort (actual rows=3 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk."time"
                Sort Method: quicksort 

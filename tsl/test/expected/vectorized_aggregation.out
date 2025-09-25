@@ -58,9 +58,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -120,9 +120,9 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -192,9 +192,9 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0 AND int_v
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -266,9 +266,9 @@ SELECT sum(segment_by_value) FROM testtable WHERE int_value > 0;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -337,9 +337,9 @@ SELECT sum(segment_by_value) FROM testtable WHERE float_value > 0;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -409,10 +409,10 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), _hyper_1_1_chunk.float_value
-   Group Key: _hyper_1_1_chunk.float_value
+   Output: sum(testtable.segment_by_value), testtable.float_value
+   Group Key: testtable.float_value
    ->  Gather
-         Output: _hyper_1_1_chunk.float_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: testtable.float_value, (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -478,10 +478,10 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), _hyper_1_1_chunk.int_value
-   Group Key: _hyper_1_1_chunk.int_value
+   Output: sum(testtable.segment_by_value), testtable.int_value
+   Group Key: testtable.int_value
    ->  Gather
-         Output: _hyper_1_1_chunk.int_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: testtable.int_value, (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -548,10 +548,10 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value
-   Group Key: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value
+   Output: sum(testtable.segment_by_value), testtable.int_value, testtable.float_value
+   Group Key: testtable.int_value, testtable.float_value
    ->  Gather
-         Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: testtable.int_value, testtable.float_value, (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -618,10 +618,10 @@ SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Output: sum(_hyper_1_1_chunk.int_value), _hyper_1_1_chunk.segment_by_value
-   Group Key: _hyper_1_1_chunk.segment_by_value
+   Output: sum(testtable.int_value), testtable.segment_by_value
+   Group Key: testtable.segment_by_value
    ->  Gather
-         Output: _hyper_1_1_chunk.segment_by_value, (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: testtable.segment_by_value, (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -687,13 +687,13 @@ SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_b
                                                                                                                                                               QUERY PLAN                                                                                                                                                              
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: (sum(_hyper_1_1_chunk.segment_by_value)), _hyper_1_1_chunk.segment_by_value
-   Sort Key: (sum(_hyper_1_1_chunk.segment_by_value)), _hyper_1_1_chunk.segment_by_value
+   Output: (sum(testtable.segment_by_value)), testtable.segment_by_value
+   Sort Key: (sum(testtable.segment_by_value)), testtable.segment_by_value
    ->  Finalize HashAggregate
-         Output: sum(_hyper_1_1_chunk.segment_by_value), _hyper_1_1_chunk.segment_by_value
-         Group Key: _hyper_1_1_chunk.segment_by_value
+         Output: sum(testtable.segment_by_value), testtable.segment_by_value
+         Group Key: testtable.segment_by_value
          ->  Gather
-               Output: _hyper_1_1_chunk.segment_by_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+               Output: testtable.segment_by_value, (PARTIAL sum(testtable.segment_by_value))
                Workers Planned: 2
                ->  Parallel Append
                      ->  Custom Scan (VectorAgg)
@@ -875,13 +875,13 @@ SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_b
                                                                                                                                                               QUERY PLAN                                                                                                                                                              
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_1_1_chunk.segment_by_value, (sum(_hyper_1_1_chunk.segment_by_value))
-   Sort Key: _hyper_1_1_chunk.segment_by_value, (sum(_hyper_1_1_chunk.segment_by_value))
+   Output: testtable.segment_by_value, (sum(testtable.segment_by_value))
+   Sort Key: testtable.segment_by_value, (sum(testtable.segment_by_value))
    ->  Finalize HashAggregate
-         Output: _hyper_1_1_chunk.segment_by_value, sum(_hyper_1_1_chunk.segment_by_value)
-         Group Key: _hyper_1_1_chunk.segment_by_value
+         Output: testtable.segment_by_value, sum(testtable.segment_by_value)
+         Group Key: testtable.segment_by_value
          ->  Gather
-               Output: _hyper_1_1_chunk.segment_by_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+               Output: testtable.segment_by_value, (PARTIAL sum(testtable.segment_by_value))
                Workers Planned: 2
                ->  Parallel Append
                      ->  Custom Scan (VectorAgg)
@@ -1070,9 +1070,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1138,9 +1138,9 @@ SELECT sum(float_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.float_value)
+   Output: sum(testtable.float_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.float_value))
+         Output: (PARTIAL sum(testtable.float_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1228,9 +1228,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1317,9 +1317,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1411,9 +1411,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1504,9 +1504,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1597,9 +1597,9 @@ SELECT sum(abs(int_value)) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(abs(_hyper_1_1_chunk.int_value))
+   Output: sum(abs(testtable.int_value))
    ->  Gather
-         Output: (PARTIAL sum(abs(_hyper_1_1_chunk.int_value)))
+         Output: (PARTIAL sum(abs(testtable.int_value)))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -1675,9 +1675,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -1755,9 +1755,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -1831,9 +1831,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1925,9 +1925,9 @@ SELECT sum(int_value), sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value), sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value), sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2012,9 +2012,9 @@ SELECT sum(segment_by_value), sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value), sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2099,9 +2099,9 @@ SELECT sum(int_value), sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value), sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.int_value), sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value)), (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.int_value)), (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2192,9 +2192,9 @@ SELECT sum(int_value), bit_or(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value), bit_or(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value), bit_or(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value)), (PARTIAL bit_or(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value)), (PARTIAL bit_or(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -2269,9 +2269,9 @@ SELECT sum(segment_by_value), bit_or(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), bit_or(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value), bit_or(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value)), (PARTIAL bit_or(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value)), (PARTIAL bit_or(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -2442,9 +2442,9 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_41_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_41_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2569,9 +2569,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_41_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_41_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2764,9 +2764,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                               QUERY PLAN                                                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_81_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_81_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2846,9 +2846,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                               QUERY PLAN                                                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_81_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_81_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2941,9 +2941,9 @@ SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testta
                                                                                                                                                               QUERY PLAN                                                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_81_chunk.segment_by_value) FILTER (WHERE (_hyper_1_81_chunk.segment_by_value > 99999))
+   Output: sum(testtable.segment_by_value) FILTER (WHERE (testtable.segment_by_value > 99999))
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_81_chunk.segment_by_value) FILTER (WHERE (_hyper_1_81_chunk.segment_by_value > 99999)))
+         Output: (PARTIAL sum(testtable.segment_by_value) FILTER (WHERE (testtable.segment_by_value > 99999)))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3085,9 +3085,9 @@ SELECT sum(segment_by_value1) FROM testtable2;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
+         Output: (PARTIAL sum(testtable2.segment_by_value1))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3166,9 +3166,9 @@ SELECT sum(segment_by_value2) FROM testtable2;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value2)
+   Output: sum(testtable2.segment_by_value2)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value2))
+         Output: (PARTIAL sum(testtable2.segment_by_value2))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3248,9 +3248,9 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
+         Output: (PARTIAL sum(testtable2.segment_by_value1))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3332,9 +3332,9 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND se
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
+         Output: (PARTIAL sum(testtable2.segment_by_value1))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3416,9 +3416,9 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND se
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
+         Output: (PARTIAL sum(testtable2.segment_by_value1))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3503,7 +3503,7 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND
                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                   
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Append
          ->  Custom Scan (VectorAgg)
                Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))

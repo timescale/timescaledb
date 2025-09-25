@@ -69,17 +69,17 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space m1 (actual rows=68370 loops=1)
          Order: m1."time"
          ->  Merge Append (actual rows=17990 loops=1)
-               Sort Key: m1_1."time"
+               Sort Key: m1."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_1 (actual rows=3598 loops=1)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_2 (actual rows=10794 loops=1)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_3 (actual rows=3598 loops=1)
          ->  Merge Append (actual rows=25190 loops=1)
-               Sort Key: m1_4."time"
+               Sort Key: m1."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_4 (actual rows=5038 loops=1)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_5 (actual rows=15114 loops=1)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_6 (actual rows=5038 loops=1)
          ->  Merge Append (actual rows=25190 loops=1)
-               Sort Key: m1_7."time"
+               Sort Key: m1."time"
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_7 (actual rows=5038 loops=1)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_8 (actual rows=15114 loops=1)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m1_9 (actual rows=5038 loops=1)
@@ -191,7 +191,7 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed m1 (actual rows=68370 loops=1)
          Order: m1."time"
          ->  Merge Append (actual rows=17990 loops=1)
-               Sort Key: m1_1."time"
+               Sort Key: m1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1_1 (actual rows=3598 loops=1)
                      ->  Sort (actual rows=4 loops=1)
                            Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
@@ -208,7 +208,7 @@ QUERY PLAN
                            Sort Method: quicksort 
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
          ->  Merge Append (actual rows=25190 loops=1)
-               Sort Key: m1_4."time"
+               Sort Key: m1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1_4 (actual rows=5038 loops=1)
                      ->  Sort (actual rows=6 loops=1)
                            Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
@@ -225,7 +225,7 @@ QUERY PLAN
                            Sort Method: quicksort 
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
          ->  Merge Append (actual rows=25190 loops=1)
-               Sort Key: m1_7."time"
+               Sort Key: m1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1_7 (actual rows=5038 loops=1)
                      ->  Sort (actual rows=6 loops=1)
                            Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1

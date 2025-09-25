@@ -251,11 +251,11 @@ select chunk from show_chunks('hyperdump') chunk offset 2 limit 1 \gset
 -- If restore is OK, and TAM is used, we should see a ColumnarScan
 explain (costs off)
 select * from hyperdump order by time, device limit 10;
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                            QUERY PLAN                            
+------------------------------------------------------------------
  Limit
    ->  Sort
-         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+         Sort Key: hyperdump."time", hyperdump.device
          ->  Append
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk

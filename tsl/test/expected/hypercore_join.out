@@ -175,9 +175,9 @@ $$, :'chunk1'));
                                                explain_analyze_anonymize                                               
 -----------------------------------------------------------------------------------------------------------------------
  Merge Join (actual rows=N loops=N)
-   Merge Cond: (_hyper_I_N_chunk.device_id = _hyper_I_N_chunk.device_id)
+   Merge Cond: (the_hypercore.device_id = _hyper_I_N_chunk.device_id)
    ->  Merge Append (actual rows=N loops=N)
-         Sort Key: _hyper_I_N_chunk.device_id
+         Sort Key: the_hypercore.device_id
          ->  Index Scan using _hyper_I_N_chunk_the_hypercore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          ->  Index Scan using _hyper_I_N_chunk_the_hypercore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          ->  Index Scan using _hyper_I_N_chunk_the_hypercore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)

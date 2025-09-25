@@ -812,7 +812,7 @@ VACUUM ANALYZE test_ordering;
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
-         Sort Key: _hyper_13_20_chunk."time"
+         Sort Key: test_ordering."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Sort
                      Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
@@ -831,7 +831,7 @@ VACUUM ANALYZE test_ordering;
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
-         Sort Key: _hyper_13_20_chunk."time"
+         Sort Key: test_ordering."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Sort
                      Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1

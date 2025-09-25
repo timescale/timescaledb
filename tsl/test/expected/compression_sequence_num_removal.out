@@ -39,7 +39,7 @@ ORDER BY device_id, time;
                                                                                                                         QUERY PLAN                                                                                                                        
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time"
+   Sort Key: hyper.device_id, hyper."time"
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          ->  Sort
@@ -94,7 +94,7 @@ ORDER BY device_id DESC, time DESC;
                                                                                                                         QUERY PLAN                                                                                                                        
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id DESC, _hyper_1_1_chunk."time" DESC
+   Sort Key: hyper.device_id DESC, hyper."time" DESC
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          Reverse: true
@@ -200,7 +200,7 @@ ORDER BY device_id, time;
                                                                                                                                                 QUERY PLAN                                                                                                                                                
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time"
+   Sort Key: hyper.device_id, hyper."time"
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          ->  Sort
@@ -255,7 +255,7 @@ ORDER BY device_id DESC, time DESC;
                                                                                                                                                 QUERY PLAN                                                                                                                                                
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id DESC, _hyper_1_1_chunk."time" DESC
+   Sort Key: hyper.device_id DESC, hyper."time" DESC
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          Reverse: true
@@ -331,7 +331,7 @@ ORDER BY device_id, time;
                                                                                                                                                 QUERY PLAN                                                                                                                                                
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time"
+   Sort Key: hyper.device_id, hyper."time"
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          ->  Sort
