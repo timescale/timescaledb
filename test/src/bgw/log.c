@@ -20,6 +20,9 @@
 
 #include "compat/compat.h"
 
+TS_FUNCTION_INFO_V1(ts_bgw_log_register_emit_log_hook);
+TS_FUNCTION_INFO_V1(ts_bgw_log_unregister_emit_log_hook);
+
 static char *bgw_application_name = "unset";
 
 void
@@ -136,4 +139,29 @@ ts_register_emit_log_hook()
 {
 	prev_emit_log_hook = emit_log_hook;
 	emit_log_hook = emit_log_hook_callback;
+}
+
+void
+ts_unregister_emit_log_hook()
+{
+	emit_log_hook = prev_emit_log_hook;
+}
+
+Datum
+ts_bgw_log_register_emit_log_hook(PG_FUNCTION_ARGS)
+{
+	if (!PG_ARGISNULL(0))
+	{
+		ts_bgw_log_set_application_name(strdup(text_to_cstring(PG_GETARG_TEXT_P(0))));
+	}
+
+	ts_register_emit_log_hook();
+	PG_RETURN_VOID();
+}
+
+Datum
+ts_bgw_log_unregister_emit_log_hook(PG_FUNCTION_ARGS)
+{
+	ts_unregister_emit_log_hook();
+	PG_RETURN_VOID();
 }
