@@ -441,9 +441,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
-		/* Associate compressed chunk with main chunk. Needed for Hypercore
-		 * TAM to not recreate the compressed chunk again when the main chunk
-		 * rel is opened. */
+		/* Associate compressed chunk with main chunk. */
 		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 		new_compressed_chunk = true;
 		ereport(DEBUG1,
