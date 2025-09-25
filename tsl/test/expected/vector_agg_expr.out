@@ -1,0 +1,753 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Expressions in vectorized aggregation.
+\pset null $
+create table aggexpr(ts int, i int, x text, b bool, v float4) with (tsdb.hypertable,
+    tsdb.compress, tsdb.compress_orderby = 'ts', tsdb.compress_segmentby = 'i, x, b',
+    tsdb.partition_column = 'ts', tsdb.chunk_interval = 10);
+insert into aggexpr select 1, null, null, null, generate_series(1, 1499);
+insert into aggexpr select 2, 2, '2', false, generate_series(1, 1493);
+select count(compress_chunk(x)) from show_chunks('aggexpr') x;
+ count 
+-------
+     1
+(1 row)
+
+alter table aggexpr set (tsdb.compress_segmentby = '');
+insert into aggexpr select 11, null, null, null, generate_series(1, 1489);
+insert into aggexpr select 12, 12, '12', false, generate_series(1, 1487);
+insert into aggexpr select 13, case when x % 2 = 0 then 13 else null end,
+    case when x % 2 = 1 then '13' else null end, x % 2 = 0, x from generate_series(1, 1483) x;
+insert into aggexpr select 14, case when x % 2 = 0 then 14 else null end,
+    case when x % 2 = 0 then '14' || x::text else null end, x % 2 = 1, x from generate_series(1, 1481) x;
+select count(compress_chunk(x)) from show_chunks('aggexpr') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+ count 
+-------
+     2
+(1 row)
+
+vacuum full analyze aggexpr;
+-- FIXME
+--set timescaledb.debug_require_vector_agg = 'require';
+---- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
+select
+    format('select %s%s from aggexpr%s%s%s;',
+            grouping || ', ',
+            function,
+            ' where ' || condition,
+            ' group by ' || grouping,
+            format(' order by %s, ', function) || grouping || ' limit 10')
+from
+    unnest(array[
+        'count(*)'
+        , 'count(i)'
+        , 'count(x)'
+        , 'count(b)'
+        ]) function,
+    unnest(array[
+        null
+        , 'b'
+        , 'not b'
+        , 'length(x) = 1'
+        , 'length(x) < 0'
+        , 'i % 2 = 0'
+        ]) with ordinality as condition(condition, n),
+    unnest(array[
+        null,
+        'length(x)',
+        'i % 2',
+        'ts'
+        ]) with ordinality as grouping(grouping, n)
+\gexec
+select count(*) from aggexpr;
+ count 
+-------
+  8932
+(1 row)
+
+select length(x), count(*) from aggexpr group by length(x) order by count(*), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      1 |  1493
+      2 |  2229
+      $ |  4470
+(7 rows)
+
+select i % 2, count(*) from aggexpr group by i % 2 order by count(*), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        1 |   741
+        0 |  3720
+        $ |  4471
+(3 rows)
+
+select ts, count(*) from aggexpr group by ts order by count(*), ts limit 10;
+ ts | count 
+----+-------
+ 14 |  1481
+ 13 |  1483
+ 12 |  1487
+ 11 |  1489
+  2 |  1493
+  1 |  1499
+(6 rows)
+
+select count(i) from aggexpr;
+ count 
+-------
+  4461
+(1 row)
+
+select length(x), count(i) from aggexpr group by length(x) order by count(i), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      $ |   741
+      2 |  1487
+      1 |  1493
+(7 rows)
+
+select i % 2, count(i) from aggexpr group by i % 2 order by count(i), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        $ |     0
+        1 |   741
+        0 |  3720
+(3 rows)
+
+select ts, count(i) from aggexpr group by ts order by count(i), ts limit 10;
+ ts | count 
+----+-------
+  1 |     0
+ 11 |     0
+ 14 |   740
+ 13 |   741
+ 12 |  1487
+  2 |  1493
+(6 rows)
+
+select count(x) from aggexpr;
+ count 
+-------
+  4462
+(1 row)
+
+select length(x), count(x) from aggexpr group by length(x) order by count(x), length(x) limit 10;
+ length | count 
+--------+-------
+      $ |     0
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      1 |  1493
+      2 |  2229
+(7 rows)
+
+select i % 2, count(x) from aggexpr group by i % 2 order by count(x), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        1 |     0
+        $ |   742
+        0 |  3720
+(3 rows)
+
+select ts, count(x) from aggexpr group by ts order by count(x), ts limit 10;
+ ts | count 
+----+-------
+  1 |     0
+ 11 |     0
+ 14 |   740
+ 13 |   742
+ 12 |  1487
+  2 |  1493
+(6 rows)
+
+select count(b) from aggexpr;
+ count 
+-------
+  5944
+(1 row)
+
+select length(x), count(b) from aggexpr group by length(x) order by count(b), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      $ |  1482
+      1 |  1493
+      2 |  2229
+(7 rows)
+
+select i % 2, count(b) from aggexpr group by i % 2 order by count(b), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        1 |   741
+        $ |  1483
+        0 |  3720
+(3 rows)
+
+select ts, count(b) from aggexpr group by ts order by count(b), ts limit 10;
+ ts | count 
+----+-------
+  1 |     0
+ 11 |     0
+ 14 |  1481
+ 13 |  1483
+ 12 |  1487
+  2 |  1493
+(6 rows)
+
+select count(*) from aggexpr where b;
+ count 
+-------
+  1482
+(1 row)
+
+select length(x), count(*) from aggexpr where b group by length(x) order by count(*), length(x) limit 10;
+ length | count 
+--------+-------
+      $ |  1482
+(1 row)
+
+select i % 2, count(*) from aggexpr where b group by i % 2 order by count(*), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        1 |   741
+        $ |   741
+(2 rows)
+
+select ts, count(*) from aggexpr where b group by ts order by count(*), ts limit 10;
+ ts | count 
+----+-------
+ 13 |   741
+ 14 |   741
+(2 rows)
+
+select count(i) from aggexpr where b;
+ count 
+-------
+   741
+(1 row)
+
+select length(x), count(i) from aggexpr where b group by length(x) order by count(i), length(x) limit 10;
+ length | count 
+--------+-------
+      $ |   741
+(1 row)
+
+select i % 2, count(i) from aggexpr where b group by i % 2 order by count(i), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        $ |     0
+        1 |   741
+(2 rows)
+
+select ts, count(i) from aggexpr where b group by ts order by count(i), ts limit 10;
+ ts | count 
+----+-------
+ 14 |     0
+ 13 |   741
+(2 rows)
+
+select count(x) from aggexpr where b;
+ count 
+-------
+     0
+(1 row)
+
+select length(x), count(x) from aggexpr where b group by length(x) order by count(x), length(x) limit 10;
+ length | count 
+--------+-------
+      $ |     0
+(1 row)
+
+select i % 2, count(x) from aggexpr where b group by i % 2 order by count(x), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        1 |     0
+        $ |     0
+(2 rows)
+
+select ts, count(x) from aggexpr where b group by ts order by count(x), ts limit 10;
+ ts | count 
+----+-------
+ 13 |     0
+ 14 |     0
+(2 rows)
+
+select count(b) from aggexpr where b;
+ count 
+-------
+  1482
+(1 row)
+
+select length(x), count(b) from aggexpr where b group by length(x) order by count(b), length(x) limit 10;
+ length | count 
+--------+-------
+      $ |  1482
+(1 row)
+
+select i % 2, count(b) from aggexpr where b group by i % 2 order by count(b), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        1 |   741
+        $ |   741
+(2 rows)
+
+select ts, count(b) from aggexpr where b group by ts order by count(b), ts limit 10;
+ ts | count 
+----+-------
+ 13 |   741
+ 14 |   741
+(2 rows)
+
+select count(*) from aggexpr where not b;
+ count 
+-------
+  4462
+(1 row)
+
+select length(x), count(*) from aggexpr where not b group by length(x) order by count(*), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      1 |  1493
+      2 |  2229
+(6 rows)
+
+select i % 2, count(*) from aggexpr where not b group by i % 2 order by count(*), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        $ |   742
+        0 |  3720
+(2 rows)
+
+select ts, count(*) from aggexpr where not b group by ts order by count(*), ts limit 10;
+ ts | count 
+----+-------
+ 14 |   740
+ 13 |   742
+ 12 |  1487
+  2 |  1493
+(4 rows)
+
+select count(i) from aggexpr where not b;
+ count 
+-------
+  3720
+(1 row)
+
+select length(x), count(i) from aggexpr where not b group by length(x) order by count(i), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      2 |  1487
+      1 |  1493
+(6 rows)
+
+select i % 2, count(i) from aggexpr where not b group by i % 2 order by count(i), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        $ |     0
+        0 |  3720
+(2 rows)
+
+select ts, count(i) from aggexpr where not b group by ts order by count(i), ts limit 10;
+ ts | count 
+----+-------
+ 13 |     0
+ 14 |   740
+ 12 |  1487
+  2 |  1493
+(4 rows)
+
+select count(x) from aggexpr where not b;
+ count 
+-------
+  4462
+(1 row)
+
+select length(x), count(x) from aggexpr where not b group by length(x) order by count(x), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      1 |  1493
+      2 |  2229
+(6 rows)
+
+select i % 2, count(x) from aggexpr where not b group by i % 2 order by count(x), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        $ |   742
+        0 |  3720
+(2 rows)
+
+select ts, count(x) from aggexpr where not b group by ts order by count(x), ts limit 10;
+ ts | count 
+----+-------
+ 14 |   740
+ 13 |   742
+ 12 |  1487
+  2 |  1493
+(4 rows)
+
+select count(b) from aggexpr where not b;
+ count 
+-------
+  4462
+(1 row)
+
+select length(x), count(b) from aggexpr where not b group by length(x) order by count(b), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      1 |  1493
+      2 |  2229
+(6 rows)
+
+select i % 2, count(b) from aggexpr where not b group by i % 2 order by count(b), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        $ |   742
+        0 |  3720
+(2 rows)
+
+select ts, count(b) from aggexpr where not b group by ts order by count(b), ts limit 10;
+ ts | count 
+----+-------
+ 14 |   740
+ 13 |   742
+ 12 |  1487
+  2 |  1493
+(4 rows)
+
+select count(*) from aggexpr where length(x) = 1;
+ count 
+-------
+  1493
+(1 row)
+
+select length(x), count(*) from aggexpr where length(x) = 1 group by length(x) order by count(*), length(x) limit 10;
+ length | count 
+--------+-------
+      1 |  1493
+(1 row)
+
+select i % 2, count(*) from aggexpr where length(x) = 1 group by i % 2 order by count(*), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        0 |  1493
+(1 row)
+
+select ts, count(*) from aggexpr where length(x) = 1 group by ts order by count(*), ts limit 10;
+ ts | count 
+----+-------
+  2 |  1493
+(1 row)
+
+select count(i) from aggexpr where length(x) = 1;
+ count 
+-------
+  1493
+(1 row)
+
+select length(x), count(i) from aggexpr where length(x) = 1 group by length(x) order by count(i), length(x) limit 10;
+ length | count 
+--------+-------
+      1 |  1493
+(1 row)
+
+select i % 2, count(i) from aggexpr where length(x) = 1 group by i % 2 order by count(i), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        0 |  1493
+(1 row)
+
+select ts, count(i) from aggexpr where length(x) = 1 group by ts order by count(i), ts limit 10;
+ ts | count 
+----+-------
+  2 |  1493
+(1 row)
+
+select count(x) from aggexpr where length(x) = 1;
+ count 
+-------
+  1493
+(1 row)
+
+select length(x), count(x) from aggexpr where length(x) = 1 group by length(x) order by count(x), length(x) limit 10;
+ length | count 
+--------+-------
+      1 |  1493
+(1 row)
+
+select i % 2, count(x) from aggexpr where length(x) = 1 group by i % 2 order by count(x), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        0 |  1493
+(1 row)
+
+select ts, count(x) from aggexpr where length(x) = 1 group by ts order by count(x), ts limit 10;
+ ts | count 
+----+-------
+  2 |  1493
+(1 row)
+
+select count(b) from aggexpr where length(x) = 1;
+ count 
+-------
+  1493
+(1 row)
+
+select length(x), count(b) from aggexpr where length(x) = 1 group by length(x) order by count(b), length(x) limit 10;
+ length | count 
+--------+-------
+      1 |  1493
+(1 row)
+
+select i % 2, count(b) from aggexpr where length(x) = 1 group by i % 2 order by count(b), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        0 |  1493
+(1 row)
+
+select ts, count(b) from aggexpr where length(x) = 1 group by ts order by count(b), ts limit 10;
+ ts | count 
+----+-------
+  2 |  1493
+(1 row)
+
+select count(*) from aggexpr where length(x) < 0;
+ count 
+-------
+     0
+(1 row)
+
+select length(x), count(*) from aggexpr where length(x) < 0 group by length(x) order by count(*), length(x) limit 10;
+ length | count 
+--------+-------
+(0 rows)
+
+select i % 2, count(*) from aggexpr where length(x) < 0 group by i % 2 order by count(*), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+(0 rows)
+
+select ts, count(*) from aggexpr where length(x) < 0 group by ts order by count(*), ts limit 10;
+ ts | count 
+----+-------
+(0 rows)
+
+select count(i) from aggexpr where length(x) < 0;
+ count 
+-------
+     0
+(1 row)
+
+select length(x), count(i) from aggexpr where length(x) < 0 group by length(x) order by count(i), length(x) limit 10;
+ length | count 
+--------+-------
+(0 rows)
+
+select i % 2, count(i) from aggexpr where length(x) < 0 group by i % 2 order by count(i), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+(0 rows)
+
+select ts, count(i) from aggexpr where length(x) < 0 group by ts order by count(i), ts limit 10;
+ ts | count 
+----+-------
+(0 rows)
+
+select count(x) from aggexpr where length(x) < 0;
+ count 
+-------
+     0
+(1 row)
+
+select length(x), count(x) from aggexpr where length(x) < 0 group by length(x) order by count(x), length(x) limit 10;
+ length | count 
+--------+-------
+(0 rows)
+
+select i % 2, count(x) from aggexpr where length(x) < 0 group by i % 2 order by count(x), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+(0 rows)
+
+select ts, count(x) from aggexpr where length(x) < 0 group by ts order by count(x), ts limit 10;
+ ts | count 
+----+-------
+(0 rows)
+
+select count(b) from aggexpr where length(x) < 0;
+ count 
+-------
+     0
+(1 row)
+
+select length(x), count(b) from aggexpr where length(x) < 0 group by length(x) order by count(b), length(x) limit 10;
+ length | count 
+--------+-------
+(0 rows)
+
+select i % 2, count(b) from aggexpr where length(x) < 0 group by i % 2 order by count(b), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+(0 rows)
+
+select ts, count(b) from aggexpr where length(x) < 0 group by ts order by count(b), ts limit 10;
+ ts | count 
+----+-------
+(0 rows)
+
+select count(*) from aggexpr where i % 2 = 0;
+ count 
+-------
+  3720
+(1 row)
+
+select length(x), count(*) from aggexpr where i % 2 = 0 group by length(x) order by count(*), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      2 |  1487
+      1 |  1493
+(6 rows)
+
+select i % 2, count(*) from aggexpr where i % 2 = 0 group by i % 2 order by count(*), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        0 |  3720
+(1 row)
+
+select ts, count(*) from aggexpr where i % 2 = 0 group by ts order by count(*), ts limit 10;
+ ts | count 
+----+-------
+ 14 |   740
+ 12 |  1487
+  2 |  1493
+(3 rows)
+
+select count(i) from aggexpr where i % 2 = 0;
+ count 
+-------
+  3720
+(1 row)
+
+select length(x), count(i) from aggexpr where i % 2 = 0 group by length(x) order by count(i), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      2 |  1487
+      1 |  1493
+(6 rows)
+
+select i % 2, count(i) from aggexpr where i % 2 = 0 group by i % 2 order by count(i), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        0 |  3720
+(1 row)
+
+select ts, count(i) from aggexpr where i % 2 = 0 group by ts order by count(i), ts limit 10;
+ ts | count 
+----+-------
+ 14 |   740
+ 12 |  1487
+  2 |  1493
+(3 rows)
+
+select count(x) from aggexpr where i % 2 = 0;
+ count 
+-------
+  3720
+(1 row)
+
+select length(x), count(x) from aggexpr where i % 2 = 0 group by length(x) order by count(x), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      2 |  1487
+      1 |  1493
+(6 rows)
+
+select i % 2, count(x) from aggexpr where i % 2 = 0 group by i % 2 order by count(x), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        0 |  3720
+(1 row)
+
+select ts, count(x) from aggexpr where i % 2 = 0 group by ts order by count(x), ts limit 10;
+ ts | count 
+----+-------
+ 14 |   740
+ 12 |  1487
+  2 |  1493
+(3 rows)
+
+select count(b) from aggexpr where i % 2 = 0;
+ count 
+-------
+  3720
+(1 row)
+
+select length(x), count(b) from aggexpr where i % 2 = 0 group by length(x) order by count(b), length(x) limit 10;
+ length | count 
+--------+-------
+      3 |     4
+      4 |    45
+      6 |   241
+      5 |   450
+      2 |  1487
+      1 |  1493
+(6 rows)
+
+select i % 2, count(b) from aggexpr where i % 2 = 0 group by i % 2 order by count(b), i % 2 limit 10;
+ ?column? | count 
+----------+-------
+        0 |  3720
+(1 row)
+
+select ts, count(b) from aggexpr where i % 2 = 0 group by ts order by count(b), ts limit 10;
+ ts | count 
+----+-------
+ 14 |   740
+ 12 |  1487
+  2 |  1493
+(3 rows)
+
+reset timescaledb.debug_require_vector_agg;
