@@ -345,7 +345,7 @@ group by device;
                                                    QUERY PLAN                                                    
 -----------------------------------------------------------------------------------------------------------------
  HashAggregate (actual rows=6 loops=1)
-   Group Key: _hyper_1_1_chunk.device
+   Group Key: readings.device
    Batches: 1 
    ->  Append (actual rows=1705 loops=1)
          ->  Index Scan using _hyper_1_1_chunk_readings_device_idx on _hyper_1_1_chunk (actual rows=35 loops=1)

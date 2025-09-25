@@ -136,7 +136,7 @@ $$, :'hypertable'));
                                     explain_anonymize                                     
 ------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Group Key: _hyper_I_N_chunk.location_id
+   Group Key: readings.location_id
    ->  Append
          ->  Partial HashAggregate
                Group Key: _hyper_I_N_chunk.location_id
