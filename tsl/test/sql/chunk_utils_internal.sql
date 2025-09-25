@@ -844,7 +844,7 @@ DROP TABLE ht_try;
 
 --TEST ALTER TABLE propagation with foreign chunks
 \c :TEST_DBNAME :ROLE_4
-CREATE TABLE ht_alter(ts timestamptz) WITH (tsdb.hypertable,tsdb.compress=false);
+CREATE TABLE ht_alter(ts timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='ts',tsdb.compress=false);
 
 INSERT INTO ht_alter SELECT '2025-01-01';
 \c postgres_fdw_db :ROLE_4
