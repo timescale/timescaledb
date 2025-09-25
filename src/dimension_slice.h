@@ -50,7 +50,7 @@ extern DimensionVec *ts_dimension_slice_scan_limit(int32 dimension_id, int64 coo
 												   const ScanTupLock *tuplock);
 
 extern void ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate,
-										 List **matching_dimension_slices);
+										 List **matching_dimension_slices, bool lock_slices);
 
 extern DimensionVec *
 ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_strategy,
@@ -99,10 +99,8 @@ extern TSDLLEXPORT List *ts_dimension_slice_get_chunkids_to_compress(
 extern DimensionSlice *ts_dimension_slice_from_tuple(TupleInfo *ti);
 extern ScanIterator ts_dimension_slice_scan_iterator_create(const ScanTupLock *tuplock,
 															MemoryContext result_mcxt);
-extern void ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id,
-														  const ScanTupLock *tuplock);
-extern DimensionSlice *ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id,
-																  const ScanTupLock *tuplock);
+extern void ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id);
+extern DimensionSlice *ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id);
 
 extern int ts_dimension_slice_scan_iterator_set_range(ScanIterator *it, int32 dimension_id,
 													  StrategyNumber start_strategy,

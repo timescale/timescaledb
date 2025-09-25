@@ -465,7 +465,8 @@ ts_dimension_slice_scan_limit(int32 dimension_id, int64 coordinate, int limit,
 }
 
 void
-ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **matching_dimension_slices)
+ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **matching_dimension_slices,
+							 bool lock_slices)
 {
 	coordinate = REMAP_LAST_COORDINATE(coordinate);
 
@@ -502,7 +503,7 @@ ts_dimension_slice_scan_list(int32 dimension_id, int64 coordinate, List **matchi
 										(void *) matching_dimension_slices,
 										/* limit = */ 0,
 										AccessShareLock,
-										&tuplock,
+										lock_slices ? &tuplock : NULL,
 										CurrentMemoryContext);
 }
 
@@ -963,14 +964,13 @@ ts_dimension_slice_scan_iterator_create(const ScanTupLock *tuplock, MemoryContex
 {
 	ScanIterator it = ts_scan_iterator_create(DIMENSION_SLICE, AccessShareLock, result_mcxt);
 	it.ctx.flags |= SCANNER_F_NOEND_AND_NOCLOSE;
-	it.ctx.tuplock = tuplock;
+	it.ctx.tuplock = RecoveryInProgress() ? NULL : tuplock;
 
 	return it;
 }
 
 void
-ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id,
-											  const ScanTupLock *tuplock)
+ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id)
 {
 	it->ctx.index = catalog_get_index(ts_catalog_get(), DIMENSION_SLICE, DIMENSION_SLICE_ID_IDX);
 	ts_scan_iterator_scan_key_reset(it);
@@ -979,17 +979,15 @@ ts_dimension_slice_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id,
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(slice_id));
-	it->ctx.tuplock = tuplock;
 }
 
 DimensionSlice *
-ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id,
-										   const ScanTupLock *tuplock)
+ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id)
 {
 	TupleInfo *ti;
 	DimensionSlice *slice = NULL;
 
-	ts_dimension_slice_scan_iterator_set_slice_id(it, slice_id, tuplock);
+	ts_dimension_slice_scan_iterator_set_slice_id(it, slice_id);
 	ts_scan_iterator_start_or_restart_scan(it);
 	ti = ts_scan_iterator_next(it);
 	Assert(ti);
