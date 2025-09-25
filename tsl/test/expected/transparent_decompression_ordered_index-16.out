@@ -443,12 +443,12 @@ GROUP BY device_id;
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=1 loops=1)
-   Group Key: mt_1.device_id
+   Group Key: mt.device_id
    ->  Nested Loop (actual rows=48 loops=1)
-         Join Filter: ((mt_1."time" > nd.start_time) AND (mt_1."time" < nd.stop_time) AND (nd.node = mt_1.device_id))
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (nd.node = mt.device_id))
          Rows Removed by Join Filter: 1493
          ->  Merge Append (actual rows=1541 loops=1)
-               Sort Key: mt_1.device_id
+               Sort Key: mt.device_id
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt_1 (actual rows=480 loops=1)
                      ->  Index Scan using compress_hyper_2_6_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_6_chunk (actual rows=5 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_2 (actual rows=960 loops=1)
@@ -527,18 +527,18 @@ ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Sort (actual rows=48 loops=1)
-   Sort Key: mt_1."time"
+   Sort Key: mt."time"
    Sort Method: quicksort 
    ->  Merge Join (actual rows=48 loops=1)
-         Merge Cond: (nd.node = mt_1.device_id)
-         Join Filter: ((mt_1."time" > nd.start_time) AND (mt_1."time" < nd.stop_time))
+         Merge Cond: (nd.node = mt.device_id)
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time))
          Rows Removed by Join Filter: 289
          ->  Sort (actual rows=1 loops=1)
                Sort Key: nd.node
                Sort Method: quicksort 
                ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
          ->  Sort (actual rows=1250 loops=1)
-               Sort Key: mt_1.device_id
+               Sort Key: mt.device_id
                Sort Method: quicksort 
                ->  Append (actual rows=1541 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt_1 (actual rows=480 loops=1)
@@ -567,11 +567,11 @@ ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Sort (actual rows=48 loops=1)
-   Sort Key: mt_1."time"
+   Sort Key: mt."time"
    Sort Method: quicksort 
    ->  Hash Join (actual rows=48 loops=1)
-         Hash Cond: (nd.node = mt_1.device_id)
-         Join Filter: ((mt_1."time" > nd.start_time) AND (mt_1."time" < nd.stop_time))
+         Hash Cond: (nd.node = mt.device_id)
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time))
          Rows Removed by Join Filter: 289
          ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
          ->  Hash (actual rows=1540 loops=1)
@@ -752,7 +752,7 @@ ORDER BY 1,
                Hypertable: metrics_ordered_idx
                Chunks excluded during startup: 0
                ->  Merge Append (actual rows=10 loops=1)
-                     Sort Key: _hyper_1_4_chunk."time" DESC
+                     Sort Key: metrics_ordered_idx."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=5 loops=1)
                            Filter: (("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND ("time" < now()))
                            ->  Sort (actual rows=1 loops=1)
@@ -795,7 +795,7 @@ ORDER BY 1,
                Hypertable: metrics_ordered_idx
                Chunks excluded during startup: 0
                ->  Merge Append (actual rows=10 loops=1)
-                     Sort Key: _hyper_1_4_chunk."time" DESC
+                     Sort Key: metrics_ordered_idx."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=9 loops=1)
                            Vectorized Filter: (("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND ("time" < now()))
                            ->  Sort (actual rows=1 loops=1)
@@ -988,13 +988,13 @@ FROM device_tbl d
     AND m.time < '2000-01-01 0:00:00+0'::text::timestamptz
 WHERE m.device_id = 7
 ORDER BY m.v0;
-                                                                                  QUERY PLAN                                                                                   
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                QUERY PLAN                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=1 loops=1)
-   Sort Key: m_1.v0
+   Sort Key: m.v0
    Sort Method: quicksort 
    ->  Nested Loop Left Join (actual rows=1 loops=1)
-         Join Filter: ((m_1."time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (m_1."time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
+         Join Filter: ((m."time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (m."time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
          ->  Append (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_1 (actual rows=0 loops=1)
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=0 loops=1)
