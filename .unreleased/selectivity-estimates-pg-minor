@@ -1,1 +1,0 @@
-Fixes: #8667 Fix wrong selectivity estimates uncovered by the recent Postgres minor releases 15.14, 16.10, 17.6.
