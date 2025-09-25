@@ -107,13 +107,12 @@ jobs:
         echo 'Acquire::http::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
         echo 'Acquire::https::Timeout "240";' >> /etc/apt/apt.conf.d/99retries
 
-    # The apt-update is allowed to fail because of a known issue in WSL
-    # where the apt spec for the debian backports repo is messed up
-    # https://github.com/Vampire/setup-wsl/issues/76
     - name: Install additional packages in WSL
       shell: wsl-bash {0}
       run: |
-        apt-get update || true
+        # Workaround for https://github.com/Vampire/setup-wsl/issues/76
+        sed -i s/ftp.debian.org/archive.debian.org/ /etc/apt/sources.list
+        apt-get update
         apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
 
     - name: Configure git
