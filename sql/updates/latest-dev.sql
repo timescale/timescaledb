@@ -11,7 +11,7 @@ END
 $$;
 
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
-
+DROP INDEX IF EXISTS _timescaledb_internal.bgw_job_stat_history_job_id_idx;
 
 -- Fix wrong migration by removing all sparse index configurations
 -- which only contain auto sparse indexing definitions on hypertable

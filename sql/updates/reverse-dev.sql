@@ -12,3 +12,4 @@ $$;
 
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
 
+DROP INDEX _timescaledb_internal.bgw_job_stat_history_execution_start_job_id_idx;
