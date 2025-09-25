@@ -21,6 +21,11 @@ name: Regression Windows
       - NOTICE
       - 'bootstrap*'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' && github.event.forced }}
+
 jobs:
   config:
     runs-on: ubuntu-latest
