@@ -9,6 +9,7 @@ sed  -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
      -e 's! Memory: [0-9]\{1,\}kB!!' \
      -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
      -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' \
+     -e 's!ERROR:  permission denied for materialized view!ERROR:  permission denied for view!' \
      -e '/Heap Fetches: [0-9]\{1,\}/d' \
      -e '/found [0-9]\{1,\} removable, [0-9]\{1,\} nonremovable row versions in [0-9]\{1,\} pages/d' | \
 grep -av 'DEBUG:  rehashing catalog cache id' | \
