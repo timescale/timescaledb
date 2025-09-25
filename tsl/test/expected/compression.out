@@ -1822,9 +1822,9 @@ SELECT sum(cpu) FROM f_sensor_data;
                                                                                                                                                         QUERY PLAN                                                                                                                                                        
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_37_73_chunk.cpu)
+   Output: sum(f_sensor_data.cpu)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_37_73_chunk.cpu))
+         Output: (PARTIAL sum(f_sensor_data.cpu))
          Workers Planned: 4
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1845,7 +1845,7 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 1000;
                                                                                                                                                   QUERY PLAN                                                                                                                                                  
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Gather
-   Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
+   Output: f_sensor_data."time", f_sensor_data.sensor_id, f_sensor_data.cpu, f_sensor_data.temperature
    Workers Planned: 3
    ->  Parallel Append
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
@@ -1942,13 +1942,13 @@ SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1
                                                                                                                                    QUERY PLAN                                                                                                                                    
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
+   Output: ht_metrics_partially_compressed."time", ht_metrics_partially_compressed.device, ht_metrics_partially_compressed.value
    ->  Gather Merge
-         Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
+         Output: ht_metrics_partially_compressed."time", ht_metrics_partially_compressed.device, ht_metrics_partially_compressed.value
          Workers Planned: 2
          ->  Sort
-               Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
-               Sort Key: _hyper_41_78_chunk."time" DESC, _hyper_41_78_chunk.device
+               Output: ht_metrics_partially_compressed."time", ht_metrics_partially_compressed.device, ht_metrics_partially_compressed.value
+               Sort Key: ht_metrics_partially_compressed."time" DESC, ht_metrics_partially_compressed.device
                ->  Parallel Append
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_78_chunk
                            Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
@@ -2510,7 +2510,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_95_chunk (never executed)
                            Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
          ->  Merge Append (never executed)
-               Sort Key: _hyper_45_87_chunk."time" DESC
+               Sort Key: sensor_data_compressed."time" DESC
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_87_chunk (never executed)
                      Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
                      Batch Sorted Merge: true
@@ -2589,7 +2589,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_95_chunk (never executed)
                            Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
          ->  Merge Append (never executed)
-               Sort Key: _hyper_45_87_chunk."time" DESC
+               Sort Key: sensor_data_compressed."time" DESC
                ->  Sort (never executed)
                      Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
                      Sort Key: _hyper_45_87_chunk."time" DESC

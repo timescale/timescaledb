@@ -46,7 +46,7 @@ select avg(device) from aggdata;
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: avg(_hyper_1_1_chunk.device)
+   Output: avg(aggdata.device)
    ->  Append
          ->  Custom Scan (VectorAgg)
                Output: (PARTIAL avg(_hyper_1_1_chunk.device))
@@ -72,7 +72,7 @@ select avg(device) from aggdata;
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: avg(_hyper_1_1_chunk.device)
+   Output: avg(aggdata.device)
    ->  Append
          ->  Partial Aggregate
                Output: PARTIAL avg(_hyper_1_1_chunk.device)
@@ -99,7 +99,7 @@ select avg(temp) filter (where device > 1) from aggdata;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: avg(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device > 1))
+   Output: avg(aggdata.temp) FILTER (WHERE (aggdata.device > 1))
    ->  Append
          ->  Custom Scan (VectorAgg)
                Output: (PARTIAL avg(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device > 1)))
@@ -126,7 +126,7 @@ select avg(temp) filter (where device > 1) from aggdata;
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: avg(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device > 1))
+   Output: avg(aggdata.temp) FILTER (WHERE (aggdata.device > 1))
    ->  Append
          ->  Partial Aggregate
                Output: PARTIAL avg(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device > 1))
@@ -153,7 +153,7 @@ select count(*) filter (where location < 3) from aggdata;
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: count(*) FILTER (WHERE (_hyper_1_1_chunk.location < 3))
+   Output: count(*) FILTER (WHERE (aggdata.location < 3))
    ->  Append
          ->  Custom Scan (VectorAgg)
                Output: (PARTIAL count(*) FILTER (WHERE (_hyper_1_1_chunk.location < 3)))
@@ -180,7 +180,7 @@ select count(*) filter (where location < 3) from aggdata;
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: count(*) FILTER (WHERE (_hyper_1_1_chunk.location < 3))
+   Output: count(*) FILTER (WHERE (aggdata.location < 3))
    ->  Append
          ->  Partial Aggregate
                Output: PARTIAL count(*) FILTER (WHERE (_hyper_1_1_chunk.location < 3))
@@ -207,7 +207,7 @@ select location, avg(temp) from aggdata where location=1 group by location;
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Finalize GroupAggregate
-   Output: _hyper_1_1_chunk.location, avg(_hyper_1_1_chunk.temp)
+   Output: aggdata.location, avg(aggdata.temp)
    ->  Append
          ->  Custom Scan (VectorAgg)
                Output: _hyper_1_1_chunk.location, (PARTIAL avg(_hyper_1_1_chunk.temp))
@@ -236,7 +236,7 @@ select location, avg(temp) from aggdata where location=1 group by location;
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Finalize GroupAggregate
-   Output: _hyper_1_1_chunk.location, avg(_hyper_1_1_chunk.temp)
+   Output: aggdata.location, avg(aggdata.temp)
    ->  Append
          ->  Partial GroupAggregate
                Output: _hyper_1_1_chunk.location, PARTIAL avg(_hyper_1_1_chunk.temp)
@@ -262,7 +262,7 @@ select location, count(*) from aggdata where location=1 group by location;
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Finalize GroupAggregate
-   Output: _hyper_1_1_chunk.location, count(*)
+   Output: aggdata.location, count(*)
    ->  Append
          ->  Custom Scan (VectorAgg)
                Output: _hyper_1_1_chunk.location, (PARTIAL count(*))
@@ -291,7 +291,7 @@ select location, count(*) from aggdata where location=1 group by location;
                                        QUERY PLAN                                       
 ----------------------------------------------------------------------------------------
  Finalize GroupAggregate
-   Output: _hyper_1_1_chunk.location, count(*)
+   Output: aggdata.location, count(*)
    ->  Append
          ->  Partial GroupAggregate
                Output: _hyper_1_1_chunk.location, PARTIAL count(*)
@@ -320,13 +320,13 @@ select time, device, sum(temp) from aggdata where device is not null group by ti
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp))
+   Output: aggdata."time", aggdata.device, (sum(aggdata.temp))
    ->  Sort
-         Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp))
-         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+         Output: aggdata."time", aggdata.device, (sum(aggdata.temp))
+         Sort Key: aggdata."time", aggdata.device
          ->  Finalize HashAggregate
-               Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, sum(_hyper_1_1_chunk.temp)
-               Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+               Output: aggdata."time", aggdata.device, sum(aggdata.temp)
+               Group Key: aggdata."time", aggdata.device
                ->  Append
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (PARTIAL sum(_hyper_1_1_chunk.temp))
@@ -357,13 +357,13 @@ select time, device, sum(temp) from aggdata where device is not null group by ti
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp))
+   Output: aggdata."time", aggdata.device, (sum(aggdata.temp))
    ->  Sort
-         Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp))
-         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+         Output: aggdata."time", aggdata.device, (sum(aggdata.temp))
+         Sort Key: aggdata."time", aggdata.device
          ->  Finalize HashAggregate
-               Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, sum(_hyper_1_1_chunk.temp)
-               Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+               Output: aggdata."time", aggdata.device, sum(aggdata.temp)
+               Group Key: aggdata."time", aggdata.device
                ->  Append
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (PARTIAL sum(_hyper_1_1_chunk.temp))
@@ -394,13 +394,13 @@ select time, device, sum(temp) filter (where device is not null) from aggdata gr
                                                                                   QUERY PLAN                                                                                   
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL)))
+   Output: aggdata."time", aggdata.device, (sum(aggdata.temp) FILTER (WHERE (aggdata.device IS NOT NULL)))
    ->  Sort
-         Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL)))
-         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device DESC
+         Output: aggdata."time", aggdata.device, (sum(aggdata.temp) FILTER (WHERE (aggdata.device IS NOT NULL)))
+         Sort Key: aggdata."time", aggdata.device DESC
          ->  Finalize HashAggregate
-               Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL))
-               Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+               Output: aggdata."time", aggdata.device, sum(aggdata.temp) FILTER (WHERE (aggdata.device IS NOT NULL))
+               Group Key: aggdata."time", aggdata.device
                ->  Append
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (PARTIAL sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL)))
@@ -430,13 +430,13 @@ select time, device, sum(temp) filter (where device is not null) from aggdata gr
                                                                                  QUERY PLAN                                                                                  
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL)))
+   Output: aggdata."time", aggdata.device, (sum(aggdata.temp) FILTER (WHERE (aggdata.device IS NOT NULL)))
    ->  Sort
-         Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL)))
-         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device DESC
+         Output: aggdata."time", aggdata.device, (sum(aggdata.temp) FILTER (WHERE (aggdata.device IS NOT NULL)))
+         Sort Key: aggdata."time", aggdata.device DESC
          ->  Finalize HashAggregate
-               Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL))
-               Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+               Output: aggdata."time", aggdata.device, sum(aggdata.temp) FILTER (WHERE (aggdata.device IS NOT NULL))
+               Group Key: aggdata."time", aggdata.device
                ->  Append
                      ->  Partial HashAggregate
                            Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, PARTIAL sum(_hyper_1_1_chunk.temp) FILTER (WHERE (_hyper_1_1_chunk.device IS NOT NULL))
@@ -469,13 +469,13 @@ select time, sum(temp) from aggdata group by time order by time limit 10;
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_1_1_chunk."time", (sum(_hyper_1_1_chunk.temp))
+   Output: aggdata."time", (sum(aggdata.temp))
    ->  Sort
-         Output: _hyper_1_1_chunk."time", (sum(_hyper_1_1_chunk.temp))
-         Sort Key: _hyper_1_1_chunk."time"
+         Output: aggdata."time", (sum(aggdata.temp))
+         Sort Key: aggdata."time"
          ->  Finalize HashAggregate
-               Output: _hyper_1_1_chunk."time", sum(_hyper_1_1_chunk.temp)
-               Group Key: _hyper_1_1_chunk."time"
+               Output: aggdata."time", sum(aggdata.temp)
+               Group Key: aggdata."time"
                ->  Append
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_1_chunk."time", (PARTIAL sum(_hyper_1_1_chunk.temp))
@@ -505,13 +505,13 @@ select time, sum(temp) from aggdata group by time order by time limit 10;
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_1_1_chunk."time", (sum(_hyper_1_1_chunk.temp))
+   Output: aggdata."time", (sum(aggdata.temp))
    ->  Sort
-         Output: _hyper_1_1_chunk."time", (sum(_hyper_1_1_chunk.temp))
-         Sort Key: _hyper_1_1_chunk."time"
+         Output: aggdata."time", (sum(aggdata.temp))
+         Sort Key: aggdata."time"
          ->  Finalize HashAggregate
-               Output: _hyper_1_1_chunk."time", sum(_hyper_1_1_chunk.temp)
-               Group Key: _hyper_1_1_chunk."time"
+               Output: aggdata."time", sum(aggdata.temp)
+               Group Key: aggdata."time"
                ->  Append
                      ->  Partial HashAggregate
                            Output: _hyper_1_1_chunk."time", PARTIAL sum(_hyper_1_1_chunk.temp)
@@ -539,13 +539,13 @@ select time, sum(temp) from aggdata group by time order by time desc limit 10;
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_1_2_chunk."time", (sum(_hyper_1_2_chunk.temp))
+   Output: aggdata."time", (sum(aggdata.temp))
    ->  Sort
-         Output: _hyper_1_2_chunk."time", (sum(_hyper_1_2_chunk.temp))
-         Sort Key: _hyper_1_2_chunk."time" DESC
+         Output: aggdata."time", (sum(aggdata.temp))
+         Sort Key: aggdata."time" DESC
          ->  Finalize HashAggregate
-               Output: _hyper_1_2_chunk."time", sum(_hyper_1_2_chunk.temp)
-               Group Key: _hyper_1_2_chunk."time"
+               Output: aggdata."time", sum(aggdata.temp)
+               Group Key: aggdata."time"
                ->  Append
                      ->  Partial HashAggregate
                            Output: _hyper_1_2_chunk."time", PARTIAL sum(_hyper_1_2_chunk.temp)
@@ -575,13 +575,13 @@ select time, sum(temp) from aggdata group by time order by time desc limit 10;
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_1_2_chunk."time", (sum(_hyper_1_2_chunk.temp))
+   Output: aggdata."time", (sum(aggdata.temp))
    ->  Sort
-         Output: _hyper_1_2_chunk."time", (sum(_hyper_1_2_chunk.temp))
-         Sort Key: _hyper_1_2_chunk."time" DESC
+         Output: aggdata."time", (sum(aggdata.temp))
+         Sort Key: aggdata."time" DESC
          ->  Finalize HashAggregate
-               Output: _hyper_1_2_chunk."time", sum(_hyper_1_2_chunk.temp)
-               Group Key: _hyper_1_2_chunk."time"
+               Output: aggdata."time", sum(aggdata.temp)
+               Group Key: aggdata."time"
                ->  Append
                      ->  Partial HashAggregate
                            Output: _hyper_1_2_chunk."time", PARTIAL sum(_hyper_1_2_chunk.temp)
@@ -627,13 +627,13 @@ select time, sum(temp) from aggdata_timeorder group by time order by time limit 
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_3_4_chunk."time", (sum(_hyper_3_4_chunk.temp))
+   Output: aggdata_timeorder."time", (sum(aggdata_timeorder.temp))
    ->  Sort
-         Output: _hyper_3_4_chunk."time", (sum(_hyper_3_4_chunk.temp))
-         Sort Key: _hyper_3_4_chunk."time"
+         Output: aggdata_timeorder."time", (sum(aggdata_timeorder.temp))
+         Sort Key: aggdata_timeorder."time"
          ->  Finalize HashAggregate
-               Output: _hyper_3_4_chunk."time", sum(_hyper_3_4_chunk.temp)
-               Group Key: _hyper_3_4_chunk."time"
+               Output: aggdata_timeorder."time", sum(aggdata_timeorder.temp)
+               Group Key: aggdata_timeorder."time"
                ->  Append
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_3_4_chunk."time", (PARTIAL sum(_hyper_3_4_chunk.temp))
@@ -661,13 +661,13 @@ select time, sum(temp) from aggdata_timeorder group by time order by time desc l
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Limit
-   Output: _hyper_3_5_chunk."time", (sum(_hyper_3_5_chunk.temp))
+   Output: aggdata_timeorder."time", (sum(aggdata_timeorder.temp))
    ->  Sort
-         Output: _hyper_3_5_chunk."time", (sum(_hyper_3_5_chunk.temp))
-         Sort Key: _hyper_3_5_chunk."time" DESC
+         Output: aggdata_timeorder."time", (sum(aggdata_timeorder.temp))
+         Sort Key: aggdata_timeorder."time" DESC
          ->  Finalize HashAggregate
-               Output: _hyper_3_5_chunk."time", sum(_hyper_3_5_chunk.temp)
-               Group Key: _hyper_3_5_chunk."time"
+               Output: aggdata_timeorder."time", sum(aggdata_timeorder.temp)
+               Group Key: aggdata_timeorder."time"
                ->  Append
                      ->  Partial HashAggregate
                            Output: _hyper_3_5_chunk."time", PARTIAL sum(_hyper_3_5_chunk.temp)

@@ -1497,10 +1497,10 @@ SELECT current_setting('timescaledb.enable_skipscan') AS enable_skipscan;
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  Sort (actual rows=11 loops=1)
-   Sort Key: _hyper_1_1_chunk.dev
+   Sort Key: skip_scan_ht.dev
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=11 loops=1)
-         Group Key: _hyper_1_1_chunk.dev
+         Group Key: skip_scan_ht.dev
          Batches: 1 
          ->  Append (actual rows=10020 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
@@ -1516,7 +1516,7 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 ------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -1536,7 +1536,7 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 ---------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev DESC
+         Sort Key: skip_scan_ht.dev DESC
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
@@ -1556,7 +1556,7 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 ------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_last on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -1579,7 +1579,7 @@ CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 -------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev NULLS FIRST
+         Sort Key: skip_scan_ht.dev NULLS FIRST
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -1599,7 +1599,7 @@ CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 -------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev NULLS FIRST
+         Sort Key: skip_scan_ht.dev NULLS FIRST
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_nulls_first on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -1622,7 +1622,7 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 ----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -1642,7 +1642,7 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 ----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_idx_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -1662,7 +1662,7 @@ CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 -------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev DESC, _hyper_1_1_chunk."time" DESC
+         Sort Key: skip_scan_ht.dev DESC, skip_scan_ht."time" DESC
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan Backward using _hyper_1_1_chunk_skip_scan_idx_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev < NULL::integer)
@@ -1705,10 +1705,10 @@ CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
                                                  QUERY PLAN                                                 
 ------------------------------------------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
-   Sort Key: _hyper_1_1_chunk.dev_name
+   Sort Key: skip_scan_ht.dev_name
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=2 loops=1)
-         Group Key: _hyper_1_1_chunk.dev_name
+         Group Key: skip_scan_ht.dev_name
          Batches: 1 
          ->  Append (actual rows=2000 loops=1)
                ->  Bitmap Heap Scan on _hyper_1_1_chunk (actual rows=500 loops=1)
@@ -1741,10 +1741,10 @@ CREATE INDEX skip_scan_expr_idx ON :TABLE((dev % 3));
                                    QUERY PLAN                                    
 ---------------------------------------------------------------------------------
  Sort (actual rows=4 loops=1)
-   Sort Key: ((_hyper_1_1_chunk.dev % 3))
+   Sort Key: ((skip_scan_ht.dev % 3))
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=4 loops=1)
-         Group Key: (_hyper_1_1_chunk.dev % 3)
+         Group Key: (skip_scan_ht.dev % 3)
          Batches: 1 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -1759,7 +1759,7 @@ CREATE INDEX skip_scan_expr_idx ON :TABLE((dev % 3));
 -----------------------------------------------------------------------------------------------------------------
  Unique (actual rows=4 loops=1)
    ->  Merge Append (actual rows=10020 loops=1)
-         Sort Key: ((_hyper_1_1_chunk.dev % 3))
+         Sort Key: ((skip_scan_ht.dev % 3))
          ->  Index Scan using _hyper_1_1_chunk_skip_scan_expr_idx on _hyper_1_1_chunk (actual rows=2505 loops=1)
          ->  Index Scan using _hyper_1_2_chunk_skip_scan_expr_idx on _hyper_1_2_chunk (actual rows=2505 loops=1)
          ->  Index Scan using _hyper_1_3_chunk_skip_scan_expr_idx on _hyper_1_3_chunk (actual rows=2505 loops=1)
@@ -1775,7 +1775,7 @@ CREATE INDEX ON :TABLE(dev_name);
 ------------------------------------------------------------------------
  Unique (actual rows=0 loops=1)
    ->  Sort (actual rows=0 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name
+         Sort Key: skip_scan_ht.dev_name
          Sort Method: quicksort 
          ->  Append (actual rows=0 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=0 loops=1)
@@ -1824,7 +1824,7 @@ CREATE INDEX ON :TABLE(dev_name);
 ---------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=0 loops=1)
    ->  Merge Append (actual rows=0 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name
+         Sort Key: skip_scan_ht.dev_name
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=0 loops=1)
                      Index Cond: (dev_name IS NULL)
@@ -1859,7 +1859,7 @@ basic DISTINCT queries on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -1880,7 +1880,7 @@ basic DISTINCT queries on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
@@ -1901,7 +1901,7 @@ basic DISTINCT queries on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -1924,7 +1924,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -1945,7 +1945,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
@@ -1966,7 +1966,7 @@ stable expression in targetlist on skip_scan_ht
 ---------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Sort (actual rows=10020 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev, (length(md5((random())::text)))
+         Sort Key: skip_scan_ht.dev, (length(md5((random())::text)))
          Sort Method: quicksort 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -1981,7 +1981,7 @@ stable expression in targetlist on skip_scan_ht
 ---------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Sort (actual rows=10020 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name, (length(md5((random())::text)))
+         Sort Key: skip_scan_ht.dev_name, (length(md5((random())::text)))
          Sort Method: quicksort 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -1993,13 +1993,13 @@ stable expression in targetlist on skip_scan_ht
 
 -- queries without skipscan because distinct is not limited to specific column
 :PREFIX SELECT DISTINCT * FROM :TABLE ORDER BY dev;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+                                            QUERY PLAN                                             
+---------------------------------------------------------------------------------------------------
  Sort (actual rows=10020 loops=1)
-   Sort Key: _hyper_1_1_chunk.dev
+   Sort Key: skip_scan_ht.dev
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
-         Group Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time", _hyper_1_1_chunk.dev_name, _hyper_1_1_chunk.val
+         Group Key: skip_scan_ht.dev, skip_scan_ht."time", skip_scan_ht.dev_name, skip_scan_ht.val
          Batches: 1 
          ->  Append (actual rows=10020 loops=1)
                ->  Seq Scan on _hyper_1_1_chunk (actual rows=2505 loops=1)
@@ -2009,13 +2009,13 @@ stable expression in targetlist on skip_scan_ht
 (11 rows)
 
 :PREFIX SELECT DISTINCT *, 'q1_9' FROM :TABLE ORDER BY dev;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                    
+-----------------------------------------------------------------------------------------------------------------
  Sort (actual rows=10020 loops=1)
-   Sort Key: _hyper_1_1_chunk.dev
+   Sort Key: skip_scan_ht.dev
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
-         Group Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time", _hyper_1_1_chunk.dev_name, _hyper_1_1_chunk.val, 'q1_9'::text
+         Group Key: skip_scan_ht.dev, skip_scan_ht."time", skip_scan_ht.dev_name, skip_scan_ht.val, 'q1_9'::text
          Batches: 1 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -2029,10 +2029,10 @@ stable expression in targetlist on skip_scan_ht
                                    QUERY PLAN                                    
 ---------------------------------------------------------------------------------
  Sort (actual rows=10020 loops=1)
-   Sort Key: _hyper_1_1_chunk.dev
+   Sort Key: skip_scan_ht.dev
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
-         Group Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time", 'q1_10'::text
+         Group Key: skip_scan_ht.dev, skip_scan_ht."time", 'q1_10'::text
          Batches: 1 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -2048,7 +2048,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2068,7 +2068,7 @@ stable expression in targetlist on skip_scan_ht
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  HashAggregate (actual rows=100 loops=1)
-   Group Key: time_bucket(10, _hyper_1_1_chunk."time"), 'q1_12'::text
+   Group Key: time_bucket(10, skip_scan_ht."time"), 'q1_12'::text
    Batches: 1 
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
@@ -2082,7 +2082,7 @@ stable expression in targetlist on skip_scan_ht
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  HashAggregate (actual rows=3 loops=1)
-   Group Key: length(_hyper_1_1_chunk.dev_name), 'q1_13'::text
+   Group Key: length(skip_scan_ht.dev_name), 'q1_13'::text
    Batches: 1 
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
@@ -2096,7 +2096,7 @@ stable expression in targetlist on skip_scan_ht
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  HashAggregate (actual rows=1000 loops=1)
-   Group Key: (3 * _hyper_1_1_chunk."time"), 'q1_14'::text
+   Group Key: (3 * skip_scan_ht."time"), 'q1_14'::text
    Batches: 1 
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
@@ -2110,7 +2110,7 @@ stable expression in targetlist on skip_scan_ht
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  HashAggregate (actual rows=11 loops=1)
-   Group Key: ('Device '::text || _hyper_1_1_chunk.dev_name)
+   Group Key: ('Device '::text || skip_scan_ht.dev_name)
    Batches: 1 
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
@@ -2126,7 +2126,7 @@ stable expression in targetlist on skip_scan_ht
 ----------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -2147,7 +2147,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2168,7 +2168,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2189,7 +2189,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2210,7 +2210,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2230,7 +2230,7 @@ stable expression in targetlist on skip_scan_ht
 -----------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2247,7 +2247,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2264,7 +2264,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2281,7 +2281,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2302,7 +2302,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
+               Sort Key: skip_scan_ht.dev, skip_scan_ht."time"
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2323,7 +2323,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2340,7 +2340,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2361,7 +2361,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2382,7 +2382,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2403,7 +2403,7 @@ stable expression in targetlist on skip_scan_ht
 ---------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name
+         Sort Key: skip_scan_ht.dev_name
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
@@ -2424,7 +2424,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
@@ -2445,7 +2445,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
@@ -2466,7 +2466,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
@@ -2487,7 +2487,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
@@ -2507,7 +2507,7 @@ stable expression in targetlist on skip_scan_ht
 ----------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name
+         Sort Key: skip_scan_ht.dev_name
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2524,7 +2524,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2541,7 +2541,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2558,7 +2558,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
@@ -2578,7 +2578,7 @@ stable expression in targetlist on skip_scan_ht
 ---------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Sort (actual rows=10020 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name, _hyper_1_1_chunk."time"
+         Sort Key: skip_scan_ht.dev_name, skip_scan_ht."time"
          Sort Method: quicksort 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -2594,7 +2594,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2611,7 +2611,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev_name > NULL::text)
@@ -2632,7 +2632,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2649,7 +2649,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2666,7 +2666,7 @@ stable expression in targetlist on skip_scan_ht
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev_name
+               Sort Key: skip_scan_ht.dev_name
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2684,7 +2684,7 @@ DISTINCT with wholerow var
 -----------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2717,7 +2717,7 @@ LIMIT queries on skip_scan_ht
  Limit (actual rows=3 loops=1)
    ->  Unique (actual rows=3 loops=1)
          ->  Merge Append (actual rows=9 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2738,7 +2738,7 @@ LIMIT queries on skip_scan_ht
  Limit (actual rows=3 loops=1)
    ->  Unique (actual rows=3 loops=1)
          ->  Merge Append (actual rows=9 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev DESC, _hyper_1_1_chunk."time" DESC
+               Sort Key: skip_scan_ht.dev DESC, skip_scan_ht."time" DESC
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan Backward using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=3 loops=1)
                            Index Cond: (dev < NULL::integer)
@@ -2759,7 +2759,7 @@ LIMIT queries on skip_scan_ht
  Limit (actual rows=3 loops=1)
    ->  Unique (actual rows=3 loops=1)
          ->  Merge Append (actual rows=9 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
+               Sort Key: skip_scan_ht.dev, skip_scan_ht."time"
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=3 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2781,7 +2781,7 @@ range queries on skip_scan_ht
 ---------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=22 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: ((dev > NULL::integer) AND ("time" >= 100) AND ("time" <= 300))
@@ -2826,7 +2826,7 @@ ordered append on skip_scan_ht
 ----------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1000 loops=1)
    ->  Merge Append (actual rows=1000 loops=1)
-         Sort Key: _hyper_1_1_chunk."time"
+         Sort Key: skip_scan_ht."time"
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=250 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_time_dev_idx on _hyper_1_1_chunk (actual rows=250 loops=1)
                      Index Cond: (("time" > NULL::integer) AND ("time" >= 0) AND ("time" <= 5000))
@@ -2850,7 +2850,7 @@ SUBSELECTS on skip_scan_ht
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_1_1_chunk.dev
+                     Sort Key: skip_scan_ht.dev
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2867,7 +2867,7 @@ SUBSELECTS on skip_scan_ht
  Subquery Scan on a (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -2888,7 +2888,7 @@ SUBSELECTS on skip_scan_ht
  Subquery Scan on a (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2908,7 +2908,7 @@ ORDER BY
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
+                     Sort Key: skip_scan_ht.dev, skip_scan_ht."time"
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2926,7 +2926,7 @@ ORDER BY
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_1_1_chunk.dev DESC, _hyper_1_1_chunk."time" DESC
+                     Sort Key: skip_scan_ht.dev DESC, skip_scan_ht."time" DESC
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                            ->  Index Scan Backward using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -2946,7 +2946,7 @@ WHERE CLAUSES
    ->  Result (actual rows=5 loops=1)
          ->  Unique (actual rows=5 loops=1)
                ->  Merge Append (actual rows=20 loops=1)
-                     Sort Key: _hyper_1_1_chunk.dev
+                     Sort Key: skip_scan_ht.dev
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
                                  Index Cond: (dev > 5)
@@ -2968,7 +2968,7 @@ WHERE CLAUSES
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_1_1_chunk.dev
+                     Sort Key: skip_scan_ht.dev
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                                  Index Cond: ("time" > 5)
@@ -2990,7 +2990,7 @@ WHERE CLAUSES
    ->  Result (actual rows=5 loops=1)
          ->  Unique (actual rows=5 loops=1)
                ->  Merge Append (actual rows=20 loops=1)
-                     Sort Key: _hyper_1_1_chunk.dev
+                     Sort Key: skip_scan_ht.dev
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
                                  Index Cond: (dev > 5)
@@ -3014,7 +3014,7 @@ WHERE CLAUSES
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_1_1_chunk.dev
+                     Sort Key: skip_scan_ht.dev
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -3032,7 +3032,7 @@ WHERE CLAUSES
  Result (actual rows=9 loops=1)
    ->  Unique (actual rows=9 loops=1)
          ->  Merge Append (actual rows=36 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=9 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=9 loops=1)
                            Index Cond: (dev > 1)
@@ -3057,7 +3057,7 @@ WHERE CLAUSES
                Hypertable: skip_scan_ht
                Chunks excluded during startup: 0
                ->  Merge Append (actual rows=32 loops=1)
-                     Sort Key: _hyper_1_1_chunk.dev
+                     Sort Key: skip_scan_ht.dev
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=8 loops=1)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=8 loops=1)
                                  Index Cond: (dev > int_func_stable())
@@ -3081,7 +3081,7 @@ WHERE CLAUSES
          Hypertable: skip_scan_ht
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=28 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=7 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=7 loops=1)
                            Filter: (dev > int_func_volatile())
@@ -3105,7 +3105,7 @@ WHERE CLAUSES
 ----------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
    ->  Merge Append (actual rows=12 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=3 loops=1)
                      Index Cond: (dev = ANY ('{1,2,3}'::integer[]))
@@ -3128,7 +3128,7 @@ WHERE CLAUSES
          Hypertable: skip_scan_ht
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=12 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=3 loops=1)
                            Index Cond: (dev = ANY (inta_func_stable()))
@@ -3151,7 +3151,7 @@ WHERE CLAUSES
          Hypertable: skip_scan_ht
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=12 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=3 loops=1)
                            Filter: (dev = ANY (inta_func_volatile()))
@@ -3176,7 +3176,7 @@ WHERE CLAUSES
 ---------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=6 loops=1)
    ->  Merge Append (actual rows=24 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=6 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=6 loops=1)
                      Index Cond: (ROW(dev, "time") > ROW(5, 100))
@@ -3209,7 +3209,7 @@ WHERE CLAUSES
 ----------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=0 loops=1)
    ->  Merge Append (actual rows=0 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=0 loops=1)
                      Index Cond: (dev > 20)
@@ -3239,7 +3239,7 @@ WHERE CLAUSES
 --------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=5 loops=1)
    ->  Merge Append (actual rows=20 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=5 loops=1)
                      Index Cond: ((dev > NULL::integer) AND (dev > 5) AND ("time" > 200))
@@ -3262,7 +3262,7 @@ WHERE CLAUSES
 ----------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=2 loops=1)
    ->  Merge Append (actual rows=8 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=2 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=2 loops=1)
                      Index Cond: ((dev >= 5) AND (dev < 7) AND (dev >= 2))
@@ -3293,7 +3293,7 @@ WHERE CLAUSES
 ---------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
@@ -3313,7 +3313,7 @@ WHERE CLAUSES
 --------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name
+         Sort Key: skip_scan_ht.dev_name
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                      Index Cond: ((dev_name > NULL::text) AND (dev_name IS NULL))
@@ -3334,7 +3334,7 @@ WHERE CLAUSES
 ------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_1_1_chunk."time" DESC
+         Sort Key: skip_scan_ht."time" DESC
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
                ->  Index Scan Backward using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
                      Index Cond: (dev = 1)
@@ -3391,7 +3391,7 @@ WHERE CLAUSES
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -3451,7 +3451,7 @@ SELECT * FROM devices;
 ----------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -3474,7 +3474,7 @@ SELECT * FROM devices ORDER BY dev;
 ----------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -3496,7 +3496,7 @@ PREPARE prep AS SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
 ---------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name
+         Sort Key: skip_scan_ht.dev_name
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
@@ -3516,7 +3516,7 @@ PREPARE prep AS SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
 ---------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name
+         Sort Key: skip_scan_ht.dev_name
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
@@ -3536,7 +3536,7 @@ PREPARE prep AS SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
 ---------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev_name
+         Sort Key: skip_scan_ht.dev_name
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev_name > NULL::text)
@@ -3561,10 +3561,10 @@ DEALLOCATE prep;
  Subquery Scan on a (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Nested Loop (actual rows=20020 loops=1)
-               Join Filter: (_hyper_1_1_chunk."time" <> "*VALUES*".column1)
+               Join Filter: (skip_scan_ht."time" <> "*VALUES*".column1)
                Rows Removed by Join Filter: 20
                ->  Merge Append (actual rows=10020 loops=1)
-                     Sort Key: _hyper_1_1_chunk.dev
+                     Sort Key: skip_scan_ht.dev
                      ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=2505 loops=1)
                      ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=2505 loops=1)
                      ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=2505 loops=1)
@@ -3583,7 +3583,7 @@ DEALLOCATE prep;
    ->  Result (actual rows=9 loops=2)
          ->  Unique (actual rows=9 loops=2)
                ->  Merge Append (actual rows=36 loops=2)
-                     Sort Key: _hyper_1_1_chunk.dev
+                     Sort Key: skip_scan_ht.dev
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=9 loops=2)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=9 loops=2)
                                  Filter: (dev <> "*VALUES*".column1)
@@ -3613,7 +3613,7 @@ DEALLOCATE prep;
    ->  Result (actual rows=10 loops=2)
          ->  Unique (actual rows=10 loops=2)
                ->  Merge Append (actual rows=38 loops=2)
-                     Sort Key: _hyper_1_1_chunk.dev
+                     Sort Key: skip_scan_ht.dev
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10 loops=2)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=10 loops=2)
                                  Index Cond: (dev >= "*VALUES*".column1)
@@ -3637,7 +3637,7 @@ DEALLOCATE prep;
  Nested Loop (actual rows=10000 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -3653,19 +3653,19 @@ DEALLOCATE prep;
    ->  Result (actual rows=909 loops=11)
          ->  Unique (actual rows=909 loops=11)
                ->  Merge Append (actual rows=909 loops=11)
-                     Sort Key: _hyper_1_1_chunk_1."time"
+                     Sort Key: skip_scan_ht_1."time"
                      ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
                            ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
-                                 Index Cond: (dev = _hyper_1_1_chunk.dev)
+                                 Index Cond: (dev = skip_scan_ht.dev)
                      ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
                            ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
-                                 Index Cond: (dev = _hyper_1_1_chunk.dev)
+                                 Index Cond: (dev = skip_scan_ht.dev)
                      ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
                            ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
-                                 Index Cond: (dev = _hyper_1_1_chunk.dev)
+                                 Index Cond: (dev = skip_scan_ht.dev)
                      ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
                            ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
-                                 Index Cond: (dev = _hyper_1_1_chunk.dev)
+                                 Index Cond: (dev = skip_scan_ht.dev)
 (36 rows)
 
 :PREFIX SELECT time, dev, NULL, 'q9_2' FROM (SELECT b.* FROM
@@ -3676,7 +3676,7 @@ DEALLOCATE prep;
  Nested Loop (actual rows=10000 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -3691,19 +3691,19 @@ DEALLOCATE prep;
                            Index Cond: (dev > NULL::integer)
    ->  Unique (actual rows=909 loops=11)
          ->  Merge Append (actual rows=909 loops=11)
-               Sort Key: _hyper_1_1_chunk_1."time"
+               Sort Key: skip_scan_ht_1."time"
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
-                           Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
+                           Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
-                           Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
+                           Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
-                           Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
+                           Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
-                           Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
+                           Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
 (39 rows)
 
 -- Test that the multi-column DISTINCT emulation is equivalent to a real multi-column DISTINCT
@@ -3715,7 +3715,7 @@ DEALLOCATE prep;
  Nested Loop (actual rows=10000 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_1_1_chunk.dev
+               Sort Key: skip_scan_ht.dev
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            Index Cond: (dev > NULL::integer)
@@ -3730,19 +3730,19 @@ DEALLOCATE prep;
                            Index Cond: (dev > NULL::integer)
    ->  Unique (actual rows=909 loops=11)
          ->  Merge Append (actual rows=909 loops=11)
-               Sort Key: _hyper_1_1_chunk_1."time"
+               Sort Key: skip_scan_ht_1."time"
                ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=227 loops=11)
-                           Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
+                           Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
                ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (actual rows=227 loops=11)
-                           Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
+                           Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
                ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (actual rows=227 loops=11)
-                           Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
+                           Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
                ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
                      ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=227 loops=11)
-                           Index Cond: ((dev = _hyper_1_1_chunk.dev) AND ("time" > NULL::integer))
+                           Index Cond: ((dev = skip_scan_ht.dev) AND ("time" > NULL::integer))
 (39 rows)
 
 :PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
@@ -3750,7 +3750,7 @@ DEALLOCATE prep;
 -----------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10000 loops=1)
    ->  Merge Append (actual rows=10000 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
+         Sort Key: skip_scan_ht.dev, skip_scan_ht."time"
          ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=2500 loops=1)
                Index Cond: (dev IS NOT NULL)
          ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=2500 loops=1)
@@ -3769,12 +3769,12 @@ UNION SELECT b.* FROM
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=10000 loops=1)
    ->  Sort (actual rows=20000 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
+         Sort Key: skip_scan_ht.dev, skip_scan_ht."time"
          Sort Method: quicksort 
          ->  Append (actual rows=20000 loops=1)
                ->  Unique (actual rows=10000 loops=1)
                      ->  Merge Append (actual rows=10000 loops=1)
-                           Sort Key: _hyper_1_1_chunk.dev, _hyper_1_1_chunk."time"
+                           Sort Key: skip_scan_ht.dev, skip_scan_ht."time"
                            ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk (actual rows=2500 loops=1)
                                  Index Cond: (dev IS NOT NULL)
                            ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk (actual rows=2500 loops=1)
@@ -3786,7 +3786,7 @@ UNION SELECT b.* FROM
                ->  Nested Loop (actual rows=10000 loops=1)
                      ->  Unique (actual rows=11 loops=1)
                            ->  Merge Append (actual rows=44 loops=1)
-                                 Sort Key: _hyper_1_1_chunk_1.dev
+                                 Sort Key: skip_scan_ht_1.dev
                                  ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=11 loops=1)
                                        ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=11 loops=1)
                                              Index Cond: (dev > NULL::integer)
@@ -3801,19 +3801,19 @@ UNION SELECT b.* FROM
                                              Index Cond: (dev > NULL::integer)
                      ->  Unique (actual rows=909 loops=11)
                            ->  Merge Append (actual rows=909 loops=11)
-                                 Sort Key: _hyper_1_1_chunk_2."time"
+                                 Sort Key: skip_scan_ht_2."time"
                                  ->  Custom Scan (SkipScan) on _hyper_1_1_chunk _hyper_1_1_chunk_2 (actual rows=227 loops=11)
                                        ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_2 (actual rows=227 loops=11)
-                                             Index Cond: ((dev = _hyper_1_1_chunk_1.dev) AND ("time" > NULL::integer))
+                                             Index Cond: ((dev = skip_scan_ht_1.dev) AND ("time" > NULL::integer))
                                  ->  Custom Scan (SkipScan) on _hyper_1_2_chunk _hyper_1_2_chunk_2 (actual rows=227 loops=11)
                                        ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_2 (actual rows=227 loops=11)
-                                             Index Cond: ((dev = _hyper_1_1_chunk_1.dev) AND ("time" > NULL::integer))
+                                             Index Cond: ((dev = skip_scan_ht_1.dev) AND ("time" > NULL::integer))
                                  ->  Custom Scan (SkipScan) on _hyper_1_3_chunk _hyper_1_3_chunk_2 (actual rows=227 loops=11)
                                        ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_2 (actual rows=227 loops=11)
-                                             Index Cond: ((dev = _hyper_1_1_chunk_1.dev) AND ("time" > NULL::integer))
+                                             Index Cond: ((dev = skip_scan_ht_1.dev) AND ("time" > NULL::integer))
                                  ->  Custom Scan (SkipScan) on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=227 loops=11)
                                        ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_2 (actual rows=227 loops=11)
-                                             Index Cond: ((dev = _hyper_1_1_chunk_1.dev) AND ("time" > NULL::integer))
+                                             Index Cond: ((dev = skip_scan_ht_1.dev) AND ("time" > NULL::integer))
 (59 rows)
 
 -- SkipScan into INSERT
@@ -3825,7 +3825,7 @@ UNION SELECT b.* FROM
          ->  Result (actual rows=11 loops=1)
                ->  Unique (actual rows=11 loops=1)
                      ->  Merge Append (actual rows=44 loops=1)
-                           Sort Key: _hyper_1_1_chunk.dev
+                           Sort Key: skip_scan_ht.dev
                            ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                                  ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -3848,7 +3848,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 ----------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=11 loops=1)
                      Index Cond: (dev > NULL::integer)
@@ -3977,7 +3977,7 @@ SET timescaledb.enable_compressed_skipscan TO false;
 ------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx1 on _hyper_1_1_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -4000,7 +4000,7 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=2538 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=2505 loops=1)
                ->  Index Scan using compress_hyper_2_17_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_17_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -4023,7 +4023,7 @@ SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 ------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx1 on _hyper_1_1_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -4041,7 +4041,7 @@ DROP INDEX _timescaledb_internal._hyper_1_1_chunk_skip_scan_ht_dev_idx;
 ------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_1_1_chunk.dev
+         Sort Key: skip_scan_ht.dev
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx1 on _hyper_1_1_chunk (actual rows=11 loops=1)
          ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11 loops=1)
@@ -4094,7 +4094,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_18_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_18_chunk (actual rows=11 loops=1)
@@ -4114,7 +4114,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev DESC
+         Sort Key: skip_scan_htc.dev DESC
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan Backward using compress_hyper_4_18_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_18_chunk (actual rows=11 loops=1)
@@ -4134,7 +4134,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev DESC
+         Sort Key: skip_scan_htc.dev DESC
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan Backward using compress_hyper_4_18_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_18_chunk (actual rows=11 loops=1)
@@ -4154,7 +4154,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_18_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_18_chunk (actual rows=11 loops=1)
@@ -4174,10 +4174,10 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
  Sort (actual rows=11 loops=1)
-   Sort Key: _hyper_3_5_chunk.dev NULLS FIRST
+   Sort Key: skip_scan_htc.dev NULLS FIRST
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=11 loops=1)
-         Group Key: _hyper_3_5_chunk.dev
+         Group Key: skip_scan_htc.dev
          Batches: 1 
          ->  Append (actual rows=10020 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
@@ -4208,7 +4208,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time" DESC
+         Sort Key: skip_scan_htc.dev, skip_scan_htc."time" DESC
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_18_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_18_chunk (actual rows=11 loops=1)
@@ -4228,7 +4228,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev DESC, _hyper_3_5_chunk."time"
+         Sort Key: skip_scan_htc.dev DESC, skip_scan_htc."time"
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan Backward using compress_hyper_4_18_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_18_chunk (actual rows=11 loops=1)
@@ -4249,7 +4249,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=10020 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev DESC, _hyper_3_5_chunk."time" DESC
+         Sort Key: skip_scan_htc.dev DESC, skip_scan_htc."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                ->  Sort (actual rows=11 loops=1)
                      Sort Key: compress_hyper_4_18_chunk.dev DESC, compress_hyper_4_18_chunk._ts_meta_min_1 DESC, compress_hyper_4_18_chunk._ts_meta_max_1 DESC
@@ -4279,7 +4279,7 @@ SET enable_seqscan TO false;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=10020 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev DESC, _hyper_3_5_chunk."time" DESC
+         Sort Key: skip_scan_htc.dev DESC, skip_scan_htc."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                ->  Sort (actual rows=11 loops=1)
                      Sort Key: compress_hyper_4_18_chunk.dev DESC, compress_hyper_4_18_chunk._ts_meta_min_1 DESC, compress_hyper_4_18_chunk._ts_meta_max_1 DESC
@@ -4364,7 +4364,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_22_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_22_chunk (actual rows=11 loops=1)
@@ -4384,7 +4384,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_22_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_22_chunk (actual rows=11 loops=1)
@@ -4404,7 +4404,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk.dev_name
+         Sort Key: skip_scan_htc.dev, skip_scan_htc.dev_name
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_22_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_22_chunk (actual rows=11 loops=1)
@@ -4424,7 +4424,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev DESC, _hyper_3_5_chunk.dev_name DESC
+         Sort Key: skip_scan_htc.dev DESC, skip_scan_htc.dev_name DESC
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan Backward using compress_hyper_4_22_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_22_chunk (actual rows=11 loops=1)
@@ -4445,7 +4445,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=10020 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk.dev_name DESC
+         Sort Key: skip_scan_htc.dev, skip_scan_htc.dev_name DESC
          ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                ->  Sort (actual rows=11 loops=1)
                      Sort Key: compress_hyper_4_22_chunk.dev, compress_hyper_4_22_chunk.dev_name DESC
@@ -4474,7 +4474,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Key: skip_scan_htc.dev_name
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=1 loops=1)
                      ->  Index Scan using compress_hyper_4_22_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_22_chunk (actual rows=1 loops=1)
@@ -4498,7 +4498,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Key: skip_scan_htc.dev_name
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=1 loops=1)
                      ->  Index Scan using compress_hyper_4_22_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_22_chunk (actual rows=1 loops=1)
@@ -4546,7 +4546,7 @@ basic DISTINCT queries on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4567,7 +4567,7 @@ basic DISTINCT queries on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4590,7 +4590,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4611,7 +4611,7 @@ stable expression in targetlist on skip_scan_htc
 ------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Sort (actual rows=10020 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev, (length(md5((random())::text)))
+         Sort Key: skip_scan_htc.dev, (length(md5((random())::text)))
          Sort Method: quicksort 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -4627,13 +4627,13 @@ stable expression in targetlist on skip_scan_htc
 
 -- queries without skipscan because distinct is not limited to specific column
 :PREFIX SELECT DISTINCT * FROM :TABLE ORDER BY dev;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
  Sort (actual rows=10020 loops=1)
-   Sort Key: _hyper_3_5_chunk.dev
+   Sort Key: skip_scan_htc.dev
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
-         Group Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time", _hyper_3_5_chunk.dev_name, _hyper_3_5_chunk.val
+         Group Key: skip_scan_htc.dev, skip_scan_htc."time", skip_scan_htc.dev_name, skip_scan_htc.val
          Batches: 1 
          ->  Append (actual rows=10020 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
@@ -4647,13 +4647,13 @@ stable expression in targetlist on skip_scan_htc
 (15 rows)
 
 :PREFIX SELECT DISTINCT *, 'q1_9' FROM :TABLE ORDER BY dev;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=10020 loops=1)
-   Sort Key: _hyper_3_5_chunk.dev
+   Sort Key: skip_scan_htc.dev
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
-         Group Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time", _hyper_3_5_chunk.dev_name, _hyper_3_5_chunk.val, 'q1_9'::text
+         Group Key: skip_scan_htc.dev, skip_scan_htc."time", skip_scan_htc.dev_name, skip_scan_htc.val, 'q1_9'::text
          Batches: 1 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -4671,10 +4671,10 @@ stable expression in targetlist on skip_scan_htc
                                                                          QUERY PLAN                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=10020 loops=1)
-   Sort Key: _hyper_3_5_chunk.dev
+   Sort Key: skip_scan_htc.dev
    Sort Method: quicksort 
    ->  HashAggregate (actual rows=10020 loops=1)
-         Group Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time", 'q1_10'::text
+         Group Key: skip_scan_htc.dev, skip_scan_htc."time", 'q1_10'::text
          Batches: 1 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -4707,7 +4707,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4727,7 +4727,7 @@ stable expression in targetlist on skip_scan_htc
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
  HashAggregate (actual rows=11 loops=1)
-   Group Key: (_hyper_3_5_chunk.dev + 1), 'q1_13'::text
+   Group Key: (skip_scan_htc.dev + 1), 'q1_13'::text
    Batches: 1 
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
@@ -4747,7 +4747,7 @@ stable expression in targetlist on skip_scan_htc
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4768,7 +4768,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4789,7 +4789,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4810,7 +4810,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4831,7 +4831,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4851,7 +4851,7 @@ stable expression in targetlist on skip_scan_htc
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4872,7 +4872,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4893,7 +4893,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4914,7 +4914,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4935,7 +4935,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time" DESC
+               Sort Key: skip_scan_htc.dev, skip_scan_htc."time" DESC
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4956,7 +4956,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4977,7 +4977,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -4998,7 +4998,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -5019,7 +5019,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -5041,7 +5041,7 @@ DISTINCT with wholerow var
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=11 loops=1)
@@ -5082,7 +5082,7 @@ LIMIT queries on skip_scan_htc
  Limit (actual rows=3 loops=1)
    ->  Unique (actual rows=3 loops=1)
          ->  Merge Append (actual rows=9 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=3 loops=1)
@@ -5103,7 +5103,7 @@ LIMIT queries on skip_scan_htc
  Limit (actual rows=3 loops=1)
    ->  Unique (actual rows=3 loops=1)
          ->  Merge Append (actual rows=9 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev DESC, _hyper_3_5_chunk."time"
+               Sort Key: skip_scan_htc.dev DESC, skip_scan_htc."time"
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
                            ->  Index Scan Backward using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=3 loops=1)
@@ -5124,7 +5124,7 @@ LIMIT queries on skip_scan_htc
  Limit (actual rows=3 loops=1)
    ->  Unique (actual rows=3 loops=1)
          ->  Merge Append (actual rows=9 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time" DESC
+               Sort Key: skip_scan_htc.dev, skip_scan_htc."time" DESC
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
                            ->  Index Scan using compress_hyper_4_26_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_26_chunk (actual rows=3 loops=1)
@@ -5146,7 +5146,7 @@ range queries on skip_scan_htc
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=22 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      Vectorized Filter: (("time" >= 100) AND ("time" <= 300))
@@ -5210,7 +5210,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5233,7 +5233,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5254,7 +5254,7 @@ stable expression in targetlist on skip_scan_htc
 ------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Sort (actual rows=10020 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev_name, (length(md5((random())::text)))
+         Sort Key: skip_scan_htc.dev_name, (length(md5((random())::text)))
          Sort Method: quicksort 
          ->  Result (actual rows=10020 loops=1)
                ->  Append (actual rows=10020 loops=1)
@@ -5273,7 +5273,7 @@ stable expression in targetlist on skip_scan_htc
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
  HashAggregate (actual rows=11 loops=1)
-   Group Key: ('Device '::text || _hyper_3_5_chunk.dev_name)
+   Group Key: ('Device '::text || skip_scan_htc.dev_name)
    Batches: 1 
    ->  Result (actual rows=10020 loops=1)
          ->  Append (actual rows=10020 loops=1)
@@ -5293,7 +5293,7 @@ stable expression in targetlist on skip_scan_htc
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Key: skip_scan_htc.dev_name
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5314,7 +5314,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5335,7 +5335,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5356,7 +5356,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5377,7 +5377,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5397,7 +5397,7 @@ stable expression in targetlist on skip_scan_htc
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Key: skip_scan_htc.dev_name
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5418,7 +5418,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5439,7 +5439,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5460,7 +5460,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5481,7 +5481,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name, _hyper_3_5_chunk."time" DESC
+               Sort Key: skip_scan_htc.dev_name, skip_scan_htc."time" DESC
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5502,7 +5502,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5523,7 +5523,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5544,7 +5544,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5565,7 +5565,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5586,7 +5586,7 @@ stable expression in targetlist on skip_scan_htc
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev_name
+               Sort Key: skip_scan_htc.dev_name
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=11 loops=1)
@@ -5606,7 +5606,7 @@ stable expression in targetlist on skip_scan_htc
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev_name
+         Sort Key: skip_scan_htc.dev_name
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=1 loops=1)
                      ->  Index Scan using compress_hyper_4_30_chunk_dev_name__ts_meta_min_1__ts_meta__idx on compress_hyper_4_30_chunk (actual rows=1 loops=1)
@@ -5655,7 +5655,7 @@ SUBSELECTS on skip_scan_htc
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_3_5_chunk.dev
+                     Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                                  ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -5676,7 +5676,7 @@ SUBSELECTS on skip_scan_htc
  Subquery Scan on a (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -5697,7 +5697,7 @@ SUBSELECTS on skip_scan_htc
  Subquery Scan on a (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -5721,7 +5721,7 @@ ORDER BY
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk."time"
+                     Sort Key: skip_scan_htc.dev, skip_scan_htc."time"
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                                  ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -5743,7 +5743,7 @@ ORDER BY
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_3_5_chunk.dev DESC, _hyper_3_5_chunk."time" DESC
+                     Sort Key: skip_scan_htc.dev DESC, skip_scan_htc."time" DESC
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                                  ->  Index Scan Backward using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -5767,7 +5767,7 @@ WHERE CLAUSES
    ->  Result (actual rows=5 loops=1)
          ->  Unique (actual rows=5 loops=1)
                ->  Merge Append (actual rows=20 loops=1)
-                     Sort Key: _hyper_3_5_chunk.dev
+                     Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=5 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=5 loops=1)
                                  ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=5 loops=1)
@@ -5793,7 +5793,7 @@ WHERE CLAUSES
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_3_5_chunk.dev
+                     Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                                  Vectorized Filter: ("time" > 5)
@@ -5824,7 +5824,7 @@ WHERE CLAUSES
    ->  Result (actual rows=5 loops=1)
          ->  Unique (actual rows=5 loops=1)
                ->  Merge Append (actual rows=20 loops=1)
-                     Sort Key: _hyper_3_5_chunk.dev
+                     Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=5 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=5 loops=1)
                                  ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=5 loops=1)
@@ -5852,7 +5852,7 @@ WHERE CLAUSES
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_3_5_chunk.dev
+                     Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                                  ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -5874,7 +5874,7 @@ WHERE CLAUSES
  Result (actual rows=9 loops=1)
    ->  Unique (actual rows=9 loops=1)
          ->  Merge Append (actual rows=36 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=9 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=9 loops=1)
                            ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=9 loops=1)
@@ -5903,7 +5903,7 @@ WHERE CLAUSES
                Hypertable: skip_scan_htc
                Chunks excluded during startup: 0
                ->  Merge Append (actual rows=32 loops=1)
-                     Sort Key: _hyper_3_5_chunk.dev
+                     Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=8 loops=1)
                                  ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=8 loops=1)
@@ -5931,7 +5931,7 @@ WHERE CLAUSES
          Hypertable: skip_scan_htc
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=28 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=7 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=7 loops=1)
                            Filter: (dev > int_func_volatile())
@@ -5959,7 +5959,7 @@ WHERE CLAUSES
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
    ->  Merge Append (actual rows=12 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=3 loops=1)
@@ -5986,7 +5986,7 @@ WHERE CLAUSES
          Hypertable: skip_scan_htc
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=12 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
                            ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=3 loops=1)
@@ -6013,7 +6013,7 @@ WHERE CLAUSES
          Hypertable: skip_scan_htc
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=12 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=3 loops=1)
                            Filter: (dev = ANY (inta_func_volatile()))
@@ -6042,7 +6042,7 @@ WHERE CLAUSES
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=6 loops=1)
    ->  Merge Append (actual rows=24 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=6 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=6 loops=1)
                      Filter: (ROW(dev, "time") > ROW(5, 100))
@@ -6083,7 +6083,7 @@ WHERE CLAUSES
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=0 loops=1)
    ->  Merge Append (actual rows=0 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=0 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=0 loops=1)
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=0 loops=1)
@@ -6120,7 +6120,7 @@ WHERE CLAUSES
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=5 loops=1)
    ->  Merge Append (actual rows=20 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=5 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=5 loops=1)
                      Vectorized Filter: ("time" > 200)
@@ -6149,7 +6149,7 @@ WHERE CLAUSES
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=2 loops=1)
    ->  Merge Append (actual rows=8 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=2 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2 loops=1)
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=2 loops=1)
@@ -6185,7 +6185,7 @@ WHERE CLAUSES
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=1 loops=1)
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=1 loops=1)
@@ -6210,7 +6210,7 @@ WHERE CLAUSES
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_3_5_chunk."time" DESC
+         Sort Key: skip_scan_htc."time" DESC
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=1 loops=1)
                      ->  Index Scan Backward using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=1 loops=1)
@@ -6238,7 +6238,7 @@ SELECT * FROM devices;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -6261,7 +6261,7 @@ SELECT * FROM devices ORDER BY dev;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -6283,7 +6283,7 @@ PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -6303,7 +6303,7 @@ PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -6323,7 +6323,7 @@ PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
@@ -6349,10 +6349,10 @@ DEALLOCATE prep;
  Subquery Scan on a (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Nested Loop (actual rows=20020 loops=1)
-               Join Filter: (_hyper_3_5_chunk."time" <> "*VALUES*".column1)
+               Join Filter: (skip_scan_htc."time" <> "*VALUES*".column1)
                Rows Removed by Join Filter: 20
                ->  Merge Append (actual rows=10020 loops=1)
-                     Sort Key: _hyper_3_5_chunk.dev
+                     Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2505 loops=1)
                            ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk (actual rows=2505 loops=1)
@@ -6376,7 +6376,7 @@ DEALLOCATE prep;
    ->  Result (actual rows=9 loops=2)
          ->  Unique (actual rows=9 loops=2)
                ->  Merge Append (actual rows=36 loops=2)
-                     Sort Key: _hyper_3_5_chunk.dev
+                     Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=9 loops=2)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=9 loops=2)
                                  ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=9 loops=2)
@@ -6410,7 +6410,7 @@ DEALLOCATE prep;
    ->  Result (actual rows=10 loops=2)
          ->  Unique (actual rows=10 loops=2)
                ->  Merge Append (actual rows=38 loops=2)
-                     Sort Key: _hyper_3_5_chunk.dev
+                     Sort Key: skip_scan_htc.dev
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10 loops=2)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=10 loops=2)
                                  ->  Index Scan using compress_hyper_4_34_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_34_chunk (actual rows=10 loops=2)
@@ -6459,7 +6459,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
  Nested Loop (actual rows=20 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk (actual rows=11 loops=1)
@@ -6475,23 +6475,23 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
    ->  Result (actual rows=2 loops=11)
          ->  Unique (actual rows=2 loops=11)
                ->  Merge Append (actual rows=7 loops=11)
-                     Sort Key: _hyper_3_5_chunk_1.val
+                     Sort Key: skip_scan_htc_1.val
                      ->  Custom Scan (SkipScan) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=2 loops=11)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=2 loops=11)
                                  ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk compress_hyper_4_38_chunk_1 (actual rows=2 loops=11)
-                                       Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                       Index Cond: (dev = skip_scan_htc.dev)
                      ->  Custom Scan (SkipScan) on _hyper_3_6_chunk _hyper_3_6_chunk_1 (actual rows=2 loops=11)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk _hyper_3_6_chunk_1 (actual rows=2 loops=11)
                                  ->  Index Scan using compress_hyper_4_39_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_39_chunk compress_hyper_4_39_chunk_1 (actual rows=2 loops=11)
-                                       Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                       Index Cond: (dev = skip_scan_htc.dev)
                      ->  Custom Scan (SkipScan) on _hyper_3_7_chunk _hyper_3_7_chunk_1 (actual rows=2 loops=11)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk _hyper_3_7_chunk_1 (actual rows=2 loops=11)
                                  ->  Index Scan using compress_hyper_4_40_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_40_chunk compress_hyper_4_40_chunk_1 (actual rows=2 loops=11)
-                                       Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                       Index Cond: (dev = skip_scan_htc.dev)
                      ->  Custom Scan (SkipScan) on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=2 loops=11)
                            ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=2 loops=11)
                                  ->  Index Scan using compress_hyper_4_41_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_41_chunk compress_hyper_4_41_chunk_1 (actual rows=2 loops=11)
-                                       Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                       Index Cond: (dev = skip_scan_htc.dev)
 (36 rows)
 
 :PREFIX SELECT val, dev, NULL, 'q9_2' FROM (SELECT b.* FROM
@@ -6502,7 +6502,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
  Nested Loop (actual rows=20 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk (actual rows=11 loops=1)
@@ -6517,23 +6517,23 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
                            ->  Index Scan using compress_hyper_4_41_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_41_chunk (actual rows=11 loops=1)
    ->  Unique (actual rows=2 loops=11)
          ->  Merge Append (actual rows=7 loops=11)
-               Sort Key: _hyper_3_5_chunk_1.val
+               Sort Key: skip_scan_htc_1.val
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=2 loops=11)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=2 loops=11)
                            ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk compress_hyper_4_38_chunk_1 (actual rows=2 loops=11)
-                                 Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                 Index Cond: (dev = skip_scan_htc.dev)
                ->  Custom Scan (SkipScan) on _hyper_3_6_chunk _hyper_3_6_chunk_1 (actual rows=2 loops=11)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk _hyper_3_6_chunk_1 (actual rows=2 loops=11)
                            ->  Index Scan using compress_hyper_4_39_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_39_chunk compress_hyper_4_39_chunk_1 (actual rows=2 loops=11)
-                                 Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                 Index Cond: (dev = skip_scan_htc.dev)
                ->  Custom Scan (SkipScan) on _hyper_3_7_chunk _hyper_3_7_chunk_1 (actual rows=2 loops=11)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk _hyper_3_7_chunk_1 (actual rows=2 loops=11)
                            ->  Index Scan using compress_hyper_4_40_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_40_chunk compress_hyper_4_40_chunk_1 (actual rows=2 loops=11)
-                                 Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                 Index Cond: (dev = skip_scan_htc.dev)
                ->  Custom Scan (SkipScan) on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=2 loops=11)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=2 loops=11)
                            ->  Index Scan using compress_hyper_4_41_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_41_chunk compress_hyper_4_41_chunk_1 (actual rows=2 loops=11)
-                                 Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                 Index Cond: (dev = skip_scan_htc.dev)
 (35 rows)
 
 -- Test that the multi-column DISTINCT emulation is equivalent to a real multi-column DISTINCT
@@ -6545,7 +6545,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
  Nested Loop (actual rows=20 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_3_5_chunk.dev
+               Sort Key: skip_scan_htc.dev
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk (actual rows=11 loops=1)
@@ -6560,23 +6560,23 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
                            ->  Index Scan using compress_hyper_4_41_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_41_chunk (actual rows=11 loops=1)
    ->  Unique (actual rows=2 loops=11)
          ->  Merge Append (actual rows=7 loops=11)
-               Sort Key: _hyper_3_5_chunk_1.val
+               Sort Key: skip_scan_htc_1.val
                ->  Custom Scan (SkipScan) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=2 loops=11)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=2 loops=11)
                            ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk compress_hyper_4_38_chunk_1 (actual rows=2 loops=11)
-                                 Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                 Index Cond: (dev = skip_scan_htc.dev)
                ->  Custom Scan (SkipScan) on _hyper_3_6_chunk _hyper_3_6_chunk_1 (actual rows=2 loops=11)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk _hyper_3_6_chunk_1 (actual rows=2 loops=11)
                            ->  Index Scan using compress_hyper_4_39_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_39_chunk compress_hyper_4_39_chunk_1 (actual rows=2 loops=11)
-                                 Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                 Index Cond: (dev = skip_scan_htc.dev)
                ->  Custom Scan (SkipScan) on _hyper_3_7_chunk _hyper_3_7_chunk_1 (actual rows=2 loops=11)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk _hyper_3_7_chunk_1 (actual rows=2 loops=11)
                            ->  Index Scan using compress_hyper_4_40_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_40_chunk compress_hyper_4_40_chunk_1 (actual rows=2 loops=11)
-                                 Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                 Index Cond: (dev = skip_scan_htc.dev)
                ->  Custom Scan (SkipScan) on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=2 loops=11)
                      ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk _hyper_3_8_chunk_1 (actual rows=2 loops=11)
                            ->  Index Scan using compress_hyper_4_41_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_41_chunk compress_hyper_4_41_chunk_1 (actual rows=2 loops=11)
-                                 Index Cond: (dev = _hyper_3_5_chunk.dev)
+                                 Index Cond: (dev = skip_scan_htc.dev)
 (35 rows)
 
 -- no SkipScan: 2 distinct columns
@@ -6585,7 +6585,7 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=20 loops=1)
    ->  Merge Append (actual rows=10000 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk.val
+         Sort Key: skip_scan_htc.dev, skip_scan_htc.val
          ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2500 loops=1)
                ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk (actual rows=20 loops=1)
                      Index Cond: (dev IS NOT NULL)
@@ -6608,12 +6608,12 @@ UNION SELECT b.* FROM
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=20 loops=1)
    ->  Sort (actual rows=40 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk.val
+         Sort Key: skip_scan_htc.dev, skip_scan_htc.val
          Sort Method: quicksort 
          ->  Append (actual rows=40 loops=1)
                ->  Unique (actual rows=20 loops=1)
                      ->  Merge Append (actual rows=10000 loops=1)
-                           Sort Key: _hyper_3_5_chunk.dev, _hyper_3_5_chunk.val
+                           Sort Key: skip_scan_htc.dev, skip_scan_htc.val
                            ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=2500 loops=1)
                                  ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk (actual rows=20 loops=1)
                                        Index Cond: (dev IS NOT NULL)
@@ -6629,7 +6629,7 @@ UNION SELECT b.* FROM
                ->  Nested Loop (actual rows=20 loops=1)
                      ->  Unique (actual rows=11 loops=1)
                            ->  Merge Append (actual rows=44 loops=1)
-                                 Sort Key: _hyper_3_5_chunk_1.dev
+                                 Sort Key: skip_scan_htc_1.dev
                                  ->  Custom Scan (SkipScan) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=11 loops=1)
                                        ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk _hyper_3_5_chunk_1 (actual rows=11 loops=1)
                                              ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk compress_hyper_4_38_chunk_1 (actual rows=11 loops=1)
@@ -6644,23 +6644,23 @@ UNION SELECT b.* FROM
                                              ->  Index Scan using compress_hyper_4_41_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_41_chunk compress_hyper_4_41_chunk_1 (actual rows=11 loops=1)
                      ->  Unique (actual rows=2 loops=11)
                            ->  Merge Append (actual rows=7 loops=11)
-                                 Sort Key: _hyper_3_5_chunk_2.val
+                                 Sort Key: skip_scan_htc_2.val
                                  ->  Custom Scan (SkipScan) on _hyper_3_5_chunk _hyper_3_5_chunk_2 (actual rows=2 loops=11)
                                        ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk _hyper_3_5_chunk_2 (actual rows=2 loops=11)
                                              ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk compress_hyper_4_38_chunk_2 (actual rows=2 loops=11)
-                                                   Index Cond: (dev = _hyper_3_5_chunk_1.dev)
+                                                   Index Cond: (dev = skip_scan_htc_1.dev)
                                  ->  Custom Scan (SkipScan) on _hyper_3_6_chunk _hyper_3_6_chunk_2 (actual rows=2 loops=11)
                                        ->  Custom Scan (DecompressChunk) on _hyper_3_6_chunk _hyper_3_6_chunk_2 (actual rows=2 loops=11)
                                              ->  Index Scan using compress_hyper_4_39_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_39_chunk compress_hyper_4_39_chunk_2 (actual rows=2 loops=11)
-                                                   Index Cond: (dev = _hyper_3_5_chunk_1.dev)
+                                                   Index Cond: (dev = skip_scan_htc_1.dev)
                                  ->  Custom Scan (SkipScan) on _hyper_3_7_chunk _hyper_3_7_chunk_2 (actual rows=2 loops=11)
                                        ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk _hyper_3_7_chunk_2 (actual rows=2 loops=11)
                                              ->  Index Scan using compress_hyper_4_40_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_40_chunk compress_hyper_4_40_chunk_2 (actual rows=2 loops=11)
-                                                   Index Cond: (dev = _hyper_3_5_chunk_1.dev)
+                                                   Index Cond: (dev = skip_scan_htc_1.dev)
                                  ->  Custom Scan (SkipScan) on _hyper_3_8_chunk _hyper_3_8_chunk_2 (actual rows=2 loops=11)
                                        ->  Custom Scan (DecompressChunk) on _hyper_3_8_chunk _hyper_3_8_chunk_2 (actual rows=2 loops=11)
                                              ->  Index Scan using compress_hyper_4_41_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_41_chunk compress_hyper_4_41_chunk_2 (actual rows=2 loops=11)
-                                                   Index Cond: (dev = _hyper_3_5_chunk_1.dev)
+                                                   Index Cond: (dev = skip_scan_htc_1.dev)
 (55 rows)
 
 -- SkipScan into INSERT
@@ -6672,7 +6672,7 @@ UNION SELECT b.* FROM
          ->  Result (actual rows=11 loops=1)
                ->  Unique (actual rows=11 loops=1)
                      ->  Merge Append (actual rows=44 loops=1)
-                           Sort Key: _hyper_3_5_chunk.dev
+                           Sort Key: skip_scan_htc.dev
                            ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                                  ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                                        ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk (actual rows=11 loops=1)
@@ -6700,7 +6700,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk (actual rows=11 loops=1)
@@ -6728,7 +6728,7 @@ TRUNCATE skip_scan_insert;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=1 loops=1)
                      ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk (actual rows=1 loops=1)
@@ -6753,7 +6753,7 @@ TRUNCATE skip_scan_insert;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=0 loops=1)
    ->  Merge Append (actual rows=0 loops=1)
-         Sort Key: _hyper_3_5_chunk.dev
+         Sort Key: skip_scan_htc.dev
          ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=0 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=0 loops=1)
                      ->  Index Scan using compress_hyper_4_38_chunk_dev_val__ts_meta_min_1__ts_meta_m_idx on compress_hyper_4_38_chunk (actual rows=0 loops=1)
@@ -6804,7 +6804,7 @@ SET max_parallel_workers_per_gather = 0;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -6824,7 +6824,7 @@ SET max_parallel_workers_per_gather = 0;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev DESC
+         Sort Key: skip_scan_htcl.dev DESC
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan Backward using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -6844,7 +6844,7 @@ SET max_parallel_workers_per_gather = 0;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev DESC
+         Sort Key: skip_scan_htcl.dev DESC
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan Backward using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -6864,7 +6864,7 @@ SET max_parallel_workers_per_gather = 0;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -6885,7 +6885,7 @@ SET max_parallel_workers_per_gather = 0;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev, _hyper_5_9_chunk."time" DESC
+         Sort Key: skip_scan_htcl.dev, skip_scan_htcl."time" DESC
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -6905,7 +6905,7 @@ SET max_parallel_workers_per_gather = 0;
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev DESC, _hyper_5_9_chunk."time"
+         Sort Key: skip_scan_htcl.dev DESC, skip_scan_htcl."time"
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan Backward using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -6928,7 +6928,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -6949,7 +6949,7 @@ stable expression in targetlist on skip_scan_htcl
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -6970,7 +6970,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -6991,7 +6991,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7012,7 +7012,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7033,7 +7033,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7053,7 +7053,7 @@ stable expression in targetlist on skip_scan_htcl
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7074,7 +7074,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7095,7 +7095,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7116,7 +7116,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7137,7 +7137,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev, _hyper_5_9_chunk."time" DESC
+               Sort Key: skip_scan_htcl.dev, skip_scan_htcl."time" DESC
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7158,7 +7158,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7179,7 +7179,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7200,7 +7200,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7221,7 +7221,7 @@ stable expression in targetlist on skip_scan_htcl
  Result (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7243,7 +7243,7 @@ DISTINCT with wholerow var
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7266,7 +7266,7 @@ LIMIT queries on skip_scan_htcl
  Limit (actual rows=3 loops=1)
    ->  Unique (actual rows=3 loops=1)
          ->  Merge Append (actual rows=9 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=3 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=3 loops=1)
@@ -7287,7 +7287,7 @@ LIMIT queries on skip_scan_htcl
  Limit (actual rows=3 loops=1)
    ->  Unique (actual rows=3 loops=1)
          ->  Merge Append (actual rows=9 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev DESC, _hyper_5_9_chunk."time"
+               Sort Key: skip_scan_htcl.dev DESC, skip_scan_htcl."time"
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=3 loops=1)
                            ->  Index Scan Backward using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=3 loops=1)
@@ -7308,7 +7308,7 @@ LIMIT queries on skip_scan_htcl
  Limit (actual rows=3 loops=1)
    ->  Unique (actual rows=3 loops=1)
          ->  Merge Append (actual rows=9 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev, _hyper_5_9_chunk."time" DESC
+               Sort Key: skip_scan_htcl.dev, skip_scan_htcl."time" DESC
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=3 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=3 loops=1)
@@ -7330,7 +7330,7 @@ range queries on skip_scan_htcl
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=22 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      Vectorized Filter: (("time" >= 100) AND ("time" <= 300))
@@ -7378,7 +7378,7 @@ SUBSELECTS on skip_scan_htcl
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_5_9_chunk.dev
+                     Sort Key: skip_scan_htcl.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                                  ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7399,7 +7399,7 @@ SUBSELECTS on skip_scan_htcl
  Subquery Scan on a (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7420,7 +7420,7 @@ SUBSELECTS on skip_scan_htcl
  Subquery Scan on a (actual rows=11 loops=1)
    ->  Unique (actual rows=11 loops=1)
          ->  Merge Append (actual rows=44 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7444,7 +7444,7 @@ ORDER BY
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_5_9_chunk.dev, _hyper_5_9_chunk."time" DESC
+                     Sort Key: skip_scan_htcl.dev, skip_scan_htcl."time" DESC
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                                  ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7466,7 +7466,7 @@ ORDER BY
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_5_9_chunk.dev DESC, _hyper_5_9_chunk."time"
+                     Sort Key: skip_scan_htcl.dev DESC, skip_scan_htcl."time"
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                                  ->  Index Scan Backward using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7490,7 +7490,7 @@ WHERE CLAUSES
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_5_9_chunk.dev
+                     Sort Key: skip_scan_htcl.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                                  Vectorized Filter: ("time" > 5)
@@ -7521,7 +7521,7 @@ WHERE CLAUSES
    ->  Result (actual rows=11 loops=1)
          ->  Unique (actual rows=11 loops=1)
                ->  Merge Append (actual rows=44 loops=1)
-                     Sort Key: _hyper_5_9_chunk.dev
+                     Sort Key: skip_scan_htcl.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                                  ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7549,7 +7549,7 @@ SET enable_seqscan = false;
    ->  Result (actual rows=5 loops=1)
          ->  Unique (actual rows=5 loops=1)
                ->  Merge Append (actual rows=20 loops=1)
-                     Sort Key: _hyper_5_9_chunk.dev
+                     Sort Key: skip_scan_htcl.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=5 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=5 loops=1)
                                  ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=5 loops=1)
@@ -7575,7 +7575,7 @@ SET enable_seqscan = false;
    ->  Result (actual rows=5 loops=1)
          ->  Unique (actual rows=5 loops=1)
                ->  Merge Append (actual rows=20 loops=1)
-                     Sort Key: _hyper_5_9_chunk.dev
+                     Sort Key: skip_scan_htcl.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=5 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=5 loops=1)
                                  ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=5 loops=1)
@@ -7601,7 +7601,7 @@ SET enable_seqscan = false;
  Result (actual rows=9 loops=1)
    ->  Unique (actual rows=9 loops=1)
          ->  Merge Append (actual rows=36 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=9 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=9 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=9 loops=1)
@@ -7630,7 +7630,7 @@ SET enable_seqscan = false;
                Hypertable: skip_scan_htcl
                Chunks excluded during startup: 0
                ->  Merge Append (actual rows=32 loops=1)
-                     Sort Key: _hyper_5_9_chunk.dev
+                     Sort Key: skip_scan_htcl.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=8 loops=1)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=8 loops=1)
                                  ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=8 loops=1)
@@ -7658,7 +7658,7 @@ SET enable_seqscan = false;
          Hypertable: skip_scan_htcl
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=28 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=7 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=7 loops=1)
                            Filter: (dev > int_func_volatile())
@@ -7686,7 +7686,7 @@ SET enable_seqscan = false;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=3 loops=1)
    ->  Merge Append (actual rows=12 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=3 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=3 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=3 loops=1)
@@ -7713,7 +7713,7 @@ SET enable_seqscan = false;
          Hypertable: skip_scan_htcl
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=12 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=3 loops=1)
                            ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=3 loops=1)
@@ -7740,7 +7740,7 @@ SET enable_seqscan = false;
          Hypertable: skip_scan_htcl
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=12 loops=1)
-               Sort Key: _hyper_5_9_chunk.dev
+               Sort Key: skip_scan_htcl.dev
                ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=3 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=3 loops=1)
                            Filter: (dev = ANY (inta_func_volatile()))
@@ -7769,7 +7769,7 @@ SET enable_seqscan = false;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=6 loops=1)
    ->  Merge Append (actual rows=24 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=6 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=6 loops=1)
                      Filter: (ROW(dev, "time") > ROW(5, 100))
@@ -7809,7 +7809,7 @@ SET enable_seqscan = false;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=0 loops=1)
    ->  Merge Append (actual rows=0 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=0 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=0 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=0 loops=1)
@@ -7846,7 +7846,7 @@ SET enable_seqscan = false;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=5 loops=1)
    ->  Merge Append (actual rows=20 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=5 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=5 loops=1)
                      Vectorized Filter: ("time" > 200)
@@ -7874,7 +7874,7 @@ SET enable_seqscan = false;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=2 loops=1)
    ->  Merge Append (actual rows=8 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=2 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=2 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=2 loops=1)
@@ -7910,7 +7910,7 @@ SET enable_seqscan = false;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=1 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=1 loops=1)
@@ -7935,7 +7935,7 @@ SET enable_seqscan = false;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=1 loops=1)
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: _hyper_5_9_chunk."time" DESC
+         Sort Key: skip_scan_htcl."time" DESC
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=1 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=1 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=1 loops=1)
@@ -7963,7 +7963,7 @@ SELECT * FROM devices;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -7986,7 +7986,7 @@ SELECT * FROM devices ORDER BY dev;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -8008,7 +8008,7 @@ PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -8028,7 +8028,7 @@ PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -8048,7 +8048,7 @@ PREPARE prep AS SELECT DISTINCT ON (dev) dev FROM :TABLE;
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Unique (actual rows=11 loops=1)
    ->  Merge Append (actual rows=44 loops=1)
-         Sort Key: _hyper_5_9_chunk.dev
+         Sort Key: skip_scan_htcl.dev
          ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=11 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=11 loops=1)
                      ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=11 loops=1)
@@ -8076,7 +8076,7 @@ DEALLOCATE prep;
    ->  Result (actual rows=9 loops=2)
          ->  Unique (actual rows=9 loops=2)
                ->  Merge Append (actual rows=36 loops=2)
-                     Sort Key: _hyper_5_9_chunk.dev
+                     Sort Key: skip_scan_htcl.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=9 loops=2)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=9 loops=2)
                                  ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=9 loops=2)
@@ -8110,7 +8110,7 @@ DEALLOCATE prep;
    ->  Result (actual rows=10 loops=2)
          ->  Unique (actual rows=10 loops=2)
                ->  Merge Append (actual rows=38 loops=2)
-                     Sort Key: _hyper_5_9_chunk.dev
+                     Sort Key: skip_scan_htcl.dev
                      ->  Custom Scan (SkipScan) on _hyper_5_9_chunk (actual rows=10 loops=2)
                            ->  Custom Scan (DecompressChunk) on _hyper_5_9_chunk (actual rows=10 loops=2)
                                  ->  Index Scan using compress_hyper_6_10_chunk_dev__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_10_chunk (actual rows=10 loops=2)
@@ -8146,7 +8146,7 @@ EXPLAIN (costs off, timing off, summary off) SELECT DISTINCT ON (dev_name) dev_n
 --------------------------------------------------------------------------------------------------------
  Unique
    ->  Merge Append
-         Sort Key: _hyper_1_1_chunk.dev_name
+         Sort Key: skip_scan_ht.dev_name
          ->  Custom Scan (SkipScan) on _hyper_1_1_chunk
                ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_name_idx on _hyper_1_1_chunk
                      Index Cond: (dev_name > NULL::text)
@@ -8175,7 +8175,7 @@ EXPLAIN (SUMMARY OFF, COSTS OFF) SELECT DISTINCT ON (a) * FROM i3629 WHERE a in 
 -------------------------------------------------
  Unique
    ->  Sort
-         Sort Key: _hyper_7_42_chunk."time" DESC
+         Sort Key: i3629."time" DESC
          ->  Append
                ->  Seq Scan on _hyper_7_42_chunk
                      Filter: (a = 2)

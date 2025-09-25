@@ -12,11 +12,11 @@ set enable_hashagg to off;
 select count(*) from metrics group by v0;
 QUERY PLAN
  Finalize GroupAggregate
-   Group Key: _hyper_X_X_chunk.v0
+   Group Key: metrics.v0
    ->  Gather Merge
          Workers Planned: 2
          ->  Sort
-               Sort Key: _hyper_X_X_chunk.v0
+               Sort Key: metrics.v0
                ->  Parallel Append
                      ->  Partial GroupAggregate
                            Group Key: _hyper_X_X_chunk.v0
@@ -40,7 +40,7 @@ reset enable_hashagg;
 select count(*) from metrics group by v0;
 QUERY PLAN
  Finalize HashAggregate
-   Group Key: _hyper_X_X_chunk.v0
+   Group Key: metrics.v0
    ->  Gather
          Workers Planned: 2
          ->  Parallel Append

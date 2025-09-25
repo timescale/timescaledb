@@ -358,9 +358,9 @@ SELECT _timescaledb_functions.cagg_watermark(:boundary_view_id);
                                                            QUERY PLAN                                                            
 ---------------------------------------------------------------------------------------------------------------------------------
  Finalize GroupAggregate (actual rows=4 loops=1)
-   Group Key: (time_bucket(10, _hyper_5_5_chunk."time"))
+   Group Key: (time_bucket(10, boundary_test."time"))
    ->  Merge Append (actual rows=4 loops=1)
-         Sort Key: (time_bucket(10, _hyper_5_5_chunk."time"))
+         Sort Key: (time_bucket(10, boundary_test."time"))
          ->  Partial GroupAggregate (actual rows=1 loops=1)
                Group Key: time_bucket(10, _hyper_5_5_chunk."time")
                ->  Index Scan Backward using _hyper_5_5_chunk_boundary_test_time_idx on _hyper_5_5_chunk (actual rows=1 loops=1)
@@ -407,9 +407,9 @@ SELECT _timescaledb_functions.cagg_watermark(:boundary_view_id);
    ->  Index Scan using _hyper_6_9_chunk__materialized_hypertable_6_time_bucket_idx on _hyper_6_9_chunk (actual rows=2 loops=1)
          Index Cond: (time_bucket < 30)
    ->  Finalize GroupAggregate (actual rows=2 loops=1)
-         Group Key: (time_bucket(10, _hyper_5_7_chunk."time"))
+         Group Key: (time_bucket(10, boundary_test."time"))
          ->  Merge Append (actual rows=2 loops=1)
-               Sort Key: (time_bucket(10, _hyper_5_7_chunk."time"))
+               Sort Key: (time_bucket(10, boundary_test."time"))
                ->  Partial GroupAggregate (actual rows=1 loops=1)
                      Group Key: time_bucket(10, _hyper_5_7_chunk."time")
                      ->  Index Scan Backward using _hyper_5_7_chunk_boundary_test_time_idx on _hyper_5_7_chunk (actual rows=1 loops=1)

@@ -38,7 +38,7 @@ select date_trunc('hour', b) bucket, sum(a) from foo group by bucket;
                               QUERY PLAN                               
 -----------------------------------------------------------------------
  Finalize HashAggregate
-   Group Key: (date_trunc('hour'::text, _hyper_1_1_chunk.b))
+   Group Key: (date_trunc('hour'::text, foo.b))
    ->  Append
          ->  Partial HashAggregate
                Group Key: date_trunc('hour'::text, _hyper_1_1_chunk.b)

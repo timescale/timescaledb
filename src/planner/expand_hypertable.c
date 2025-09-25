@@ -1137,10 +1137,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		appinfo->child_relid = child_rtindex;
 		appinfo->parent_reltype = oldrelation->rd_rel->reltype;
 		appinfo->child_reltype = newrelation->rd_rel->reltype;
-		ts_make_inh_translation_list(oldrelation,
-									 newrelation,
-									 child_rtindex,
-									 &appinfo->translated_vars);
+		ts_make_inh_translation_list(oldrelation, newrelation, child_rtindex, appinfo);
 		appinfo->parent_reloid = parent_oid;
 		appinfos = lappend(appinfos, appinfo);
 

@@ -229,11 +229,11 @@ INSERT INTO foo values( 2, '2005-01-01 00:00:00+00', NULL);
 create or replace  view v1(a, partialb, partialtv) as select a, _timescaledb_functions.partialize_agg( max(b) ), _timescaledb_functions.partialize_agg( min(toastval)) from foo group by a;
 EXPLAIN (VERBOSE, COSTS OFF)
 create table t1 as select * from v1;
-                                                                                     QUERY PLAN                                                                                      
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
  Partial HashAggregate
-   Output: _hyper_1_1_chunk.a, _timescaledb_functions.partialize_agg(PARTIAL max(_hyper_1_1_chunk.b)), _timescaledb_functions.partialize_agg(PARTIAL min(_hyper_1_1_chunk.toastval))
-   Group Key: _hyper_1_1_chunk.a
+   Output: foo.a, _timescaledb_functions.partialize_agg(PARTIAL max(foo.b)), _timescaledb_functions.partialize_agg(PARTIAL min(foo.toastval))
+   Group Key: foo.a
    ->  Append
          ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.a, _hyper_1_1_chunk.b, _hyper_1_1_chunk.toastval
@@ -414,12 +414,12 @@ EXPLAIN (VERBOSE, COSTS OFF)
     _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
     _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
-                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                      QUERY PLAN                                                                                                                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Partial Aggregate
-   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL min(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL max(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
+   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL min(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL max(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
    ->  Gather
-         Output: (PARTIAL sum(_hyper_2_4_chunk.value)), (PARTIAL avg(_hyper_2_4_chunk.value)), (PARTIAL min(_hyper_2_4_chunk.value)), (PARTIAL max(_hyper_2_4_chunk.value)), (PARTIAL count(*))
+         Output: (PARTIAL sum(issue4922.value)), (PARTIAL avg(issue4922.value)), (PARTIAL min(issue4922.value)), (PARTIAL max(issue4922.value)), (PARTIAL count(*))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -846,10 +846,10 @@ EXPLAIN (VERBOSE, COSTS OFF)
     _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
     _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
-                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                      QUERY PLAN                                                                                                                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Partial Aggregate
-   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL min(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL max(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
+   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL min(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL max(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
    ->  Append
          ->  Seq Scan on _timescaledb_internal._hyper_2_4_chunk
                Output: _hyper_2_4_chunk.value

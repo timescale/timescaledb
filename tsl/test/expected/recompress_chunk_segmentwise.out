@@ -358,7 +358,7 @@ EXPLAIN (COSTS OFF) EXECUTE p1;
                                                                                      QUERY PLAN                                                                                     
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_9_10_chunk.a, _hyper_9_10_chunk.c, _hyper_9_10_chunk."time" DESC
+   Sort Key: mytab_prep.a, mytab_prep.c, mytab_prep."time" DESC
    ->  Custom Scan (DecompressChunk) on _hyper_9_10_chunk
          ->  Sort
                Sort Key: compress_hyper_10_11_chunk.a, compress_hyper_10_11_chunk.c, compress_hyper_10_11_chunk._ts_meta_min_1 DESC, compress_hyper_10_11_chunk._ts_meta_max_1 DESC
