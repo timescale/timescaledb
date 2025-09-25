@@ -111,7 +111,7 @@ jobs:
       shell: wsl-bash {0}
       run: |
         # Workaround for https://github.com/Vampire/setup-wsl/issues/76
-        sed -i s/ftp.debian.org bullseye-backports/archive.debian.org bullseye-backports/ /etc/apt/sources.list
+        sed -i s/ftp.debian.org/debian bullseye-backports/archive.debian.org/debian bullseye-backports/ /etc/apt/sources.list
         apt-get update
         apt-get install --yes --no-install-recommends cmake gawk gcc git gnupg jq make postgresql-client postgresql-common tree
 
