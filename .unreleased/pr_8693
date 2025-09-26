@@ -1,0 +1,1 @@
+Fixes: #8693 Compressed index not chosen for varchar segmentby column
