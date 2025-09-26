@@ -217,7 +217,7 @@ m["include"].append(
 m["include"].append(
     build_debug_config(
         {
-            "pg": "18rc1",
+            "pg": "18.0",
             "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
             "tsdb_build_args": "-DEXPERIMENTAL=ON -DWARNINGS_AS_ERRORS=OFF",
             "installcheck": False,
