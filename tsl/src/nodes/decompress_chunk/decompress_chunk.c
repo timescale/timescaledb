@@ -1951,6 +1951,12 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		if (child_expr == NULL)
 			continue;
 
+		/* #8681: coerce compressed var to current equivalence member type/collation,
+		 *  in case we dug the "cur_em->em_expr" var from under RelabelTypes
+		 */
+		child_expr =
+			canonicalize_ec_expression(child_expr, cur_em->em_datatype, cur_ec->ec_collation);
+
 		/*
 		 * Transform em_relids to match.  Note we do *not* do
 		 * pull_varnos(child_expr) here, as for example the
@@ -2394,20 +2400,29 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 			if (IsA(ri->clause, OpExpr) && list_length(castNode(OpExpr, ri->clause)->args) == 2)
 			{
 				OpExpr *op = castNode(OpExpr, ri->clause);
-				Var *var;
+				Var *lvar, *rvar, *var;
 				Expr *other;
 
 				if (op->opretset)
 					continue;
 
-				if (IsA(linitial(op->args), Var))
+				lvar = linitial(op->args);
+				while (lvar && IsA(lvar, RelabelType))
+					lvar = (Var *) ((RelabelType *) lvar)->arg;
+
+				rvar = lsecond(op->args);
+				while (rvar && IsA(rvar, RelabelType))
+					rvar = (Var *) ((RelabelType *) rvar)->arg;
+
+				Assert(lvar && rvar);
+				if (IsA(lvar, Var))
 				{
-					var = castNode(Var, linitial(op->args));
+					var = castNode(Var, lvar);
 					other = lsecond(op->args);
 				}
-				else if (IsA(lsecond(op->args), Var))
+				else if (IsA(rvar, Var))
 				{
-					var = castNode(Var, lsecond(op->args));
+					var = castNode(Var, rvar);
 					other = linitial(op->args);
 				}
 				else
@@ -2448,6 +2463,8 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		compressed_pk_index++;
 		PathKey *pk = list_nth_node(PathKey, pathkeys, i);
 		Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
+		while (expr && IsA(expr, RelabelType))
+			expr = ((RelabelType *) expr)->arg;
 
 		if (expr == NULL || !IsA(expr, Var))
 		{
@@ -2625,6 +2642,8 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			Assert(bms_num_members(segmentby_columns) <= compression_info->num_segmentby_columns);
 
 			Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
+			while (expr && IsA(expr, RelabelType))
+				expr = ((RelabelType *) expr)->arg;
 
 			if (expr == NULL || !IsA(expr, Var))
 				break;
