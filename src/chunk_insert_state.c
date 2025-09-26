@@ -459,7 +459,10 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(ctr->hypertable_rri, rel, ctr->estate);
 	if (ctr->mht_state)
-		CheckValidResultRelCompat(relinfo, ctr->mht_state->mt->operation, NIL);
+		CheckValidResultRelCompat(relinfo,
+								  ctr->mht_state->mt->operation,
+								  ctr->mht_state->mt->onConflictAction,
+								  NIL);
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->counters = ctr->counters;
