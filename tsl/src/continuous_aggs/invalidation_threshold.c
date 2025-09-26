@@ -199,8 +199,9 @@ invalidation_threshold_get(int32 hypertable_id, Oid type)
 	PushActiveSnapshot(GetLatestSnapshot());
 	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-		.index =
-			catalog_get_index(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD, BGW_JOB_PKEY_IDX),
+		.index = catalog_get_index(catalog,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY),
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = &data,
@@ -252,8 +253,9 @@ invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 	PushActiveSnapshot(GetLatestSnapshot());
 	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-		.index =
-			catalog_get_index(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD, BGW_JOB_PKEY_IDX),
+		.index = catalog_get_index(catalog,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY),
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = &updatectx,
@@ -348,8 +350,9 @@ invalidation_threshold_initialize(const ContinuousAgg *cagg)
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-		.index =
-			catalog_get_index(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD, BGW_JOB_PKEY_IDX),
+		.index = catalog_get_index(catalog,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY),
 		.nkeys = 1,
 		.scankey = scankey,
 		.lockmode = ShareUpdateExclusiveLock,
