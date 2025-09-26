@@ -95,7 +95,7 @@ GROUP BY 2, 3;
          Chunks excluded during startup: 0
          ->  Merge Append (actual rows=535681 loops=1)
                Sort Key: merge_sort.device_id, merge_sort.measure_id
-               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=86400 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_3_5_chunk (actual rows=86400 loops=1)
                      Vectorized Filter: ("time" < "timestamp"(now()))
                      ->  Index Scan using compress_hyper_4_10_chunk_device_id_measure_id__ts_meta_min_idx on compress_hyper_4_10_chunk (actual rows=87 loops=1)
                            Index Cond: (_ts_meta_min_1 < now())
@@ -184,7 +184,7 @@ WHERE check_equal_228(rtt) and ts < '2019-12-15 00:00:00' order by ts;
  Custom Scan (ChunkAppend) on test_chartab (actual rows=1 loops=1)
    Order: test_chartab.ts
    Chunks excluded during startup: 0
-   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1 loops=1)
          Filter: ((ts < 'Sun Dec 15 00:00:00 2019'::timestamp without time zone) AND check_equal_228(rtt))
          Rows Removed by Filter: 2
          ->  Sort (actual rows=3 loops=1)
@@ -203,6 +203,9 @@ SELECT create_hypertable('pseudo','time');
 (1 row)
 
 ALTER TABLE pseudo SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "pseudo" is set to ""
+NOTICE:  default order by for hypertable "pseudo" is set to ""time" DESC"
 INSERT INTO pseudo SELECT '2000-01-01';
 SELECT compress_chunk(show_chunks('pseudo'));
              compress_chunk              

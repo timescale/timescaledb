@@ -165,7 +165,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     insert_memory_usage.sql
     information_view_chunk_count.sql
     read_only.sql
-    transparent_decompression_queries.sql
     tsl_tables.sql
     license_tsl.sql
     fixed_schedules.sql
@@ -189,7 +188,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_update_delete.sql.in
-    continuous_aggs.sql.in)
+    continuous_aggs.sql.in
+    transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
