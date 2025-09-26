@@ -213,7 +213,7 @@ m["include"].append(
     )
 )
 
-# test building against PG18rc1
+# test building against PG18
 m["include"].append(
     build_debug_config(
         {
@@ -224,6 +224,19 @@ m["include"].append(
             "pginstallcheck": False,
             "coverage": False,
         }
+    )
+)
+
+m["include"].append(
+    build_debug_config(
+        macos_config({
+            "pg": "18.0",
+            "pg_extra_args": "--enable-debug --with-libraries=/usr/local/opt/openssl@3/lib --with-includes=/usr/local/opt/openssl@3/include --without-icu",
+            "tsdb_build_args": "-DEXPERIMENTAL=ON -DWARNINGS_AS_ERRORS=OFF",
+            "installcheck": False,
+            "pginstallcheck": False,
+            "coverage": False,
+        })
     )
 )
 
