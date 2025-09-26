@@ -14,12 +14,12 @@
 
 /*
  * The struct is packed so that the hash table entry fits into 16
- * bytes with the uint32 key index that goes before.
+ * bytes with the uint32 key index that goes after.
  */
 struct umash_fingerprint_key
 {
-	uint32 hash;
-	uint64 rest;
+	uint64 hash;
+	uint32 rest;
 } pg_attribute_packed();
 
 #define HASH_TABLE_KEY_TYPE struct umash_fingerprint_key
