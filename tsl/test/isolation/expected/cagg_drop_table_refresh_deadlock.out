@@ -1,0 +1,244 @@
+Parsed test spec with 4 sessions
+
+starting permutation: WP_enable_AfterAdvisoryLock S2_refresh S3_lock_show WP_enable_beforeAccessExclusiveLockOnJob S1_drop_table S3_lock_show WP_release_beforeAccessExclusiveLockOnJob S3_lock_show WP_release_AfterAdvisoryLock S3_lock_show
+step WP_enable_AfterAdvisoryLock: 
+    SELECT debug_waitpoint_enable('after_taking_job_id_advisory_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step S2_refresh: 
+    DO $$
+    DECLARE
+        job_pid INTEGER;
+    BEGIN
+        SELECT pid INTO job_pid FROM refresh_pid LIMIT 1;
+        CALL run_job(job_pid);
+    END
+    $$;
+ <waiting ...>
+step S3_lock_show: 
+    SELECT pid, locktype, mode, relation_id, relname, granted, application_name, objtyp, objid 
+    FROM my_locks
+    WHERE locktype = 'advisory' OR relname IN ('conditions', '_timescaledb_internal.bgw_job_stat');
+
+    pid|locktype|mode         |relation_id|relname|granted|application_name                             |objtyp|objid     
+-------+--------+-------------+-----------+-------+-------+---------------------------------------------+------+----------
+2447084|advisory|ShareLock    |           |       |f      |isolation/cagg_drop_table_refresh_deadlock/S2|-     |1129463972
+2447084|advisory|RowShareLock |           |       |t      |isolation/cagg_drop_table_refresh_deadlock/S2|1001  |-         
+2447082|advisory|ExclusiveLock|           |       |t      |isolation/cagg_drop_table_refresh_deadlock/WP|-     |1129463972
+(3 rows)
+
+step WP_enable_beforeAccessExclusiveLockOnJob: 
+    SELECT debug_waitpoint_enable('debug_waitpoint_before_get_job_lock_for_delete');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+S1: NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view _timescaledb_internal._partial_view_2
+drop cascades to view _timescaledb_internal._direct_view_2
+step S1_drop_table: 
+    DROP TABLE conditions CASCADE;
+ <waiting ...>
+step S3_lock_show: 
+    SELECT pid, locktype, mode, relation_id, relname, granted, application_name, objtyp, objid 
+    FROM my_locks
+    WHERE locktype = 'advisory' OR relname IN ('conditions', '_timescaledb_internal.bgw_job_stat');
+
+    pid|locktype|mode               |relation_id|relname   |granted|application_name                             |objtyp|objid     
+-------+--------+-------------------+-----------+----------+-------+---------------------------------------------+------+----------
+2447083|advisory|ShareLock          |           |          |f      |isolation/cagg_drop_table_refresh_deadlock/S1|-     |1104060561
+2447084|advisory|ShareLock          |           |          |f      |isolation/cagg_drop_table_refresh_deadlock/S2|-     |1129463972
+2447084|advisory|RowShareLock       |           |          |t      |isolation/cagg_drop_table_refresh_deadlock/S2|1001  |-         
+2447082|advisory|ExclusiveLock      |           |          |t      |isolation/cagg_drop_table_refresh_deadlock/WP|-     |1104060561
+2447082|advisory|ExclusiveLock      |           |          |t      |isolation/cagg_drop_table_refresh_deadlock/WP|-     |1129463972
+2447083|relation|AccessExclusiveLock|      17171|conditions|t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |          
+(6 rows)
+
+step WP_release_beforeAccessExclusiveLockOnJob: 
+    SELECT debug_waitpoint_release('debug_waitpoint_before_get_job_lock_for_delete');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step S3_lock_show: 
+    SELECT pid, locktype, mode, relation_id, relname, granted, application_name, objtyp, objid 
+    FROM my_locks
+    WHERE locktype = 'advisory' OR relname IN ('conditions', '_timescaledb_internal.bgw_job_stat');
+
+    pid|locktype|mode                 |relation_id|relname                           |granted|application_name                             |objtyp|objid     
+-------+--------+---------------------+-----------+----------------------------------+-------+---------------------------------------------+------+----------
+2447083|advisory|AccessExclusiveLock  |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S1|1000  |-         
+2447083|advisory|AccessExclusiveLock  |           |                                  |f      |isolation/cagg_drop_table_refresh_deadlock/S1|1001  |-         
+2447084|advisory|ShareLock            |           |                                  |f      |isolation/cagg_drop_table_refresh_deadlock/S2|-     |1129463972
+2447084|advisory|RowShareLock         |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S2|1001  |-         
+2447082|advisory|ExclusiveLock        |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/WP|-     |1129463972
+2447083|relation|ShareRowExclusiveLock|      16563|_timescaledb_internal.bgw_job_stat|t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |          
+2447083|relation|AccessExclusiveLock  |      17171|conditions                        |t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |          
+(7 rows)
+
+step WP_release_AfterAdvisoryLock: 
+    SELECT debug_waitpoint_release('after_taking_job_id_advisory_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step S3_lock_show: 
+    SELECT pid, locktype, mode, relation_id, relname, granted, application_name, objtyp, objid 
+    FROM my_locks
+    WHERE locktype = 'advisory' OR relname IN ('conditions', '_timescaledb_internal.bgw_job_stat');
+
+    pid|locktype|mode                 |relation_id|relname                           |granted|application_name                             |objtyp|objid
+-------+--------+---------------------+-----------+----------------------------------+-------+---------------------------------------------+------+-----
+2447083|advisory|AccessExclusiveLock  |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S1|  1000|-    
+2447083|advisory|AccessExclusiveLock  |           |                                  |f      |isolation/cagg_drop_table_refresh_deadlock/S1|  1001|-    
+2447084|advisory|RowShareLock         |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S2|  1001|-    
+2447083|relation|AccessExclusiveLock  |      17171|conditions                        |t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |     
+2447083|relation|ShareRowExclusiveLock|      16563|_timescaledb_internal.bgw_job_stat|t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |     
+2447084|relation|AccessShareLock      |      17171|conditions                        |f      |isolation/cagg_drop_table_refresh_deadlock/S2|      |     
+(6 rows)
+
+step S2_refresh: <... completed>
+step S1_drop_table: <... completed>
+ERROR:  deadlock detected
+
+starting permutation: WP_enable_AfterDeleteJob S1_drop_table S3_lock_show WP_enable_AfterAdvisoryLock S2_refresh S3_lock_show WP_enable_beforeKillingJob WP_release_AfterDeleteJob S3_lock_show WP_release_BeforeKillingJob WP_release_AfterAdvisoryLock S3_lock_show
+step WP_enable_AfterDeleteJob: 
+    SELECT debug_waitpoint_enable('after_delete_a_job');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+S1: NOTICE:  drop cascades to 2 other objects
+DETAIL:  drop cascades to view _timescaledb_internal._partial_view_4
+drop cascades to view _timescaledb_internal._direct_view_4
+step S1_drop_table: 
+    DROP TABLE conditions CASCADE;
+ <waiting ...>
+step S3_lock_show: 
+    SELECT pid, locktype, mode, relation_id, relname, granted, application_name, objtyp, objid 
+    FROM my_locks
+    WHERE locktype = 'advisory' OR relname IN ('conditions', '_timescaledb_internal.bgw_job_stat');
+
+    pid|locktype|mode                 |relation_id|relname                           |granted|application_name                             |objtyp|objid    
+-------+--------+---------------------+-----------+----------------------------------+-------+---------------------------------------------+------+---------
+2447083|advisory|ShareLock            |           |                                  |f      |isolation/cagg_drop_table_refresh_deadlock/S1|-     |984946278
+2447083|advisory|AccessExclusiveLock  |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S1|1002  |-        
+2447082|advisory|ExclusiveLock        |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/WP|-     |984946278
+2447083|relation|ShareRowExclusiveLock|      16563|_timescaledb_internal.bgw_job_stat|t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |         
+2447083|relation|AccessExclusiveLock  |      17246|conditions                        |t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |         
+(5 rows)
+
+step WP_enable_AfterAdvisoryLock: 
+    SELECT debug_waitpoint_enable('after_taking_job_id_advisory_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step S2_refresh: 
+    DO $$
+    DECLARE
+        job_pid INTEGER;
+    BEGIN
+        SELECT pid INTO job_pid FROM refresh_pid LIMIT 1;
+        CALL run_job(job_pid);
+    END
+    $$;
+ <waiting ...>
+step S3_lock_show: 
+    SELECT pid, locktype, mode, relation_id, relname, granted, application_name, objtyp, objid 
+    FROM my_locks
+    WHERE locktype = 'advisory' OR relname IN ('conditions', '_timescaledb_internal.bgw_job_stat');
+
+    pid|locktype|mode                 |relation_id|relname                           |granted|application_name                             |objtyp|objid     
+-------+--------+---------------------+-----------+----------------------------------+-------+---------------------------------------------+------+----------
+2447083|advisory|ShareLock            |           |                                  |f      |isolation/cagg_drop_table_refresh_deadlock/S1|-     |984946278 
+2447083|advisory|AccessExclusiveLock  |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S1|1002  |-         
+2447084|advisory|ShareLock            |           |                                  |f      |isolation/cagg_drop_table_refresh_deadlock/S2|-     |1129463972
+2447084|advisory|RowShareLock         |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S2|1003  |-         
+2447082|advisory|ExclusiveLock        |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/WP|-     |984946278 
+2447082|advisory|ExclusiveLock        |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/WP|-     |1129463972
+2447083|relation|AccessExclusiveLock  |      17246|conditions                        |t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |          
+2447083|relation|ShareRowExclusiveLock|      16563|_timescaledb_internal.bgw_job_stat|t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |          
+(8 rows)
+
+step WP_enable_beforeKillingJob: 
+    SELECT debug_waitpoint_enable('before_killing_job');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step WP_release_AfterDeleteJob: 
+    SELECT debug_waitpoint_release('after_delete_a_job');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step S3_lock_show: 
+    SELECT pid, locktype, mode, relation_id, relname, granted, application_name, objtyp, objid 
+    FROM my_locks
+    WHERE locktype = 'advisory' OR relname IN ('conditions', '_timescaledb_internal.bgw_job_stat');
+
+    pid|locktype|mode                 |relation_id|relname                           |granted|application_name                             |objtyp|objid     
+-------+--------+---------------------+-----------+----------------------------------+-------+---------------------------------------------+------+----------
+2447083|advisory|ShareLock            |           |                                  |f      |isolation/cagg_drop_table_refresh_deadlock/S1|-     |193437824 
+2447083|advisory|AccessExclusiveLock  |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S1|1002  |-         
+2447084|advisory|ShareLock            |           |                                  |f      |isolation/cagg_drop_table_refresh_deadlock/S2|-     |1129463972
+2447084|advisory|RowShareLock         |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S2|1003  |-         
+2447082|advisory|ExclusiveLock        |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/WP|-     |193437824 
+2447082|advisory|ExclusiveLock        |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/WP|-     |1129463972
+2447083|relation|AccessExclusiveLock  |      17246|conditions                        |t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |          
+2447083|relation|ShareRowExclusiveLock|      16563|_timescaledb_internal.bgw_job_stat|t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |          
+(8 rows)
+
+step WP_release_BeforeKillingJob: 
+    SELECT debug_waitpoint_release('before_killing_job');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step WP_release_AfterAdvisoryLock: 
+    SELECT debug_waitpoint_release('after_taking_job_id_advisory_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step S3_lock_show: 
+    SELECT pid, locktype, mode, relation_id, relname, granted, application_name, objtyp, objid 
+    FROM my_locks
+    WHERE locktype = 'advisory' OR relname IN ('conditions', '_timescaledb_internal.bgw_job_stat');
+
+    pid|locktype|mode                 |relation_id|relname                           |granted|application_name                             |objtyp|objid
+-------+--------+---------------------+-----------+----------------------------------+-------+---------------------------------------------+------+-----
+2447083|advisory|AccessExclusiveLock  |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S1|  1002|-    
+2447083|advisory|AccessExclusiveLock  |           |                                  |f      |isolation/cagg_drop_table_refresh_deadlock/S1|  1003|-    
+2447084|advisory|RowShareLock         |           |                                  |t      |isolation/cagg_drop_table_refresh_deadlock/S2|  1003|-    
+2447083|relation|ShareRowExclusiveLock|      16563|_timescaledb_internal.bgw_job_stat|t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |     
+2447083|relation|AccessExclusiveLock  |      17246|conditions                        |t      |isolation/cagg_drop_table_refresh_deadlock/S1|      |     
+2447084|relation|AccessShareLock      |      17246|conditions                        |f      |isolation/cagg_drop_table_refresh_deadlock/S2|      |     
+(6 rows)
+
+step S1_drop_table: <... completed>
+ERROR:  deadlock detected
+step S2_refresh: <... completed>

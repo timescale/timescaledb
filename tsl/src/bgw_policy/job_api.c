@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include "debug_point.h"
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <utils/acl.h>
@@ -267,6 +268,7 @@ job_run(PG_FUNCTION_ARGS)
 	int32 job_id = PG_GETARG_INT32(0);
 	BgwJob *job = find_job(job_id, PG_ARGISNULL(0), false);
 
+	DEBUG_WAITPOINT("after_taking_job_id_advisory_lock");
 	ts_bgw_job_permission_check(job, "run");
 
 	job_execute(job);

@@ -6,6 +6,7 @@
 #include <postgres.h>
 
 #include <unistd.h>
+#include "debug_point.h"
 #include <access/xact.h>
 #include <catalog/pg_authid.h>
 #include <executor/execdebug.h>
@@ -47,6 +48,7 @@
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "tss_callbacks.h"
+
 #include "utils.h"
 
 #ifdef USE_TELEMETRY
@@ -669,6 +671,7 @@ get_job_lock_for_delete(int32 job_id)
 		VirtualTransactionId *vxid = GetLockConflicts(&tag, AccessExclusiveLock, NULL);
 		PGPROC *proc;
 
+		DEBUG_WAITPOINT("before_killing_job");
 		if (VirtualTransactionIdIsValid(*vxid))
 		{
 			proc = VirtualTransactionGetProcCompat(vxid);
@@ -729,6 +732,7 @@ bgw_job_tuple_delete(TupleInfo *ti, void *data)
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
 
+	DEBUG_WAITPOINT("after_delete_a_job");
 	return SCAN_CONTINUE;
 }
 
@@ -737,8 +741,8 @@ bgw_job_delete_scan(ScanKeyData *scankey, int32 job_id)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx scanctx;
-
 	/* get job lock before relation lock */
+	DEBUG_WAITPOINT("debug_waitpoint_before_get_job_lock_for_delete");
 	get_job_lock_for_delete(job_id);
 
 	scanctx = (ScannerCtx){
