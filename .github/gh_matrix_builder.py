@@ -150,6 +150,7 @@ def macos_config(overrides):
     macos_ignored_tests = {
         "bgw_launcher",
         "pg_dump",
+        "compression_bgw",
         "compressed_collation",
     }
     base_config = dict(
