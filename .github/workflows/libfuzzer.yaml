@@ -6,7 +6,6 @@ name: Libfuzzer
   push:
     branches:
       - main
-      - ?.*.x
       - trigger/libfuzzer
   pull_request:
     paths:

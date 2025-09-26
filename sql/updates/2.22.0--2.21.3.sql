@@ -228,7 +228,7 @@ SELECT
 FROM _timescaledb_catalog.hypertable h
 JOIN pg_index ht_i ON ht_i.indrelid = format('%I.%I',h.schema_name,h.table_name)::regclass
 JOIN pg_class ht_ci ON ht_ci.oid=ht_i.indexrelid
-JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id=h.id
+JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id=h.id AND NOT ch.dropped
 JOIN pg_index ch_i ON
   ch_i.indrelid=format('%I.%I',ch.schema_name,ch.table_name)::regclass AND
   ht_i.indnatts = ch_i.indnatts AND

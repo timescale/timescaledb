@@ -193,7 +193,6 @@ m["include"].append(
             # code. The actual architecture for our ARM CI runner is reported as:
             # -imultiarch aarch64-linux-gnu - -mlittle-endian -mabi=lp64 -march=armv8.2-a+crypto+fp16+rcpc+dotprod
             "pg_extra_args": "--enable-debug --enable-cassert --without-llvm CFLAGS=-march=armv8.2-a+crypto",
-            "coverage": False,
         }
     )
 )
@@ -218,7 +217,7 @@ m["include"].append(
 m["include"].append(
     build_debug_config(
         {
-            "pg": "18rc1",
+            "pg": "18.0",
             "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
             "tsdb_build_args": "-DEXPERIMENTAL=ON -DWARNINGS_AS_ERRORS=OFF",
             "installcheck": False,

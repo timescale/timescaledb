@@ -512,6 +512,9 @@ RestrictSearchPath(void)
 					  0,
 					  false);
 }
+#endif
+
+#if PG17_LT
 
 /* This macro was renamed in PG17, see 414f6c0fb79a */
 #define WAIT_EVENT_MESSAGE_QUEUE_INTERNAL WAIT_EVENT_MQ_INTERNAL
@@ -522,10 +525,6 @@ RestrictSearchPath(void)
 
 /* 'stmt' argument was added in f21848de2013 */
 #define reindex_relation_compat(stmt, relid, flags, params) reindex_relation(relid, flags, params)
-
-/* 'mergeActions' argument was added in 5f2e179bd31e */
-#define CheckValidResultRelCompat(resultRelInfo, operation, mergeActions)                          \
-	CheckValidResultRel(resultRelInfo, operation)
 
 /* 'vacuum_is_relation_owner' was renamed to 'vacuum_is_permitted_for_relation' in ecb0fd33720f */
 #define vacuum_is_permitted_for_relation_compat(relid, reltuple, options)                          \
@@ -591,9 +590,6 @@ RestrictSearchPath(void)
 #define reindex_relation_compat(stmt, relid, flags, params)                                        \
 	reindex_relation(stmt, relid, flags, params)
 
-#define CheckValidResultRelCompat(resultRelInfo, operation, mergeActions)                          \
-	CheckValidResultRel(resultRelInfo, operation, mergeActions)
-
 #define vacuum_is_permitted_for_relation_compat(relid, reltuple, options)                          \
 	vacuum_is_permitted_for_relation(relid, reltuple, options)
 
@@ -641,6 +637,18 @@ RestrictSearchPath(void)
 				 allow_system_table_mods,                                                          \
 				 is_internal,                                                                      \
 				 constraintId)
+#endif
+
+#if PG17_LT
+/* 'mergeActions' argument was added in 5f2e179bd31e */
+#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+	CheckValidResultRel(resultRelInfo, operation)
+#elif PG18_LT
+#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+	CheckValidResultRel(resultRelInfo, operation, mergeActions)
+#else
+#define CheckValidResultRelCompat(resultRelInfo, operation, onConflictAction, mergeActions)        \
+	CheckValidResultRel(resultRelInfo, operation, onConflictAction, mergeActions)
 #endif
 
 #if PG17_LT
