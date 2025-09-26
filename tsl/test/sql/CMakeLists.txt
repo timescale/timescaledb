@@ -74,6 +74,7 @@ set(TEST_FILES
     vector_agg_functions.sql
     vector_agg_groupagg.sql
     vector_agg_param.sql
+    vector_agg_expr.sql
     vectorized_aggregation.sql)
 
 set(TEST_TEMPLATES
