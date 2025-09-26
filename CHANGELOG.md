@@ -82,6 +82,13 @@ $$;
 * @pierreforstmann for fixing a bug that happened when dropping chunks with foreign keys
 * @Zaczero for reporting a bug with CREATE TABLE WITH when using the TimescaleDB Apache 2 Edition
 
+## 2.21.4 (2025-09-25)
+
+This release contains performance improvements and bug fixes since the 2.21.3 release. We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* [#8667](https://github.com/timescale/timescaledb/pull/8667) Fix wrong selectivity estimates uncovered by the recent Postgres minor releases 15.14, 16.10, 17.6.
+
 ## 2.21.3 (2025-08-12)
 
 This release contains performance improvements and bug fixes since the 2.21.2 release. We recommend that you upgrade at the next available opportunity.
