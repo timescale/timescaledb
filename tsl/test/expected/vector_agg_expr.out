@@ -29,8 +29,7 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
 (1 row)
 
 vacuum full analyze aggexpr;
--- FIXME
---set timescaledb.debug_require_vector_agg = 'require';
+set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference
 --set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
 select
@@ -46,6 +45,7 @@ from
         , 'count(i)'
         , 'count(x)'
         , 'count(b)'
+        , 'sum((i = 12)::int)'
         ]) function,
     unnest(array[
         null
@@ -56,10 +56,11 @@ from
         , 'i % 2 = 0'
         ]) with ordinality as condition(condition, n),
     unnest(array[
-        null,
-        'length(x)',
-        'i % 2',
-        'ts'
+        null
+        , 'length(x)'
+        , 'i % 2'
+        , 'ts'
+        , 'b'
         ]) with ordinality as grouping(grouping, n)
 \gexec
 select count(*) from aggexpr;
@@ -99,6 +100,14 @@ select ts, count(*) from aggexpr group by ts order by count(*), ts limit 10;
   1 |  1499
 (6 rows)
 
+select b, count(*) from aggexpr group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ t |  1482
+ $ |  2988
+ f |  4462
+(3 rows)
+
 select count(i) from aggexpr;
  count 
 -------
@@ -135,6 +144,14 @@ select ts, count(i) from aggexpr group by ts order by count(i), ts limit 10;
  12 |  1487
   2 |  1493
 (6 rows)
+
+select b, count(i) from aggexpr group by b order by count(i), b limit 10;
+ b | count 
+---+-------
+ $ |     0
+ t |   741
+ f |  3720
+(3 rows)
 
 select count(x) from aggexpr;
  count 
@@ -173,6 +190,14 @@ select ts, count(x) from aggexpr group by ts order by count(x), ts limit 10;
   2 |  1493
 (6 rows)
 
+select b, count(x) from aggexpr group by b order by count(x), b limit 10;
+ b | count 
+---+-------
+ t |     0
+ $ |     0
+ f |  4462
+(3 rows)
+
 select count(b) from aggexpr;
  count 
 -------
@@ -210,6 +235,59 @@ select ts, count(b) from aggexpr group by ts order by count(b), ts limit 10;
   2 |  1493
 (6 rows)
 
+select b, count(b) from aggexpr group by b order by count(b), b limit 10;
+ b | count 
+---+-------
+ $ |     0
+ t |  1482
+ f |  4462
+(3 rows)
+
+select sum((i = 12)::int) from aggexpr;
+ sum  
+------
+ 1487
+(1 row)
+
+select length(x), sum((i = 12)::int) from aggexpr group by length(x) order by sum((i = 12)::int), length(x) limit 10;
+ length | sum  
+--------+------
+      1 |    0
+      3 |    0
+      4 |    0
+      5 |    0
+      6 |    0
+      $ |    0
+      2 | 1487
+(7 rows)
+
+select i % 2, sum((i = 12)::int) from aggexpr group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
+ ?column? | sum  
+----------+------
+        1 |    0
+        0 | 1487
+        $ |    $
+(3 rows)
+
+select ts, sum((i = 12)::int) from aggexpr group by ts order by sum((i = 12)::int), ts limit 10;
+ ts | sum  
+----+------
+  2 |    0
+ 13 |    0
+ 14 |    0
+ 12 | 1487
+  1 |    $
+ 11 |    $
+(6 rows)
+
+select b, sum((i = 12)::int) from aggexpr group by b order by sum((i = 12)::int), b limit 10;
+ b | sum  
+---+------
+ t |    0
+ f | 1487
+ $ |    $
+(3 rows)
+
 select count(*) from aggexpr where b;
  count 
 -------
@@ -235,6 +313,12 @@ select ts, count(*) from aggexpr where b group by ts order by count(*), ts limit
  13 |   741
  14 |   741
 (2 rows)
+
+select b, count(*) from aggexpr where b group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ t |  1482
+(1 row)
 
 select count(i) from aggexpr where b;
  count 
@@ -262,6 +346,12 @@ select ts, count(i) from aggexpr where b group by ts order by count(i), ts limit
  13 |   741
 (2 rows)
 
+select b, count(i) from aggexpr where b group by b order by count(i), b limit 10;
+ b | count 
+---+-------
+ t |   741
+(1 row)
+
 select count(x) from aggexpr where b;
  count 
 -------
@@ -288,6 +378,12 @@ select ts, count(x) from aggexpr where b group by ts order by count(x), ts limit
  14 |     0
 (2 rows)
 
+select b, count(x) from aggexpr where b group by b order by count(x), b limit 10;
+ b | count 
+---+-------
+ t |     0
+(1 row)
+
 select count(b) from aggexpr where b;
  count 
 -------
@@ -313,6 +409,44 @@ select ts, count(b) from aggexpr where b group by ts order by count(b), ts limit
  13 |   741
  14 |   741
 (2 rows)
+
+select b, count(b) from aggexpr where b group by b order by count(b), b limit 10;
+ b | count 
+---+-------
+ t |  1482
+(1 row)
+
+select sum((i = 12)::int) from aggexpr where b;
+ sum 
+-----
+   0
+(1 row)
+
+select length(x), sum((i = 12)::int) from aggexpr where b group by length(x) order by sum((i = 12)::int), length(x) limit 10;
+ length | sum 
+--------+-----
+      $ |   0
+(1 row)
+
+select i % 2, sum((i = 12)::int) from aggexpr where b group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
+ ?column? | sum 
+----------+-----
+        1 |   0
+        $ |   $
+(2 rows)
+
+select ts, sum((i = 12)::int) from aggexpr where b group by ts order by sum((i = 12)::int), ts limit 10;
+ ts | sum 
+----+-----
+ 13 |   0
+ 14 |   $
+(2 rows)
+
+select b, sum((i = 12)::int) from aggexpr where b group by b order by sum((i = 12)::int), b limit 10;
+ b | sum 
+---+-----
+ t |   0
+(1 row)
 
 select count(*) from aggexpr where not b;
  count 
@@ -347,6 +481,12 @@ select ts, count(*) from aggexpr where not b group by ts order by count(*), ts l
   2 |  1493
 (4 rows)
 
+select b, count(*) from aggexpr where not b group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ f |  4462
+(1 row)
+
 select count(i) from aggexpr where not b;
  count 
 -------
@@ -379,6 +519,12 @@ select ts, count(i) from aggexpr where not b group by ts order by count(i), ts l
  12 |  1487
   2 |  1493
 (4 rows)
+
+select b, count(i) from aggexpr where not b group by b order by count(i), b limit 10;
+ b | count 
+---+-------
+ f |  3720
+(1 row)
 
 select count(x) from aggexpr where not b;
  count 
@@ -413,6 +559,12 @@ select ts, count(x) from aggexpr where not b group by ts order by count(x), ts l
   2 |  1493
 (4 rows)
 
+select b, count(x) from aggexpr where not b group by b order by count(x), b limit 10;
+ b | count 
+---+-------
+ f |  4462
+(1 row)
+
 select count(b) from aggexpr where not b;
  count 
 -------
@@ -446,6 +598,51 @@ select ts, count(b) from aggexpr where not b group by ts order by count(b), ts l
   2 |  1493
 (4 rows)
 
+select b, count(b) from aggexpr where not b group by b order by count(b), b limit 10;
+ b | count 
+---+-------
+ f |  4462
+(1 row)
+
+select sum((i = 12)::int) from aggexpr where not b;
+ sum  
+------
+ 1487
+(1 row)
+
+select length(x), sum((i = 12)::int) from aggexpr where not b group by length(x) order by sum((i = 12)::int), length(x) limit 10;
+ length | sum  
+--------+------
+      1 |    0
+      3 |    0
+      4 |    0
+      5 |    0
+      6 |    0
+      2 | 1487
+(6 rows)
+
+select i % 2, sum((i = 12)::int) from aggexpr where not b group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
+ ?column? | sum  
+----------+------
+        0 | 1487
+        $ |    $
+(2 rows)
+
+select ts, sum((i = 12)::int) from aggexpr where not b group by ts order by sum((i = 12)::int), ts limit 10;
+ ts | sum  
+----+------
+  2 |    0
+ 14 |    0
+ 12 | 1487
+ 13 |    $
+(4 rows)
+
+select b, sum((i = 12)::int) from aggexpr where not b group by b order by sum((i = 12)::int), b limit 10;
+ b | sum  
+---+------
+ f | 1487
+(1 row)
+
 select count(*) from aggexpr where length(x) = 1;
  count 
 -------
@@ -468,6 +665,12 @@ select ts, count(*) from aggexpr where length(x) = 1 group by ts order by count(
  ts | count 
 ----+-------
   2 |  1493
+(1 row)
+
+select b, count(*) from aggexpr where length(x) = 1 group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ f |  1493
 (1 row)
 
 select count(i) from aggexpr where length(x) = 1;
@@ -494,6 +697,12 @@ select ts, count(i) from aggexpr where length(x) = 1 group by ts order by count(
   2 |  1493
 (1 row)
 
+select b, count(i) from aggexpr where length(x) = 1 group by b order by count(i), b limit 10;
+ b | count 
+---+-------
+ f |  1493
+(1 row)
+
 select count(x) from aggexpr where length(x) = 1;
  count 
 -------
@@ -516,6 +725,12 @@ select ts, count(x) from aggexpr where length(x) = 1 group by ts order by count(
  ts | count 
 ----+-------
   2 |  1493
+(1 row)
+
+select b, count(x) from aggexpr where length(x) = 1 group by b order by count(x), b limit 10;
+ b | count 
+---+-------
+ f |  1493
 (1 row)
 
 select count(b) from aggexpr where length(x) = 1;
@@ -542,6 +757,42 @@ select ts, count(b) from aggexpr where length(x) = 1 group by ts order by count(
   2 |  1493
 (1 row)
 
+select b, count(b) from aggexpr where length(x) = 1 group by b order by count(b), b limit 10;
+ b | count 
+---+-------
+ f |  1493
+(1 row)
+
+select sum((i = 12)::int) from aggexpr where length(x) = 1;
+ sum 
+-----
+   0
+(1 row)
+
+select length(x), sum((i = 12)::int) from aggexpr where length(x) = 1 group by length(x) order by sum((i = 12)::int), length(x) limit 10;
+ length | sum 
+--------+-----
+      1 |   0
+(1 row)
+
+select i % 2, sum((i = 12)::int) from aggexpr where length(x) = 1 group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
+ ?column? | sum 
+----------+-----
+        0 |   0
+(1 row)
+
+select ts, sum((i = 12)::int) from aggexpr where length(x) = 1 group by ts order by sum((i = 12)::int), ts limit 10;
+ ts | sum 
+----+-----
+  2 |   0
+(1 row)
+
+select b, sum((i = 12)::int) from aggexpr where length(x) = 1 group by b order by sum((i = 12)::int), b limit 10;
+ b | sum 
+---+-----
+ f |   0
+(1 row)
+
 select count(*) from aggexpr where length(x) < 0;
  count 
 -------
@@ -561,6 +812,11 @@ select i % 2, count(*) from aggexpr where length(x) < 0 group by i % 2 order by 
 select ts, count(*) from aggexpr where length(x) < 0 group by ts order by count(*), ts limit 10;
  ts | count 
 ----+-------
+(0 rows)
+
+select b, count(*) from aggexpr where length(x) < 0 group by b order by count(*), b limit 10;
+ b | count 
+---+-------
 (0 rows)
 
 select count(i) from aggexpr where length(x) < 0;
@@ -584,6 +840,11 @@ select ts, count(i) from aggexpr where length(x) < 0 group by ts order by count(
 ----+-------
 (0 rows)
 
+select b, count(i) from aggexpr where length(x) < 0 group by b order by count(i), b limit 10;
+ b | count 
+---+-------
+(0 rows)
+
 select count(x) from aggexpr where length(x) < 0;
  count 
 -------
@@ -605,6 +866,11 @@ select ts, count(x) from aggexpr where length(x) < 0 group by ts order by count(
 ----+-------
 (0 rows)
 
+select b, count(x) from aggexpr where length(x) < 0 group by b order by count(x), b limit 10;
+ b | count 
+---+-------
+(0 rows)
+
 select count(b) from aggexpr where length(x) < 0;
  count 
 -------
@@ -624,6 +890,37 @@ select i % 2, count(b) from aggexpr where length(x) < 0 group by i % 2 order by 
 select ts, count(b) from aggexpr where length(x) < 0 group by ts order by count(b), ts limit 10;
  ts | count 
 ----+-------
+(0 rows)
+
+select b, count(b) from aggexpr where length(x) < 0 group by b order by count(b), b limit 10;
+ b | count 
+---+-------
+(0 rows)
+
+select sum((i = 12)::int) from aggexpr where length(x) < 0;
+ sum 
+-----
+   $
+(1 row)
+
+select length(x), sum((i = 12)::int) from aggexpr where length(x) < 0 group by length(x) order by sum((i = 12)::int), length(x) limit 10;
+ length | sum 
+--------+-----
+(0 rows)
+
+select i % 2, sum((i = 12)::int) from aggexpr where length(x) < 0 group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
+ ?column? | sum 
+----------+-----
+(0 rows)
+
+select ts, sum((i = 12)::int) from aggexpr where length(x) < 0 group by ts order by sum((i = 12)::int), ts limit 10;
+ ts | sum 
+----+-----
+(0 rows)
+
+select b, sum((i = 12)::int) from aggexpr where length(x) < 0 group by b order by sum((i = 12)::int), b limit 10;
+ b | sum 
+---+-----
 (0 rows)
 
 select count(*) from aggexpr where i % 2 = 0;
@@ -657,6 +954,12 @@ select ts, count(*) from aggexpr where i % 2 = 0 group by ts order by count(*), 
   2 |  1493
 (3 rows)
 
+select b, count(*) from aggexpr where i % 2 = 0 group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+ f |  3720
+(1 row)
+
 select count(i) from aggexpr where i % 2 = 0;
  count 
 -------
@@ -687,6 +990,12 @@ select ts, count(i) from aggexpr where i % 2 = 0 group by ts order by count(i), 
  12 |  1487
   2 |  1493
 (3 rows)
+
+select b, count(i) from aggexpr where i % 2 = 0 group by b order by count(i), b limit 10;
+ b | count 
+---+-------
+ f |  3720
+(1 row)
 
 select count(x) from aggexpr where i % 2 = 0;
  count 
@@ -719,6 +1028,12 @@ select ts, count(x) from aggexpr where i % 2 = 0 group by ts order by count(x), 
   2 |  1493
 (3 rows)
 
+select b, count(x) from aggexpr where i % 2 = 0 group by b order by count(x), b limit 10;
+ b | count 
+---+-------
+ f |  3720
+(1 row)
+
 select count(b) from aggexpr where i % 2 = 0;
  count 
 -------
@@ -749,5 +1064,48 @@ select ts, count(b) from aggexpr where i % 2 = 0 group by ts order by count(b), 
  12 |  1487
   2 |  1493
 (3 rows)
+
+select b, count(b) from aggexpr where i % 2 = 0 group by b order by count(b), b limit 10;
+ b | count 
+---+-------
+ f |  3720
+(1 row)
+
+select sum((i = 12)::int) from aggexpr where i % 2 = 0;
+ sum  
+------
+ 1487
+(1 row)
+
+select length(x), sum((i = 12)::int) from aggexpr where i % 2 = 0 group by length(x) order by sum((i = 12)::int), length(x) limit 10;
+ length | sum  
+--------+------
+      1 |    0
+      3 |    0
+      4 |    0
+      5 |    0
+      6 |    0
+      2 | 1487
+(6 rows)
+
+select i % 2, sum((i = 12)::int) from aggexpr where i % 2 = 0 group by i % 2 order by sum((i = 12)::int), i % 2 limit 10;
+ ?column? | sum  
+----------+------
+        0 | 1487
+(1 row)
+
+select ts, sum((i = 12)::int) from aggexpr where i % 2 = 0 group by ts order by sum((i = 12)::int), ts limit 10;
+ ts | sum  
+----+------
+  2 |    0
+ 14 |    0
+ 12 | 1487
+(3 rows)
+
+select b, sum((i = 12)::int) from aggexpr where i % 2 = 0 group by b order by sum((i = 12)::int), b limit 10;
+ b | sum  
+---+------
+ f | 1487
+(1 row)
 
 reset timescaledb.debug_require_vector_agg;

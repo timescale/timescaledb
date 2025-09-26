@@ -155,8 +155,11 @@ compute_single_aggregate(GroupingPolicyHash *policy, DecompressContext *dcontext
 		else
 		{
 			Assert(values.decompression_type == DT_Scalar);
-			arg_datum = *values.output_value;
 			arg_isnull = *values.output_isnull;
+			if (!arg_isnull)
+			{
+				arg_datum = *values.output_value;
+			}
 		}
 	}
 

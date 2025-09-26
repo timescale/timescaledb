@@ -257,8 +257,12 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 		{
 			have_null_scalars = *arg_values[i].output_isnull || have_null_scalars;
 
-			fcinfo->args[i].value = *arg_values[i].output_value;
 			fcinfo->args[i].isnull = *arg_values[i].output_isnull;
+
+			if (!fcinfo->args[i].isnull)
+			{
+				fcinfo->args[i].value = *arg_values[i].output_value;
+			}
 		}
 		else
 		{
@@ -329,22 +333,42 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 	int16 rettyplen;
 	bool rettypbyval;
 	get_typlenbyval(rettype, &rettyplen, &rettypbyval);
+	DecompressionType arrow_result_type = DT_Invalid;
+	if (rettype == BOOLOID)
+	{
+		arrow_result_type = DT_ArrowBits;
+	}
+	else if (rettyplen == -1)
+	{
+		arrow_result_type = DT_ArrowText;
+	}
+	else
+	{
+		Assert(rettyplen > 0);
+		arrow_result_type = rettyplen;
+	}
 
 	void *restrict result_buffer_1 = NULL;
 	uint8 *restrict body_buffer = NULL;
 	uint32 *restrict offset_buffer = NULL;
 	uint32 current_offset = 0;
 	int allocated_body_bytes = pad_to_multiple(64, 10);
-	if (rettyplen != -1)
+	if (arrow_result_type == DT_ArrowBits)
 	{
 		result_buffer_1 = MemoryContextAllocZero(batch_state->per_batch_context,
-												 pad_to_multiple(64, rettyplen * nrows));
+												 sizeof(uint64) * num_validity_words);
 	}
-	else
+	else if (arrow_result_type == DT_ArrowText)
 	{
 		offset_buffer = MemoryContextAllocZero(batch_state->per_batch_context,
 											   pad_to_multiple(64, sizeof(uint32 *) * (nrows + 1)));
 		body_buffer = MemoryContextAllocZero(batch_state->per_batch_context, allocated_body_bytes);
+	}
+	else
+	{
+		Assert(arrow_result_type > 0);
+		result_buffer_1 = MemoryContextAllocZero(batch_state->per_batch_context,
+												 pad_to_multiple(64, arrow_result_type * nrows));
 	}
 
 	for (int i = 0; i < nrows; i++)
@@ -380,11 +404,14 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 			continue;
 		}
 
-		switch (rettyplen)
+		switch ((int) arrow_result_type)
 		{
-			/* FIXME bool */
-			/* FIXME per-type code actually faster? */
-			case -1:
+			case DT_ArrowBits:
+			{
+				arrow_set_row_validity(result_buffer_1, i, DatumGetBool(result));
+				break;
+			}
+			case DT_ArrowText:
 			{
 				const int result_bytes = VARSIZE_ANY_EXHDR(result);
 				const int required_body_bytes = pad_to_multiple(64, current_offset + result_bytes);
@@ -413,31 +440,33 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 #ifdef USE_FLOAT8_BYVAL
 			case 8:
 #endif
-				memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1, &result, sizeof(Datum));
+				memcpy(i * arrow_result_type + (uint8 *restrict) result_buffer_1,
+					   &result,
+					   sizeof(Datum));
 				break;
 #ifndef USE_FLOAT8_BYVAL
 			case 8:
 #endif
 			case 16:
 				Assert(!rettypbyval);
-				memcpy(i * rettyplen + (uint8 *restrict) result_buffer_1,
+				memcpy(i * arrow_result_type + (uint8 *restrict) result_buffer_1,
 					   DatumGetPointer(result),
-					   rettyplen);
+					   arrow_result_type);
 				break;
 			default:
-				elog(ERROR, "wrong size %d", rettyplen);
+				elog(ERROR, "wrong arrow result type %d", arrow_result_type);
 		}
 	}
 
 	ArrowArray *arrow_result = NULL;
-	if (rettyplen != -1)
+	if (arrow_result_type == DT_ArrowBits)
 	{
 		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
 											  sizeof(ArrowArray) + 2 * sizeof(void *));
 		arrow_result->buffers = (void *) &arrow_result[1];
 		arrow_result->buffers[1] = result_buffer_1;
 	}
-	else
+	else if (arrow_result_type == DT_ArrowText)
 	{
 		offset_buffer[nrows] = current_offset;
 
@@ -446,6 +475,15 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 		arrow_result->buffers = (void *) &arrow_result[1];
 		arrow_result->buffers[1] = offset_buffer;
 		arrow_result->buffers[2] = body_buffer;
+	}
+	else
+	{
+		Assert(arrow_result_type > 0);
+
+		arrow_result = MemoryContextAllocZero(batch_state->per_batch_context,
+											  sizeof(ArrowArray) + 2 * sizeof(void *));
+		arrow_result->buffers = (void *) &arrow_result[1];
+		arrow_result->buffers[1] = result_buffer_1;
 	}
 	arrow_result->length = nrows;
 
@@ -469,10 +507,10 @@ evaluate_function(DecompressContext *dcontext, TupleTableSlot *slot, uint64 cons
 	// arrow_result->null_count);
 
 	CompressedColumnValues result = {
-		.decompression_type = rettyplen == -1 ? DT_ArrowText : rettyplen,
+		.decompression_type = arrow_result_type,
 		.buffers = { arrow_result->buffers[0],
 					 arrow_result->buffers[1],
-					 rettyplen == -1 ? arrow_result->buffers[2] : NULL },
+					 arrow_result_type == DT_ArrowText ? arrow_result->buffers[2] : NULL },
 		.arrow = arrow_result,
 	};
 	return result;

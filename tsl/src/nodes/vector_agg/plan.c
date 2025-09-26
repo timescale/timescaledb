@@ -186,7 +186,7 @@ is_vector_type(Oid typeoid)
 {
 	switch (typeoid)
 	{
-			//		case BOOLOID:
+		case BOOLOID:
 		case FLOAT4OID:
 		case FLOAT8OID:
 		case INT2OID:
@@ -461,6 +461,9 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		{
 			switch (typlen)
 			{
+				case 1:
+					Assert(single_grouping_var_type == BOOLOID);
+					return VAGT_HashSerialized;
 				case 2:
 					return VAGT_HashSingleFixed2;
 				case 4:

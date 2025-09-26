@@ -34,8 +34,7 @@ select count(compress_chunk(x)) from show_chunks('aggexpr') x;
 vacuum full analyze aggexpr;
 
 
--- FIXME
---set timescaledb.debug_require_vector_agg = 'require';
+set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference
 --set timescaledb.debug_require_vector_agg = 'forbid'; set timescaledb.enable_vectorized_aggregation to off;
 
@@ -52,6 +51,7 @@ from
         , 'count(i)'
         , 'count(x)'
         , 'count(b)'
+        , 'sum((i = 12)::int)'
         ]) function,
     unnest(array[
         null
@@ -62,10 +62,11 @@ from
         , 'i % 2 = 0'
         ]) with ordinality as condition(condition, n),
     unnest(array[
-        null,
-        'length(x)',
-        'i % 2',
-        'ts'
+        null
+        , 'length(x)'
+        , 'i % 2'
+        , 'ts'
+        , 'b'
         ]) with ordinality as grouping(grouping, n)
 \gexec
 
