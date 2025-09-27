@@ -138,9 +138,15 @@ SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 ORDER BY id DESC;
 
--- Insert non-v7 UUIDs
 \set ON_ERROR_STOP 0
+-- Insert non-v7 UUIDs
 INSERT INTO uuid_events SELECT 'a8961135-cd89-4c4b-aa05-79df642407dd', 5, 5.0;
+
+-- Time bucket directly on UUID column
+SELECT
+  time_bucket('1 day', id),
+  SUM(temp)
+FROM uuid_events;
 \set ON_ERROR_STOP 1
 
 DROP TABLE uuid_events;
