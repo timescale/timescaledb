@@ -1636,10 +1636,7 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	ts_get_rel_info_by_name(NameStr(chunk->fd.schema_name),
 							NameStr(chunk->fd.table_name),
 							&chunk->table_id,
-							&chunk->amoid,
 							&chunk->relkind);
-
-	Assert(OidIsValid(chunk->amoid) || chunk->fd.osm_chunk);
 
 	Ensure(chunk->relkind > 0,
 		   "relkind for chunk \"%s\".\"%s\" is invalid",
