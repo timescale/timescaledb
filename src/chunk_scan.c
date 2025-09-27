@@ -131,10 +131,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	for (int i = 0; i < locked_chunk_count; i++)
 	{
 		Chunk *chunk = locked_chunks[i];
-
-		ts_get_rel_info(chunk->table_id, &chunk->amoid, &chunk->relkind);
-
-		Assert(OidIsValid(chunk->amoid) || chunk->fd.osm_chunk);
+		chunk->relkind = get_rel_relkind(chunk->table_id);
 	}
 
 	/*
