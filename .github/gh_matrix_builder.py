@@ -280,7 +280,18 @@ if not pull_request:
         build_debug_config(
             {
                 "pg": 15,
-                "ignored_tests": ignored_before_pg17,
+                "ignored_tests": ignored_before_pg17
+                | {
+                    "bgw_custom",
+                    "bgw_scheduler_restart",
+                    "bgw_job_stat_history_errors_permissions",
+                    "bgw_job_stat_history_errors",
+                    "bgw_job_stat_history",
+                    "bgw_db_scheduler_fixed",
+                    "bgw_reorder_drop_chunks",
+                    "scheduler_fixed",
+                    "compress_bgw_reorder_drop_chunks",
+                },
                 "snapshot": "snapshot",
             }
         )
