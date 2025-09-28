@@ -743,7 +743,7 @@ compute_compression_size_stats_fraction(Form_compression_chunk_size ccs, double 
 static void
 update_compression_stats_for_split(const SplitRelationInfo *split_relations,
 								   const SplitRelationInfo *compressed_split_relations,
-								   int split_factor, Oid amoid)
+								   int split_factor)
 {
 	double total_tuples = 0;
 
@@ -835,14 +835,12 @@ update_compression_stats_for_split(const SplitRelationInfo *split_relations,
  */
 static void
 update_chunk_stats_for_split(const SplitRelationInfo *split_relations,
-							 const SplitRelationInfo *compressed_split_relations, int split_factor,
-							 Oid amoid)
+							 const SplitRelationInfo *compressed_split_relations, int split_factor)
 {
 	if (compressed_split_relations)
 		update_compression_stats_for_split(split_relations,
 										   compressed_split_relations,
-										   split_factor,
-										   amoid);
+										   split_factor);
 	/*
 	 * Update reltuples in pg_class. The reltuples are normally updated on
 	 * reindex, so this update only matters in case of no indexes.
@@ -1085,7 +1083,6 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 															NameStr(chunk->fd.schema_name),
 															NULL,
 															InvalidOid,
-															amoid,
 															&created);
 	Ensure(created, "could not create chunk for split");
 	Assert(new_chunk);
@@ -1170,7 +1167,7 @@ chunk_split_chunk(PG_FUNCTION_ARGS)
 	ts_cache_release(&hcache);
 
 	/* Update stats after split is done */
-	update_chunk_stats_for_split(split_relations, compressed_split_relations, SPLIT_FACTOR, amoid);
+	update_chunk_stats_for_split(split_relations, compressed_split_relations, SPLIT_FACTOR);
 
 	DEBUG_WAITPOINT("split_chunk_at_end");
 
