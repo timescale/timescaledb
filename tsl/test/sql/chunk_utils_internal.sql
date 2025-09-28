@@ -860,6 +860,67 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('ht_alter', 'child_ht_alter
 ALTER TABLE ht_alter SET (autovacuum_enabled = false);
 ALTER TABLE ht_alter RESET (autovacuum_enabled);
 
+-- test DML blocker on frozen chunks
+CREATE TABLE dml_blocks (time timestamptz, device text, value float) WITH (tsdb.hypertable, tsdb.segmentby='device');
+
+-- DML on hypertable before freezing should work
+INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
+BEGIN;
+UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM dml_blocks WHERE device = 'dev2';
+ROLLBACK;
+SELECT show_chunks('dml_blocks') AS "CHUNK" \gset
+
+-- DML on chunk before freezing should work
+BEGIN;
+INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
+UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM :CHUNK WHERE device = 'dev2';
+ROLLBACK;
+
+SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
+
+-- DML on hypertable after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
+UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM dml_blocks WHERE device = 'dev2';
+\set ON_ERROR_STOP 1
+
+-- DML on chunk after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
+UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM :CHUNK WHERE device = 'dev2';
+\set ON_ERROR_STOP 1
+
+-- repeat tests with compressed chunk
+SELECT _timescaledb_functions.unfreeze_chunk(:'CHUNK');
+SELECT compress_chunk(:'CHUNK');
+SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
+SELECT format('%I.%I', schema_name, table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+
+-- DML on hypertable after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
+UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM dml_blocks WHERE device = 'dev2';
+\set ON_ERROR_STOP 1
+
+-- DML on chunk after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
+UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM :CHUNK WHERE device = 'dev2';
+\set ON_ERROR_STOP 1
+
+-- DML on chunk after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO :COMPRESSED_CHUNK SELECT;
+UPDATE :COMPRESSED_CHUNK SET device = 'dev3' WHERE device = 'dev1';
+DELETE FROM :COMPRESSED_CHUNK WHERE device = 'dev1';
+\set ON_ERROR_STOP 1
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- clean up databases created
 DROP DATABASE postgres_fdw_db WITH (FORCE);

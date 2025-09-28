@@ -650,3 +650,83 @@ SELECT create_hypertable('i3037','time');
 ALTER TABLE i3037 ADD COLUMN value float DEFAULT 0;
 INSERT INTO i3037 VALUES ('2000-01-01');
 INSERT INTO i3037 VALUES ('2000-01-01') ON CONFLICT(time) DO UPDATE SET value = EXCLUDED.value;
+-- test inserting into chunks directly
+CREATE TABLE direct_insert(time timestamptz, meta text) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO direct_insert VALUES ('2020-01-01');
+SELECT show_chunks('direct_insert') AS "CHUNK" \gset
+--should have ModifyHyperable node
+EXPLAIN (costs off, timing off, summary off) INSERT INTO :CHUNK VALUES ('2020-01-01');
+             QUERY PLAN              
+-------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Insert on _hyper_14_231_chunk
+         ->  Result
+(3 rows)
+
+-- correct time range should succeed
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+             time             | meta 
+------------------------------+------
+ Wed Jan 01 00:00:00 2020 PST | 
+(1 row)
+
+-- incorrect time range should fail
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2020-01-01'), ('2021-01-01') RETURNING *;
+ERROR:  new row for relation "_hyper_14_231_chunk" violates chunk constraint
+INSERT INTO :CHUNK VALUES ('2025-01-01') RETURNING *;
+ERROR:  new row for relation "_hyper_14_231_chunk" violates chunk constraint
+\set ON_ERROR_STOP 1
+-- test that triggers on chunks work
+CREATE FUNCTION test_trigger() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'trigger called';
+  NEW.meta = 'triggered';
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER test_trigger BEFORE INSERT ON direct_insert FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+NOTICE:  trigger called
+             time             |   meta    
+------------------------------+-----------
+ Wed Jan 01 00:00:00 2020 PST | triggered
+(1 row)
+
+-- test upsert
+DELETE FROM direct_insert;
+ALTER TABLE direct_insert ADD CONSTRAINT direct_insert_pkey PRIMARY KEY (time);
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+NOTICE:  trigger called
+             time             |   meta    
+------------------------------+-----------
+ Wed Jan 01 00:00:00 2020 PST | triggered
+(1 row)
+
+-- DO NOTHING should succeed
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT DO NOTHING RETURNING *;
+NOTICE:  trigger called
+ time | meta 
+------+------
+(0 rows)
+
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET meta = 'update' RETURNING *;
+NOTICE:  trigger called
+             time             |  meta  
+------------------------------+--------
+ Wed Jan 01 00:00:00 2020 PST | update
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- conflict should fail
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+NOTICE:  trigger called
+ERROR:  duplicate key value violates unique constraint "231_205_direct_insert_pkey"
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = '2000-01-01' RETURNING *;
+NOTICE:  trigger called
+ERROR:  new row for relation "_hyper_14_231_chunk" violates check constraint "constraint_237"
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = EXCLUDED.time + '1 year' RETURNING *;
+NOTICE:  trigger called
+ERROR:  new row for relation "_hyper_14_231_chunk" violates check constraint "constraint_237"
+\set ON_ERROR_STOP 1

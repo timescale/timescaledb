@@ -2456,9 +2456,9 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 				 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 				 */
 #if PG17_GE
-				List *actionStates = ctr->hypertable_rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+				List *actionStates = ctr->root_rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
 #else
-				List *actionStates = ctr->hypertable_rri->ri_notMatchedMergeAction;
+				List *actionStates = ctr->root_rri->ri_notMatchedMergeAction;
 #endif
 				ListCell *l;
 				foreach (l, actionStates)

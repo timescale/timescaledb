@@ -15,9 +15,14 @@ typedef struct ModifyHypertableState ModifyHypertableState;
 
 typedef struct ChunkTupleRouting
 {
-	Relation partition_root;
 	Hypertable *hypertable;
-	ResultRelInfo *hypertable_rri;
+	/*
+	 * When single_chunk_insert is true, root_rel and root_rri point to the
+	 * chunk being inserted into. Otherwise, they point to the hypertable.
+	 */
+	Relation root_rel;
+	ResultRelInfo *root_rri;
+	bool single_chunk_insert;
 	Cache *hypertable_cache;
 
 	SubspaceStore *subspace;

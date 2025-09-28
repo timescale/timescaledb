@@ -210,3 +210,48 @@ ALTER TABLE i3037 ADD COLUMN value float DEFAULT 0;
 INSERT INTO i3037 VALUES ('2000-01-01');
 INSERT INTO i3037 VALUES ('2000-01-01') ON CONFLICT(time) DO UPDATE SET value = EXCLUDED.value;
 
+-- test inserting into chunks directly
+CREATE TABLE direct_insert(time timestamptz, meta text) WITH (tsdb.hypertable);
+
+INSERT INTO direct_insert VALUES ('2020-01-01');
+SELECT show_chunks('direct_insert') AS "CHUNK" \gset
+
+--should have ModifyHyperable node
+EXPLAIN (costs off, timing off, summary off) INSERT INTO :CHUNK VALUES ('2020-01-01');
+
+-- correct time range should succeed
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+-- incorrect time range should fail
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2020-01-01'), ('2021-01-01') RETURNING *;
+INSERT INTO :CHUNK VALUES ('2025-01-01') RETURNING *;
+\set ON_ERROR_STOP 1
+
+-- test that triggers on chunks work
+CREATE FUNCTION test_trigger() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'trigger called';
+  NEW.meta = 'triggered';
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER test_trigger BEFORE INSERT ON direct_insert FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+
+-- test upsert
+DELETE FROM direct_insert;
+ALTER TABLE direct_insert ADD CONSTRAINT direct_insert_pkey PRIMARY KEY (time);
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+
+-- DO NOTHING should succeed
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT DO NOTHING RETURNING *;
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET meta = 'update' RETURNING *;
+
+\set ON_ERROR_STOP 0
+-- conflict should fail
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = '2000-01-01' RETURNING *;
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = EXCLUDED.time + '1 year' RETURNING *;
+\set ON_ERROR_STOP 1
+

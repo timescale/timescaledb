@@ -450,3 +450,71 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
 (1 row)
 
 ROLLBACK;
+-- test direct compress into chunk directly
+CREATE TABLE metrics_chunk(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time');
+SET timescaledb.enable_direct_compress_insert = true;
+-- create uncompressed chunk
+INSERT INTO metrics_chunk SELECT '2025-01-01';
+WARNING:  disabling direct compress because of too small batch size
+-- status should be normal uncompressed chunk since it was single tuple insert
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_chunk') chunk;
+ chunk_status_text 
+-------------------
+ {}
+(1 row)
+
+SELECT show_chunks('metrics_chunk') AS "CHUNK" \gset
+EXPLAIN (costs off,summary off,timing off) INSERT INTO :CHUNK SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(0,100) i;
+                   QUERY PLAN                   
+------------------------------------------------
+ Custom Scan (ModifyHypertable)
+   Direct Compress: true
+   ->  Insert on _hyper_6_41_chunk
+         ->  Function Scan on generate_series i
+(4 rows)
+
+BEGIN;
+INSERT INTO :CHUNK SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(0,100) i;
+-- status should be COMPRESSED, UNORDERED, PARTIAL
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_chunk') chunk;
+       chunk_status_text        
+--------------------------------
+ {COMPRESSED,UNORDERED,PARTIAL}
+(1 row)
+
+-- delete should propagate to compressed chunk
+SELECT count(*) FROM :CHUNK;
+ count 
+-------
+   102
+(1 row)
+
+EXPLAIN (analyze,buffers off,costs off,summary off,timing off) DELETE FROM :CHUNK WHERE time > '2025-01-01'::timestamptz;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 101
+   ->  Delete on _hyper_6_41_chunk (actual rows=0.00 loops=1)
+         ->  Index Scan using _hyper_6_41_chunk_metrics_chunk_time_idx on _hyper_6_41_chunk (actual rows=100.00 loops=1)
+               Index Cond: ("time" > 'Wed Jan 01 00:00:00 2025 PST'::timestamp with time zone)
+(6 rows)
+
+SELECT count(*) FROM :CHUNK;
+ count 
+-------
+     2
+(1 row)
+
+ROLLBACK;
+BEGIN;
+SET timescaledb.enable_direct_compress_insert_client_sorted = true;
+INSERT INTO :CHUNK SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(0,100) i;
+-- status should be COMPRESSED, PARTIAL
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_chunk') chunk;
+  chunk_status_text   
+----------------------
+ {COMPRESSED,PARTIAL}
+(1 row)
+
+ROLLBACK;
