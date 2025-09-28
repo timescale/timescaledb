@@ -28,15 +28,28 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 	 * single tuple into a partitioned table and this must be fast.
 	 */
 	ctr = (ChunkTupleRouting *) palloc0(sizeof(ChunkTupleRouting));
-	ctr->hypertable_rri = rri;
-	ctr->partition_root = rri->ri_RelationDesc;
+	ctr->root_rri = rri;
+	ctr->root_rel = rri->ri_RelationDesc;
 	ctr->estate = estate;
 	ctr->counters = palloc0(sizeof(SharedCounters));
 
 	ctr->hypertable =
 		ts_hypertable_cache_get_cache_and_entry(RelationGetRelid(rri->ri_RelationDesc),
-												CACHE_FLAG_NONE,
+												CACHE_FLAG_MISSING_OK,
 												&ctr->hypertable_cache);
+
+	/*
+	 * If we are inserting into a chunk directly, rri will point to the chunk
+	 * itself, so we need to get the hypertable from the chunk.
+	 */
+	if (!ctr->hypertable)
+	{
+		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(rri->ri_RelationDesc), false);
+		ctr->hypertable = ts_hypertable_cache_get_entry(ctr->hypertable_cache,
+														chunk->hypertable_relid,
+														CACHE_FLAG_NONE);
+		ctr->single_chunk_insert = true;
+	}
 	ctr->subspace = ts_subspace_store_init(ctr->hypertable->space,
 										   estate->es_query_cxt,
 										   ts_guc_max_open_chunks_per_insert);
@@ -56,9 +69,15 @@ ts_chunk_tuple_routing_destroy(ChunkTupleRouting *ctr)
 }
 
 static void
+destroy_chunk_insert_state_single_chunk(void *cis)
+{
+	ts_chunk_insert_state_destroy((ChunkInsertState *) cis, true);
+}
+
+static void
 destroy_chunk_insert_state(void *cis)
 {
-	ts_chunk_insert_state_destroy((ChunkInsertState *) cis);
+	ts_chunk_insert_state_destroy((ChunkInsertState *) cis, false);
 }
 
 extern ChunkInsertState *
@@ -90,13 +109,24 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		chunk = ts_hypertable_find_chunk_for_point(ctr->hypertable, point);
 
 		/*
-		 * Frozen chunks require at least PG14.
+		 * When inserting directly into a chunk, we should always find the chunk and
+		 * the returned chunk should match the relid we are inserting into.
 		 */
+		if (ctr->single_chunk_insert)
+		{
+			if (!chunk || chunk->table_id != RelationGetRelid(ctr->root_rri->ri_RelationDesc))
+				ereport(ERROR,
+						(errcode(ERRCODE_CHECK_VIOLATION),
+						 errmsg("new row for relation \"%s\" violates chunk constraint",
+								RelationGetRelationName(ctr->root_rri->ri_RelationDesc))));
+		}
+
 		if (chunk && ts_chunk_is_frozen(chunk))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot INSERT into frozen chunk \"%s\"",
 							get_rel_name(chunk->table_id))));
+
 		if (chunk && IS_OSM_CHUNK(chunk))
 		{
 			const Dimension *time_dim = hyperspace_get_open_dimension(ctr->hypertable->space, 0);
@@ -151,7 +181,11 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 		cis = ts_chunk_insert_state_create(chunk->table_id, ctr);
 		cis->needs_partial = needs_partial;
-		ts_subspace_store_add(ctr->subspace, chunk->cube, cis, destroy_chunk_insert_state);
+		ts_subspace_store_add(ctr->subspace,
+							  chunk->cube,
+							  cis,
+							  ctr->single_chunk_insert ? destroy_chunk_insert_state_single_chunk :
+														 destroy_chunk_insert_state);
 	}
 
 	MemoryContextSwitchTo(old_context);

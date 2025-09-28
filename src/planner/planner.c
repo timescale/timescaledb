@@ -1586,50 +1586,85 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			ModifyTablePath *mt = castNode(ModifyTablePath, path);
 			RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 			Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
-			if (ht)
-			{
-				/* Direct INSERT into internal compressed hypertable is not supported.
-				 * Compressed chunks have no dimensions so we could not do tuple routing.
-				 * Additionally internal compressed hypertable has no columns so you
-				 * coulnt even insert any actual data.
-				 */
-				if (ht->fd.compression_state == HypertableInternalCompressionTable)
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("direct insert into internal compressed hypertable is not "
-									"supported")));
 
-				switch (mt->operation)
+			/* Direct INSERT into internal compressed hypertable is not supported.
+			 * Compressed chunks have no dimensions so we could not do tuple routing.
+			 * Additionally internal compressed hypertable has no columns so you
+			 * couldn't even insert any actual data.
+			 */
+			if (ht && ht->fd.compression_state == HypertableInternalCompressionTable)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("direct insert into internal compressed hypertable is not "
+								"supported")));
+
+			/* Check for DML on chunk directly */
+			if (!ht)
+			{
+				Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
+				if (!chunk)
 				{
-					case CMD_INSERT:
-					case CMD_UPDATE:
-					case CMD_DELETE:
-					{
-						path = ts_modify_hypertable_path_create(root, mt, input_rel);
-						break;
-					}
-					case CMD_MERGE:
-					{
-						List *firstMergeActionList = linitial(mt->mergeActionLists);
-						ListCell *l;
-						/*
-						 * Iterate over merge action to check if there is an INSERT sql.
-						 * If so, then add ModifyHypertable node.
-						 */
-						foreach (l, firstMergeActionList)
-						{
-							MergeAction *action = (MergeAction *) lfirst(l);
-							if (action->commandType == CMD_INSERT)
-							{
-								path = ts_modify_hypertable_path_create(root, mt, input_rel);
-								break;
-							}
-						}
-						break;
-					}
-					default:
-						break;
+					/* Not a hypertable or chunk, continue */
+					new_pathlist = lappend(new_pathlist, path);
+					continue;
 				}
+
+				if (ts_chunk_is_frozen(chunk))
+					ereport(ERROR,
+							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							 errmsg("cannot modify frozen chunk")));
+
+				ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
+				if (ht->fd.compression_state == HypertableInternalCompressionTable)
+				{
+					/*
+					 * For operations on internal compressed chunks we block modifications
+					 * if the chunk belongs to a frozen chunk.
+					 * In all other cases of direct modification of chunks we dont interfere
+					 * and do not add a ModifyHypertable node.
+					 */
+					Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
+					if (ts_chunk_is_frozen(uncompressed))
+						ereport(ERROR,
+								(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+								 errmsg("cannot modify compressed chunk belonging to a frozen "
+										"chunk")));
+
+					new_pathlist = lappend(new_pathlist, path);
+					continue;
+				}
+			}
+
+			switch (mt->operation)
+			{
+				case CMD_INSERT:
+				case CMD_UPDATE:
+				case CMD_DELETE:
+				{
+					path = ts_modify_hypertable_path_create(root, mt, input_rel);
+					break;
+				}
+				case CMD_MERGE:
+				{
+					List *firstMergeActionList = linitial(mt->mergeActionLists);
+					ListCell *l;
+					/*
+					 * Iterate over merge action to check if there is an INSERT sql.
+					 * If so, then add ModifyHypertable node.
+					 */
+					foreach (l, firstMergeActionList)
+					{
+						MergeAction *action = (MergeAction *) lfirst(l);
+						if (action->commandType == CMD_INSERT)
+						{
+							path = ts_modify_hypertable_path_create(root, mt, input_rel);
+							break;
+						}
+					}
+					break;
+				}
+				default:
+					break;
 			}
 		}
 

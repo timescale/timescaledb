@@ -169,7 +169,7 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 	}
 	/*
 	 * We do not support MERGE command with UPDATE/DELETE merge actions on
-	 * compressed hypertables, because Custom Scan (HypertableModify) node is
+	 * compressed hypertables, because Custom Scan (ModifyHypertable) node is
 	 * not generated in the plan for MERGE command on compressed hypertables
 	 */
 	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
