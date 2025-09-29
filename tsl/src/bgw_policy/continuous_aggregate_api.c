@@ -533,6 +533,12 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 	if (jobs == NIL)
 		return overlap_result;
 
+	if (ContinuousAggIsHierarchical(cagg))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("multiple refresh policies are not supported for hierarchical "
+						"continuous aggregates")));
+
 	Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 	const Dimension *dim = get_open_dimension_for_hypertable(mat_ht, true);
 
@@ -736,9 +742,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 								"\"%s\", skipping",
 								get_rel_name(cagg->relid)),
 						 errdetail("A refresh policy with the same start and end offset already "
-								   "exists "
-								   "for "
-								   "continuous aggregate \"%s\".",
+								   "exists for continuous aggregate \"%s\".",
 								   get_rel_name(cagg->relid))));
 				PG_RETURN_INT32(-1);
 			}

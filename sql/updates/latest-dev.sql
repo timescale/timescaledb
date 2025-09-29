@@ -48,3 +48,37 @@ BEGIN
 		END IF;
     END LOOP;
 END $$;
+
+DO
+$$
+DECLARE
+    cagg_names TEXT;
+BEGIN
+    WITH cagg AS (
+        SELECT
+            format('%I.%I', user_view_schema, user_view_name) AS cagg_name
+        FROM
+            _timescaledb_catalog.continuous_agg
+            JOIN _timescaledb_config.bgw_job ON bgw_job.hypertable_id = continuous_agg.mat_hypertable_id
+        WHERE
+            parent_mat_hypertable_id IS NOT NULL
+        GROUP BY
+            1
+        HAVING
+            count(*) > 1
+    )
+    SELECT
+        string_agg(cagg_name, ', ' ORDER BY cagg_name)
+    INTO
+        cagg_names
+    FROM
+        cagg;
+
+    IF cagg_names IS NOT NULL THEN
+        RAISE WARNING 'hierarchical continuous aggregates with multiple refresh jobs found'
+        USING
+            DETAIL = 'The following continuous aggregates have multiple refresh jobs: '|| cagg_names,
+            HINT = 'Consider consolidating the refresh jobs for these continuous aggregates due to potential deadlocks.';
+    END IF;
+END;
+$$;
