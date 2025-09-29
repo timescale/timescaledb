@@ -59,7 +59,6 @@ set(TEST_FILES
     custom_hashagg.sql
     decompress_index.sql
     foreign_keys_test.sql
-    merge_append_partially_compressed.sql
     merge_chunks.sql
     merge_compress.sql
     modify_exclusion.sql
@@ -187,7 +186,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES privilege_maintain.sql)
+  list(APPEND TEST_FILES privilege_maintain.sql
+       merge_append_partially_compressed.sql)
 endif()
 
 set(SOLO_TESTS
