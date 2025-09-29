@@ -573,10 +573,10 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 		return false;
 	}
 
-	if (query->hasRecursive || query->hasSubLinks || query->hasTargetSRFs || query->cteList)
+	if (query->hasRecursive || query->hasSubLinks || query->cteList)
 	{
 		appendStringInfoString(detail,
-							   "CTEs, subqueries and set-returning functions are not supported by "
+							   "CTEs and subqueries are not supported by "
 							   "continuous aggregates.");
 		return false;
 	}
