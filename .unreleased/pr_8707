@@ -1,0 +1,1 @@
+Fixes: #8707 Block concurrent refresh policies for Hierarchical CAggs due to potential deadlocks
