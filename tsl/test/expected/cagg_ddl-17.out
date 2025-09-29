@@ -2249,3 +2249,27 @@ SELECT column_name, compress_interval_length from _timescaledb_catalog.dimension
  time_bucket |             345600000000
 (1 row)
 
+-- test set returning functions in caggs
+CREATE TABLE kpis_raw (time TIMESTAMP NOT NULL, value INTEGER, groups TEXT[]) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO kpis_raw (time, value, groups) VALUES
+  ('2025-01-01', 10, '{group1,group2,group3}'),
+  ('2025-01-02', 20, '{group1,group4}'),
+  ('2025-02-01', 10, '{group1,group3}'),
+  ('2025-02-01', 20, '{group1,group4}');
+CREATE MATERIALIZED VIEW kpis_cagg WITH (tsdb.continuous) AS
+SELECT time_bucket('7 day', time) AS bucket, count(*) AS number_of_records, avg(value) AS average, unnest(groups) AS kpi_group
+FROM kpis_raw GROUP BY bucket, kpi_group;
+NOTICE:  refreshing continuous aggregate "kpis_cagg"
+SELECT * FROM kpis_cagg ORDER BY bucket, kpi_group;
+          bucket          | number_of_records |       average       | kpi_group 
+--------------------------+-------------------+---------------------+-----------
+ Mon Dec 30 00:00:00 2024 |                 2 | 15.0000000000000000 | group1
+ Mon Dec 30 00:00:00 2024 |                 1 | 10.0000000000000000 | group2
+ Mon Dec 30 00:00:00 2024 |                 1 | 10.0000000000000000 | group3
+ Mon Dec 30 00:00:00 2024 |                 1 | 20.0000000000000000 | group4
+ Mon Jan 27 00:00:00 2025 |                 2 | 15.0000000000000000 | group1
+ Mon Jan 27 00:00:00 2025 |                 1 | 10.0000000000000000 | group3
+ Mon Jan 27 00:00:00 2025 |                 1 | 20.0000000000000000 | group4
+(7 rows)
+
