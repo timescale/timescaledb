@@ -62,6 +62,7 @@ BEGIN
             JOIN _timescaledb_config.bgw_job ON bgw_job.hypertable_id = continuous_agg.mat_hypertable_id
         WHERE
             parent_mat_hypertable_id IS NOT NULL
+            AND proc_name = 'policy_refresh_continuous_aggregate'
         GROUP BY
             1
         HAVING
