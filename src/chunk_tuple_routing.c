@@ -184,6 +184,8 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 			 */
 			TM_Result lockres;
 
+			DEBUG_WAITPOINT("insert_create_compressed");
+
 			lockres = ts_chunk_lock_for_creating_compressed_chunk(chunk->fd.id,
 																  &chunk->fd.compressed_chunk_id);
 
