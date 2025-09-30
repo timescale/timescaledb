@@ -1,2 +1,0 @@
-Fixes: #8607 Fix interrupted CAgg refresh materialization phase leaving behind pending materialization ranges
-Thanks: @snyrkill for reporting a bug when interrupting a CAgg refresh
