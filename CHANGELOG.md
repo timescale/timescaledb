@@ -9,6 +9,14 @@ commands from accidentally triggering the load of a previous DB version.**
 
 This release contains performance improvements and bug fixes since the [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.20.0) release. We recommend that you upgrade at the next available opportunity.
 
+This release blocks the ability to leverage **concurrent refresh policies** in **hierarchical continous aggregates**, as potential deadlocks can occur. 
+If you have [concurrent refresh policies](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/refresh-policies/#add-concurrent-refresh-policies) in **hierarchical** continous aggregates, [please disable the jobs](https://docs.tigerdata.com/api/latest/jobs-automation/alter_job/#samples), as following:
+
+```
+SELECT alter_job("<job_id_of_concurrent_policy>", scheduled => false);
+```
+
+
 **Bugfixes**
 * [#7766](https://github.com/timescale/timescaledb/pull/7766) Load the OSM extension in the retention background worker to drop tiered chunks
 * [#8550](https://github.com/timescale/timescaledb/pull/8550) Error in gapfill with expressions over aggregates, groupby columns, and out-of-order columns
