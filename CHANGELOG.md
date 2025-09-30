@@ -16,7 +16,6 @@ If you have [concurrent refresh policies](https://docs.tigerdata.com/use-timesca
 SELECT alter_job("<job_id_of_concurrent_policy>", scheduled => false);
 ```
 
-
 **Bugfixes**
 * [#7766](https://github.com/timescale/timescaledb/pull/7766) Load the OSM extension in the retention background worker to drop tiered chunks
 * [#8550](https://github.com/timescale/timescaledb/pull/8550) Error in gapfill with expressions over aggregates, groupby columns, and out-of-order columns
