@@ -10,20 +10,20 @@ commands from accidentally triggering the load of a previous DB version.**
 This release contains performance improvements and bug fixes since the [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.20.0) release. We recommend that you upgrade at the next available opportunity.
 
 **Bugfixes**
-* [#7766](https://github.com/timescale/timescaledb/pull/7766) Load OSM extension in retention background worker to drop tiered chunks
-* [#8550](https://github.com/timescale/timescaledb/pull/8550) Error in gapfill with expressions over aggregates and groupby columns and out-of-order columns
+* [#7766](https://github.com/timescale/timescaledb/pull/7766) Load the OSM extension in the retention background worker to drop tiered chunks
+* [#8550](https://github.com/timescale/timescaledb/pull/8550) Error in gapfill with expressions over aggregates, groupby columns, and out-of-order columns
 * [#8593](https://github.com/timescale/timescaledb/pull/8593) Error on change of invalidation method for continuous aggregate
-* [#8599](https://github.com/timescale/timescaledb/pull/8599) Fix attnum mismatch bug in chunk constraint checks
-* [#8607](https://github.com/timescale/timescaledb/pull/8607) Fix interrupted continous aggregate refresh materialization phase leaving behind pending materialization ranges
+* [#8599](https://github.com/timescale/timescaledb/pull/8599) Fix the attnum mismatch bug in chunk constraint checks
+* [#8607](https://github.com/timescale/timescaledb/pull/8607) Fix the interrupted continous aggregate refresh materialization phase that leaves behind pending materialization ranges
 * [#8638](https://github.com/timescale/timescaledb/pull/8638) `ALTER TABLE RESET` for `orderby` settings
-* [#8644](https://github.com/timescale/timescaledb/pull/8644) Fix migration script for sparse index configuration
+* [#8644](https://github.com/timescale/timescaledb/pull/8644) Fix the migration script for sparse index configuration
 * [#8657](https://github.com/timescale/timescaledb/pull/8657) Fix `CREATE TABLE WITH` when using UUIDv7 partitioning
-* [#8659](https://github.com/timescale/timescaledb/pull/8659) Don't propagate `ALTER TABLE` commands to foreign data wrapper chunks
+* [#8659](https://github.com/timescale/timescaledb/pull/8659) `ALTER TABLE` commands to foreign data wrapper chunks not propogated. 
 * [#8693](https://github.com/timescale/timescaledb/pull/8693) Compressed index not chosen for `varchar` typed `segmentby` columns
 * [#8707](https://github.com/timescale/timescaledb/pull/8707) Block concurrent refresh policies for hierarchical continous aggregate due to potential deadlocks
 
 **Thanks**
-* @MKrkkl for reporting a bug in Gapfill queries with expressions over aggregates and groupby columns
+* @MKrkkl for reporting a bug in gapfill queries with expressions over aggregates and groupby columns
 * @brandonpurcell-dev for creating a test case that showed a bug in `CREATE TABLE WITH` when using UUIDv7 partitioning
 * @snyrkill for reporting a bug when interrupting a continous aggregate refresh
 
