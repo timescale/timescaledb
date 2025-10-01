@@ -50,3 +50,12 @@ INSERT INTO should_drop VALUES (now(), 1.0);
 SELECT * from _timescaledb_catalog.hypertable;
 SELECT * from _timescaledb_catalog.dimension;
 
+-- test dropping multiple objects at once
+CREATE TABLE t1 (time timestamptz) WITH (tsdb.hypertable);
+INSERT INTO t1 VALUES ('2025-01-01');
+CREATE TABLE t2 (time timestamptz) WITH (tsdb.hypertable);
+INSERT INTO t2 VALUES ('2025-01-01');
+CREATE TABLE t3 (time timestamptz);
+
+DROP TABLE t1, t2, t3;
+

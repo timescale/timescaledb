@@ -1466,11 +1466,8 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 
 			ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 
-			if (NULL != ht)
+			if (ht)
 			{
-				if (list_length(stmt->objects) != 1)
-					elog(ERROR, "cannot drop a hypertable along with other objects");
-
 				if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
