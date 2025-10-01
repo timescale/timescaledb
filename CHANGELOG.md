@@ -9,11 +9,19 @@ commands from accidentally triggering the load of a previous DB version.**
 
 This release contains performance improvements and bug fixes since the [2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.20.0) release. We recommend that you upgrade at the next available opportunity.
 
-This release blocks the ability to leverage **concurrent refresh policies** in **hierarchical continous aggregates**, as potential deadlocks can occur. 
-If you have [concurrent refresh policies](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/refresh-policies/#add-concurrent-refresh-policies) in **hierarchical** continous aggregates, [please disable the jobs](https://docs.tigerdata.com/api/latest/jobs-automation/alter_job/#samples), as following:
-
+This release blocks the ability to leverage **concurrent refresh policies** in **hierarchical continuous aggregates**, as potential deadlocks can occur. 
+[Concurrent refresh policies](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/refresh-policies/#add-concurrent-refresh-policies) were introduced in [2.21.0](https://github.com/timescale/timescaledb/releases/tag/2.20.0) and allow users to define multiple time ranges, to refresh, e.g. data from the last hour in policy and the last day in a second policy.
+If you are using this feature with **hierarchical** continuous aggregates, please [remove the existing policies](https://docs.tigerdata.com/api/latest/jobs-automation/delete_job/#samples) and [create a new policy](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/refresh-policies/#change-the-refresh-policy) for the full range you want to refresh, of the continuous aggregate as follows:
 ```
-SELECT alter_job("<job_id_of_concurrent_policy>", scheduled => false);
+--- Find the job ID's of the concurrent refresh policies
+SELECT * FROM timescaledb_information.jobs WHERE proc_name = 'policy_refresh_continuous_aggregate';
+--- Remove the job
+SELECT delete_job("<job_id_of_concurrent_policy>");
+--- Create new policy for hierarchical continuous aggregate
+SELECT add_continuous_aggregate_policy('<name_of_materialized_view>',
+  start_offset => INTERVAL '1 month',
+  end_offset => INTERVAL '1 day',
+  schedule_interval => INTERVAL '1 hour');
 ```
 
 **Bugfixes**
