@@ -41,6 +41,8 @@ CREATE OPERATOR CLASS customtype_ops
   FOR TYPE customtype
   USING hash AS OPERATOR 1 =;
 
+SELECT count(delete_job(job_id)) from timescaledb_information.jobs ;
+
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 CREATE TABLE test1 ("Time" timestamptz, i integer, b bigint, t text);
