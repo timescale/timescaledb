@@ -10,7 +10,7 @@ SET parallel_leader_participation TO off;
 SET min_parallel_table_scan_size TO '0';
 SET enable_incremental_sort TO off;
 SELECT show_chunks('metrics_compressed') AS "TEST_TABLE" ORDER BY 1::text LIMIT 1 \gset
--- this should use DecompressChunk node
+-- this should use ColumnarScan node
 :PREFIX_VERBOSE
 SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time LIMIT 5;
 QUERY PLAN
@@ -25,7 +25,7 @@ QUERY PLAN
                Index Cond: (compress_hyper_X_X_chunk.device_id = 1)
 (9 rows)
 
--- must not use DecompressChunk node
+-- must not use ColumnarScan node
 :PREFIX_VERBOSE
 SELECT * FROM ONLY :TEST_TABLE WHERE device_id = 1 ORDER BY time LIMIT 5;
 QUERY PLAN
@@ -38,6 +38,33 @@ QUERY PLAN
          ->  Seq Scan on _timescaledb_internal._hyper_X_X_chunk (actual rows=0.00 loops=1)
                Output: "time", device_id, v0, v1, v2, v3
                Filter: (_hyper_X_X_chunk.device_id = 1)
+(9 rows)
+
+-- this should use ColumnarScan node
+:PREFIX_NO_VERBOSE
+SELECT * FROM :TEST_TABLE UNION ALL SELECT * FROM :TEST_TABLE;
+QUERY PLAN
+ Gather
+   Workers Planned: 2
+   ->  Parallel Append
+         ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
+               ->  Parallel Seq Scan on compress_hyper_X_X_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk _hyper_X_X_chunk_1
+               ->  Parallel Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+(7 rows)
+
+:PREFIX_NO_VERBOSE
+SELECT * FROM :TEST_TABLE UNION ALL SELECT * FROM :TEST_TABLE ORDER BY time;
+QUERY PLAN
+ Sort
+   Sort Key: _hyper_X_X_chunk."time"
+   ->  Gather
+         Workers Planned: 2
+         ->  Parallel Append
+               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
+                     ->  Parallel Seq Scan on compress_hyper_X_X_chunk
+               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk _hyper_X_X_chunk_1
+                     ->  Parallel Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
 (9 rows)
 
 -- test expressions

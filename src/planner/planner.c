@@ -907,8 +907,8 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 
 	/*
 	 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
-	 * be a hypertable here if it was pulled up from a subquery
-	 * as happens with UNION ALL for example. So we have to
+	 * be a hypertable or a chunk here if it was pulled up from a
+	 * subquery as happens with UNION ALL for example. So we have to
 	 * check for that to properly detect that pattern.
 	 */
 	if (parent_rte->rtekind == RTE_SUBQUERY)
@@ -916,7 +916,21 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 		*ht = ts_planner_get_hypertable(rte->relid,
 										rte->inh ? CACHE_FLAG_MISSING_OK : CACHE_FLAG_CHECK);
 
-		return *ht ? TS_REL_HYPERTABLE : TS_REL_OTHER;
+		if (*ht)
+			return TS_REL_HYPERTABLE;
+
+		/*
+		 * This is either a chunk seen as a standalone table or a non-chunk baserel.
+		 * We need a costly chunk metadata scan to distinguish between them, so we
+		 * cache the result of this lookup to avoid doing it repeatedly.
+		 */
+		BaserelInfoEntry *entry = get_or_add_baserel_from_cache(rte->relid, InvalidOid);
+		*ht = entry->ht;
+
+		if (*ht)
+			return TS_REL_CHUNK_STANDALONE;
+
+		return TS_REL_OTHER;
 	}
 
 	if (parent_rte->relid == rte->relid)
