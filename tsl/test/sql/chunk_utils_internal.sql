@@ -868,6 +868,9 @@ INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
 BEGIN;
 UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
 DELETE FROM dml_blocks WHERE device = 'dev2';
+COPY dml_blocks FROM STDIN;
+2025-01-01	dev1	1.0
+\.
 ROLLBACK;
 SELECT show_chunks('dml_blocks') AS "CHUNK" \gset
 
@@ -876,6 +879,9 @@ BEGIN;
 INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
 UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
 DELETE FROM :CHUNK WHERE device = 'dev2';
+COPY :CHUNK FROM STDIN;
+2025-01-01	dev1	1.0
+\.
 ROLLBACK;
 
 SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
@@ -885,6 +891,9 @@ SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
 INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
 UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
 DELETE FROM dml_blocks WHERE device = 'dev2';
+COPY dml_blocks FROM STDIN;
+2025-01-01	dev1	1.0
+\.
 \set ON_ERROR_STOP 1
 
 -- DML on chunk after freezing should be blocked
@@ -892,6 +901,9 @@ DELETE FROM dml_blocks WHERE device = 'dev2';
 INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
 UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
 DELETE FROM :CHUNK WHERE device = 'dev2';
+COPY :CHUNK FROM STDIN;
+2025-01-01	dev1	1.0
+\.
 \set ON_ERROR_STOP 1
 
 -- repeat tests with compressed chunk
@@ -905,6 +917,9 @@ SELECT format('%I.%I', schema_name, table_name) AS "COMPRESSED_CHUNK" FROM _time
 INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
 UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
 DELETE FROM dml_blocks WHERE device = 'dev2';
+COPY dml_blocks FROM STDIN;
+2025-01-01	dev1	1.0
+\.
 \set ON_ERROR_STOP 1
 
 -- DML on chunk after freezing should be blocked
@@ -912,6 +927,9 @@ DELETE FROM dml_blocks WHERE device = 'dev2';
 INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
 UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
 DELETE FROM :CHUNK WHERE device = 'dev2';
+COPY :CHUNK FROM STDIN;
+2025-01-01	dev1	1.0
+\.
 \set ON_ERROR_STOP 1
 
 -- DML on chunk after freezing should be blocked
@@ -919,6 +937,7 @@ DELETE FROM :CHUNK WHERE device = 'dev2';
 INSERT INTO :COMPRESSED_CHUNK SELECT;
 UPDATE :COMPRESSED_CHUNK SET device = 'dev3' WHERE device = 'dev1';
 DELETE FROM :COMPRESSED_CHUNK WHERE device = 'dev1';
+COPY :COMPRESSED_CHUNK FROM STDIN;
 \set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
