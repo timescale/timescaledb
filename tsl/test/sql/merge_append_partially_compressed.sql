@@ -31,6 +31,13 @@ generate_series(1,3) device;
 VACUUM ANALYZE ht_metrics_compressed;
 
 SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group by 1 order by 2;
+SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
+
+-- test UNION with partially compressed chunks
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK;
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK ORDER BY time DESC;
+:PREFIX SELECT device FROM :CHUNK UNION ALL SELECT device FROM :CHUNK ORDER BY device DESC;
+:PREFIX SELECT value FROM :CHUNK UNION ALL SELECT value FROM :CHUNK ORDER BY value DESC;
 
 -- chunkAppend eligible queries (from tsbench)
 -- sort is not pushed down
