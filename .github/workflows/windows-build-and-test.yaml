@@ -59,14 +59,11 @@ jobs:
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 15
-            pg_version: "15.12"
-#            pg_version: ${{ needs.config.outputs.pg15_latest }}
+            pg_version: ${{ needs.config.outputs.pg15_latest }}
           - pg: 16
-            pg_version: "16.8"
-#            pg_version: ${{ needs.config.outputs.pg16_latest }}
+            pg_version: ${{ needs.config.outputs.pg16_latest }}
           - pg: 17
-            pg_version: "17.4"
-#            pg_version: ${{ needs.config.outputs.pg17_latest }}
+            pg_version: ${{ needs.config.outputs.pg17_latest }}
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -95,6 +92,24 @@ jobs:
         bgw_db_scheduler
         bgw_db_scheduler_fixed
     steps:
+
+    - name: Remove Existing PostgreSQL
+      shell: powershell
+      run: |
+        # Search for any installed application package containing 'PostgreSQL' in the name.
+        $PostgresPackages = Get-Package -Name "*PostgreSQL*" -Provider Programs -ErrorAction SilentlyContinue
+        if ($PostgresPackages) {
+            Write-Host "Found $($PostgresPackages.Count) PostgreSQL package(s) to uninstall."
+            # Use Uninstall-Package with -Force for a silent, non-interactive removal.
+            $PostgresPackages | Uninstall-Package -Force
+            # Manually remove common installation paths and data folders
+            # to ensure no conflicts with the new installation.
+            Remove-Item "C:\Program Files\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item "C:\PostgreSQL" -Recurse -Force -ErrorAction SilentlyContinue
+        } else {
+            Write-Host "No registered PostgreSQL installation found. Skipping uninstall step."
+        }
+
     - name: Setup WSL
       uses: Vampire/setup-wsl@v3.1.4
       with:
@@ -147,33 +162,27 @@ jobs:
       uses: actions/cache@v4
       id: cache-postgresql
       with:
-        path: ~\PostgreSQL\${{ matrix.pg }}
+        path: C:\Progra~1\PostgreSQL\${{ matrix.pg }}
         key: "${{ runner.os }}-build-pg${{ matrix.pkg_version }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
-    # Force install PostgreSQL 17 since the package still on moderation
-    # https://community.chocolatey.org/packages/postgresql17
     - name: Install PostgreSQL ${{ matrix.pg }} (using ${{ matrix.pg_version }})
       if: github.event_name != 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        choco feature disable --name=usePackageExitCodes
-        choco feature disable --name=showDownloadProgress
-        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pg_version }} `
-          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+        $version = ${{ matrix.pg_version }}
+        $version = $version.Replace('"', '') + "-1"
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.pg }} --version $version --force --accept-source-agreements --accept-package-agreements --disable-interactivity
 
     # This is for nightly builds. Here we pick the latest version of the package.
     - name: Install PostgreSQL ${{ matrix.pg }}
       if: github.event_name == 'schedule' && steps.cache-postgresql.outputs.cache-hit != 'true'
       run: |
-        choco feature disable --name=usePackageExitCodes
-        choco feature disable --name=showDownloadProgress
-        choco install postgresql${{ matrix.pg }} `
-          --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.pg }} --force --accept-source-agreements --accept-package-agreements --disable-interactivity
 
     - name: Configure TimescaleDB
       run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-        -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" `
-        -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DASSERTIONS=ON `
+        -DPG_CONFIG=C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_config `
+        -DASSERTIONS=ON `
         -DTEST_PG_LOG_DIRECTORY="log"
     - name: Build TimescaleDB
       run: cmake --build build_win --config ${{ matrix.build_type }}
@@ -182,7 +191,7 @@ jobs:
 
     - name: Setup postgres cluster
       run: |
-        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         mkdir -p ${{ env.TABLESPACE1 }}\_default
         mkdir -p ${{ env.TABLESPACE2 }}\_default
         icacls ${{ env.TABLESPACE1 }} /grant runneradmin:F /T
@@ -190,18 +199,18 @@ jobs:
         copy build_win/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
         icacls . /grant runneradmin:F /T
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
         echo "PG version:"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT version();'
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT version();'
         echo "Log configuration:"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW logging_collector;'
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_filename;'
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_directory;'
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT pg_current_logfile();'
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW logging_collector;'
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_filename;'
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW log_directory;'
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT pg_current_logfile();'
         echo "Data directory:"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SHOW data_directory;'
 
     - name: Install postgres for test runner
       shell: wsl-bash {0}
@@ -226,15 +235,15 @@ jobs:
 
     - name: Setup postgres cluster for TSL tests
       run: |
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl stop
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl stop
         timeout 10
         Remove-Item -Recurse ${{ env.PGDATA }}
-        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/tsl/test/pg_hba.conf ${{ env.PGDATA }}
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postmaster.log"
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postmaster.log"
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
+        C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
     - name: Run TSL tests
       shell: wsl-bash {0}
