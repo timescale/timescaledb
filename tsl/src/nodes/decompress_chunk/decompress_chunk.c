@@ -566,8 +566,20 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
 		appinfo = ts_get_appendrelinfo(root, chunk_rel->relid, false);
-		info->ht_rte = planner_rt_fetch(appinfo->parent_relid, root);
-		info->ht_rel = root->simple_rel_array[appinfo->parent_relid];
+		RangeTblEntry *rte = planner_rt_fetch(appinfo->parent_relid, root);
+		if (rte->rtekind == RTE_RELATION)
+		{
+			info->ht_rte = rte;
+			info->ht_rel = root->simple_rel_array[appinfo->parent_relid];
+		}
+		else
+		{
+			/* In UNION queries referencing chunks directly, the parent rel can be a subquery */
+			Assert(rte->rtekind == RTE_SUBQUERY);
+			info->single_chunk = true;
+			info->ht_rte = info->chunk_rte;
+			info->ht_rel = info->chunk_rel;
+		}
 	}
 	else
 	{
@@ -1027,7 +1039,6 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 		 * estimate.
 		 */
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
-		Assert(chunk_info->parent_reloid == ht->main_table_relid);
 		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
 		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
@@ -1929,6 +1940,7 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		/* given that the em is a var of the uncompressed chunk, the relid of the chunk should
 		 * be set on the em */
 		Assert(bms_is_member(info->ht_rel->relid, cur_em->em_relids));
+		Assert(OidIsValid(info->ht_rte->relid));
 
 		const char *attname = get_attname(info->ht_rte->relid, var->varattno, false);
 

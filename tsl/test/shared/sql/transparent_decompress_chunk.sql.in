@@ -14,13 +14,20 @@ SET enable_incremental_sort TO off;
 
 SELECT show_chunks('metrics_compressed') AS "TEST_TABLE" ORDER BY 1::text LIMIT 1 \gset
 
--- this should use DecompressChunk node
+-- this should use ColumnarScan node
 :PREFIX_VERBOSE
 SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time LIMIT 5;
 
--- must not use DecompressChunk node
+-- must not use ColumnarScan node
 :PREFIX_VERBOSE
 SELECT * FROM ONLY :TEST_TABLE WHERE device_id = 1 ORDER BY time LIMIT 5;
+
+-- this should use ColumnarScan node
+:PREFIX_NO_VERBOSE
+SELECT * FROM :TEST_TABLE UNION ALL SELECT * FROM :TEST_TABLE;
+
+:PREFIX_NO_VERBOSE
+SELECT * FROM :TEST_TABLE UNION ALL SELECT * FROM :TEST_TABLE ORDER BY time;
 
 -- test expressions
 :PREFIX
