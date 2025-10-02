@@ -42,6 +42,75 @@ SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group
  _timescaledb_internal._hyper_1_3_chunk | Wed Jan 15 16:00:00 2020 PST | Fri Jan 17 16:00:00 2020 PST
 (3 rows)
 
+SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
+-- test UNION with partially compressed chunks
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK;
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Append (actual rows=282.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=84.00 loops=1)
+         ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=57.00 loops=1)
+(7 rows)
+
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK ORDER BY time DESC;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Sort (actual rows=282.00 loops=1)
+   Sort Key: _hyper_1_1_chunk."time" DESC
+   Sort Method: quicksort 
+   ->  Append (actual rows=282.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=84.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=57.00 loops=1)
+(10 rows)
+
+:PREFIX SELECT device FROM :CHUNK UNION ALL SELECT device FROM :CHUNK ORDER BY device DESC;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Merge Append (actual rows=282.00 loops=1)
+   Sort Key: _hyper_1_1_chunk.device DESC
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
+               Sort Key: compress_hyper_2_4_chunk.device DESC
+               Sort Method: quicksort 
+               ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+   ->  Sort (actual rows=57.00 loops=1)
+         Sort Key: _hyper_1_1_chunk.device DESC
+         Sort Method: quicksort 
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=84.00 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
+               Sort Key: compress_hyper_2_4_chunk_1.device DESC
+               Sort Method: quicksort 
+               ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3.00 loops=1)
+   ->  Sort (actual rows=57.00 loops=1)
+         Sort Key: _hyper_1_1_chunk_1.device DESC
+         Sort Method: quicksort 
+         ->  Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=57.00 loops=1)
+(20 rows)
+
+:PREFIX SELECT value FROM :CHUNK UNION ALL SELECT value FROM :CHUNK ORDER BY value DESC;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Sort (actual rows=282.00 loops=1)
+   Sort Key: _hyper_1_1_chunk.value DESC
+   Sort Method: quicksort 
+   ->  Append (actual rows=282.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=84.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=57.00 loops=1)
+(10 rows)
+
 -- chunkAppend eligible queries (from tsbench)
 -- sort is not pushed down
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time DESC, device LIMIT 1;
