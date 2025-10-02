@@ -2505,7 +2505,7 @@ ROLLBACK;
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE tab1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE test5586;
+DROP DATABASE test5586 WITH (FORCE);
 --issue: #6024
 CREATE TABLE t(a integer, b integer);
 SELECT create_hypertable('t', 'a', chunk_time_interval=> 10);
@@ -2732,7 +2732,7 @@ ROLLBACK;
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE t6367;
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE test6367;
+DROP DATABASE test6367 WITH (FORCE);
 -- Text limitting decompressed tuple during an UPDATE or DELETE
 CREATE TABLE test_limit (
     timestamp int not null,
