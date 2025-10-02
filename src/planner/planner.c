@@ -1609,17 +1609,14 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 					continue;
 				}
 
-				if (ts_chunk_is_frozen(chunk))
-					ereport(ERROR,
-							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-							 errmsg("cannot modify frozen chunk")));
-
 				ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
 				if (ht->fd.compression_state == HypertableInternalCompressionTable)
 				{
 					/*
 					 * For operations on internal compressed chunks we block modifications
 					 * if the chunk belongs to a frozen chunk.
+					 * Direct modifications of uncompressed chunks is intercepted by chunk
+					 * tuple routing.
 					 * In all other cases of direct modification of chunks we dont interfere
 					 * and do not add a ModifyHypertable node.
 					 */

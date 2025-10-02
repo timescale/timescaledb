@@ -203,3 +203,26 @@ COPY metrics_status FROM STDIN;
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
 ROLLBACK;
 
+SELECT tableoid::regclass AS "CHUNK" FROM metrics_status WHERE time = '2025-01-01' LIMIT 1 \gset
+
+-- repeat tests with direct reference to chunk
+BEGIN;
+-- compressed copy into fully compressed chunk should result in chunk status 3 (compressed,unordered)
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.enable_direct_compress_copy_client_sorted = false;
+COPY :CHUNK FROM STDIN;
+2025-01-01
+\.
+SELECT _timescaledb_functions.chunk_status_text(:'CHUNK'::regclass);
+ROLLBACK;
+
+BEGIN;
+-- compressed copy new chunk should result in chunk status 1 (compressed)
+SET timescaledb.enable_direct_compress_copy = true;
+SET timescaledb.enable_direct_compress_copy_client_sorted = true;
+COPY :CHUNK FROM STDIN;
+2025-01-01
+\.
+SELECT _timescaledb_functions.chunk_status_text(:'CHUNK'::regclass);
+ROLLBACK;
+

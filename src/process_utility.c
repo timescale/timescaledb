@@ -792,10 +792,35 @@ process_copy(ProcessUtilityArgs *args)
 
 		ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
-		if (ht == NULL)
+		if (!ht)
 		{
-			ts_cache_release(&hcache);
-			return DDL_CONTINUE;
+			Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+			/* target is neither hypertable nor chunk so let postgres handle it */
+			if (!chunk)
+			{
+				ts_cache_release(&hcache);
+				return DDL_CONTINUE;
+			}
+
+			ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
+			if (ht->fd.compression_state == HypertableInternalCompressionTable)
+			{
+				/*
+				 * For operations on internal compressed chunks we block modifications
+				 * if the chunk belongs to a frozen chunk otherwise let postgres handle it.
+				 * Uncompressed frozen chunks are intercepted as part of tuple routing.
+				 */
+				Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
+				if (ts_chunk_is_frozen(uncompressed))
+					ereport(ERROR,
+							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							 errmsg("cannot COPY into chunk belonging to a frozen "
+									"chunk")));
+
+				ts_cache_release(&hcache);
+				return DDL_CONTINUE;
+			}
 		}
 	}
 
@@ -803,7 +828,7 @@ process_copy(ProcessUtilityArgs *args)
 	 * hypertable data are in the hypertable chunks and no data would be
 	 * copied, we skip the copy for COPY TO, but print an informative
 	 * message. */
-	if (!stmt->is_from || NULL == stmt->relation)
+	if (!stmt->is_from || !stmt->relation)
 	{
 		if (ht && stmt->relation)
 			ereport(NOTICE,

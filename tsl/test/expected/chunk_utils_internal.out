@@ -1879,6 +1879,7 @@ INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
 BEGIN;
 UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
 DELETE FROM dml_blocks WHERE device = 'dev2';
+COPY dml_blocks FROM STDIN;
 ROLLBACK;
 SELECT show_chunks('dml_blocks') AS "CHUNK" \gset
 -- DML on chunk before freezing should work
@@ -1886,6 +1887,7 @@ BEGIN;
 INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
 UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
 DELETE FROM :CHUNK WHERE device = 'dev2';
+COPY :CHUNK FROM STDIN;
 ROLLBACK;
 SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
  freeze_chunk 
@@ -1901,15 +1903,19 @@ UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
 ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
 DELETE FROM dml_blocks WHERE device = 'dev2';
 ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+COPY dml_blocks FROM STDIN;
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
 \set ON_ERROR_STOP 1
 -- DML on chunk after freezing should be blocked
 \set ON_ERROR_STOP 0
 INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
-ERROR:  cannot modify frozen chunk
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
 UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
-ERROR:  cannot modify frozen chunk
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
 DELETE FROM :CHUNK WHERE device = 'dev2';
-ERROR:  cannot modify frozen chunk
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+COPY :CHUNK FROM STDIN;
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
 \set ON_ERROR_STOP 1
 -- repeat tests with compressed chunk
 SELECT _timescaledb_functions.unfreeze_chunk(:'CHUNK');
@@ -1939,15 +1945,19 @@ UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
 ERROR:  cannot modify frozen chunk status
 DELETE FROM dml_blocks WHERE device = 'dev2';
 ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+COPY dml_blocks FROM STDIN;
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
 \set ON_ERROR_STOP 1
 -- DML on chunk after freezing should be blocked
 \set ON_ERROR_STOP 0
 INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
-ERROR:  cannot modify frozen chunk
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
 UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
-ERROR:  cannot modify frozen chunk
+ERROR:  cannot modify frozen chunk status
 DELETE FROM :CHUNK WHERE device = 'dev2';
-ERROR:  cannot modify frozen chunk
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+COPY :CHUNK FROM STDIN;
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
 \set ON_ERROR_STOP 1
 -- DML on chunk after freezing should be blocked
 \set ON_ERROR_STOP 0
@@ -1957,6 +1967,8 @@ UPDATE :COMPRESSED_CHUNK SET device = 'dev3' WHERE device = 'dev1';
 ERROR:  cannot modify compressed chunk belonging to a frozen chunk
 DELETE FROM :COMPRESSED_CHUNK WHERE device = 'dev1';
 ERROR:  cannot modify compressed chunk belonging to a frozen chunk
+COPY :COMPRESSED_CHUNK FROM STDIN;
+ERROR:  cannot COPY into chunk belonging to a frozen chunk
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- clean up databases created
