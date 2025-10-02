@@ -97,7 +97,6 @@ static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_func
 												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
-static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
 static void mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
 												  Hypertable *ht);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
@@ -359,8 +358,8 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
  * created in LogicalDecodingProcessRecord() trying to allocate too much
  * memory if you have too many other concurrent transactions in progress.
  */
-static void
-cagg_add_logical_decoding_slot_prepare(const char *slot_name)
+void
+ts_cagg_add_logical_decoding_slot_prepare(const char *slot_name)
 {
 	CatalogSecurityContext sec_ctx;
 	LogicalDecodingContext *ctx = NULL;
@@ -411,8 +410,8 @@ cagg_add_logical_decoding_slot_prepare(const char *slot_name)
 	ts_catalog_restore_user(&sec_ctx);
 }
 
-static void
-cagg_add_logical_decoding_slot_finalize(void)
+void
+ts_cagg_add_logical_decoding_slot_finalize(void)
 {
 	TS_DEBUG_LOG("persist invalidation slot");
 	ReplicationSlotPersist();
@@ -425,7 +424,7 @@ cagg_add_logical_decoding_slot_finalize(void)
  * hypertableid - argument to pass to trigger
  * (the hypertable id from timescaledb catalog)
  */
-static void
+void
 cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 {
 	char hypertable_id_str[12];
@@ -720,12 +719,6 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 	}
 }
 
-static const char *invalidate_using_info[] = {
-	[ContinuousAggInvalidateUsingDefault] = "default",
-	[ContinuousAggInvalidateUsingTrigger] = "trigger",
-	[ContinuousAggInvalidateUsingWal] = "wal",
-};
-
 static ContinuousAggInvalidateUsing
 get_invalidate_using(WithClauseResult *with_clause_options)
 {
@@ -734,14 +727,7 @@ get_invalidate_using(WithClauseResult *with_clause_options)
 
 	const char *invalidate_using = text_to_cstring(
 		DatumGetTextP(with_clause_options[CreateMaterializedViewFlagInvalidateUsing].parsed));
-
-	for (size_t i = 0; i < sizeof(invalidate_using_info) / sizeof(*invalidate_using_info); ++i)
-		if (strcmp(invalidate_using_info[i], invalidate_using) == 0)
-			return i;
-	ereport(ERROR,
-			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			errmsg("unrecognized value \"%s\" for invalidate_using", invalidate_using));
-	return -1; /* To keep linter happy */
+	return invalidation_parse_using(invalidate_using);
 }
 
 static void
@@ -905,7 +891,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	if (invalidate_using == ContinuousAggInvalidateUsingWal &&
 		SearchNamedReplicationSlot(slot_name, true) == NULL)
 	{
-		cagg_add_logical_decoding_slot_prepare(slot_name);
+		ts_cagg_add_logical_decoding_slot_prepare(slot_name);
 		slot_prepared = true;
 	}
 
@@ -1045,7 +1031,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	if (invalidate_using == ContinuousAggInvalidateUsingTrigger)
 		cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
 	else if (slot_prepared)
-		cagg_add_logical_decoding_slot_finalize();
+		ts_cagg_add_logical_decoding_slot_finalize();
 }
 
 DDLResult

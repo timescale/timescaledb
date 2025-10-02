@@ -1653,3 +1653,32 @@ cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
 	}
 	return retlist;
 }
+
+/*
+ * Get all hypertables that are using WAL-invalidations.
+ */
+List *
+get_all_wal_using_hypertables(void)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	List *hypertables = NIL;
+
+	/* Collect OID of all tables using continuous aggregates */
+	ts_scanner_foreach(&iterator)
+	{
+		bool isnull;
+		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
+								   Anum_continuous_agg_raw_hypertable_id,
+								   &isnull);
+
+		Assert(!isnull);
+		int32 hypertable_id = DatumGetInt32(datum);
+		Oid relid = ts_hypertable_id_to_relid(hypertable_id, false);
+		if (!has_invalidation_trigger(relid))
+			hypertables = list_append_unique_int(hypertables, hypertable_id);
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return hypertables;
+}

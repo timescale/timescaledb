@@ -1,0 +1,1 @@
+Implements: #8738 Add function to migrate between WAL-based and trigger-based invalidation collection

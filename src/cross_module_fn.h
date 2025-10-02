@@ -106,6 +106,7 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_invalidation_trigger;
 	PGFunction continuous_agg_refresh;
 	PGFunction continuous_agg_process_hypertable_invalidations;
+	PGFunction continuous_agg_set_invalidation_method;
 	void (*continuous_agg_invalidate_raw_ht)(const Hypertable *raw_ht, int64 start, int64 end);
 	void (*continuous_agg_invalidate_mat_ht)(const Hypertable *raw_ht, const Hypertable *mat_ht,
 											 int64 start, int64 end);

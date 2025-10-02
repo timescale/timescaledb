@@ -17,10 +17,7 @@
 
 #define CROSSMODULE_WRAPPER(func)                                                                  \
 	TS_FUNCTION_INFO_V1(ts_##func);                                                                \
-	Datum ts_##func(PG_FUNCTION_ARGS)                                           \
-	{                                                                                              \
-		PG_RETURN_DATUM(ts_cm_functions->func(fcinfo));                                            \
-	}
+	Datum ts_##func(PG_FUNCTION_ARGS) { PG_RETURN_DATUM(ts_cm_functions->func(fcinfo)); }
 
 /* bgw policy functions */
 CROSSMODULE_WRAPPER(policy_compression_add);
@@ -94,6 +91,7 @@ CROSSMODULE_WRAPPER(bloom1_contains);
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_process_hypertable_invalidations);
+CROSSMODULE_WRAPPER(continuous_agg_set_invalidation_method);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function_info);
@@ -364,6 +362,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
+	.continuous_agg_set_invalidation_method = error_no_default_fn_pg_community,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,

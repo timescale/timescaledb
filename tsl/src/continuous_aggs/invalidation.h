@@ -42,7 +42,9 @@ extern void continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 sta
 extern void continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat_ht,
 											 int64 start, int64 end);
 extern Datum continuous_agg_process_hypertable_invalidations(PG_FUNCTION_ARGS);
+extern Datum continuous_agg_set_invalidation_method(PG_FUNCTION_ARGS);
 extern void invalidation_process_hypertable_log(int32 hypertable_id, Oid dimtype);
+extern ContinuousAggInvalidateUsing invalidation_parse_using(const char *using);
 
 extern InvalidationStore *invalidation_process_cagg_log(const ContinuousAgg *cagg,
 														const InternalTimeRange *refresh_window,

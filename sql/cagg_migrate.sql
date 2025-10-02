@@ -674,3 +674,10 @@ $BODY$;
 -- into a CAgg using the regular time_bucket function
 CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_to_time_bucket(cagg REGCLASS)
 AS '@MODULE_PATHNAME@', 'ts_continuous_agg_migrate_to_time_bucket' LANGUAGE C;
+
+-- Migrate all continuous aggregates attached to a hypertable to use
+-- WAL-based invalidation or trigger-based invalidation.
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.set_invalidation_method(
+    method NAME,
+    hypertable REGCLASS
+) AS '@MODULE_PATHNAME@', 'ts_continuous_agg_set_invalidation_method' LANGUAGE C;
