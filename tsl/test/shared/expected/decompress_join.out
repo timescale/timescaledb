@@ -17,15 +17,16 @@ QUERY PLAN
    ->  Hash Join (actual rows=1.00 loops=1)
          Hash Cond: ((m."time" = t."time") AND (m.device_id = t.device_id))
          ->  Append (actual rows=43181.00 loops=1)
-               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_1 (actual rows=17990.00 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_1 (actual rows=16392.00 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk m_1 (actual rows=1598.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_2 (actual rows=25190.00 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30.00 loops=1)
                ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m_3 (actual rows=1.00 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1.00 loops=1)
          ->  Hash (actual rows=10.00 loops=1)
                ->  Seq Scan on compressed_join_temp t (actual rows=10.00 loops=1)
-(13 rows)
+(14 rows)
 
 DROP TABLE compressed_join_temp;
 -- test join with partially compressed chunks

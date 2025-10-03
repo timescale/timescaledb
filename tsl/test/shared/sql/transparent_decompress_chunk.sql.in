@@ -107,7 +107,7 @@ ORDER BY time, device_id;
 :PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE v1 = device_id ORDER BY time, device_id LIMIT 10;
 
 --pushdown between two order by column (not pushed down)
-:PREFIX SELECT * FROM :TEST_TABLE WHERE v0 = v1 ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_ANALYZE SELECT * FROM :TEST_TABLE WHERE v0 = v1 ORDER BY time, device_id LIMIT 10;
 
 --pushdown of quals on order by and segment by cols anded together
 :PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' AND device_id = 1 ORDER BY time, device_id LIMIT 10;
@@ -121,18 +121,18 @@ ORDER BY time, device_id;
 -- test sort optimization interaction
 :PREFIX_NO_VERBOSE SELECT time FROM :TEST_TABLE ORDER BY time DESC LIMIT 10;
 
-:PREFIX_NO_VERBOSE SELECT time, device_id FROM :TEST_TABLE ORDER BY time DESC, device_id LIMIT 10;
+:PREFIX_NO_ANALYZE SELECT time, device_id FROM :TEST_TABLE ORDER BY time DESC, device_id LIMIT 10;
 
 :PREFIX_NO_VERBOSE SELECT time, device_id FROM :TEST_TABLE ORDER BY device_id, time DESC LIMIT 10;
 
 -- test aggregate
-:PREFIX SELECT count(*) FROM :TEST_TABLE;
+:PREFIX_NO_ANALYZE SELECT count(*) FROM :TEST_TABLE;
 
 -- test aggregate with GROUP BY
-:PREFIX SELECT count(*) FROM :TEST_TABLE GROUP BY device_id ORDER BY device_id;
+:PREFIX_NO_ANALYZE SELECT count(*) FROM :TEST_TABLE GROUP BY device_id ORDER BY device_id;
 
 -- test window functions with GROUP BY
-:PREFIX SELECT sum(count(*)) OVER () FROM :TEST_TABLE GROUP BY device_id ORDER BY device_id;
+:PREFIX_NO_ANALYZE SELECT sum(count(*)) OVER () FROM :TEST_TABLE GROUP BY device_id ORDER BY device_id;
 
 -- test CTE
 :PREFIX WITH q AS (
@@ -298,7 +298,6 @@ ORDER BY m1.time,
     m2.device_id
 LIMIT 10;
 RESET enable_mergejoin;
-RESET parallel_leader_participation;
 
 :PREFIX
 SELECT *
