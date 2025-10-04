@@ -134,3 +134,18 @@ SELECT i4489('1'), i4489('1');
 -- should return 0 (zero) in all cases handled by the exception
 SELECT i4489(), i4489();
 SELECT i4489('a'), i4489('a');
+
+-- test DDL inside function
+CREATE OR REPLACE FUNCTION ddl_function() RETURNS VOID LANGUAGE PLPGSQL AS $$
+BEGIN
+  DROP TABLE IF EXISTS func_table;
+  CREATE TABLE func_table(time timestamptz) WITH (tsdb.hypertable, tsdb.partition_column='time');
+END
+$$;
+
+SELECT ddl_function();
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+
+SELECT ddl_function();
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+

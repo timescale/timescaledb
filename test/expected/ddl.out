@@ -604,3 +604,35 @@ SELECT i4489('a'), i4489('a');
      0 |     0
 (1 row)
 
+-- test DDL inside function
+CREATE OR REPLACE FUNCTION ddl_function() RETURNS VOID LANGUAGE PLPGSQL AS $$
+BEGIN
+  DROP TABLE IF EXISTS func_table;
+  CREATE TABLE func_table(time timestamptz) WITH (tsdb.hypertable, tsdb.partition_column='time');
+END
+$$;
+SELECT ddl_function();
+NOTICE:  table "func_table" does not exist, skipping
+ ddl_function 
+--------------
+ 
+(1 row)
+
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+ hypertable_name 
+-----------------
+ func_table
+(1 row)
+
+SELECT ddl_function();
+ ddl_function 
+--------------
+ 
+(1 row)
+
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+ hypertable_name 
+-----------------
+ func_table
+(1 row)
+
