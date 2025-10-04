@@ -5415,9 +5415,13 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	}
 
 	/*
-	 * Process Utility/DDL operation locally then pass it on for
-	 * execution in TSL.
+	 * Since we might alter the parsetree and strip timescaledb options
+	 * before passing it to Postgres, we need to make a copy of the original
+	 * statement in case it is cached.
 	 */
+	args.pstmt = copyObject(pstmt);
+	args.parsetree = args.pstmt->utilityStmt;
+
 	result = process_ddl_command_start(&args);
 
 	if (result == DDL_CONTINUE)
