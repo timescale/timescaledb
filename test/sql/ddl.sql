@@ -153,3 +153,17 @@ INSERT INTO at_test VALUES ('2025-02-01');
 ALTER TABLE ONLY at_test SET (autovacuum_enabled = false);
 ALTER TABLE ONLY at_test RESET (autovacuum_enabled);
 
+-- test DDL inside function
+CREATE OR REPLACE FUNCTION ddl_function() RETURNS VOID LANGUAGE PLPGSQL AS $$
+BEGIN
+  DROP TABLE IF EXISTS func_table;
+  CREATE TABLE func_table(time timestamptz) WITH (tsdb.hypertable);
+END
+$$;
+
+SELECT ddl_function();
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+
+SELECT ddl_function();
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+
