@@ -45,7 +45,7 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 	 */
 	if (!ctr->hypertable)
 	{
-		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(rri->ri_RelationDesc), false);
+		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(rri->ri_RelationDesc), true);
 		ctr->hypertable = ts_hypertable_cache_get_entry(ctr->hypertable_cache,
 														chunk->hypertable_relid,
 														CACHE_FLAG_NONE);
