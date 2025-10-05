@@ -7,3 +7,4 @@
 
 extern void ts_bgw_log_set_application_name(char *name);
 extern void ts_register_emit_log_hook(void);
+extern void ts_unregister_emit_log_hook(void);
