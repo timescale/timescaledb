@@ -167,6 +167,8 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_ReAddStatistics:
 				case AT_SetCompression:
 				case AT_SetAccessMethod:
+				case AT_SetLogged:
+				case AT_SetUnLogged:
 					/* allowed on chunks */
 					break;
 				case AT_AddConstraint:
@@ -297,6 +299,8 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_DropNotNull:
 			case AT_SetNotNull:
 			case AT_SetAccessMethod:
+			case AT_SetLogged:
+			case AT_SetUnLogged:
 				continue;
 				/*
 				 * BLOCKED:
@@ -887,6 +891,34 @@ foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 	foreach (lc, chunks)
 	{
 		process_chunk(ht, lfirst_oid(lc), arg);
+		n++;
+	}
+
+	return n;
+}
+
+/*
+ * Applies a function to each compressed internal chunk of a hypertable.
+ *
+ * Returns the number of processed chunks, or -1 if the table was not a
+ * hypertable.
+ */
+static int
+foreach_compressed_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
+{
+	List *chunks;
+	ListCell *lc;
+	int n = 0;
+
+	if (!ht || !ht->fd.compressed_hypertable_id)
+		return -1;
+
+	chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+
+	foreach (lc, chunks)
+	{
+		Chunk *chunk = lfirst(lc);
+		process_chunk(ht, chunk->table_id, arg);
 		n++;
 	}
 
@@ -4129,8 +4161,8 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 	ts_cache_release(&hcache);
 }
 
-static inline void
-process_altertable_chunk_set_tablespace(AlterTableCmd *cmd, Oid relid)
+static void
+process_altertable_chunk_propagate_to_compressed(AlterTableCmd *cmd, Oid relid)
 {
 	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
@@ -4304,8 +4336,10 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				break;
 			case AT_SetTableSpace:
-				if (NULL == ht)
-					process_altertable_chunk_set_tablespace(cmd, reloid);
+			case AT_SetLogged:
+			case AT_SetUnLogged:
+				if (!ht)
+					process_altertable_chunk_propagate_to_compressed(cmd, reloid);
 				break;
 			default:
 				break;
@@ -4572,12 +4606,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);
 			break;
-		case AT_SetUnLogged:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("logging cannot be turned off for hypertables")));
-			/* Break here to silence compiler */
-			break;
 		case AT_ReplicaIdentity:
 			process_altertable_replica_identity(ht, cmd);
 			break;
@@ -4600,9 +4628,12 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 #endif
 			process_altertable_validate_constraint_end(ht, cmd);
 			break;
-		case AT_DropCluster:
+		case AT_SetLogged:
+		case AT_SetUnLogged:
 			foreach_chunk(ht, process_altertable_chunk, cmd);
+			foreach_compressed_chunk(ht, process_altertable_chunk, cmd);
 			break;
+		case AT_DropCluster:
 		case AT_SetNotNull:
 		case AT_DropNotNull:
 		case AT_SetRelOptions:
@@ -4624,7 +4655,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertables do not support inheritance")));
 		case AT_SetStatistics:
-		case AT_SetLogged:
 		case AT_SetStorage:
 		case AT_ColumnDefault:
 		case AT_CookedColumnDefault:

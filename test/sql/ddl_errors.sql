@@ -60,18 +60,9 @@ SELECT * FROM create_hypertable('"public"."Parent"', 'time', chunk_time_interval
 SELECT * FROM create_hypertable('"public"."Child"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 \set ON_ERROR_STOP 1
 
-CREATE UNLOGGED TABLE PUBLIC."Hypertable_unlogged" (
-  time BIGINT NOT NULL,
-  "Device_id" TEXT NOT NULL,
-  temp_c int NOT NULL DEFAULT -1
-);
-
 \set ON_ERROR_STOP 0
-SELECT * FROM create_hypertable('"public"."Hypertable_unlogged"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
+CREATE TEMPORARY TABLE temp_table (time timestamptz) WITH (tsdb.hypertable);
 \set ON_ERROR_STOP 1
-
-ALTER TABLE PUBLIC."Hypertable_unlogged" SET LOGGED;
-SELECT * FROM create_hypertable('"public"."Hypertable_unlogged"', 'time', chunk_time_interval=>_timescaledb_functions.interval_to_usec('1 month'));
 
 CREATE TEMP TABLE "Hypertable_temp" (
   time BIGINT NOT NULL,

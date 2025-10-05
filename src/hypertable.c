@@ -1259,12 +1259,6 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 	return schema_oid;
 }
 
-static bool
-table_is_logged(Oid table_relid)
-{
-	return get_rel_persistence(table_relid) == RELPERSISTENCE_PERMANENT;
-}
-
 inline static bool
 table_has_rules(Relation rel)
 {
@@ -1923,12 +1917,11 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 				 errdetail(
 					 "It is not possible to turn tables that use inheritance into hypertables.")));
 
-	if (!table_is_logged(table_relid))
+	if (rel->rd_rel->relpersistence == RELPERSISTENCE_TEMP)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("table \"%s\" has to be logged", get_rel_name(table_relid)),
-				 errdetail(
-					 "It is not possible to turn temporary or unlogged tables into hypertables.")));
+				 errmsg("table \"%s\" cannot be temporary", get_rel_name(table_relid)),
+				 errdetail("It is not supported to turn temporary tables into hypertables.")));
 
 	if (table_has_rules(rel))
 		ereport(ERROR,

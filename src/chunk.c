@@ -753,6 +753,9 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 
 	rel = table_open(ht->main_table_relid, AccessShareLock);
 
+	/* Inherit the persistence (LOGGED or UNLOGGED) from the parent hypertable */
+	stmt.relation->relpersistence = rel->rd_rel->relpersistence;
+
 	/*
 	 * If the chunk is created in the internal schema, become the catalog
 	 * owner, otherwise become the hypertable owner

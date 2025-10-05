@@ -135,6 +135,9 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 	compress_rel = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
 
 	create->relation = compress_rel;
+	/* Inherit the persistence (LOGGED or UNLOGGED) from the uncompressed chunk */
+	create->relation->relpersistence = get_rel_persistence(src_chunk->table_id);
+
 	tbladdress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
 	CommandCounterIncrement();
 	chunk->table_id = tbladdress.objectId;
