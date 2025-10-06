@@ -139,6 +139,7 @@ typedef struct TSCopyMultiInsertInfo
 	CommandId mycid;		  /* Command Id used for COPY */
 	int ti_options;			  /* table insert options */
 	Hypertable *ht;			  /* The hypertable for the inserts */
+	bool has_continuous_aggregate;
 } TSCopyMultiInsertInfo;
 
 /*
@@ -354,6 +355,7 @@ TSCopyMultiInsertInfoInit(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 	miinfo->mycid = mycid;
 	miinfo->ti_options = ti_options;
 	miinfo->ht = ht;
+	miinfo->has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(ht->fd.id);
 }
 
 /*
@@ -479,6 +481,19 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 								 slots[i],
 								 NIL,
 								 NULL /* transition capture */);
+		}
+
+		if (miinfo->has_continuous_aggregate && !ts_guc_enable_cagg_wal_based_invalidation)
+		{
+			bool should_free;
+			HeapTuple tuple = ExecFetchSlotHeapTuple(slots[i], false, &should_free);
+			ts_cm_functions->continuous_agg_dml_invalidate(miinfo->ht->fd.id,
+														   resultRelInfo->ri_RelationDesc,
+														   tuple,
+														   NULL,
+														   false);
+			if (should_free)
+				heap_freetuple(tuple);
 		}
 
 		ExecClearTuple(slots[i]);
@@ -813,7 +828,14 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && ts_guc_enable_direct_compress_copy)
 	{
-		if (ts_indexing_relation_has_primary_or_unique_index(ccstate->rel))
+		if (ts_hypertable_has_continuous_aggregates(ccstate->ctr->hypertable->fd.id))
+		{
+			ereport(WARNING,
+					(errmsg(
+						"disabling direct compress because the destination table has continuous "
+						"aggregates")));
+		}
+		else if (ts_indexing_relation_has_primary_or_unique_index(ccstate->rel))
 		{
 			ereport(WARNING,
 					(errmsg("disabling direct compress because the destination table has unique "
@@ -970,7 +992,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 	ExecOpenIndices(resultRelInfo, false);
 
-	ccstate->ctr = ts_chunk_tuple_routing_create(estate, resultRelInfo);
+	ccstate->ctr = ts_chunk_tuple_routing_create(estate, ht, resultRelInfo);
 
 	singleslot = table_slot_create(resultRelInfo->ri_RelationDesc, &estate->es_tupleTable);
 

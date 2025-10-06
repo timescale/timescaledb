@@ -24,13 +24,11 @@
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/pg_namespace.h>
-#include <catalog/pg_trigger.h>
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
-#include <commands/trigger.h>
 #include <commands/view.h>
 #include <executor/spi.h>
 #include <fmgr.h>
@@ -97,7 +95,6 @@ static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_func
 												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
-static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
 static void mattablecolumninfo_add_mattable_index(MaterializationHypertableColumnInfo *matcolinfo,
 												  Hypertable *ht);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
@@ -107,7 +104,6 @@ static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Qu
 						WithClauseResult *with_clause_options);
 
 #define MATPARTCOL_INTERVAL_FACTOR 10
-#define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
 
 static void
 makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
@@ -393,49 +389,6 @@ cagg_add_logical_decoding_slot_finalize(void)
 	TS_DEBUG_LOG("persist invalidation slot");
 	ReplicationSlotPersist();
 	ReplicationSlotRelease();
-}
-
-/*
- * Add continuous agg invalidation trigger to hypertable
- * relid - oid of hypertable
- * hypertableid - argument to pass to trigger
- * (the hypertable id from timescaledb catalog)
- */
-static void
-cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
-{
-	char hypertable_id_str[12];
-	ObjectAddress objaddr;
-	char *relname = get_rel_name(relid);
-	Oid schemaid = get_rel_namespace(relid);
-	char *schema = get_namespace_name(schemaid);
-	Cache *hcache;
-	Hypertable *ht;
-
-	CreateTrigStmt stmt_template = {
-		.type = T_CreateTrigStmt,
-		.row = true,
-		/* Using OR REPLACE option introduced on Postgres 14 */
-		.replace = true,
-		.timing = TRIGGER_TYPE_AFTER,
-		.trigname = CAGGINVAL_TRIGGER_NAME,
-		.relation = makeRangeVar(schema, relname, -1),
-		.funcname =
-			list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(CAGG_INVALIDATION_TRIGGER)),
-		.args = NIL, /* to be filled in later */
-		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
-	};
-
-	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
-	CreateTrigStmt local_stmt = stmt_template;
-	pg_ltoa(hypertable_id, hypertable_id_str);
-	local_stmt.args = list_make1(makeString(hypertable_id_str));
-	objaddr = ts_hypertable_create_trigger(ht, &local_stmt, NULL);
-	if (!OidIsValid(objaddr.objectId))
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not create continuous aggregate trigger")));
-	ts_cache_release(&hcache);
 }
 
 /*
@@ -730,7 +683,6 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  *
  * Notes: ViewStmt->query is the raw parse tree
  * panquery is the output of running parse_anlayze( ViewStmt->query)
- *               so don't recreate invalidation trigger.
 
  * Since 1.7, we support real time aggregation.
  * If real time aggregation is off i.e. materialized only, the mcagg view is as described in Step 2.
@@ -950,11 +902,8 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 										 bucket_info->bf->bucket_time_timezone,
 										 bucket_info->bf->bucket_fixed_interval);
 
-	/* Step 5: Create trigger on raw hypertable, if needed, and finalize slot
-	 * creation if that needs to be done. */
-	if (!slot_prepared)
-		cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
-	else
+	/* Step 5: Finalize slot creation if using wal based invalidation. */
+	if (ts_guc_enable_cagg_wal_based_invalidation && slot_prepared)
 		cagg_add_logical_decoding_slot_finalize();
 }
 

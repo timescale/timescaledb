@@ -203,7 +203,5 @@ CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materia
 
 CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_12 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker();
 
-CREATE TRIGGER ts_cagg_invalidation_trigger AFTER INSERT OR DELETE OR UPDATE ON public.conditions FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger('9');
-
 CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON public.conditions FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker();
 

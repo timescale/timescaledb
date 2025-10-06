@@ -232,7 +232,7 @@ CREATE TABLE devices (
 SELECT create_hypertable('devices', 'time');
   create_hypertable   
 ----------------------
- (9,public,devices,t)
+ (8,public,devices,t)
 
 GRANT SELECT, TRIGGER ON devices TO :ROLE_DEFAULT_PERM_USER_2;
 INSERT INTO devices
@@ -245,14 +245,14 @@ AS SELECT time_bucket('1 day', time) AS bucket, device, MAX(temp)
 FROM devices GROUP BY bucket, device WITH NO DATA;
 \x on
 SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
--[ RECORD 1 ]-----+---------------------------------------
+-[ RECORD 1 ]-----+--------------------------------------
 user_view         | devices_summary
 user_view_perm    | 
-mat_table         | _materialized_hypertable_10
+mat_table         | _materialized_hypertable_9
 mat_table_perm    | 
-direct_view       | _timescaledb_internal._direct_view_10
+direct_view       | _timescaledb_internal._direct_view_9
 direct_view_perm  | 
-partial_view      | _timescaledb_internal._partial_view_10
+partial_view      | _timescaledb_internal._partial_view_9
 partial_view_perm | 
 
 GRANT ALL ON devices_summary TO :ROLE_DEFAULT_PERM_USER;
@@ -260,11 +260,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+------------------------------------------------------------------------------------------------
 user_view         | devices_summary
 user_view_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
-mat_table         | _materialized_hypertable_10
+mat_table         | _materialized_hypertable_9
 mat_table_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
-direct_view       | _timescaledb_internal._direct_view_10
+direct_view       | _timescaledb_internal._direct_view_9
 direct_view_perm  | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
-partial_view      | _timescaledb_internal._partial_view_10
+partial_view      | _timescaledb_internal._partial_view_9
 partial_view_perm | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=arwdDxt/default_perm_user_2}
 
 REVOKE SELECT, UPDATE ON devices_summary FROM :ROLE_DEFAULT_PERM_USER;
@@ -272,11 +272,11 @@ SELECT * FROM cagg_info WHERE user_view::text = 'devices_summary';
 -[ RECORD 1 ]-----+----------------------------------------------------------------------------------------------
 user_view         | devices_summary
 user_view_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
-mat_table         | _materialized_hypertable_10
+mat_table         | _materialized_hypertable_9
 mat_table_perm    | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
-direct_view       | _timescaledb_internal._direct_view_10
+direct_view       | _timescaledb_internal._direct_view_9
 direct_view_perm  | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
-partial_view      | _timescaledb_internal._partial_view_10
+partial_view      | _timescaledb_internal._partial_view_9
 partial_view_perm | {default_perm_user_2=arwdDxt/default_perm_user_2,default_perm_user=adDxt/default_perm_user_2}
 
 \x off
@@ -294,7 +294,7 @@ CREATE TABLE test_default_privileges.devices (
 SELECT create_hypertable('test_default_privileges.devices', 'time');
            create_hypertable            
 ----------------------------------------
- (11,test_default_privileges,devices,t)
+ (10,test_default_privileges,devices,t)
 
 CREATE MATERIALIZED VIEW test_default_privileges.devices_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
