@@ -509,12 +509,7 @@ pushdown_saop_bloom1(QualPushdownContext *context, ScalarArrayOpExpr *orig_saop)
 	}
 
 	List *expr_args = orig_saop->args;
-	if (list_length(expr_args) != 2)
-	{
-		context->can_pushdown = false;
-		return orig_saop;
-	}
-
+	Assert(list_length(expr_args) == 2);
 	Expr *orig_leftop = linitial(expr_args);
 	Expr *orig_rightop = lsecond(expr_args);
 

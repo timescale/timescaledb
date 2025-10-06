@@ -394,15 +394,10 @@ bloom1_update_val(void *builder_, Datum needle)
 }
 
 /*
- * We use a stateful detoaster to detoast the bloom filter arguments for the
- * bloom1_contains() functions. It is initialized on first use and destroyed in
- * the reset callback of the flinfo memory context (ExecutorState in practice).
+ * We cache some information accross function calls in this context.
  */
 typedef struct Bloom1ContainsContext
 {
-	MemoryContextCallback memoryContextCallback;
-	Detoaster detoaster;
-
 	PGFunction hash_function_pointer;
 	FmgrInfo *hash_function_finfo;
 
@@ -415,13 +410,6 @@ typedef struct Bloom1ContainsContext
 	struct varlena *current_row_bloom;
 } Bloom1ContainsContext;
 
-static void
-bloom1_contains_context_reset_callback(void *arg)
-{
-	Bloom1ContainsContext *context = (Bloom1ContainsContext *) arg;
-	detoaster_close(&context->detoaster);
-}
-
 static Bloom1ContainsContext *
 bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 {
@@ -430,19 +418,7 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 	{
 		Ensure(PG_NARGS() == 2, "bloom1_contains called with wrong number of arguments");
 
-		context = MemoryContextAlloc(fcinfo->flinfo->fn_mcxt, sizeof(*context));
-		*context = (Bloom1ContainsContext){
-			.memoryContextCallback =
-				(MemoryContextCallback){
-					.func = bloom1_contains_context_reset_callback,
-					.arg = context,
-				},
-		};
-
-		detoaster_init(&context->detoaster, fcinfo->flinfo->fn_mcxt);
-
-		MemoryContextRegisterResetCallback(fcinfo->flinfo->fn_mcxt,
-										   &context->memoryContextCallback);
+		context = MemoryContextAllocZero(fcinfo->flinfo->fn_mcxt, sizeof(*context));
 
 		context->element_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
 		if (use_element_type)
@@ -482,9 +458,7 @@ bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
 	}
 	else
 	{
-		context->current_row_bloom = detoaster_detoast_attr_copy(PG_GETARG_RAW_VARLENA_P(0),
-																 &context->detoaster,
-																 CurrentMemoryContext);
+		context->current_row_bloom = PG_GETARG_VARLENA_P(0);
 	}
 
 	return context;
