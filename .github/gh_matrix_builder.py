@@ -213,20 +213,6 @@ m["include"].append(
     )
 )
 
-# test building against PG18beta3
-m["include"].append(
-    build_debug_config(
-        {
-            "pg": "18beta3",
-            "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-            "tsdb_build_args": "-DEXPERIMENTAL=ON -DWARNINGS_AS_ERRORS=OFF",
-            "installcheck": False,
-            "pginstallcheck": False,
-            "coverage": False,
-        }
-    )
-)
-
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional
 # entries to the matrix
