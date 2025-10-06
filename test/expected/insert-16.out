@@ -191,7 +191,6 @@ SELECT * FROM ONLY "two_Partitions";
 CREATE TABLE error_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('error_test', 'time', 'device', 2);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (2,public,error_test,t)
@@ -242,7 +241,6 @@ SELECT * FROM tick_character;
 
 CREATE TABLE  date_col_test(time date, temp float8, device text NOT NULL);
 SELECT create_hypertable('date_col_test', 'time', 'device', 1000, chunk_time_interval => INTERVAL '1 Day');
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (4,public,date_col_test,t)
@@ -264,7 +262,6 @@ SELECT * FROM date_col_test WHERE time > '2001-01-01';
 set timescaledb.max_open_chunks_per_insert=1;
 CREATE TABLE chunk_assert_fail(i bigint, j bigint);
 SELECT create_hypertable('chunk_assert_fail', 'i', 'j', 1000, chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "i"
        create_hypertable        
 --------------------------------
  (5,public,chunk_assert_fail,t)
@@ -282,7 +279,6 @@ select * from chunk_assert_fail;
 CREATE TABLE one_space_test(time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('one_space_test', 'time', 'device', 1);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (6,public,one_space_test,t)
@@ -309,118 +305,109 @@ SELECT * FROM insert_cte;
  Mon Jan 01 01:02:01 2001 |    1 | device
 (1 row)
 
-EXPLAIN (analyze, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
+EXPLAIN (analyze, buffers off, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
 WITH insert_cte as (
 	INSERT INTO one_space_test VALUES
 		('2001-01-01 01:03:01', 1.0, 'device')
 	)
 SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
-                               QUERY PLAN                                
--------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+                           QUERY PLAN                           
+----------------------------------------------------------------
+ Result (actual rows=1.00 loops=1)
    CTE insert_cte
-     ->  Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-           ->  Insert on one_space_test (actual rows=0 loops=1)
-                 ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-                       ->  Result (actual rows=1 loops=1)
-(8 rows)
-
--- INSERTs can exclude chunks based on constraints
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
- Custom Scan (ModifyHypertable)
-   ->  Insert on chunk_assert_fail
-         ->  Custom Scan (ChunkDispatch)
-               ->  Append
-                     ->  Index Only Scan using _hyper_5_11_chunk_chunk_assert_fail_j_i_idx on _hyper_5_11_chunk
-                     ->  Index Only Scan using _hyper_5_12_chunk_chunk_assert_fail_j_i_idx on _hyper_5_12_chunk
-                     ->  Index Only Scan using _hyper_5_13_chunk_chunk_assert_fail_j_i_idx on _hyper_5_13_chunk
+     ->  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+           ->  Insert on one_space_test (actual rows=0.00 loops=1)
+                 ->  Result (actual rows=1.00 loops=1)
 (7 rows)
 
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
-                 QUERY PLAN                 
---------------------------------------------
+-- INSERTs can exclude chunks based on constraints
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on chunk_assert_fail
-         ->  Custom Scan (ChunkDispatch)
-               ->  Result
-                     One-Time Filter: false
-(5 rows)
+         ->  Append
+               ->  Index Only Scan using _hyper_5_11_chunk_chunk_assert_fail_j_i_idx on _hyper_5_11_chunk
+               ->  Index Only Scan using _hyper_5_12_chunk_chunk_assert_fail_j_i_idx on _hyper_5_12_chunk
+               ->  Index Only Scan using _hyper_5_13_chunk_chunk_assert_fail_j_i_idx on _hyper_5_13_chunk
+(6 rows)
 
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
-                                               QUERY PLAN                                                
----------------------------------------------------------------------------------------------------------
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
+              QUERY PLAN              
+--------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on chunk_assert_fail
-         ->  Custom Scan (ChunkDispatch)
-               ->  Append
-                     ->  Index Scan using _hyper_5_11_chunk_chunk_assert_fail_i_idx on _hyper_5_11_chunk
-                           Index Cond: (i = 1)
-                     ->  Index Scan using _hyper_5_12_chunk_chunk_assert_fail_i_idx on _hyper_5_12_chunk
-                           Index Cond: (i = 1)
-(8 rows)
+         ->  Result
+               One-Time Filter: false
+(4 rows)
 
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
                                             QUERY PLAN                                             
 ---------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on chunk_assert_fail
-         ->  Custom Scan (ChunkDispatch)
-               ->  Index Scan using _hyper_5_13_chunk_chunk_assert_fail_i_idx on _hyper_5_13_chunk
-                     Index Cond: (i > 1)
-(5 rows)
+         ->  Append
+               ->  Index Scan using _hyper_5_11_chunk_chunk_assert_fail_i_idx on _hyper_5_11_chunk
+                     Index Cond: (i = 1)
+               ->  Index Scan using _hyper_5_12_chunk_chunk_assert_fail_i_idx on _hyper_5_12_chunk
+                     Index Cond: (i = 1)
+(7 rows)
+
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
+                                         QUERY PLAN                                          
+---------------------------------------------------------------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Insert on chunk_assert_fail
+         ->  Index Scan using _hyper_5_13_chunk_chunk_assert_fail_i_idx on _hyper_5_13_chunk
+               Index Cond: (i > 1)
+(4 rows)
 
 INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on one_space_test
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Append
-                           ->  Index Scan using _hyper_6_14_chunk_one_space_test_time_idx on _hyper_6_14_chunk
-                                 Index Cond: ("time" < 'infinity'::timestamp without time zone)
-                           ->  Index Scan using _hyper_6_15_chunk_one_space_test_time_idx on _hyper_6_15_chunk
-                                 Index Cond: ("time" < 'infinity'::timestamp without time zone)
-(9 rows)
+         ->  Limit
+               ->  Append
+                     ->  Index Scan using _hyper_6_14_chunk_one_space_test_time_idx on _hyper_6_14_chunk
+                           Index Cond: ("time" < 'infinity'::timestamp without time zone)
+                     ->  Index Scan using _hyper_6_15_chunk_one_space_test_time_idx on _hyper_6_15_chunk
+                           Index Cond: ("time" < 'infinity'::timestamp without time zone)
+(8 rows)
 
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
-                    QUERY PLAN                    
---------------------------------------------------
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
+                 QUERY PLAN                 
+--------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on one_space_test
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Result
-                           One-Time Filter: false
-(6 rows)
+         ->  Limit
+               ->  Result
+                     One-Time Filter: false
+(5 rows)
 
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
-                    QUERY PLAN                    
---------------------------------------------------
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
+                 QUERY PLAN                 
+--------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on one_space_test
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Result
-                           One-Time Filter: false
-(6 rows)
+         ->  Limit
+               ->  Result
+                     One-Time Filter: false
+(5 rows)
 
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on one_space_test
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Append
-                           ->  Index Scan using _hyper_6_14_chunk_one_space_test_time_idx on _hyper_6_14_chunk
-                                 Index Cond: ("time" > '-infinity'::timestamp without time zone)
-                           ->  Index Scan using _hyper_6_15_chunk_one_space_test_time_idx on _hyper_6_15_chunk
-                                 Index Cond: ("time" > '-infinity'::timestamp without time zone)
-(9 rows)
+         ->  Limit
+               ->  Append
+                     ->  Index Scan using _hyper_6_14_chunk_one_space_test_time_idx on _hyper_6_14_chunk
+                           Index Cond: ("time" > '-infinity'::timestamp without time zone)
+                     ->  Index Scan using _hyper_6_15_chunk_one_space_test_time_idx on _hyper_6_15_chunk
+                           Index Cond: ("time" > '-infinity'::timestamp without time zone)
+(8 rows)
 
 INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
 INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
@@ -429,129 +416,119 @@ INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity'
 CREATE TABLE timestamp_inf(time TIMESTAMP);
 SELECT create_hypertable('timestamp_inf', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (7,public,timestamp_inf,t)
 (1 row)
 
 INSERT INTO timestamp_inf VALUES ('2018/01/02'), ('2019/01/02');
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time < 'infinity' LIMIT 1;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on timestamp_inf
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Append
-                           ->  Index Only Scan using _hyper_7_16_chunk_timestamp_inf_time_idx on _hyper_7_16_chunk
-                                 Index Cond: ("time" < 'infinity'::timestamp without time zone)
-                           ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
-                                 Index Cond: ("time" < 'infinity'::timestamp without time zone)
-(9 rows)
+         ->  Limit
+               ->  Append
+                     ->  Index Only Scan using _hyper_7_16_chunk_timestamp_inf_time_idx on _hyper_7_16_chunk
+                           Index Cond: ("time" < 'infinity'::timestamp without time zone)
+                     ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
+                           Index Cond: ("time" < 'infinity'::timestamp without time zone)
+(8 rows)
 
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time >= 'infinity' LIMIT 1;
-                    QUERY PLAN                    
---------------------------------------------------
+                 QUERY PLAN                 
+--------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on timestamp_inf
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Result
-                           One-Time Filter: false
-(6 rows)
+         ->  Limit
+               ->  Result
+                     One-Time Filter: false
+(5 rows)
 
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time <= '-infinity' LIMIT 1;
-                    QUERY PLAN                    
---------------------------------------------------
+                 QUERY PLAN                 
+--------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on timestamp_inf
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Result
-                           One-Time Filter: false
-(6 rows)
+         ->  Limit
+               ->  Result
+                     One-Time Filter: false
+(5 rows)
 
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time > '-infinity' LIMIT 1;
-                                                    QUERY PLAN                                                     
--------------------------------------------------------------------------------------------------------------------
+                                                 QUERY PLAN                                                  
+-------------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on timestamp_inf
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Append
-                           ->  Index Only Scan using _hyper_7_16_chunk_timestamp_inf_time_idx on _hyper_7_16_chunk
-                                 Index Cond: ("time" > '-infinity'::timestamp without time zone)
-                           ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
-                                 Index Cond: ("time" > '-infinity'::timestamp without time zone)
-(9 rows)
+         ->  Limit
+               ->  Append
+                     ->  Index Only Scan using _hyper_7_16_chunk_timestamp_inf_time_idx on _hyper_7_16_chunk
+                           Index Cond: ("time" > '-infinity'::timestamp without time zone)
+                     ->  Index Only Scan using _hyper_7_17_chunk_timestamp_inf_time_idx on _hyper_7_17_chunk
+                           Index Cond: ("time" > '-infinity'::timestamp without time zone)
+(8 rows)
 
 CREATE TABLE date_inf(time DATE);
 SELECT create_hypertable('date_inf', 'time');
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (8,public,date_inf,t)
 (1 row)
 
 INSERT INTO date_inf VALUES ('2018/01/02'), ('2019/01/02');
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time < 'infinity' LIMIT 1;
-                                                  QUERY PLAN                                                  
---------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on date_inf
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Append
-                           ->  Index Only Scan using _hyper_8_18_chunk_date_inf_time_idx on _hyper_8_18_chunk
-                                 Index Cond: ("time" < 'infinity'::date)
-                           ->  Index Only Scan using _hyper_8_19_chunk_date_inf_time_idx on _hyper_8_19_chunk
-                                 Index Cond: ("time" < 'infinity'::date)
-(9 rows)
+         ->  Limit
+               ->  Append
+                     ->  Index Only Scan using _hyper_8_18_chunk_date_inf_time_idx on _hyper_8_18_chunk
+                           Index Cond: ("time" < 'infinity'::date)
+                     ->  Index Only Scan using _hyper_8_19_chunk_date_inf_time_idx on _hyper_8_19_chunk
+                           Index Cond: ("time" < 'infinity'::date)
+(8 rows)
 
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time >= 'infinity' LIMIT 1;
-                    QUERY PLAN                    
---------------------------------------------------
+                 QUERY PLAN                 
+--------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on date_inf
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Result
-                           One-Time Filter: false
-(6 rows)
+         ->  Limit
+               ->  Result
+                     One-Time Filter: false
+(5 rows)
 
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time <= '-infinity' LIMIT 1;
-                    QUERY PLAN                    
---------------------------------------------------
+                 QUERY PLAN                 
+--------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on date_inf
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Result
-                           One-Time Filter: false
-(6 rows)
+         ->  Limit
+               ->  Result
+                     One-Time Filter: false
+(5 rows)
 
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time > '-infinity' LIMIT 1;
-                                                  QUERY PLAN                                                  
---------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on date_inf
-         ->  Custom Scan (ChunkDispatch)
-               ->  Limit
-                     ->  Append
-                           ->  Index Only Scan using _hyper_8_18_chunk_date_inf_time_idx on _hyper_8_18_chunk
-                                 Index Cond: ("time" > '-infinity'::date)
-                           ->  Index Only Scan using _hyper_8_19_chunk_date_inf_time_idx on _hyper_8_19_chunk
-                                 Index Cond: ("time" > '-infinity'::date)
-(9 rows)
+         ->  Limit
+               ->  Append
+                     ->  Index Only Scan using _hyper_8_18_chunk_date_inf_time_idx on _hyper_8_18_chunk
+                           Index Cond: ("time" > '-infinity'::date)
+                     ->  Index Only Scan using _hyper_8_19_chunk_date_inf_time_idx on _hyper_8_19_chunk
+                           Index Cond: ("time" > '-infinity'::date)
+(8 rows)
 
 -- test INSERT with cached plans / plpgsql functions
 -- https://github.com/timescale/timescaledb/issues/1809
@@ -608,7 +585,7 @@ SELECT create_hypertable(
  (11,public,readings,t)
 (1 row)
 
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 INSERT INTO readings
 SELECT '2020-05-09 10:34:35.296288+00', 1, 0
 WHERE NOT EXISTS (
@@ -617,17 +594,16 @@ WHERE NOT EXISTS (
 	WHERE sensor_id = 1
 		AND toe = '2020-05-09 10:34:35.296288+00'
 );
-                  QUERY PLAN                   
------------------------------------------------
+               QUERY PLAN                
+-----------------------------------------
  Custom Scan (ModifyHypertable)
    InitPlan 1 (returns $0)
      ->  Result
            One-Time Filter: false
    ->  Insert on readings
-         ->  Custom Scan (ChunkDispatch)
-               ->  Result
-                     One-Time Filter: (NOT $0)
-(8 rows)
+         ->  Result
+               One-Time Filter: (NOT $0)
+(7 rows)
 
 INSERT INTO readings
 SELECT '2020-05-09 10:34:35.296288+00', 1, 0
@@ -674,3 +650,83 @@ SELECT create_hypertable('i3037','time');
 ALTER TABLE i3037 ADD COLUMN value float DEFAULT 0;
 INSERT INTO i3037 VALUES ('2000-01-01');
 INSERT INTO i3037 VALUES ('2000-01-01') ON CONFLICT(time) DO UPDATE SET value = EXCLUDED.value;
+-- test inserting into chunks directly
+CREATE TABLE direct_insert(time timestamptz, meta text) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO direct_insert VALUES ('2020-01-01');
+SELECT show_chunks('direct_insert') AS "CHUNK" \gset
+--should have ModifyHyperable node
+EXPLAIN (costs off, timing off, summary off) INSERT INTO :CHUNK VALUES ('2020-01-01');
+             QUERY PLAN              
+-------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Insert on _hyper_14_231_chunk
+         ->  Result
+(3 rows)
+
+-- correct time range should succeed
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+             time             | meta 
+------------------------------+------
+ Wed Jan 01 00:00:00 2020 PST | 
+(1 row)
+
+-- incorrect time range should fail
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2020-01-01'), ('2021-01-01') RETURNING *;
+ERROR:  new row for relation "_hyper_14_231_chunk" violates chunk constraint
+INSERT INTO :CHUNK VALUES ('2025-01-01') RETURNING *;
+ERROR:  new row for relation "_hyper_14_231_chunk" violates chunk constraint
+\set ON_ERROR_STOP 1
+-- test that triggers on chunks work
+CREATE FUNCTION test_trigger() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'trigger called';
+  NEW.meta = 'triggered';
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER test_trigger BEFORE INSERT ON direct_insert FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+NOTICE:  trigger called
+             time             |   meta    
+------------------------------+-----------
+ Wed Jan 01 00:00:00 2020 PST | triggered
+(1 row)
+
+-- test upsert
+DELETE FROM direct_insert;
+ALTER TABLE direct_insert ADD CONSTRAINT direct_insert_pkey PRIMARY KEY (time);
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+NOTICE:  trigger called
+             time             |   meta    
+------------------------------+-----------
+ Wed Jan 01 00:00:00 2020 PST | triggered
+(1 row)
+
+-- DO NOTHING should succeed
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT DO NOTHING RETURNING *;
+NOTICE:  trigger called
+ time | meta 
+------+------
+(0 rows)
+
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET meta = 'update' RETURNING *;
+NOTICE:  trigger called
+             time             |  meta  
+------------------------------+--------
+ Wed Jan 01 00:00:00 2020 PST | update
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- conflict should fail
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+NOTICE:  trigger called
+ERROR:  duplicate key value violates unique constraint "231_205_direct_insert_pkey"
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = '2000-01-01' RETURNING *;
+NOTICE:  trigger called
+ERROR:  new row for relation "_hyper_14_231_chunk" violates check constraint "constraint_237"
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = EXCLUDED.time + '1 year' RETURNING *;
+NOTICE:  trigger called
+ERROR:  new row for relation "_hyper_14_231_chunk" violates check constraint "constraint_237"
+\set ON_ERROR_STOP 1

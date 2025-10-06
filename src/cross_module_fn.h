@@ -80,7 +80,6 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_dml)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *, Hypertable *);
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
-	bool (*process_explain_def)(DefElem *def);
 
 	/* gapfill */
 	PGFunction gapfill_marker;
@@ -105,9 +104,6 @@ typedef struct CrossModuleFunctions
 	DDLResult (*process_cagg_viewstmt)(Node *stmt, const char *query_string, void *pstmt,
 									   WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_invalidation_trigger;
-	void (*continuous_agg_call_invalidation_trigger)(int32 hypertable_id, Relation chunk_rel,
-													 HeapTuple chunk_tuple,
-													 HeapTuple chunk_newtuple, bool update);
 	PGFunction continuous_agg_refresh;
 	PGFunction continuous_agg_process_hypertable_invalidations;
 	void (*continuous_agg_invalidate_raw_ht)(const Hypertable *raw_ht, int64 start, int64 end);
@@ -138,7 +134,7 @@ typedef struct CrossModuleFunctions
 	void (*init_decompress_state_for_insert)(ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(ModifyHypertableState *ht_state);
 
-	void (*compression_enable)(Hypertable *ht, WithClauseResult *with_clause_options);
+	void (*columnstore_setup)(Hypertable *ht, WithClauseResult *with_clause_options);
 	RowCompressor *(*compressor_init)(Relation in_rel, BulkWriter **bulk_writer, bool sort);
 	void (*compressor_add_slot)(RowCompressor *compressor, BulkWriter *bulk_writer,
 								TupleTableSlot *slot);

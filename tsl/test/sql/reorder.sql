@@ -109,7 +109,7 @@ SET LOCAL enable_seqscan=false;
 SET LOCAL enable_indexscan=true;
 SET LOCAL enable_bitmapscan=false;
 
-EXPLAIN (costs off) SELECT * FROM cluster_test WHERE location < 6;
+EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE location < 6;
 
 SELECT time, temp, location, substring(value for 30), length(value)
     FROM cluster_test

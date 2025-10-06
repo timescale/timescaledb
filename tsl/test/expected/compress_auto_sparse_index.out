@@ -3,7 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 create table sparse(ts int, value float);
 select create_hypertable('sparse', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable  
 ---------------------
  (1,public,sparse,t)
@@ -21,7 +20,7 @@ select count(compress_chunk(x)) from show_chunks('sparse') x;
 (1 row)
 
 vacuum analyze sparse;
-explain (costs off) select * from sparse where value = 1;
+explain (buffers off, costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
@@ -39,7 +38,7 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
 (1 row)
 
 vacuum analyze sparse;
-explain (costs off) select * from sparse where value = 1;
+explain (buffers off, costs off) select * from sparse where value = 1;
                       QUERY PLAN                      
 ------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
@@ -55,7 +54,7 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
 (1 row)
 
 vacuum analyze sparse;
-explain (costs off) select * from sparse where value = 1;
+explain (buffers off, costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
@@ -66,7 +65,7 @@ explain (costs off) select * from sparse where value = 1;
 
 -- Should survive renames.
 alter table sparse rename column value to wert;
-explain (costs off) select * from sparse where wert = 1;
+explain (buffers off, costs off) select * from sparse where wert = 1;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
@@ -76,7 +75,7 @@ explain (costs off) select * from sparse where wert = 1;
 (4 rows)
 
 alter table sparse rename column wert to value;
-explain (costs off) select * from sparse where value = 1;
+explain (buffers off, costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
@@ -95,7 +94,7 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
 (1 row)
 
 vacuum analyze sparse;
-explain (costs off) select * from sparse where value = 1;
+explain (buffers off, costs off) select * from sparse where value = 1;
                       QUERY PLAN                      
 ------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
@@ -113,7 +112,7 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
 (1 row)
 
 vacuum analyze sparse;
-explain (costs off) select * from sparse where value = 1;
+explain (buffers off, costs off) select * from sparse where value = 1;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
@@ -131,7 +130,7 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
 (1 row)
 
 vacuum analyze sparse;
-explain (costs off) select * from sparse where value = 1;
+explain (buffers off, costs off) select * from sparse where value = 1;
                       QUERY PLAN                      
 ------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
@@ -154,7 +153,7 @@ select count(compress_chunk(x)) from show_chunks('sparse') x;
 (1 row)
 
 vacuum analyze sparse;
-explain (costs off) select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
+explain (buffers off, costs off) select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk

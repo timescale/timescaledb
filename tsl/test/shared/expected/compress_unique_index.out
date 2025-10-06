@@ -24,23 +24,21 @@ INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-01');
 ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_uniq_expr"
 \set ON_ERROR_STOP 1
 -- should only decompress 1 batch
-EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-02');
+EXPLAIN (analyze,buffers off, costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-02');
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches filtered: 1
-   ->  Insert on compress_unique (actual rows=0 loops=1)
-         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-               ->  Result (actual rows=1 loops=1)
-(5 rows)
+   ->  Insert on compress_unique (actual rows=0.00 loops=1)
+         ->  Result (actual rows=1.00 loops=1)
+(4 rows)
 
 -- should decompress no batches
-EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c3','2000-01-02');
+EXPLAIN (analyze,buffers off, costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c3','2000-01-02');
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Insert on compress_unique (actual rows=0 loops=1)
-         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
-               ->  Result (actual rows=1 loops=1)
-(4 rows)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Insert on compress_unique (actual rows=0.00 loops=1)
+         ->  Result (actual rows=1.00 loops=1)
+(3 rows)
 
 SELECT * FROM compress_unique ORDER BY compress_unique;
        offset_timestamp       | meter_id | meter_channel_id |          timestamp           

@@ -30,23 +30,21 @@ SELECT * FROM upsert_test;
 (1 row)
 
 -- Test 'Tuples Inserted' and 'Conflicting Tuples' values in EXPLAIN ANALYZE
-EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+EXPLAIN (VERBOSE, ANALYZE, BUFFERS FALSE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
   INSERT INTO upsert_test VALUES
     ('2017-01-20T09:00:01', 28.5, 'blue'),
     ('2017-01-20T09:00:01', 21.9, 'red'),
     ('2017-01-20T10:00:01', 2.4, 'pink') ON CONFLICT DO NOTHING;
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Insert on public.upsert_test (actual rows=0 loops=1)
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Insert on public.upsert_test (actual rows=0.00 loops=1)
          Conflict Resolution: NOTHING
          Tuples Inserted: 1
          Conflicting Tuples: 2
-         ->  Custom Scan (ChunkDispatch) (actual rows=3 loops=1)
+         ->  Values Scan on "*VALUES*" (actual rows=3.00 loops=1)
                Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
-               ->  Values Scan on "*VALUES*" (actual rows=3 loops=1)
-                     Output: "*VALUES*".column1, "*VALUES*".column2, "*VALUES*".column3
-(9 rows)
+(7 rows)
 
 -- Test ON CONFLICT ON CONSTRAINT
 INSERT INTO upsert_test VALUES ('2017-01-20T09:00:01', 12.3, 'yellow') ON CONFLICT ON CONSTRAINT upsert_test_pkey
@@ -71,7 +69,6 @@ ERROR:  duplicate key value violates unique constraint "1_1_upsert_test_pkey"
 CREATE TABLE upsert_test_unique(time timestamp, temp float, color text);
 SELECT create_hypertable('upsert_test_unique', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (2,public,upsert_test_unique,t)
@@ -106,7 +103,6 @@ SELECT * FROM upsert_test_unique ORDER BY time, color DESC;
 CREATE TABLE upsert_test_multi_unique(time timestamp, temp float, color text);
 SELECT create_hypertable('upsert_test_multi_unique', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
  (3,public,upsert_test_multi_unique,t)
@@ -165,7 +161,6 @@ ALTER TABLE upsert_test_space DROP device_id_1, ADD device_id char(20);
 ALTER TABLE upsert_test_space ADD CONSTRAINT time_space_constraint UNIQUE (time, device_id);
 SELECT create_hypertable('upsert_test_space', 'time', 'device_id', 2, partitioning_func=>'_timescaledb_functions.get_partition_for_key'::regproc);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable        
 --------------------------------
  (4,public,upsert_test_space,t)
@@ -364,7 +359,6 @@ ERROR:  could not find arbiter index for hypertable index "multi_time_color_idx"
 CREATE TABLE upsert_test_diffchunk(time timestamp, device_id char(20), to_drop int, temp float, color text);
 SELECT create_hypertable('upsert_test_diffchunk', 'time', chunk_time_interval=> interval '1 month');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable          
 ------------------------------------
  (5,public,upsert_test_diffchunk,t)
@@ -422,7 +416,6 @@ select * from upsert_test_diffchunk order by time, device_id;
 CREATE TABLE upsert_test_arbiter(time timestamp, to_drop int);
 SELECT create_hypertable('upsert_test_arbiter', 'time', chunk_time_interval=> interval '1 month');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (6,public,upsert_test_arbiter,t)

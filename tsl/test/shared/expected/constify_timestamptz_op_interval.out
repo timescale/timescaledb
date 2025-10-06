@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set PREFIX 'EXPLAIN (costs off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off)'
 -- we disable ChunkAppend and ConstraintAwareAppend here to make the exclusion easier to spot
 -- otherwise those would remove the chunks from the plan during execution
 SET timescaledb.enable_chunk_append TO FALSE;
@@ -121,11 +121,14 @@ SELECT time
 FROM metrics_compressed
 WHERE time < '2000-01-01'::timestamptz - '6h'::interval;
 QUERY PLAN
- Custom Scan (ColumnarScan) on _hyper_X_X_chunk
-   Vectorized Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
-   ->  Seq Scan on compress_hyper_X_X_chunk
-         Filter: (_ts_meta_min_1 < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
-(4 rows)
+ Append
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
+         Vectorized Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
+         ->  Seq Scan on compress_hyper_X_X_chunk
+               Filter: (_ts_meta_min_1 < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
+(7 rows)
 
 -- test on space-partitioned compressed hypertable
 :PREFIX

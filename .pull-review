@@ -54,6 +54,7 @@ reviewers:
 # list of users who will never be notified
 review_blacklist:
   - timescale-automation
+  - philkra
 
 # ignore changes to the test output files.
 # 1. because they usually will have equivalent .sql files

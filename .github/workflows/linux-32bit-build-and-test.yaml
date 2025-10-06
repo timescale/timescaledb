@@ -60,11 +60,13 @@ jobs:
           compress_bloom_sparse_debug
           compress_qualpushdown_saop
           compression_allocation
+          merge_append_partially_compressed
           net
           pg_dump
           telemetry
           transparent_decompress_chunk-*
           transparent_decompression-*
+          vector_agg_filter
           vector_agg_groupagg
           vector_agg_grouping
           vector_agg_text

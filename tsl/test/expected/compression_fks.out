@@ -5,7 +5,6 @@
 CREATE TABLE keys(time timestamptz unique);
 CREATE TABLE ht_with_fk(time timestamptz);
 SELECT create_hypertable('ht_with_fk','time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,ht_with_fk,t)

@@ -65,7 +65,7 @@ select s, sum(t), count(*) from svagg where f > 10         group by s order by s
 select s, sum(t), count(*) from svagg group by s order by s;
 
 -- another example that we used not to vectorize because of the projection.
-explain (costs off)
+explain (buffers off, costs off)
 select sum(t), s, count(*) from svagg group by s order by s;
 
 select sum(t) from svagg group by s order by 1;

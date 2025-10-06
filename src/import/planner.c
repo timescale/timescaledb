@@ -34,6 +34,7 @@
 #include <utils/datum.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
+#include <utils/syscache.h>
 
 #include "compat/compat.h"
 #include "planner.h"
@@ -42,17 +43,24 @@ static Node *replace_nestloop_params(PlannerInfo *root, Node *expr);
 static Node *replace_nestloop_params_mutator(Node *node, PlannerInfo *root);
 static Plan *inject_projection_plan(Plan *subplan, List *tlist, bool parallel_safe);
 
-/* copied verbatim from prepunion.c */
+/* copied verbatim from optimizer/util/appendinfo.c at REL_17_6 */
 void
 ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index newvarno,
-							 List **translated_vars)
+							 AppendRelInfo *appinfo)
 {
 	List *vars = NIL;
+	AttrNumber *pcolnos;
 	TupleDesc old_tupdesc = RelationGetDescr(oldrelation);
 	TupleDesc new_tupdesc = RelationGetDescr(newrelation);
+	Oid new_relid = RelationGetRelid(newrelation);
 	int oldnatts = old_tupdesc->natts;
 	int newnatts = new_tupdesc->natts;
 	int old_attno;
+	int new_attno = 0;
+
+	/* Initialize reverse-translation array with all entries zero */
+	appinfo->num_child_cols = newnatts;
+	appinfo->parent_colnos = pcolnos = (AttrNumber *) palloc0(newnatts * sizeof(AttrNumber));
 
 	for (old_attno = 0; old_attno < oldnatts; old_attno++)
 	{
@@ -61,7 +69,6 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 		Oid atttypid;
 		int32 atttypmod;
 		Oid attcollation;
-		int new_attno = InvalidAttrNumber;
 
 		att = TupleDescAttr(old_tupdesc, old_attno);
 		if (att->attisdropped)
@@ -88,6 +95,7 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 								   atttypmod,
 								   attcollation,
 								   0));
+			pcolnos[old_attno] = old_attno + 1;
 			continue;
 		}
 
@@ -95,31 +103,27 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 		 * Otherwise we have to search for the matching column by name.
 		 * There's no guarantee it'll have the same column position, because
 		 * of cases like ALTER TABLE ADD COLUMN and multiple inheritance.
-		 * However, in simple cases it will be the same column number, so try
-		 * that before we go groveling through all the columns.
+		 * However, in simple cases, the relative order of columns is mostly
+		 * the same in both relations, so try the column of newrelation that
+		 * follows immediately after the one that we just found, and if that
+		 * fails, let syscache handle it.
 		 */
-		if (old_attno < newnatts)
+		if (new_attno >= newnatts || (att = TupleDescAttr(new_tupdesc, new_attno))->attisdropped ||
+			strcmp(attname, NameStr(att->attname)) != 0)
 		{
-			att = TupleDescAttr(new_tupdesc, old_attno);
-			if (!att->attisdropped && strcmp(attname, NameStr(att->attname)) == 0)
-			{
-				new_attno = old_attno;
-			}
-		}
+			HeapTuple newtup;
 
-		if (new_attno == InvalidAttrNumber)
-		{
-			for (new_attno = 0; new_attno < newnatts; new_attno++)
-			{
-				att = TupleDescAttr(new_tupdesc, new_attno);
-				if (!att->attisdropped && strcmp(attname, NameStr(att->attname)) == 0)
-					break;
-			}
-			if (new_attno >= newnatts)
+			newtup = SearchSysCacheAttName(new_relid, attname);
+			if (!HeapTupleIsValid(newtup))
 				elog(ERROR,
 					 "could not find inherited attribute \"%s\" of relation \"%s\"",
 					 attname,
 					 RelationGetRelationName(newrelation));
+			new_attno = ((Form_pg_attribute) GETSTRUCT(newtup))->attnum - 1;
+			Assert(new_attno >= 0 && new_attno < newnatts);
+			ReleaseSysCache(newtup);
+
+			att = TupleDescAttr(new_tupdesc, new_attno);
 		}
 
 		/* Found it, check type and collation match */
@@ -141,9 +145,11 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 							   atttypmod,
 							   attcollation,
 							   0));
+		pcolnos[new_attno] = old_attno + 1;
+		new_attno++;
 	}
 
-	*translated_vars = vars;
+	appinfo->translated_vars = vars;
 }
 
 /* copied verbatim from planner.c */
@@ -816,3 +822,35 @@ inject_projection_plan(Plan *subplan, List *tlist, bool parallel_safe)
 
 	return plan;
 }
+
+/* In PG18, child ems are not added to ec_members
+ * but need to be maintained in separate Lists.
+ *
+ * https://github.com/postgres/postgres/commit/d69d45a5
+ */
+/* copied from add_child_eq_member */
+#if PG18_GE
+void
+ts_add_child_eq_member(PlannerInfo *root, EquivalenceClass *ec, EquivalenceMember *em,
+					   int child_relid)
+{
+	/*
+	 * Allocate the array to store child members; an array of Lists indexed by
+	 * relid, or expand the existing one, if necessary.
+	 */
+	if (unlikely(ec->ec_childmembers_size < root->simple_rel_array_size))
+	{
+		ec->ec_relids = bms_add_members(ec->ec_relids, em->em_relids);
+		if (ec->ec_childmembers == NULL)
+			ec->ec_childmembers = palloc0_array(List *, root->simple_rel_array_size);
+		else
+			ec->ec_childmembers = repalloc0_array(ec->ec_childmembers,
+												  List *,
+												  ec->ec_childmembers_size,
+												  root->simple_rel_array_size);
+		ec->ec_childmembers_size = root->simple_rel_array_size;
+	}
+	/* add member to the ec_childmembers List for the given child_relid */
+	ec->ec_childmembers[child_relid] = lappend(ec->ec_childmembers[child_relid], em);
+}
+#endif

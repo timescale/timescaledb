@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set EXPLAIN 'EXPLAIN (costs off, timing off, summary off, analyze)'
+\set EXPLAIN 'EXPLAIN (buffers off, costs off, timing off, summary off, analyze)'
 
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
@@ -298,7 +298,7 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE time = 1 AND val = 2;
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE time = 1 AND val = 2;
 
 -- delete rows with time = 1 AND val = 2
-EXPLAIN (costs off, verbose) DELETE FROM sample_table WHERE time = 1 AND 2 = val;
+EXPLAIN (buffers off, costs off, verbose) DELETE FROM sample_table WHERE time = 1 AND 2 = val;
 -- should delete rows from 1 of the compressed chunks
 DELETE FROM sample_table WHERE time = 1 AND 2 = val;
 
@@ -995,7 +995,7 @@ SELECT count(*) FROM tab1 WHERE device_id = 1;
 INSERT INTO tab1(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 1000, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 SELECT count(*) FROM tab1 WHERE device_id = 1;
 ANALYZE tab1;
-EXPLAIN (costs off) DELETE FROM public.tab1 WHERE public.tab1.device_id = 1;
+EXPLAIN (buffers off, costs off) DELETE FROM public.tab1 WHERE public.tab1.device_id = 1;
 DELETE FROM tab1 WHERE tab1.device_id = 1;
 SELECT count(*) FROM tab1 WHERE device_id = 1;
 ROLLBACK;
@@ -1010,7 +1010,7 @@ SELECT count(*) FROM tab1 WHERE device_id = 1;
 ANALYZE tab1;
 SET enable_seqscan = off;
 SET enable_indexscan = off;
-EXPLAIN (costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
+EXPLAIN (buffers off, costs off) DELETE FROM tab1 WHERE tab1.device_id = 1;
 DELETE FROM tab1 WHERE tab1.device_id = 1;
 SELECT count(*) FROM tab1 WHERE device_id = 1;
 ROLLBACK;
@@ -1025,7 +1025,7 @@ CREATE TABLE join_table AS SELECT repeat('t', d) FROM generate_series(1,3,1) d;
 ANALYZE tab1;
 SET enable_seqscan = off;
 SET enable_indexscan = off;
-EXPLAIN (costs off) UPDATE tab1
+EXPLAIN (buffers off, costs off) UPDATE tab1
 SET v0 = 0 FROM
 	(SELECT repeat, count(*)
 	FROM join_table
@@ -1169,7 +1169,7 @@ INSERT INTO index_scan_test(time,device_id,value) SELECT time, device_id, device
 BEGIN;
 SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 \gset
 CREATE INDEX ON index_scan_test(device_id);
-EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2;
+EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2;
 DELETE FROM index_scan_test WHERE device_id = 2;
 -- everything should be deleted
 SELECT count(*) FROM index_scan_test where device_id = 2;
@@ -1184,7 +1184,7 @@ ROLLBACK;
 BEGIN;
 SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
 CREATE INDEX ON index_scan_test(device_id, time);
-EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
 DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
 -- everything should be deleted
 SELECT count(*) FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
@@ -1199,7 +1199,7 @@ ROLLBACK;
 BEGIN;
 SELECT count(*) as "UNCOMP_LEFTOVER" FROM ONLY :CHUNK_1 WHERE device_id != 2 OR time <= '2000-01-02'::timestamptz \gset
 CREATE INDEX ON index_scan_test(device_id);
-EXPLAIN (costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
+EXPLAIN (buffers off, costs off, verbose) DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
 DELETE FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
 -- everything should be deleted
 SELECT count(*) FROM index_scan_test WHERE device_id = 2 AND time > '2000-01-02'::timestamptz;
@@ -1331,7 +1331,7 @@ ROLLBACK;
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE tab1;
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE test5586;
+DROP DATABASE test5586 WITH (FORCE);
 
 
 --issue: #6024
@@ -1443,7 +1443,7 @@ ROLLBACK;
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE t6367;
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE test6367;
+DROP DATABASE test6367 WITH (FORCE);
 
 -- Text limitting decompressed tuple during an UPDATE or DELETE
 CREATE TABLE test_limit (
@@ -1492,22 +1492,22 @@ ALTER TABLE test_partials SET (timescaledb.compress);
 SELECT compress_chunk(show_chunks('test_partials'));
 VACUUM ANALYZE test_partials;
 -- fully compressed
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
 -- check that DML causes transparent decompression and that
 -- data gets shifted to the uncompressed parts
-EXPLAIN (costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
+EXPLAIN (buffers off, costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
 DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
 VACUUM ANALYZE test_partials;
 -- All 3 chunks will now become partially compressed chunks
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
 SELECT compress_chunk(show_chunks('test_partials'));
 VACUUM ANALYZE test_partials;
 -- fully compressed
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
 DROP TABLE test_partials;
 
 CREATE TABLE test_meta_filters(time timestamptz NOT NULL, device text, metric text, v1 float, v2 float);
@@ -1520,7 +1520,7 @@ INSERT INTO test_meta_filters SELECT '2020-01-01'::timestamptz,'d1','m' || metri
 
 SELECT compress_chunk(show_chunks('test_meta_filters'));
 
-EXPLAIN (analyze, timing off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
+EXPLAIN (analyze, timing off, buffers off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
 
 -- test expression pushdown in compressed dml constraints
 CREATE TABLE test_pushdown(time timestamptz NOT NULL, device text);

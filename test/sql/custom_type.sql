@@ -4,6 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+SET client_min_messages TO WARNING;
+
 CREATE OR REPLACE FUNCTION customtype_in(cstring) RETURNS customtype AS
 'timestamptz_in'
 LANGUAGE internal IMMUTABLE STRICT;
@@ -17,6 +19,7 @@ CREATE OR REPLACE FUNCTION customtype_send(customtype) RETURNS bytea AS
 'timestamptz_send'
 LANGUAGE internal IMMUTABLE STRICT;
 
+SET client_min_messages TO DEFAULT;
 
 CREATE TYPE customtype (
  INPUT = customtype_in,
@@ -75,8 +78,8 @@ SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval =
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
-EXPLAIN (costs off) SELECT * FROM customtype_test;
+EXPLAIN (buffers off, costs off) SELECT * FROM customtype_test;
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:23'::customtype, 11);
-EXPLAIN (costs off) SELECT * FROM customtype_test;
+EXPLAIN (buffers off, costs off) SELECT * FROM customtype_test;
 
 SELECT * FROM customtype_test;

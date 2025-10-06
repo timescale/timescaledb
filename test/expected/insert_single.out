@@ -211,7 +211,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 INSERT INTO "1dim_usec_interval" VALUES('1969-12-01T19:00:00', 21.2);
 CREATE TABLE "1dim_neg"(time INTEGER, temp float);
 SELECT create_hypertable('"1dim_neg"', 'time', chunk_time_interval=>10);
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (6,public,1dim_neg,t)
@@ -287,7 +286,6 @@ SELECT * FROM _timescaledb_catalog.dimension_slice;
 CREATE TABLE "3dim" (time timestamp, temp float, device text, location text);
 SELECT create_hypertable('"3dim"', 'time', 'device', 2);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (7,public,3dim,t)
@@ -321,43 +319,40 @@ SELECT * FROM "3dim";
 (3 rows)
 
 -- test that explain works
-EXPLAIN (COSTS FALSE)
+EXPLAIN (BUFFERS FALSE, COSTS FALSE)
 INSERT INTO "3dim" VALUES('2017-01-21T09:00:01', 32.9, 'green', 'nyc'),
                          ('2017-01-21T09:00:47', 27.3, 'purple', 'la') RETURNING *;
-                 QUERY PLAN                  
----------------------------------------------
+              QUERY PLAN               
+---------------------------------------
  Custom Scan (ModifyHypertable)
    ->  Insert on "3dim"
-         ->  Custom Scan (ChunkDispatch)
-               ->  Values Scan on "*VALUES*"
-(4 rows)
+         ->  Values Scan on "*VALUES*"
+(3 rows)
 
-EXPLAIN (COSTS FALSE)
+EXPLAIN (BUFFERS FALSE, COSTS FALSE)
 WITH "3dim_insert" AS (
      INSERT INTO "3dim" VALUES('2017-01-21T09:01:44', 19.3, 'black', 'la') RETURNING time, temp
 ), regular_insert AS (
    INSERT INTO regular_table VALUES('2017-01-21T10:00:51', 14.3) RETURNING time, temp
 ) INSERT INTO "1dim" (SELECT time, temp FROM "3dim_insert" UNION SELECT time, temp FROM regular_insert);
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+                               QUERY PLAN                               
+------------------------------------------------------------------------
  Custom Scan (ModifyHypertable)
    CTE 3dim_insert
      ->  Custom Scan (ModifyHypertable)
            ->  Insert on "3dim"
-                 ->  Custom Scan (ChunkDispatch)
-                       ->  Result
+                 ->  Result
    CTE regular_insert
      ->  Insert on regular_table
            ->  Result
    ->  Insert on "1dim"
-         ->  Custom Scan (ChunkDispatch)
-               ->  Unique
-                     ->  Sort
-                           Sort Key: "3dim_insert"."time", "3dim_insert".temp
-                           ->  Append
-                                 ->  CTE Scan on "3dim_insert"
-                                 ->  CTE Scan on regular_insert
-(17 rows)
+         ->  Unique
+               ->  Sort
+                     Sort Key: "3dim_insert"."time", "3dim_insert".temp
+                     ->  Append
+                           ->  CTE Scan on "3dim_insert"
+                           ->  CTE Scan on regular_insert
+(15 rows)
 
 -- test prepared statement INSERT
 PREPARE "1dim_plan" (timestamp, float) AS
@@ -416,7 +411,6 @@ SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>3276
 --make sure date inserts work even when the timezone changes the
 CREATE TABLE hyper_date(time date, temp float);
 SELECT create_hypertable('"hyper_date"', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (10,public,hyper_date,t)

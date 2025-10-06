@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off, timing off, summary off)'
 
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
@@ -72,7 +72,7 @@ SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id');
 
 -- The above should add an entry with MIN/MAX int64 entries for invalid chunk id
 -- to indicate that ranges on this column should be calculated for chunks
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 -- Skipping should work
 SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id', true);
@@ -203,14 +203,14 @@ SET timescaledb.enable_chunk_skipping to ON;
 -- Newly added chunks should also have MIN/MAX entry
 \set start_date '2024-01-28 01:09:51.583252+05:30'
 INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 1, 9, 78.999, 'new row4');
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 -- Check that a RENAME COLUMN works ok
 ALTER TABLE sample_table RENAME COLUMN sensor_id TO sense_id;
 
 -- use the disable_chunk_skipping API to remove the min/max range entries
 SELECT * from disable_chunk_skipping('sample_table', 'sense_id');
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 SELECT * from disable_chunk_skipping('sample_table', 'sense_id', true);
 
 ALTER TABLE sample_table RENAME COLUMN sense_id TO sensor_id;
@@ -229,24 +229,24 @@ SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id');
 -- Chunk was already compressed before we enabled stats. It will
 -- point to min/max entries till the ranges get refreshed later.
 SELECT decompress_chunk(:'CH_NAME');
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 -- Compressing a chunk again should calculate proper ranges
 SELECT compress_chunk(:'CH_NAME');
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 SELECT decompress_chunk(:'CH_NAME');
 -- Entry should be reset for this chunk now
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 -- Check that truncate resets the entry in the catalog
 SELECT compress_chunk(:'CH_NAME');
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 TRUNCATE :CH_NAME;
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 -- Check that drop chunk also removes entries from the catalog
 SELECT drop_chunks('sample_table', older_than => '2022-02-28');
 -- Entry should be removed for this chunk now
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 -- disable compression to allow dropping of the column
 ALTER TABLE sample_table SET (
@@ -254,10 +254,10 @@ ALTER TABLE sample_table SET (
 );
 -- Check that a DROP COLUMN removes entries from catalogs as well
 ALTER TABLE sample_table DROP COLUMN sensor_id;
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 DROP TABLE sample_table;
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 -- Check that empty hypertables can have enable_chunk_skipping and
 -- that new chunks get entries in the catalog as they get added
@@ -273,12 +273,12 @@ CREATE INDEX sense_idx ON sample_table1 (sensor_id);
 SELECT * FROM create_hypertable('sample_table1', 'time',
        chunk_time_interval => INTERVAL '2 months');
 SELECT * FROM enable_chunk_skipping('sample_table1', 'sensor_id');
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 \set start_date '2023-03-17 17:51:11.322998+05:30'
 -- insert into new chunks
 INSERT INTO sample_table1 VALUES (:'start_date'::timestamptz, 12, 21, 33.123, 'new row1');
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 -- Check that ALTER TYPE for a column on which stats are enabled only works
 -- in a few sub types
@@ -310,7 +310,7 @@ set timescaledb.enable_chunk_skipping = on;
 SELECT enable_chunk_skipping('sample_table', 'temperature');
 SELECT show_chunks('sample_table') AS "CH_NAME" order by 1 limit 1 \gset
 SELECT compress_chunk(:'CH_NAME');
-SELECT * FROM _timescaledb_catalog.chunk_column_stats;
+SELECT * FROM _timescaledb_catalog.chunk_column_stats ORDER BY 1;
 
 -- Check min/max ranges for partial chunks with segmentby columns get recalculated correctly by seementwise recompression
 CREATE TABLE chunk_skipping(time timestamptz,device text, updated_at timestamptz)

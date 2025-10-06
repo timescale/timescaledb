@@ -190,7 +190,6 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_catalog  | chunk
  _timescaledb_catalog  | chunk_column_stats
  _timescaledb_catalog  | chunk_constraint
- _timescaledb_catalog  | chunk_index
  _timescaledb_catalog  | compression_algorithm
  _timescaledb_catalog  | compression_chunk_size
  _timescaledb_catalog  | compression_settings
@@ -201,6 +200,7 @@ SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_
  _timescaledb_catalog  | continuous_aggs_hypertable_invalidation_log
  _timescaledb_catalog  | continuous_aggs_invalidation_threshold
  _timescaledb_catalog  | continuous_aggs_materialization_invalidation_log
+ _timescaledb_catalog  | continuous_aggs_materialization_ranges
  _timescaledb_catalog  | continuous_aggs_watermark
  _timescaledb_catalog  | dimension
  _timescaledb_catalog  | dimension_slice

@@ -9,7 +9,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 \gset
 SELECT format('\! diff -u  --label "Unoptimized result" --label "Optimized result" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
-\set PREFIX 'EXPLAIN (costs OFF)'
+\set PREFIX 'EXPLAIN (buffers OFF, costs OFF)'
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -150,14 +150,14 @@ SHOW timescaledb.enable_optimizations;
 (5 rows)
 
 :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                    QUERY PLAN                                                    
+------------------------------------------------------------------------------------------------------------------
  Limit
    ->  GroupAggregate
-         Group Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone))
+         Group Key: (date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone))
          ->  Result
                ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone)) DESC
+                     Sort Key: (date_trunc('minute'::text, (hyper_1_date."time")::timestamp with time zone)) DESC
                      ->  Index Scan using _hyper_4_6_chunk_time_plain_date on _hyper_4_6_chunk
                      ->  Index Scan using _hyper_4_7_chunk_time_plain_date on _hyper_4_7_chunk
                      ->  Index Scan using _hyper_4_8_chunk_time_plain_date on _hyper_4_8_chunk

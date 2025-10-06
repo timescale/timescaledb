@@ -672,3 +672,24 @@ CREATE VIEW test_view_part_few AS SELECT project_id,
   WHERE project_id = ANY (ARRAY[5, 10, 15]);
 -- Complicated query on a view involving a range check and a sort
 SELECT * FROM test_view_part_few WHERE ts BETWEEN '2024-01-04 00:00:00+00'AND '2024-01-05 00:00:00' ORDER BY ts LIMIT 1000;
+
+-- Test chunk_status_text function
+CREATE TABLE chunk_status_test(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=false);
+INSERT INTO chunk_status_test VALUES ('2025-01-01'),('2025-02-01'),('2025-03-01');
+SELECT _timescaledb_functions.chunk_status_text(i) FROM generate_series(0,15) i;
+
+SELECT chunk, _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('chunk_status_test') chunk;
+
+SELECT _timescaledb_functions.chunk_status_text(NULL::int);
+SELECT _timescaledb_functions.chunk_status_text(NULL::regclass);
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.chunk_status_text(-1);
+SELECT _timescaledb_functions.chunk_status_text(16);
+SELECT _timescaledb_functions.chunk_status_text(1000);
+SELECT _timescaledb_functions.chunk_status_text(0::regclass);
+SELECT _timescaledb_functions.chunk_status_text('pg_class'::regclass);
+\set ON_ERROR_STOP 1
+
+-- Test that function exists and returns an array type
+SELECT pg_typeof(_timescaledb_functions.chunk_status_text(0));
+

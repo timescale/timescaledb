@@ -143,7 +143,6 @@ SELECT * FROM trigger_test ORDER BY time;
 -- message.
 CREATE TABLE test(a INT NOT NULL, b TIMESTAMPTZ);
 SELECT create_hypertable('test', 'b');
-NOTICE:  adding not-null constraint to column "b"
  create_hypertable 
 -------------------
  (5,public,test,t)
@@ -724,7 +723,6 @@ SELECT * FROM table_with_layout_change ORDER BY time, value7;
 CREATE TABLE test_check(a INT, b TIMESTAMPTZ);
 ALTER TABLE test_check ADD CONSTRAINT c1 CHECK (a > 7);
 SELECT table_name FROM create_hypertable('test_check', 'b');
-NOTICE:  adding not-null constraint to column "b"
  table_name 
 ------------
  test_check

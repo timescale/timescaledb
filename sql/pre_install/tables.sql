@@ -192,21 +192,6 @@ CREATE SEQUENCE _timescaledb_catalog.chunk_constraint_name;
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_constraint_name', '');
 
-CREATE TABLE _timescaledb_catalog.chunk_index (
-  chunk_id integer NOT NULL,
-  index_name name NOT NULL,
-  hypertable_id integer NOT NULL,
-  hypertable_index_name name NOT NULL,
-  -- table constraints
-  CONSTRAINT chunk_index_chunk_id_index_name_key UNIQUE (chunk_id, index_name),
-  CONSTRAINT chunk_index_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE,
-  CONSTRAINT chunk_index_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
-);
-
-CREATE INDEX chunk_index_hypertable_id_hypertable_index_name_idx ON _timescaledb_catalog.chunk_index (hypertable_id, hypertable_index_name);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
-
 -- Track statistics for columns of chunks from a hypertable.
 -- Currently, we track the min/max range for a given column across chunks.
 -- More statistics (like bloom filters) can be added in the future.
@@ -457,6 +442,18 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 
 CREATE INDEX continuous_aggs_materialization_invalidation_log_idx ON _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value ASC);
 
+-- cagg materialization ranges
+CREATE TABLE _timescaledb_catalog.continuous_aggs_materialization_ranges (
+  materialization_id integer,
+  lowest_modified_value bigint NOT NULL,
+  greatest_modified_value bigint NOT NULL,
+  -- table constraints
+  CONSTRAINT continuous_aggs_materialization_ranges_materialization_id_fkey FOREIGN KEY (materialization_id) REFERENCES _timescaledb_catalog.continuous_agg (mat_hypertable_id) ON DELETE CASCADE
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_materialization_ranges', '');
+
+CREATE INDEX continuous_aggs_materialization_ranges_idx ON _timescaledb_catalog.continuous_aggs_materialization_ranges (materialization_id, lowest_modified_value ASC);
 
 /* the source of this data is the enum from the source code that lists
  *  the algorithms. This table is NOT dumped.

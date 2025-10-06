@@ -749,7 +749,7 @@ select table_name, dropped, status, compressed_chunk_id
 from _timescaledb_catalog.chunk where table_name = '_hyper_1_3_chunk';
     table_name    | dropped | status | compressed_chunk_id 
 ------------------+---------+--------+---------------------
- _hyper_1_3_chunk | f       |      1 |                  15
+ _hyper_1_3_chunk | f       |      9 |                  15
 (1 row)
 
 truncate chunk_summary_before_split;
@@ -763,7 +763,7 @@ select
 select * from chunk_summary_before_split;
  count | device_sum | location_sum |   temp_sum   
 -------+------------+--------------+--------------
- 29523 |     162731 |       169458 | 603967.96562
+ 29525 |     162733 |       169511 | 604005.96562
 (1 row)
 
 select * from chunk_info;
@@ -833,7 +833,7 @@ select
 select * from chunk_summary_before_split;
  count | device_sum | location_sum |   temp_sum   
 -------+------------+--------------+--------------
- 29523 |     162731 |       169458 | 603967.96562
+ 29525 |     162733 |       169511 | 604005.96562
 (1 row)
 
 select * from chunk_summary_after_split;
@@ -1173,7 +1173,6 @@ and provolatile = 'i'
 and n.nspname = 'pg_catalog' \gset
 create table time_part_func (time float8, temp float);
 select create_hypertable('time_part_func', 'time', time_partitioning_func => :'time_funcid', create_default_indexes => false, chunk_time_interval => interval '1 month');
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (5,public,time_part_func,t)

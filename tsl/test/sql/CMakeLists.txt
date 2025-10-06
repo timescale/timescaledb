@@ -8,14 +8,17 @@ set(TEST_FILES
     bgw_policy.sql
     bgw_security.sql
     cagg_api.sql
+    cagg_config.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
+    cagg_invalidation_multi.sql
     cagg_policy.sql
     cagg_policy_move.sql
     cagg_policy_concurrent.sql
     cagg_plugin.sql
-    cagg_refresh.sql
+    cagg_refresh_using_trigger.sql
+    cagg_refresh_using_wal.sql
     cagg_refresh_using_merge.sql
     cagg_utils.sql
     cagg_watermark.sql
@@ -33,6 +36,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
+    compressed_insert.sql
     compression.sql
     compression_allocation.sql
     compression_conflicts.sql
@@ -56,17 +60,18 @@ set(TEST_FILES
     custom_hashagg.sql
     decompress_index.sql
     foreign_keys_test.sql
-    merge_append_partially_compressed.sql
     merge_chunks.sql
     merge_compress.sql
     modify_exclusion.sql
     move.sql
+    plan_skip_scan_notnull.sql
     policy_generalization.sql
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql
     split_chunk.sql
     transparent_decompression_join_index.sql
+    unlogged.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
     vector_agg_param.sql
@@ -146,7 +151,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     insert_memory_usage.sql
     information_view_chunk_count.sql
     read_only.sql
-    transparent_decompression_queries.sql
     tsl_tables.sql
     license_tsl.sql
     fixed_schedules.sql
@@ -170,7 +174,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_update_delete.sql.in
-    continuous_aggs.sql.in)
+    continuous_aggs.sql.in
+    transparent_decompression_queries.sql.in)
 
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry_stats.sql)
@@ -183,7 +188,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES privilege_maintain.sql)
+  list(APPEND TEST_FILES privilege_maintain.sql
+       merge_append_partially_compressed.sql)
 endif()
 
 set(SOLO_TESTS
@@ -204,13 +210,19 @@ set(SOLO_TESTS
     cagg_bgw
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
-    cagg_invalidation
-    cagg_plugin
     cagg_policy_incremental
     move
     reorder
     split_chunk
-    telemetry_stats)
+    telemetry_stats
+    # These are solo tests because of a bug in PostgreSQL 17.5. A fix for it
+    # seems to be scheduled for release with 17.6.
+    #
+    # See
+    # https://github.com/postgres/postgres/commit/d87d07b7ad3b782cb74566cd771ecdb2823adf6a
+    cagg_invalidation
+    cagg_invalidation_multi
+    cagg_plugin)
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

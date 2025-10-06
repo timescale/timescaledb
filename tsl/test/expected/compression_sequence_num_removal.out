@@ -6,7 +6,7 @@
 -- which is removed in latest schema revision
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 CREATE TABLE hyper(
     time INT NOT NULL,
     device_id INT,
@@ -39,7 +39,7 @@ ORDER BY device_id, time;
                                                                                                                         QUERY PLAN                                                                                                                        
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time"
+   Sort Key: hyper.device_id, hyper."time"
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          ->  Sort
@@ -94,7 +94,7 @@ ORDER BY device_id DESC, time DESC;
                                                                                                                         QUERY PLAN                                                                                                                        
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id DESC, _hyper_1_1_chunk."time" DESC
+   Sort Key: hyper.device_id DESC, hyper."time" DESC
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          Reverse: true
@@ -200,7 +200,7 @@ ORDER BY device_id, time;
                                                                                                                                                 QUERY PLAN                                                                                                                                                
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time"
+   Sort Key: hyper.device_id, hyper."time"
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          ->  Sort
@@ -255,7 +255,7 @@ ORDER BY device_id DESC, time DESC;
                                                                                                                                                 QUERY PLAN                                                                                                                                                
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id DESC, _hyper_1_1_chunk."time" DESC
+   Sort Key: hyper.device_id DESC, hyper."time" DESC
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          Reverse: true
@@ -331,7 +331,7 @@ ORDER BY device_id, time;
                                                                                                                                                 QUERY PLAN                                                                                                                                                
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _hyper_1_1_chunk.device_id, _hyper_1_1_chunk."time"
+   Sort Key: hyper.device_id, hyper."time"
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id, _hyper_1_1_chunk.val
          ->  Sort

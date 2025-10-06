@@ -3,7 +3,6 @@
 -- LICENSE-APACHE for a copy of the license.
 CREATE TABLE part_legacy(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func => '_timescaledb_functions.get_partition_for_key');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (1,public,part_legacy,t)
@@ -35,7 +34,7 @@ BEGIN;
 -- For plan stability between versions
 SET LOCAL enable_bitmapscan = false;
 SET LOCAL enable_indexscan = false;
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_legacy WHERE device = 1;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -47,7 +46,6 @@ SELECT * FROM part_legacy WHERE device = 1;
 COMMIT;
 CREATE TABLE part_new(time timestamptz, temp float, device int);
 SELECT create_hypertable('part_new', 'time', 'device', 2);
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
 -----------------------
  (2,public,part_new,t)
@@ -80,7 +78,7 @@ BEGIN;
 -- For plan stability between versions
 SET LOCAL enable_bitmapscan = false;
 SET LOCAL enable_indexscan = false;
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_new WHERE device = 1;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -92,7 +90,6 @@ SELECT * FROM part_new WHERE device = 1;
 COMMIT;
 CREATE TABLE part_new_convert1(time timestamptz, temp float8, device int);
 SELECT create_hypertable('part_new_convert1', 'time', 'temp', 2);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable        
 --------------------------------
  (3,public,part_new_convert1,t)
@@ -116,7 +113,6 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_3_%_chunk');
 
 CREATE TABLE part_add_dim(time timestamptz, temp float8, device int, location int);
 SELECT create_hypertable('part_add_dim', 'time', 'temp', 2);
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (4,public,part_add_dim,t)
@@ -162,7 +158,6 @@ END
 $BODY$;
 CREATE TABLE part_custom_func(time timestamptz, temp float8, device text);
 SELECT create_hypertable('part_custom_func', 'time', 'device', 2, partitioning_func => 'custom_partfunc');
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (5,public,part_custom_func,t)
@@ -212,7 +207,6 @@ SELECT create_hypertable(
     1000,
     chunk_time_interval => interval '1 day',
     partitioning_func=>'simpl_type_hash');
-NOTICE:  adding not-null constraint to column "timestamp"
       create_hypertable       
 ------------------------------
  (6,public,simpl_partition,t)
@@ -252,13 +246,10 @@ CREATE TABLE hyper_with_index(time timestamptz, temp float, device int);
 CREATE UNIQUE INDEX temp_index ON hyper_with_index(temp);
 \set ON_ERROR_STOP 0
 SELECT create_hypertable('hyper_with_index', 'time');
-NOTICE:  adding not-null constraint to column "time"
 ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 SELECT create_hypertable('hyper_with_index', 'time', 'device', 2);
-NOTICE:  adding not-null constraint to column "time"
 ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 SELECT create_hypertable('hyper_with_index', 'time', 'temp', 2);
-NOTICE:  adding not-null constraint to column "time"
 ERROR:  cannot create a unique index without the column "time" (used in partitioning)
 \set ON_ERROR_STOP 1
 DROP INDEX temp_index;
@@ -266,11 +257,9 @@ CREATE UNIQUE INDEX time_index ON hyper_with_index(time);
 \set ON_ERROR_STOP 0
 -- should error because device not in index
 SELECT create_hypertable('hyper_with_index', 'time', 'device', 4);
-NOTICE:  adding not-null constraint to column "time"
 ERROR:  cannot create a unique index without the column "device" (used in partitioning)
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('hyper_with_index', 'time');
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable        
 --------------------------------
  (11,public,hyper_with_index,t)
@@ -326,7 +315,6 @@ END
 $BODY$;
 CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
 SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_func=>'tuple_hash');
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (14,public,part_custom_dim,t)
@@ -349,7 +337,6 @@ END
 $BODY$;
 CREATE TABLE part_custom_dim (time TIMESTAMPTZ, combo TUPLE, device TEXT);
 SELECT create_hypertable('part_custom_dim', 'time', 'combo', 4, partitioning_func=>'my_partitioning_schema.tuple_hash');
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (15,public,part_custom_dim,t)
@@ -399,7 +386,6 @@ ERROR:  invalid partitioning function
 \set ON_ERROR_STOP 1
 -- Should work with time partitioning function that returns a valid time type
 SELECT create_hypertable('part_time_func', 'time', time_partitioning_func => 'time_partfunc');
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable       
 ------------------------------
  (16,public,part_time_func,t)
@@ -457,7 +443,7 @@ FROM test.show_subtables('part_time_func');
 -- Check that constraint exclusion works with time partitioning
 -- function (scan only one chunk)
 -- No exclusion
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_time_func;
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
@@ -469,7 +455,7 @@ SELECT * FROM part_time_func;
 (5 rows)
 
 -- Exclude using the function on time
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_time_func WHERE time_partfunc(time) < '2018-07-01';
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
@@ -480,7 +466,7 @@ SELECT * FROM part_time_func WHERE time_partfunc(time) < '2018-07-01';
 
 -- Exclude using the same date but as a UNIX timestamp. Won't do an
 -- index scan since the index is on the time function expression
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM part_time_func WHERE time < 1530403200.0;
 NOTICE:  time value for 1530403200 is Sun Jul 01 00:00:00 2018
                                        QUERY PLAN                                        
@@ -501,7 +487,6 @@ END
 $BODY$;
 CREATE TABLE part_time_func_null_ret(time float8, temp float8, device text);
 SELECT create_hypertable('part_time_func_null_ret', 'time', time_partitioning_func => 'time_partfunc_null_ret');
-NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
  (17,public,part_time_func_null_ret,t)

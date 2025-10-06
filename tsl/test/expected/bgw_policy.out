@@ -3,14 +3,12 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 CREATE OR REPLACE FUNCTION reorder_called(chunk_id INT) RETURNS BOOL AS $$
   SELECT indisclustered
-  FROM _timescaledb_catalog.chunk_index ci
-    INNER JOIN pg_class pgc ON ci.index_name = pgc.relname
-    INNER JOIN pg_index pgi ON pgc.oid = pgi.indexrelid
-  WHERE chunk_id = $1;
+  FROM _timescaledb_catalog.chunk ch
+  JOIN pg_index i on indrelid = format('%I.%I',ch.schema_name,ch.table_name)::regclass
+  WHERE ch.id = chunk_id;
 $$ LANGUAGE SQL;
 CREATE TABLE test_table(time timestamptz, chunk_id int);
 SELECT create_hypertable('test_table', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,test_table,t)
@@ -326,14 +324,12 @@ NOTICE:  no chunks need reordering for hypertable public.test_table
 CREATE TABLE test_table_int(time bigint, junk int);
 CREATE TABLE test_overflow_smallint(time smallint, junk int);
 SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (2,public,test_table_int,t)
 (1 row)
 
 SELECT create_hypertable('test_overflow_smallint', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable          
 -------------------------------------
  (3,public,test_overflow_smallint,t)
@@ -535,7 +531,6 @@ end
 $body$;
 create or replace function dummy_now() returns bigint language sql immutable as  'select 2::bigint';
 select create_hypertable('part_time_now_func', 'time', time_partitioning_func => 'time_partfunc', chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (5,public,part_time_now_func,t)

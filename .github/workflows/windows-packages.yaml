@@ -1,5 +1,5 @@
 # Test installation of windows package for latest version
-name: Windows Packages
+name: "Packaging tests: Windows"
 "on":
   schedule:
     # run daily 0:00 on main branch
@@ -15,39 +15,14 @@ name: Windows Packages
   workflow_dispatch:
 
 jobs:
-  config:
-    runs-on: ubuntu-latest
-    outputs:
-      pg15_latest: ${{ steps.config.outputs.pg15_latest }}
-      pg16_latest: ${{ steps.config.outputs.pg16_latest }}
-      pg17_latest: ${{ steps.config.outputs.pg17_latest }}
-
-    steps:
-    - name: Checkout source code
-      uses: actions/checkout@v4
-    - name: Read configuration
-      id: config
-      run: python .github/gh_config_reader.py
 
   build:
-    name: Windows package PG${{ matrix.pkg_version }}
-    runs-on: ${{ matrix.os }}
-    needs: config
+    name: Windows package PG${{ matrix.pg }}
+    runs-on: windows-2025
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-2022 ]
         pg: [ "15", "16", "17" ]
-        include:
-          - pg: 15
-            pkg_version: 15.12.0
-#            pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}.0
-          - pg: 16
-            pkg_version: 16.8.0
-#            pkg_version: ${{ fromJson(needs.config.outputs.pg16_latest) }}.0
-          - pg: 17
-            pkg_version: 17.4.0
-#            pkg_version: ${{ fromJson(needs.config.outputs.pg17_latest) }}.0
     env:
       # PostgreSQL configuration
       PGPORT: 6543
@@ -77,8 +52,8 @@ jobs:
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
-        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} `
-          --force -y --install-args="'--prefix $HOME/PostgreSQL/${{ matrix.pg }} --extract-only yes'"
+        choco uninstall postgresql --yes
+        winget install --id PostgreSQL.PostgreSQL.${{ matrix.pg }} --accept-source-agreements --accept-package-agreements --disable-interactivity
         choco install wget
 
     - name: Download TimescaleDB
@@ -89,19 +64,19 @@ jobs:
       run: |
         tar -xf timescaledb.zip
         cd timescaledb
-        ./setup.exe -yes-tune -pgconfig "$HOME/PostgreSQL/${{ matrix.pg }}/bin/pg_config"
+        ./setup.exe -yes-tune -pgconfig C:\Progra~1\PostgreSQL\${{ matrix.pg }}\bin\pg_config
 
     - name: Create DB
       run: |
-        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "-cshared_preload_libraries=timescaledb"
+        C:\Progra~1\PostgreSQL\${{ matrix.pg }}\bin\initdb -U postgres -A trust
+        C:\Progra~1\PostgreSQL\${{ matrix.pg }}\bin\pg_ctl start -o "-cshared_preload_libraries=timescaledb"
 
     - name: Test creating extension
       run: |
-        ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -X `
+        C:\Progra~1\PostgreSQL\${{ matrix.pg }}\bin\psql -U postgres -d postgres -X `
           -c "CREATE EXTENSION timescaledb" `
           -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
-        $installed_version = ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres `
+        $installed_version = C:\Progra~1\PostgreSQL\${{ matrix.pg }}\bin\psql -U postgres `
           -d postgres -qtAX -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb'"
         $installed_version = $installed_version.Trim()
         echo "Installed version is '${installed_version}'"

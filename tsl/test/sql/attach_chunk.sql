@@ -63,8 +63,7 @@ WHERE hypertable_id = :'HYPERTABLE_ID' AND table_name = 'regular_table_to_attach
 -- Verify that each constraint/index on a auto-created chunk is also present on the attached chunk
 SELECT hypertable_constraint_name FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID'
 EXCEPT SELECT hypertable_constraint_name FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'ATTACHED_CHUNK';
-SELECT hypertable_index_name FROM _timescaledb_catalog.chunk_index WHERE chunk_id = :'CHUNK_ID'
-EXCEPT SELECT hypertable_index_name FROM _timescaledb_catalog.chunk_index WHERE chunk_id = :'ATTACHED_CHUNK';
+SELECT * FROM test.show_indexesp('regular_table_to_attach');
 SELECT * FROM _timescaledb_catalog.dimension_slice ds
 JOIN _timescaledb_catalog.chunk_constraint cc ON ds.id = cc.dimension_slice_id
 WHERE cc.chunk_id = :'ATTACHED_CHUNK';
@@ -96,7 +95,6 @@ SELECT count(*) > 0 FROM pg_inherits WHERE inhrelid = :'CHUNK_NAME'::regclass::o
 
 -- Verify constraints and indexes are restored
 SELECT * FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID';
-SELECT * FROM _timescaledb_catalog.chunk_index WHERE chunk_id = :'CHUNK_ID';
 SELECT * FROM _timescaledb_catalog.dimension_slice ds
 JOIN _timescaledb_catalog.chunk_constraint cc ON ds.id = cc.dimension_slice_id
 WHERE cc.chunk_id = :'CHUNK_ID';

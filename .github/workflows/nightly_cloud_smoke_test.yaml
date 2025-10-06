@@ -6,8 +6,8 @@ name: Nightly - Update smoke test on release branch
 # from the release branch to the QA service in Cloud
 
 "on":
-  schedule:
-    - cron: '0 0 * * *'
+  #schedule:
+  #  - cron: '0 0 * * *'
   workflow_dispatch:
   pull_request:
     paths:

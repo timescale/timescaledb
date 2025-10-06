@@ -24,7 +24,7 @@
 #include "export.h"
 
 extern TSDLLEXPORT void ts_make_inh_translation_list(Relation oldrelation, Relation newrelation,
-													 Index newvarno, List **translated_vars);
+													 Index newvarno, AppendRelInfo *appinfo);
 
 extern TSDLLEXPORT struct PathTarget *ts_make_partial_grouping_target(struct PlannerInfo *root,
 																	  PathTarget *grouping_target);
@@ -51,3 +51,14 @@ extern TSDLLEXPORT PathKey *ts_make_pathkey_from_sortop(PlannerInfo *root, Expr 
 extern TSDLLEXPORT List *ts_build_path_tlist(PlannerInfo *root, Path *path);
 
 extern void ts_ExecSetTupleBound(int64 tuples_needed, PlanState *child_node);
+
+#if PG18_GE
+/* In PG18, child ems are not added to ec_members
+ * but need to be maintained in separate Lists.
+ *
+ * https://github.com/postgres/postgres/commit/d69d45a5
+ */
+/* copied from add_child_eq_member */
+extern TSDLLEXPORT void ts_add_child_eq_member(PlannerInfo *root, EquivalenceClass *ec,
+											   EquivalenceMember *em, int child_relid);
+#endif

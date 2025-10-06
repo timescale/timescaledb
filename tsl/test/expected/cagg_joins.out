@@ -32,8 +32,6 @@ INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-27', 'Moscow', 31,3);
 CREATE TABLE conditions_dup AS SELECT * FROM conditions;
 SELECT table_name FROM create_hypertable('conditions_dup', 'day', chunk_time_interval => INTERVAL '1 day', migrate_data => true);
-NOTICE:  adding not-null constraint to column "day"
-DETAIL:  Dimensions cannot have NULL values.
 NOTICE:  migrating data to chunks
 DETAIL:  Migration might take a while depending on the amount of data.
    table_name   
@@ -1019,7 +1017,7 @@ WHERE conditions.city IN (
 AND conditions.device_id = devices.device_id
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 CREATE MATERIALIZED VIEW conditions_summary_subselect
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -1035,7 +1033,7 @@ WHERE conditions.city IN (
       WHERE currency = 'EUR'))
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 CREATE MATERIALIZED VIEW conditions_summary_subselect
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -1051,7 +1049,7 @@ WHERE conditions.city IN (
       WHERE currency = 'EUR'))
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 DROP TABLE cities CASCADE;
 --Error out when join is between two hypertables
 CREATE MATERIALIZED VIEW cagg_ht

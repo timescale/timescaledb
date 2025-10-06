@@ -5,7 +5,6 @@
 CREATE ROLE r_maintain;
 CREATE TABLE metrics(time timestamptz, device text, value float);
 SELECT create_hypertable('metrics', 'time');
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------
  (1,public,metrics,t)

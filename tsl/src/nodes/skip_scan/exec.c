@@ -38,10 +38,58 @@
  *                    |   DONE    |
  *                    \===========/
  *
+ *
+ *
+ * N-key SkipScan needs to do 2^N null check stages when using the above scheme,
+ * made even more complicated with having to change searches for previous keys.
+ *
+ * So we made a decision to support multikey SkipScan in NOT NULL mode only.
+ *
+ * For N-key SkipScan we search with these predicates when current key = K:
+ * (key_1 = prev_1),...,(key_K > prev_K),(key_K+1 IS NOT NULL)...(key_N IS NOT NULL)
+ *
+ * As all skip keys are NOT NULL, "IS NOT NULL" fetches the tuple with no previous value.
+ *
+ * We start the search with K=1 i.e. with these predicates:
+ * (key_1 IS NOT NULL),...,(key_N IS NOT NULL).
+ *
+ * When a tuple is fetched we set  K=N as we can fill all previous values, search is now:
+ * (key_1 = prev_1),...,(key_N > prev_N)
+ *
+ * When no tuple is fetched and K>1 we can relax the search and move to previous key (K-1):
+ * (key_1 = prev_1),...,(key_K-1 > prev_K-1),(key_K IS NOT NULL)...(key_N IS NOT NULL)
+ *
+ * When no tuple is fetched and K=1, we are done.
+ *
+ * Multikey SkipScan flowchart:
+ *                   start (K=1)
+ *                      |         +---------+
+ *                      |         |         |
+ *                      v         v         |
+ *      +=================================+ |
+ *      |   search for NOT NULL after K   | |
+ *      +=================================+ |
+ *            |                          |  |
+ *            | found value              |  |
+ *            v                          |  |
+ *  +==============================+     |  |
+ *  | search for values after prev |     |  |
+ *  +==============================+     |  |
+ *                       |               |  |
+ *                       |   no value    |  |
+ *                       v               v  |
+ *                 +======================+ |
+ *                 | K=1         | K>1      |
+ *                 v             v          |
+ *            /===========\   +=========+   |
+ *            |   DONE    |   | K = K-1 |---+
+ *            \===========/   +=========+
+ *
  */
 
 #include <postgres.h>
 #include <access/genam.h>
+#include <access/nbtree.h>
 #include <nodes/extensible.h>
 #include <nodes/pg_list.h>
 #include <utils/datum.h>
@@ -58,6 +106,7 @@ typedef enum SkipScanStage
 	SS_NOT_NULL,
 	SS_VALUES,
 	SS_NULLS_LAST,
+	SS_PREV_KEY,
 	SS_END,
 } SkipScanStage;
 
@@ -74,7 +123,7 @@ typedef struct SkipKeyData
 	int distinct_col_attnum;
 	int distinct_typ_len;
 	int sk_attno;
-	bool nulls_first;
+	SkipKeyNullStatus nulls;
 } SkipKeyData;
 
 typedef struct SkipScanState
@@ -92,6 +141,17 @@ typedef struct SkipScanState
 
 	int num_skip_keys;
 	SkipKeyData *skip_keys;
+
+	/* Skip key with ">" qual, coming after "=" skip quals for multikey SkipScan */
+	int current_key;
+
+	/* For Multikey SkipScan we keep copies of "sk_func" for "=" and ">" for keys 1..N-1
+	 * to be swapped during execution.
+	 */
+	FmgrInfo *eq_funcs;
+	/* Will be filled after IndexScan scankeys have been initialized */
+	FmgrInfo *comp_funcs;
+	StrategyNumber *comp_strategies;
 
 	SkipScanStage stage;
 
@@ -157,31 +217,44 @@ skip_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	/* find position of our skip key
 	 * skip key is put as first key for the respective column in sort_indexquals
 	 */
-	ScanKey data = *state->scan_keys;
+	ScanKey scankeydata = *state->scan_keys;
 	int j = 0;
 	for (int i = 0; i < *state->num_scan_keys; i++)
 	{
-		if (data[i].sk_flags == SK_ISNULL && data[i].sk_attno == state->skip_keys[j].sk_attno)
+		if (scankeydata[i].sk_flags == SK_ISNULL &&
+			scankeydata[i].sk_attno == state->skip_keys[j].sk_attno)
 		{
-			state->skip_keys[j++].skip_key = &data[i];
+			SkipKeyData *skipkeydata = &state->skip_keys[j++];
+			skipkeydata->skip_key = &scankeydata[i];
+			/* Set up ">" sk_func swaps for skip keys 1..N-1 */
+			if (j < state->num_skip_keys)
+			{
+				state->comp_strategies[j - 1] = scankeydata[i].sk_strategy;
+				fmgr_info_copy(&state->comp_funcs[j - 1],
+							   &scankeydata[i].sk_func,
+							   CurrentMemoryContext);
+			}
 			if (j == state->num_skip_keys)
 				break;
 		}
 	}
 	if (j < state->num_skip_keys)
 		elog(ERROR, "ScanKey for skip qual not found");
+
+	/* when we fetch the 1st tuple we update all skip keys from 0 to N */
+	state->current_key = 0;
 }
 
 static bool
 has_nulls_first(SkipScanState *state)
 {
-	return state->skip_keys[0].nulls_first;
+	return state->skip_keys[0].nulls == SK_NULLS_FIRST;
 }
 
 static bool
 has_nulls_last(SkipScanState *state)
 {
-	return !has_nulls_first(state);
+	return state->skip_keys[0].nulls == SK_NULLS_LAST;
 }
 
 static void
@@ -223,18 +296,62 @@ skip_scan_rescan_index(SkipScanState *state)
 static void
 skip_scan_switch_stage(SkipScanState *state, SkipScanStage new_stage)
 {
-	Assert(new_stage > state->stage);
+	Assert(new_stage > state->stage || state->num_skip_keys > 1);
 
 	switch (new_stage)
 	{
 		case SS_NOT_NULL:
-			state->skip_keys[0].skip_key->sk_flags = SK_ISNULL | SK_SEARCHNOTNULL;
-			state->skip_keys[0].skip_key->sk_argument = 0;
+			for (int i = 0; i < state->num_skip_keys; i++)
+			{
+				state->skip_keys[i].skip_key->sk_flags = SK_ISNULL | SK_SEARCHNOTNULL;
+				state->skip_keys[i].skip_key->sk_argument = 0;
+			}
+			state->current_key = 0;
+			state->needs_rescan = true;
+			break;
+
+		case SS_PREV_KEY:
+			/* Done searching with ">" for this key: set this key to NOT NULL i.e. any value,
+			 * set previous "=" key to search with ">".
+			 */
+			state->skip_keys[state->current_key].skip_key->sk_flags = SK_ISNULL | SK_SEARCHNOTNULL;
+			state->current_key--;
+			state->skip_keys[state->current_key].skip_key->sk_flags = 0;
+			fmgr_info_copy(&state->skip_keys[state->current_key].skip_key->sk_func,
+						   &state->comp_funcs[state->current_key],
+						   CurrentMemoryContext);
+			state->skip_keys[state->current_key].skip_key->sk_strategy =
+				state->comp_strategies[state->current_key];
 			state->needs_rescan = true;
 			break;
 
 		case SS_VALUES:
-			state->skip_keys[0].skip_key->sk_flags = 0;
+			for (int i = 0; i < state->num_skip_keys; i++)
+			{
+				state->skip_keys[i].skip_key->sk_flags = 0;
+				/* reset all ">" back to "=" from the current key to N-1 */
+				if (i >= state->current_key && i < state->num_skip_keys - 1)
+				{
+					fmgr_info_copy(&state->skip_keys[i].skip_key->sk_func,
+								   &state->eq_funcs[i],
+								   CurrentMemoryContext);
+					state->skip_keys[i].skip_key->sk_strategy = BTEqualStrategyNumber;
+				}
+			}
+#if PG18_GE
+			/* PG18+ skip arrays are not used for "=",..,"=",">" multikey index quals,
+			 * but so->skipScan is never reset to false in PG18
+			 * when we change from ">",...,">" quals to "=",..,"=",">",
+			 * so we reset it here.
+			 * https://github.com/postgres/postgres/commit/8a51027
+			 */
+			if (*state->scan_desc && state->num_skip_keys > 1)
+			{
+				BTScanOpaque so = (BTScanOpaque) (*state->scan_desc)->opaque;
+				so->skipScan = false;
+			}
+#endif
+			state->current_key = state->num_skip_keys - 1;
 			state->needs_rescan = true;
 			break;
 
@@ -256,31 +373,32 @@ skip_scan_switch_stage(SkipScanState *state, SkipScanStage new_stage)
 static void
 skip_scan_update_key(SkipScanState *state, TupleTableSlot *slot)
 {
-	if (!state->skip_keys[0].prev_is_null && !state->skip_keys[0].distinct_by_val)
+	for (int i = state->current_key; i < state->num_skip_keys; i++)
 	{
-		Assert(state->stage == SS_VALUES);
-		pfree(DatumGetPointer(state->skip_keys[0].prev_datum));
-	}
+		if (!state->skip_keys[i].prev_is_null && !state->skip_keys[i].distinct_by_val)
+		{
+			Assert(state->stage == SS_VALUES || state->num_skip_keys > 1);
+			pfree(DatumGetPointer(state->skip_keys[i].prev_datum));
+		}
 
-	MemoryContext old_ctx = MemoryContextSwitchTo(state->ctx);
-	state->skip_keys[0].prev_datum = slot_getattr(slot,
-												  state->skip_keys[0].distinct_col_attnum,
-												  &state->skip_keys[0].prev_is_null);
-	if (state->skip_keys[0].prev_is_null)
-	{
-		state->skip_keys[0].skip_key->sk_flags = SK_ISNULL;
-		state->skip_keys[0].skip_key->sk_argument = 0;
+		MemoryContext old_ctx = MemoryContextSwitchTo(state->ctx);
+		state->skip_keys[i].prev_datum = slot_getattr(slot,
+													  state->skip_keys[i].distinct_col_attnum,
+													  &state->skip_keys[i].prev_is_null);
+		if (state->skip_keys[i].prev_is_null)
+		{
+			state->skip_keys[i].skip_key->sk_flags = SK_ISNULL;
+			state->skip_keys[i].skip_key->sk_argument = 0;
+		}
+		else
+		{
+			state->skip_keys[i].prev_datum = datumCopy(state->skip_keys[i].prev_datum,
+													   state->skip_keys[i].distinct_by_val,
+													   state->skip_keys[i].distinct_typ_len);
+			state->skip_keys[i].skip_key->sk_argument = state->skip_keys[i].prev_datum;
+		}
+		MemoryContextSwitchTo(old_ctx);
 	}
-	else
-	{
-		state->skip_keys[0].prev_datum = datumCopy(state->skip_keys[0].prev_datum,
-												   state->skip_keys[0].distinct_by_val,
-												   state->skip_keys[0].distinct_typ_len);
-		state->skip_keys[0].skip_key->sk_argument = state->skip_keys[0].prev_datum;
-	}
-
-	MemoryContextSwitchTo(old_ctx);
-
 	/* we need to do a rescan whenever we modify the ScanKey */
 	state->needs_rescan = true;
 }
@@ -330,6 +448,7 @@ skip_scan_exec(CustomScanState *node)
 				break;
 
 			case SS_NOT_NULL:
+			case SS_PREV_KEY:
 			case SS_VALUES:
 				child_state = linitial(state->cscan_state.custom_ps);
 				result = child_state->ps.ExecProcNode(&child_state->ps);
@@ -343,10 +462,10 @@ skip_scan_exec(CustomScanState *node)
 					 * also switch stage to look for values greater than
 					 * that in subsequent calls.
 					 */
-					if (state->stage == SS_NOT_NULL)
+					skip_scan_update_key(state, result);
+					if (state->stage == SS_NOT_NULL || state->stage == SS_PREV_KEY)
 						skip_scan_switch_stage(state, SS_VALUES);
 
-					skip_scan_update_key(state, result);
 					return result;
 				}
 				else
@@ -356,9 +475,15 @@ skip_scan_exec(CustomScanState *node)
 					 * the skip constraint we are either done
 					 * for NULLS FIRST ordering or need to check
 					 * for NULLs if we have NULLS LAST ordering
+					 *
+					 * Or we can move back one key for multikey SkipScan to relax the search,
+					 * i.e. make current key NOT NULL (any value) and change previous search from
+					 * "=" to ">"
 					 */
 					if (has_nulls_last(state))
 						skip_scan_switch_stage(state, SS_NULLS_LAST);
+					else if (state->current_key > 0)
+						skip_scan_switch_stage(state, SS_PREV_KEY);
 					else
 						skip_scan_switch_stage(state, SS_END);
 				}
@@ -401,8 +526,11 @@ skip_scan_rescan(CustomScanState *node)
 	else
 		skip_scan_switch_stage(state, SS_NOT_NULL);
 
-	state->skip_keys[0].prev_is_null = true;
-	state->skip_keys[0].prev_datum = 0;
+	for (int i = 0; i < state->num_skip_keys; i++)
+	{
+		state->skip_keys[i].prev_is_null = true;
+		state->skip_keys[i].prev_datum = 0;
+	}
 
 	state->needs_rescan = false;
 	ScanState *child_state = linitial(state->cscan_state.custom_ps);
@@ -435,24 +563,54 @@ tsl_skip_scan_state_create(CustomScan *cscan)
 	}
 	state->stage = SS_BEGIN;
 
-	state->num_skip_keys = list_length(cscan->custom_private);
+	/* set up N skipkeyinfos for N skip keys */
+	List *skinfos = (List *) linitial(cscan->custom_private);
+	state->num_skip_keys = list_length(skinfos);
 	state->skip_keys = palloc(sizeof(SkipKeyData) * state->num_skip_keys);
 
 	ListCell *lc;
 	int i = 0;
-	foreach (lc, cscan->custom_private)
+	foreach (lc, skinfos)
 	{
 		List *skipkeyinfo = (List *) lfirst(lc);
 
-		state->skip_keys[i].distinct_col_attnum = linitial_int(skipkeyinfo);
-		state->skip_keys[i].distinct_by_val = lsecond_int(skipkeyinfo);
-		state->skip_keys[i].distinct_typ_len = lthird_int(skipkeyinfo);
-		state->skip_keys[i].nulls_first = lfourth_int(skipkeyinfo);
-		state->skip_keys[i].sk_attno = list_nth_int(skipkeyinfo, 4);
+		state->skip_keys[i].distinct_col_attnum = list_nth_int(skipkeyinfo, SK_DistinctColAttno);
+		state->skip_keys[i].distinct_by_val = list_nth_int(skipkeyinfo, SK_DistinctByVal);
+		state->skip_keys[i].distinct_typ_len = list_nth_int(skipkeyinfo, SK_DistinctTypeLen);
+		state->skip_keys[i].nulls = list_nth_int(skipkeyinfo, SK_NullStatus);
+		Assert(state->num_skip_keys == 1 || state->skip_keys[i].nulls == SK_NOT_NULL);
+		state->skip_keys[i].sk_attno = list_nth_int(skipkeyinfo, SK_IndexKeyAttno);
 
 		state->skip_keys[i].prev_is_null = true;
 		i++;
 	}
+
+	state->eq_funcs = NULL;
+	state->comp_funcs = NULL;
+	state->comp_strategies = NULL;
+
+	/* set up N-1 equality ops for N skip keys if N>1 */
+	if (state->num_skip_keys > 1)
+	{
+		/* Should have a list of N-1 equality op Oids for N skip keys if N>1 */
+		Assert(list_length(cscan->custom_private) == 2);
+		List *eqoids = (List *) lsecond(cscan->custom_private);
+
+		state->eq_funcs = palloc(sizeof(FmgrInfo) * (state->num_skip_keys - 1));
+		state->comp_funcs = palloc(sizeof(FmgrInfo) * (state->num_skip_keys - 1));
+		state->comp_strategies = palloc(sizeof(StrategyNumber) * (state->num_skip_keys - 1));
+
+		int i = 0;
+		/* Set up "=" sk_funcs for keys 1..N-1 */
+		foreach (lc, eqoids)
+		{
+			Oid eqoid = lfirst_oid(lc);
+			Assert(OidIsValid(eqoid));
+			fmgr_info(eqoid, &state->eq_funcs[i++]);
+		}
+		Assert(i == state->num_skip_keys - 1);
+	}
+
 	state->cscan_state.methods = &skip_scan_state_methods;
 	return (Node *) state;
 }

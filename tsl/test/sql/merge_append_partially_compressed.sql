@@ -9,7 +9,7 @@
 -- We're testing the MergeAppend here which is not compatible with parallel plans.
 set max_parallel_workers_per_gather = 0;
 set timescaledb.enable_decompression_sorted_merge = off;
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float);
 SELECT create_hypertable('ht_metrics_compressed','time');
@@ -31,6 +31,13 @@ generate_series(1,3) device;
 VACUUM ANALYZE ht_metrics_compressed;
 
 SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group by 1 order by 2;
+SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
+
+-- test UNION with partially compressed chunks
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK;
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK ORDER BY time DESC;
+:PREFIX SELECT device FROM :CHUNK UNION ALL SELECT device FROM :CHUNK ORDER BY device DESC;
+:PREFIX SELECT value FROM :CHUNK UNION ALL SELECT value FROM :CHUNK ORDER BY value DESC;
 
 -- chunkAppend eligible queries (from tsbench)
 -- sort is not pushed down
@@ -306,7 +313,7 @@ VACUUM ANALYZE test4;
 
 set enable_hashagg TO false;
 SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
-EXPLAIN (costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
+EXPLAIN (buffers off, costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
 
 reset timescaledb.enable_decompression_sorted_merge;
 reset max_parallel_workers_per_gather;

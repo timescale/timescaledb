@@ -1,0 +1,1 @@
+Fixes: #8561 Show warning when direct compress is skipped due to triggers or unique constraints

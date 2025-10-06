@@ -3,7 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 create table foo( a integer, b timestamptz);
 select count(*) from create_hypertable('foo', 'b');
-NOTICE:  adding not-null constraint to column "b"
  count 
 -------
      1
@@ -33,12 +32,12 @@ insert into foo values
 -- function
 set timescaledb.enable_custom_hashagg to true;
 analyze foo;
-explain (costs off)
+explain (buffers off, costs off)
 select date_trunc('hour', b) bucket, sum(a) from foo group by bucket;
                               QUERY PLAN                               
 -----------------------------------------------------------------------
  Finalize HashAggregate
-   Group Key: (date_trunc('hour'::text, _hyper_1_1_chunk.b))
+   Group Key: (date_trunc('hour'::text, foo.b))
    ->  Append
          ->  Partial HashAggregate
                Group Key: date_trunc('hour'::text, _hyper_1_1_chunk.b)

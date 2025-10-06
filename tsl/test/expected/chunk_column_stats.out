@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set PREFIX 'EXPLAIN (costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off, timing off, summary off)'
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
@@ -78,7 +78,7 @@ SELECT * FROM enable_chunk_skipping('sample_table', 'sensor_id');
 
 -- The above should add an entry with MIN/MAX int64 entries for invalid chunk id
 -- to indicate that ranges on this column should be calculated for chunks
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   1 |             1 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
@@ -566,12 +566,12 @@ SET timescaledb.enable_chunk_skipping to ON;
 -- Newly added chunks should also have MIN/MAX entry
 \set start_date '2024-01-28 01:09:51.583252+05:30'
 INSERT INTO sample_table VALUES (:'start_date'::timestamptz, 1, 9, 78.999, 'new row4');
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   1 |             1 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
-  3 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   2 |             1 |        1 | sensor_id   |                    1 |                   9 | t
+  3 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   4 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
 (4 rows)
 
@@ -584,7 +584,7 @@ SELECT * from disable_chunk_skipping('sample_table', 'sense_id');
              1 | sense_id    | t
 (1 row)
 
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
 ----+---------------+----------+-------------+-------------+-----------+-------
 (0 rows)
@@ -626,13 +626,13 @@ SELECT decompress_chunk(:'CH_NAME');
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   5 |             1 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
-  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   7 |             1 |        1 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
 (4 rows)
 
 -- Compressing a chunk again should calculate proper ranges
@@ -642,13 +642,13 @@ SELECT compress_chunk(:'CH_NAME');
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   5 |             1 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
-  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   7 |             1 |        1 | sensor_id   |                    1 |                   9 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
 (4 rows)
 
 SELECT decompress_chunk(:'CH_NAME');
@@ -658,13 +658,13 @@ SELECT decompress_chunk(:'CH_NAME');
 (1 row)
 
 -- Entry should be reset for this chunk now
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   5 |             1 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
-  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   7 |             1 |        1 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
 (4 rows)
 
 -- Check that truncate resets the entry in the catalog
@@ -674,23 +674,23 @@ SELECT compress_chunk(:'CH_NAME');
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   5 |             1 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
-  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   7 |             1 |        1 | sensor_id   |                    1 |                   9 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
 (4 rows)
 
 TRUNCATE :CH_NAME;
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   5 |             1 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   6 |             1 |        2 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
-  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
   7 |             1 |        1 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
+  8 |             1 |        4 | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
 (4 rows)
 
 -- Check that drop chunk also removes entries from the catalog
@@ -701,7 +701,7 @@ SELECT drop_chunks('sample_table', older_than => '2022-02-28');
 (1 row)
 
 -- Entry should be removed for this chunk now
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   5 |             1 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
@@ -715,13 +715,13 @@ ALTER TABLE sample_table SET (
 );
 -- Check that a DROP COLUMN removes entries from catalogs as well
 ALTER TABLE sample_table DROP COLUMN sensor_id;
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
 ----+---------------+----------+-------------+-------------+-----------+-------
 (0 rows)
 
 DROP TABLE sample_table;
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name | range_start | range_end | valid 
 ----+---------------+----------+-------------+-------------+-----------+-------
 (0 rows)
@@ -750,7 +750,7 @@ SELECT * FROM enable_chunk_skipping('sample_table1', 'sensor_id');
                9 | t
 (1 row)
 
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   9 |             3 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
@@ -759,7 +759,7 @@ SELECT * from _timescaledb_catalog.chunk_column_stats;
 \set start_date '2023-03-17 17:51:11.322998+05:30'
 -- insert into new chunks
 INSERT INTO sample_table1 VALUES (:'start_date'::timestamptz, 12, 21, 33.123, 'new row1');
-SELECT * from _timescaledb_catalog.chunk_column_stats;
+SELECT * from _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
   9 |             3 |          | sensor_id   | -9223372036854775808 | 9223372036854775807 | t
@@ -816,7 +816,7 @@ SELECT compress_chunk(:'CH_NAME');
  _timescaledb_internal._hyper_4_8_chunk
 (1 row)
 
-SELECT * FROM _timescaledb_catalog.chunk_column_stats;
+SELECT * FROM _timescaledb_catalog.chunk_column_stats ORDER BY 1;
  id | hypertable_id | chunk_id | column_name |     range_start      |      range_end      | valid 
 ----+---------------+----------+-------------+----------------------+---------------------+-------
  11 |             4 |          | temperature | -9223372036854775808 | 9223372036854775807 | t
@@ -826,7 +826,6 @@ SELECT * FROM _timescaledb_catalog.chunk_column_stats;
 -- Check min/max ranges for partial chunks with segmentby columns get recalculated correctly by seementwise recompression
 CREATE TABLE chunk_skipping(time timestamptz,device text, updated_at timestamptz)
 WITH (tsdb.hypertable, tsdb.partition_column='time',tsdb.segmentby='device');
-NOTICE:  adding not-null constraint to column "time"
 SELECT enable_chunk_skipping('chunk_skipping', 'updated_at');
  enable_chunk_skipping 
 -----------------------

@@ -5,7 +5,7 @@
 SET timescaledb.enable_transparent_decompression to OFF;
 SET timezone TO 'America/Los_Angeles';
 
-\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 
 \ir include/rand_generator.sql
 
@@ -235,7 +235,7 @@ SELECT compress_chunk(:'CHUNK_NAME');
 VACUUM ANALYZE plan_inval;
 
 EXECUTE prep_plan;
-EXPLAIN (COSTS OFF) EXECUTE prep_plan;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE prep_plan;
 
 SET enable_hashagg = ON;
 
@@ -267,23 +267,23 @@ SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch LIMIT 2;
 VACUUM ANALYZE test_collation;
 
 --segment bys are pushed down correctly
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "POSIX";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE device_id < 'a';
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "POSIX";
 
 \set ON_ERROR_STOP 0
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id COLLATE "POSIX" < device_id_2 COLLATE "C";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE device_id COLLATE "POSIX" < device_id_2 COLLATE "C";
 SELECT device_id < device_id_2  FROM test_collation;
 \set ON_ERROR_STOP 1
 
 --segment meta on order bys pushdown
 --should work
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSIX";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSIX";
 --cannot pushdown when op collation does not match column's collation since min/max used different collation than what op needs
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSIX";
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "C";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSIX";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "C";
 
 --test datatypes
 CREATE TABLE datatype_test(
@@ -524,6 +524,7 @@ ALTER TABLE stattest SET (timescaledb.compress);
 -- check that approximate_row_count works with all normal chunks
 SELECT approximate_row_count('stattest');
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
+ANALYZE stattest;
 -- check that approximate_row_count works with all compressed chunks
 SELECT approximate_row_count('stattest');
 -- actual count should match with the above
@@ -789,7 +790,7 @@ SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
 SHOW max_parallel_workers;
 
-\set explain 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set explain 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 
 -- We disable enable_parallel_append here to ensure
 -- that we create the same query plan in all PG 14.X versions

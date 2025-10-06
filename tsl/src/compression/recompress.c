@@ -650,8 +650,6 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 										Relation uncompressed_chunk_rel, Snapshot snapshot)
 {
 	bool matching_exist = false;
-	/* Let compression TAM know it should only return tuples from the
-	 * non-compressed relation. */
 
 	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, 0);
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
@@ -863,7 +861,8 @@ delete_tuple_for_recompression(Relation rel, ItemPointer tid, Snapshot snapshot)
 static void
 try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk_rel)
 {
-	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, GetLatestSnapshot(), 0, 0);
+	PushActiveSnapshot(GetLatestSnapshot());
+	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, GetActiveSnapshot(), 0, 0);
 	ScanDirection scan_dir = BackwardScanDirection;
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
@@ -878,6 +877,7 @@ try_updating_chunk_status(Chunk *uncompressed_chunk, Relation uncompressed_chunk
 
 	ExecDropSingleTupleTableSlot(slot);
 	table_endscan(scan);
+	PopActiveSnapshot();
 
 	if (!has_tuples)
 	{

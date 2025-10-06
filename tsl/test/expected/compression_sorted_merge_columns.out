@@ -5,7 +5,6 @@
 create table t(x int, time timestamp, timetz timestamptz, int32 int4, int64 int8, s text);
 select create_hypertable('t', 'x');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "x"
  create_hypertable 
 -------------------
  (1,public,t,t)

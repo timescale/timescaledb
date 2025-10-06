@@ -5,6 +5,7 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 \set TEST_BASE_NAME skip_scan
 SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_NAME",
+    format('include/%s_multi_load.sql', :'TEST_BASE_NAME') AS "TEST_MULTI_LOAD_NAME",
     format('include/%s_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME",
     format('%s/results/%s_results_unoptimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_UNOPTIMIZED",
     format('%s/results/%s_results_optimized.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') AS "TEST_RESULTS_OPTIMIZED" \gset
@@ -137,22 +138,30 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -215,6 +224,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -284,6 +295,11 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
 -- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
 :PREFIX SELECT DISTINCT sq.dev FROM (SELECT dev FROM :TABLE) sq JOIN :TABLE ref ON (sq.dev = ref.dev) WHERE 1 > 2;
+-- test distinct PathKey with sortref not aligning with targets sortrefs in PG15 due to Window function
+:PREFIX SELECT DISTINCT
+    case when false then c10 else c10 end as c0,
+    max(c8) over (partition by c10 order by c6) as c1
+FROM (SELECT time as c6, val as c8, dev as c10 FROM :TABLE WHERE false) subq WHERE false;
 -- test multiple distincts with all but one pinned: #7998
 :PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
 :PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
@@ -327,8 +343,8 @@ DEALLOCATE prep;
 :PREFIX SELECT * FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0
 UNION SELECT b.* FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
@@ -370,22 +386,30 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -448,6 +472,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -517,6 +543,11 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
 -- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
 :PREFIX SELECT DISTINCT sq.dev FROM (SELECT dev FROM :TABLE) sq JOIN :TABLE ref ON (sq.dev = ref.dev) WHERE 1 > 2;
+-- test distinct PathKey with sortref not aligning with targets sortrefs in PG15 due to Window function
+:PREFIX SELECT DISTINCT
+    case when false then c10 else c10 end as c0,
+    max(c8) over (partition by c10 order by c6) as c1
+FROM (SELECT time as c6, val as c8, dev as c10 FROM :TABLE WHERE false) subq WHERE false;
 -- test multiple distincts with all but one pinned: #7998
 :PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
 :PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
@@ -560,8 +591,8 @@ DEALLOCATE prep;
 :PREFIX SELECT * FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0
 UNION SELECT b.* FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
@@ -618,22 +649,30 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -696,6 +735,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -765,6 +806,11 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
 -- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
 :PREFIX SELECT DISTINCT sq.dev FROM (SELECT dev FROM :TABLE) sq JOIN :TABLE ref ON (sq.dev = ref.dev) WHERE 1 > 2;
+-- test distinct PathKey with sortref not aligning with targets sortrefs in PG15 due to Window function
+:PREFIX SELECT DISTINCT
+    case when false then c10 else c10 end as c0,
+    max(c8) over (partition by c10 order by c6) as c1
+FROM (SELECT time as c6, val as c8, dev as c10 FROM :TABLE WHERE false) subq WHERE false;
 -- test multiple distincts with all but one pinned: #7998
 :PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
 :PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
@@ -808,8 +854,8 @@ DEALLOCATE prep;
 :PREFIX SELECT * FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0
 UNION SELECT b.* FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
@@ -851,22 +897,30 @@ CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE ORDER BY dev DESC, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 ORDER BY dev;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE time = 100;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL ORDER BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -929,6 +983,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT ON (dev) dev, int_func_volatile(), 'q2_14' FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -998,6 +1054,11 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT DISTINCT dev_name::varchar FROM :TABLE  WHERE dev_name::varchar = 'device_1' ORDER BY 1;
 -- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
 :PREFIX SELECT DISTINCT sq.dev FROM (SELECT dev FROM :TABLE) sq JOIN :TABLE ref ON (sq.dev = ref.dev) WHERE 1 > 2;
+-- test distinct PathKey with sortref not aligning with targets sortrefs in PG15 due to Window function
+:PREFIX SELECT DISTINCT
+    case when false then c10 else c10 end as c0,
+    max(c8) over (partition by c10 order by c6) as c1
+FROM (SELECT time as c6, val as c8, dev as c10 FROM :TABLE WHERE false) subq WHERE false;
 -- test multiple distincts with all but one pinned: #7998
 :PREFIX SELECT DISTINCT dev, dev FROM :TABLE ORDER BY 1;
 :PREFIX SELECT DISTINCT dev, time FROM :TABLE WHERE time = 100 ORDER BY 1;
@@ -1041,8 +1102,8 @@ DEALLOCATE prep;
 :PREFIX SELECT * FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL;
-:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE dev IS NOT NULL
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0;
+:PREFIX SELECT DISTINCT ON (dev, time) dev, time FROM :TABLE WHERE coalesce(dev, -1) >= 0
 UNION SELECT b.* FROM
    (SELECT DISTINCT ON (dev) dev FROM :TABLE) a,
    LATERAL (SELECT DISTINCT ON (time) dev, time FROM :TABLE WHERE dev = a.dev) b;
@@ -1102,11 +1163,16 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev DESC NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 -- NULLS FIRST doesn't match segmentby NULL direction
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 -- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev, time DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time;
 -- multicolumn sort not matching compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time DESC;
@@ -1132,6 +1198,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev, dev_name DESC;
 -- dev_name is not a leading column
 :PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 ORDER BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 AND dev_name IS NOT NULL ORDER BY dev_name;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev = 1;
 -- Basic tests for "segmentby = 'dev'"
 -----------------------------------------
@@ -1155,6 +1223,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT dev + 1, 'q1_13' FROM :TABLE;
 -- DISTINCT ON queries
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
@@ -1194,6 +1264,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT 'Device ' || dev_name FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -1331,11 +1403,16 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC;
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev DESC NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev;
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev DESC NULLS FIRST;
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
 -- NULLS FIRST doesn't match segmentby NULL direction
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev NULLS FIRST;
 -- multicolumn sort with dev as leading column matching (segmentby dev, order by time DESC) compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev, time DESC;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE WHERE dev IS NOT NULL ORDER BY dev, time DESC;
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time;
 -- multicolumn sort not matching compression index
 :PREFIX SELECT DISTINCT ON (dev) dev, time FROM :TABLE ORDER BY dev DESC, time DESC;
@@ -1361,6 +1438,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT ON (dev) dev, dev_name FROM :TABLE ORDER BY dev, dev_name DESC;
 -- dev_name is not a leading column
 :PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 ORDER BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev = 1 AND dev_name IS NOT NULL ORDER BY dev_name;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev = 1;
 -- Basic tests for "segmentby = 'dev'"
 -----------------------------------------
@@ -1384,6 +1463,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT dev + 1, 'q1_13' FROM :TABLE;
 -- DISTINCT ON queries
 :PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev) dev FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev) dev, 'q2_4', length(md5(now()::text)) FROM :TABLE;
@@ -1423,6 +1504,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT DISTINCT 'Device ' || dev_name FROM :TABLE;
 -- DISTINCT ON queries on TEXT column
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE;
+-- Test not-NULL mode
+:PREFIX SELECT DISTINCT ON (dev_name) dev_name FROM :TABLE WHERE dev_name IS NOT NULL;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_2' FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_3', NULL FROM :TABLE;
 :PREFIX SELECT DISTINCT ON (dev_name) dev_name, 'q3_4', length(md5(now()::text)) FROM :TABLE;
@@ -1543,7 +1626,7 @@ TRUNCATE skip_scan_insert;
 SELECT decompress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 \o
 RESET timescaledb.enable_compressed_skipscan;
--- compare SkipScan results on hypertable
+-- compare SkipScan results on compressed hypertable
 :DIFF_CMD
 --- Unoptimized results
 +++ Optimized results
@@ -1795,7 +1878,7 @@ RESET max_parallel_workers_per_gather;
 RESET enable_seqscan;
 \o
 RESET timescaledb.enable_compressed_skipscan;
--- compare SkipScan results on hypertable
+-- compare SkipScan results on compressed hypertable
 :DIFF_CMD
 --- Unoptimized results
 +++ Optimized results
@@ -1807,3 +1890,1034 @@ RESET timescaledb.enable_compressed_skipscan;
  (1 row)
  
   dev 
+-- run tests on compressed hypertable with different layouts of compressed chunks
+SELECT format('include/%s_multi_query.sql', :'TEST_BASE_NAME') AS "TEST_QUERY_NAME" \gset
+-- run multikey SkipScan tests
+\ir :TEST_MULTI_LOAD_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Create tables with 4 not-null index columns (ASC, DESC, ASC, ASC) to test various multikey SkipScan scenarios
+-- Not-null scenarios are tested separately in skip_scan_notnull.sql, here we are testing multi-keys specifically
+CREATE TABLE mskip_scan(time int not null, status int not null, region text not null, dev int not null, dev_name text not null, val int);
+-- Status: (1,2), region: (reg1..reg4), dev: (1..5), dev_name same as dev, 400 timestamps divided into 4 chunks tied to status, 8K rows total
+-- We want to test both (1 distinct, N distinct) and (N distinct, 1 distinct) scenarios,
+-- (status,*) where time<100 will do for the former, (dev, dev_name) will do for the latter
+INSERT INTO mskip_scan SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(0, 99) t, generate_series(1, 4) r, generate_series(1, 5) d;
+INSERT INTO mskip_scan SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(100, 199) t, generate_series(1, 4) r, generate_series(1, 5) d;
+INSERT INTO mskip_scan SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(200, 299) t, generate_series(1, 4) r, generate_series(1, 5) d;
+INSERT INTO mskip_scan SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(300, 399) t, generate_series(1, 4) r, generate_series(1, 5) d;
+CREATE INDEX on mskip_scan(status, region, dev, dev_name);
+-- To test reverse column orders
+CREATE INDEX on mskip_scan(status, region DESC, dev);
+ANALYZE mskip_scan;
+-- Same with a hypertable
+CREATE TABLE mskip_scan_ht(time int not null, status int not null, region text not null, dev int not null, dev_name text not null, val int);
+SELECT create_hypertable('mskip_scan_ht', 'time', chunk_time_interval => 100, create_default_indexes => false);
+     create_hypertable      
+----------------------------
+ (7,public,mskip_scan_ht,t)
+(1 row)
+
+INSERT INTO mskip_scan_ht SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(0, 99) t, generate_series(1, 4) r, generate_series(1, 5) d;
+INSERT INTO mskip_scan_ht SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(100, 199) t, generate_series(1, 4) r, generate_series(1, 5) d;
+INSERT INTO mskip_scan_ht SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(200, 299) t, generate_series(1, 4) r, generate_series(1, 5) d;
+INSERT INTO mskip_scan_ht SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(300, 399) t, generate_series(1, 4) r, generate_series(1, 5) d;
+CREATE INDEX on mskip_scan_ht(status, region, dev, dev_name);
+-- To test reverse column orders
+CREATE INDEX on mskip_scan_ht(status, region DESC, dev);
+ANALYZE mskip_scan_ht;
+-- Same with columnar
+CREATE TABLE mskip_scan_htc(time int not null, status int not null, region text not null, dev int not null, dev_name text not null, val int);
+SELECT create_hypertable('mskip_scan_htc', 'time', chunk_time_interval => 100, create_default_indexes => false);
+      create_hypertable      
+-----------------------------
+ (8,public,mskip_scan_htc,t)
+(1 row)
+
+-- Cannot have reverse orders on segmented columns in columnar index, so it won't be tested for columnar table
+ALTER TABLE mskip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='status,region,dev,dev_name');
+INSERT INTO mskip_scan_htc SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(0, 99) t, generate_series(1, 4) r, generate_series(1, 5) d;
+INSERT INTO mskip_scan_htc SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(100, 199) t, generate_series(1, 4) r, generate_series(1, 5) d;
+INSERT INTO mskip_scan_htc SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(200, 299) t, generate_series(1, 4) r, generate_series(1, 5) d;
+INSERT INTO mskip_scan_htc SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(300, 399) t, generate_series(1, 4) r, generate_series(1, 5) d;
+SELECT compress_chunk(ch) FROM show_chunks('mskip_scan_htc') ch;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_69_chunk
+ _timescaledb_internal._hyper_8_70_chunk
+ _timescaledb_internal._hyper_8_71_chunk
+ _timescaledb_internal._hyper_8_72_chunk
+(4 rows)
+
+ANALYZE mskip_scan_htc;
+alter table mskip_scan set (autovacuum_enabled = off);
+alter table mskip_scan_ht set (autovacuum_enabled = off);
+alter table mskip_scan_htc set (autovacuum_enabled = off);
+\set PREFIX ''
+-- make sure multikey SkipScan results are correct
+\set TABLE mskip_scan
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
+-- multicolumn index with uniform order
+:PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
+-- index with reverse column orders (applied to non-columnstore ony)
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
+set enable_seqscan=0;
+-- (1,N) distinct scenario
+:PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
+-- (N,1) distinct scenario
+:PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
+-- SELECT list order of distinct columns shouldn't matter if OBY matches index order
+:PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
+reset enable_seqscan;
+-- Basic queries
+:PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
+\qecho ordered append on :TABLE
+:PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
+:PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
+ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices ORDER BY region, dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT time, status, region, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (status, region, dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+set enable_seqscan=0;
+:PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+reset enable_seqscan;
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+\o
+SET timescaledb.enable_multikey_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
+-- multicolumn index with uniform order
+:PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
+-- index with reverse column orders (applied to non-columnstore ony)
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
+set enable_seqscan=0;
+-- (1,N) distinct scenario
+:PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
+-- (N,1) distinct scenario
+:PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
+-- SELECT list order of distinct columns shouldn't matter if OBY matches index order
+:PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
+reset enable_seqscan;
+-- Basic queries
+:PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
+\qecho ordered append on :TABLE
+:PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
+:PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
+ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices ORDER BY region, dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT time, status, region, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (status, region, dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+set enable_seqscan=0;
+:PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+reset enable_seqscan;
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+\o
+RESET timescaledb.enable_multikey_skipscan;
+-- compare SkipScan results on table
+:DIFF_CMD
+--- Unoptimized results
++++ Optimized results
+@@ -1,6 +1,6 @@
+  enable_multikey_skipscan 
+ --------------------------
+- off
++ on
+ (1 row)
+ 
+  time | status | region | dev | dev_name | val 
+\set TABLE mskip_scan_ht
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
+-- multicolumn index with uniform order
+:PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
+-- index with reverse column orders (applied to non-columnstore ony)
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
+set enable_seqscan=0;
+-- (1,N) distinct scenario
+:PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
+-- (N,1) distinct scenario
+:PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
+-- SELECT list order of distinct columns shouldn't matter if OBY matches index order
+:PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
+reset enable_seqscan;
+-- Basic queries
+:PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
+\qecho ordered append on :TABLE
+:PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
+:PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
+ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices ORDER BY region, dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT time, status, region, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (status, region, dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+set enable_seqscan=0;
+:PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+reset enable_seqscan;
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+\o
+SET timescaledb.enable_multikey_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
+-- multicolumn index with uniform order
+:PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
+-- index with reverse column orders (applied to non-columnstore ony)
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
+set enable_seqscan=0;
+-- (1,N) distinct scenario
+:PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
+-- (N,1) distinct scenario
+:PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
+-- SELECT list order of distinct columns shouldn't matter if OBY matches index order
+:PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
+reset enable_seqscan;
+-- Basic queries
+:PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
+\qecho ordered append on :TABLE
+:PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
+:PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
+ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices ORDER BY region, dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT time, status, region, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (status, region, dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+set enable_seqscan=0;
+:PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+reset enable_seqscan;
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+\o
+RESET timescaledb.enable_multikey_skipscan;
+-- compare SkipScan results on hypertable
+:DIFF_CMD
+--- Unoptimized results
++++ Optimized results
+@@ -1,6 +1,6 @@
+  enable_multikey_skipscan 
+ --------------------------
+- off
++ on
+ (1 row)
+ 
+  time | status | region | dev | dev_name | val  
+\set TABLE mskip_scan_htc
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
+-- multicolumn index with uniform order
+:PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
+-- index with reverse column orders (applied to non-columnstore ony)
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
+set enable_seqscan=0;
+-- (1,N) distinct scenario
+:PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
+-- (N,1) distinct scenario
+:PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
+-- SELECT list order of distinct columns shouldn't matter if OBY matches index order
+:PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
+reset enable_seqscan;
+-- Basic queries
+:PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
+\qecho ordered append on :TABLE
+:PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
+:PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
+ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices ORDER BY region, dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT time, status, region, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (status, region, dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+set enable_seqscan=0;
+:PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+reset enable_seqscan;
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+\o
+SET timescaledb.enable_multikey_skipscan TO false;
+\o :TEST_RESULTS_UNOPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
+-- multicolumn index with uniform order
+:PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
+-- index with reverse column orders (applied to non-columnstore ony)
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
+set enable_seqscan=0;
+-- (1,N) distinct scenario
+:PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
+-- (N,1) distinct scenario
+:PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
+-- SELECT list order of distinct columns shouldn't matter if OBY matches index order
+:PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
+reset enable_seqscan;
+-- Basic queries
+:PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
+\qecho ordered append on :TABLE
+:PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
+:PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
+ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices;
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices ORDER BY region, dev;
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT time, status, region, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (status, region, dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+set enable_seqscan=0;
+:PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
+-- RuntimeKeys
+:PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+reset enable_seqscan;
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+\o
+RESET timescaledb.enable_multikey_skipscan;
+-- compare SkipScan results on compressed hypertable
+:DIFF_CMD
+--- Unoptimized results
++++ Optimized results
+@@ -1,6 +1,6 @@
+  enable_multikey_skipscan 
+ --------------------------
+- off
++ on
+ (1 row)
+ 
+  time | status | region | dev | dev_name | val  
+-- make sure multikey SkipScan is applied correctly
+SET timescaledb.debug_skip_scan_info TO true;
+\set TABLE mskip_scan
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
+-- multicolumn index with uniform order
+:PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- index with reverse column orders (applied to non-columnstore ony)
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
+psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on mskip_scan_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
+psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on mskip_scan_status_region_dev_idx(region NOT NULL, dev NOT NULL)
+set enable_seqscan=0;
+-- (1,N) distinct scenario
+:PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
+psql:include/skip_scan_multi_query.sql:18: INFO:  SkipScan used on mskip_scan_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+-- (N,1) distinct scenario
+:PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
+-- SELECT list order of distinct columns shouldn't matter if OBY matches index order
+:PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+reset enable_seqscan;
+-- Basic queries
+:PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+\qecho ordered append on :TABLE
+:PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+:PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on mskip_scan_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
+psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
+ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices;
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices ORDER BY region, dev;
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
+:PREFIX EXECUTE prep;
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT time, status, region, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (status, region, dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+set enable_seqscan=0;
+:PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+-- RuntimeKeys
+:PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+reset enable_seqscan;
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on mskip_scan_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+\o
+\set TABLE mskip_scan_ht
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
+-- multicolumn index with uniform order
+:PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- index with reverse column orders (applied to non-columnstore ony)
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
+psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:13: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
+psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:14: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_idx(region NOT NULL, dev NOT NULL)
+set enable_seqscan=0;
+-- (1,N) distinct scenario
+:PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
+psql:include/skip_scan_multi_query.sql:18: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+-- (N,1) distinct scenario
+:PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(dev NOT NULL, dev_name NOT NULL)
+-- SELECT list order of distinct columns shouldn't matter if OBY matches index order
+:PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+reset enable_seqscan;
+-- Basic queries
+:PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+\qecho ordered append on :TABLE
+:PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+:PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:47: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_idx(status NOT NULL, dev NOT NULL)
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
+psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:51: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
+ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices;
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices ORDER BY region, dev;
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL)
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
+:PREFIX EXECUTE prep;
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT time, status, region, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (status, region, dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+set enable_seqscan=0;
+:PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+-- RuntimeKeys
+:PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+reset enable_seqscan;
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_7_65_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_7_66_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_7_67_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on _hyper_7_68_chunk_mskip_scan_ht_status_region_dev_dev_name_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+\o
+\set TABLE mskip_scan_htc
+\o :TEST_RESULTS_OPTIMIZED
+\ir :TEST_QUERY_NAME
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- canary for result diff
+SELECT current_setting('timescaledb.enable_multikey_skipscan') AS enable_multikey_skipscan;
+-- multicolumn index with uniform order
+:PREFIX SELECT DISTINCT ON(status, region, dev, dev_name) * FROM :TABLE ORDER BY status, region, dev, dev_name;
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:9: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region DESC, dev DESC;
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:10: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+-- index with reverse column orders (applied to non-columnstore ony)
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE ORDER BY status, region DESC, dev;
+:PREFIX SELECT DISTINCT ON(region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev DESC;
+set enable_seqscan=0;
+-- (1,N) distinct scenario
+:PREFIX SELECT DISTINCT status, dev FROM :TABLE WHERE time < 100 AND region = 'reg_1' ORDER BY 1,2;
+psql:include/skip_scan_multi_query.sql:18: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL)
+-- (N,1) distinct scenario
+:PREFIX SELECT DISTINCT dev, dev_name FROM :TABLE WHERE status = 1 AND region = 'reg_1' ORDER BY 1,2;
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:21: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(dev NOT NULL, dev_name NOT NULL)
+-- SELECT list order of distinct columns shouldn't matter if OBY matches index order
+:PREFIX SELECT DISTINCT dev, status, dev_name FROM :TABLE WHERE region = 'reg_2' ORDER BY status, dev, dev_name;
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:24: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, dev NOT NULL, dev_name NOT NULL)
+reset enable_seqscan;
+-- Basic queries
+:PREFIX SELECT DISTINCT region, dev, 'q1_3', NULL FROM :TABLE WHERE status = 1 ORDER BY region, dev;
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:28: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+-- DISTINCT ON queries
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, tableoid::regclass, 'q2_11' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:31: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_immutable(), 'q2_12' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:32: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_stable(), 'q2_13' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:33: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name, int_func_volatile(), 'q2_14' FROM :TABLE WHERE status = 1;
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:34: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+\qecho ordered append on :TABLE
+:PREFIX SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1 AND time BETWEEN 0 AND 5000;
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:37: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+\qecho SUBSELECTS on :TABLE
+:PREFIX SELECT time, region, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1) a;
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:40: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+:PREFIX SELECT NULL, region, dev, NULL, 'q4_3' FROM (SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1) a;
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:41: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+\qecho ORDER BY
+:PREFIX SELECT time, dev, val, 'q4_1' FROM (SELECT DISTINCT ON (region, dev) * FROM :TABLE WHERE status = 1 ORDER BY region, dev) a;
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:44: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+-- RowCompareExpr
+:PREFIX SELECT DISTINCT ON (status, dev) * FROM :TABLE WHERE region = 'reg_1' and (status, dev) > (1,2);
+-- always false expr similar to our initial skip qual
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > NULL and status > NULL and region > NULL;
+-- no tuples matching
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev > 20;
+-- test constants in ORDER BY
+:PREFIX SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE status = 1 ORDER BY status, region;
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:54: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+-- test distinct PathKey with sortref = 0 in PG15 due to FALSE filter not pushed into relation (should not crash in PG15)
+:PREFIX SELECT DISTINCT sq.dev FROM (SELECT status, region, dev FROM :TABLE) sq JOIN :TABLE ref
+ON (sq.dev = ref.dev) AND (sq.status = ref.status) AND (sq.region = ref.region) WHERE 1 > 2;
+-- CTE
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices;
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:64: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+:PREFIX WITH devices AS (
+	SELECT DISTINCT ON (region, dev) region, dev FROM :TABLE WHERE status = 1
+)
+SELECT * FROM devices ORDER BY region, dev;
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:69: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL)
+-- prepared statements
+PREPARE prep AS SELECT DISTINCT ON (region, dev, dev_name) region, dev, dev_name FROM :TABLE WHERE status = 1;
+:PREFIX EXECUTE prep;
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+psql:include/skip_scan_multi_query.sql:73: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(region NOT NULL, dev NOT NULL, dev_name NOT NULL)
+:PREFIX EXECUTE prep;
+:PREFIX EXECUTE prep;
+DEALLOCATE prep;
+-- ReScan tests
+:PREFIX SELECT time, status, region, dev, val, 'q7_1' FROM (SELECT DISTINCT ON (status, region, dev) * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT * FROM :TABLE WHERE time != a.v) b) a;
+set enable_seqscan=0;
+:PREFIX SELECT time, status, region, dev, val, 'q7_2' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev != a.v) b) a;
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:86: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+-- RuntimeKeys
+:PREFIX SELECT time, status, region, dev, val, 'q8_1' FROM (SELECT * FROM (
+    VALUES (1), (2)) a(v),
+    LATERAL (SELECT DISTINCT ON (status, region, dev) * FROM :TABLE WHERE dev >= a.v) b) c;
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:91: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+reset enable_seqscan;
+-- parallel query
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+:PREFIX SELECT DISTINCT status, region, dev FROM :TABLE ORDER BY status, region, dev;
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on compress_hyper_9_73_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on compress_hyper_9_74_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on compress_hyper_9_75_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+psql:include/skip_scan_multi_query.sql:96: INFO:  SkipScan used on compress_hyper_9_76_chunk_status_region_dev_dev_name__ts_me_idx(status NOT NULL, region NOT NULL, dev NOT NULL)
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+\o
+RESET timescaledb.debug_skip_scan_info;

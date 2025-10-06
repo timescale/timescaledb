@@ -75,7 +75,7 @@ BEGIN
 END;
 $BODY$;
 -- ConstraintAwareAppend applied for SELECT
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
                                                                    QUERY PLAN                                                                   
@@ -108,7 +108,7 @@ WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series
 (25 rows)
 
 -- ConstraintAwareAppend NOT applied for DELETE
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
                                                                       QUERY PLAN                                                                       
@@ -181,5 +181,44 @@ SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, serie
  1257894002000000000 | dev1      |      2.5 |        3 |          | 
  1257897600000000000 | dev1      |      4.5 |        5 |          | f
 (4 rows)
+
+ROLLBACK;
+-- test update on chunks directly
+CREATE TABLE direct_delete(time timestamptz) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO direct_delete VALUES ('2020-01-01');
+SELECT show_chunks('direct_delete') AS "CHUNK" \gset
+--should have ModifyHyperable node
+EXPLAIN (costs off, timing off, summary off) DELETE FROM :CHUNK;
+                QUERY PLAN                
+------------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Delete on _hyper_2_5_chunk
+         ->  Seq Scan on _hyper_2_5_chunk
+(3 rows)
+
+EXPLAIN (costs off, timing off, summary off) DELETE FROM ONLY :CHUNK;
+                QUERY PLAN                
+------------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Delete on _hyper_2_5_chunk
+         ->  Seq Scan on _hyper_2_5_chunk
+(3 rows)
+
+-- DELETE should succeed
+BEGIN;
+DELETE FROM :CHUNK RETURNING *;
+             time             
+------------------------------
+ Wed Jan 01 00:00:00 2020 PST
+(1 row)
+
+ROLLBACK;
+BEGIN;
+DELETE FROM ONLY :CHUNK RETURNING *;
+             time             
+------------------------------
+ Wed Jan 01 00:00:00 2020 PST
+(1 row)
 
 ROLLBACK;

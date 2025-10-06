@@ -24,7 +24,6 @@ SELECT * FROM test.show_columns('index_test');
 
 -- No pre-existing UNIQUE index, so partitioning on two columns should work
 SELECT create_hypertable('index_test', 'time', 'device', 2);
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (1,public,index_test,t)
@@ -66,19 +65,6 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk') ORDER BY
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (8 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
- chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
-----------+---------------------------------------------+---------------+----------------------------
-        1 | _hyper_1_1_chunk_index_test_device_time_idx |             1 | index_test_device_time_idx
-        1 | _hyper_1_1_chunk_index_test_time_device_idx |             1 | index_test_time_device_idx
-        1 | _hyper_1_1_chunk_index_test_time_idx        |             1 | index_test_time_idx
-        1 | _hyper_1_1_chunk_index_test_time_temp_idx   |             1 | index_test_time_temp_idx
-        2 | _hyper_1_2_chunk_index_test_device_time_idx |             1 | index_test_device_time_idx
-        2 | _hyper_1_2_chunk_index_test_time_device_idx |             1 | index_test_time_device_idx
-        2 | _hyper_1_2_chunk_index_test_time_idx        |             1 | index_test_time_idx
-        2 | _hyper_1_2_chunk_index_test_time_temp_idx   |             1 | index_test_time_temp_idx
-(8 rows)
-
 ALTER INDEX index_test_time_idx RENAME TO index_test_time_idx2;
 -- Metadata and index should have changed name
 SELECT * FROM test.show_indexes('index_test');
@@ -103,19 +89,6 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk') ORDER BY
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (8 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
- chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
-----------+---------------------------------------------+---------------+----------------------------
-        1 | _hyper_1_1_chunk_index_test_device_time_idx |             1 | index_test_device_time_idx
-        1 | _hyper_1_1_chunk_index_test_time_device_idx |             1 | index_test_time_device_idx
-        1 | _hyper_1_1_chunk_index_test_time_idx2       |             1 | index_test_time_idx2
-        1 | _hyper_1_1_chunk_index_test_time_temp_idx   |             1 | index_test_time_temp_idx
-        2 | _hyper_1_2_chunk_index_test_device_time_idx |             1 | index_test_device_time_idx
-        2 | _hyper_1_2_chunk_index_test_time_device_idx |             1 | index_test_time_device_idx
-        2 | _hyper_1_2_chunk_index_test_time_idx2       |             1 | index_test_time_idx2
-        2 | _hyper_1_2_chunk_index_test_time_temp_idx   |             1 | index_test_time_temp_idx
-(8 rows)
-
 DROP INDEX index_test_time_idx2;
 DROP INDEX index_test_time_device_idx;
 -- Index should have been dropped
@@ -135,18 +108,9 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal._hyper_1_2_chunk_index_test_time_temp_idx   | {time,temp}   |      | f      | f       | f         | 
 (4 rows)
 
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
-----------+---------------------------------------------+---------------+----------------------------
-        1 | _hyper_1_1_chunk_index_test_device_time_idx |             1 | index_test_device_time_idx
-        1 | _hyper_1_1_chunk_index_test_time_temp_idx   |             1 | index_test_time_temp_idx
-        2 | _hyper_1_2_chunk_index_test_device_time_idx |             1 | index_test_device_time_idx
-        2 | _hyper_1_2_chunk_index_test_time_temp_idx   |             1 | index_test_time_temp_idx
-(4 rows)
-
 -- Create index with long name to see how this is handled on chunks
-CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates ON index_test (time, temp) WITH (timescaledb.transaction_per_chunk);
-CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates_2 ON index_test (time, temp) WITH (timescaledb.transaction_per_chunk);
+CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates ON index_test (time ASC, temp DESC) WITH (timescaledb.transaction_per_chunk);
+CREATE INDEX a_hypertable_index_with_a_very_very_long_name_that_truncates_2 ON index_test (time DESC, temp ASC) WITH (timescaledb.transaction_per_chunk);
 SELECT * FROM test.show_indexes('index_test');
                              Index                              |    Columns    | Expr | Unique | Primary | Exclusion | Tablespace 
 ----------------------------------------------------------------+---------------+------+--------+---------+-----------+------------
@@ -224,18 +188,7 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
  _timescaledb_internal._hyper_1_2_chunk | _timescaledb_internal."2_2_index_test_time_device_key"            | {time,device} |      | t      | f       | f         | 
 (6 rows)
 
--- Constraint indexes are added to chunk_index table.
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id |                 index_name                  | hypertable_id |   hypertable_index_name    
-----------+---------------------------------------------+---------------+----------------------------
-        1 | _hyper_1_1_chunk_index_test_device_time_idx |             1 | index_test_device_time_idx
-        1 | _hyper_1_1_chunk_index_test_time_temp_idx   |             1 | index_test_time_temp_idx
-        2 | _hyper_1_2_chunk_index_test_device_time_idx |             1 | index_test_device_time_idx
-        2 | _hyper_1_2_chunk_index_test_time_temp_idx   |             1 | index_test_time_temp_idx
-        1 | 1_1_index_test_time_device_key              |             1 | index_test_time_device_key
-        2 | 2_2_index_test_time_device_key              |             1 | index_test_time_device_key
-(6 rows)
-
+-- Constraints are added to chunk_constraint table.
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
  chunk_id | dimension_slice_id |        constraint_name         | hypertable_constraint_name 
 ----------+--------------------+--------------------------------+----------------------------
@@ -248,16 +201,9 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
 (6 rows)
 
 DROP TABLE index_test;
--- Metadata removed
-SELECT * FROM _timescaledb_catalog.chunk_index;
- chunk_id | index_name | hypertable_id | hypertable_index_name 
-----------+------------+---------------+-----------------------
-(0 rows)
-
 -- Test that indexes are planned correctly
 CREATE TABLE index_expr_test(id serial, time timestamptz, temp float, meta int);
 select create_hypertable('index_expr_test', 'time');
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable       
 ------------------------------
  (2,public,index_expr_test,t)
@@ -270,7 +216,7 @@ INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, 1);
 INSERT INTO index_expr_test VALUES ('2017-01-20T09:00:01', 17.5, 2);
 SET enable_seqscan TO false;
 SET enable_bitmapscan TO false;
-EXPLAIN (verbose, costs off)
+EXPLAIN (verbose, buffers off, costs off)
 SELECT * FROM index_expr_test WHERE meta = 1;
                                               QUERY PLAN                                              
 ------------------------------------------------------------------------------------------------------
@@ -297,7 +243,6 @@ ROLLBACK;
 DROP TABLE index_expr_test CASCADE;
 CREATE TABLE partial_index_test(time INTEGER);
 SELECT create_hypertable('partial_index_test', 'time', chunk_time_interval => 1, create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (3,public,partial_index_test,t)
@@ -329,9 +274,8 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 
 -- regerssion test for bug fixed by PR #1008.
 -- this caused an assertion failure when a MergeAppend node contained unsorted children
-SET enable_seqscan TO false;
 SET enable_bitmapscan TO false;
-EXPLAIN (verbose, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
+EXPLAIN (verbose, buffers off, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
  Limit
@@ -371,14 +315,14 @@ SELECT * FROM test.show_indexesp('_timescaledb_internal._hyper%_chunk');
 -------+-------+---------+------+--------+---------+-----------+------------
 (0 rows)
 
-EXPLAIN (verbose, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
+EXPLAIN (verbose, buffers off, costs off) SELECT * FROM partial_index_test WHERE time < 2 ORDER BY time LIMIT 2;
                               QUERY PLAN                              
 ----------------------------------------------------------------------
  Limit
-   Output: _hyper_3_4_chunk."time"
+   Output: partial_index_test."time"
    ->  Sort
-         Output: _hyper_3_4_chunk."time"
-         Sort Key: _hyper_3_4_chunk."time"
+         Output: partial_index_test."time"
+         Sort Key: partial_index_test."time"
          ->  Append
                ->  Seq Scan on _timescaledb_internal._hyper_3_4_chunk
                      Output: _hyper_3_4_chunk."time"

@@ -6,7 +6,6 @@
 \set GROUPING_CARDINALITY 10::int
 create table svagg(t int, f int, s int);
 select create_hypertable('svagg', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
-NOTICE:  adding not-null constraint to column "s"
  create_hypertable  
 --------------------
  (1,public,svagg,t)
@@ -32,7 +31,7 @@ set max_parallel_workers_per_gather = 0;
 set timescaledb.debug_require_vector_agg = 'require';
 set timescaledb.enable_vectorized_aggregation to off;
 select sum(t) from svagg;
-ERROR:  vector aggregation inconsistent with debug_require_vector_agg GUC
+ERROR:  postgres partial aggregation nodes inconsistent with debug_require_vector_agg GUC
 set timescaledb.debug_require_vector_agg = 'forbid';
 set timescaledb.enable_vectorized_aggregation to off;
 select sum(t) from svagg;
@@ -44,7 +43,7 @@ select sum(t) from svagg;
 set timescaledb.debug_require_vector_agg = 'forbid';
 set timescaledb.enable_vectorized_aggregation to on;
 select sum(t) from svagg;
-ERROR:  vector aggregation inconsistent with debug_require_vector_agg GUC
+ERROR:  vectorized partial aggregation nodes inconsistent with debug_require_vector_agg GUC
 set timescaledb.debug_require_vector_agg = 'require';
 set timescaledb.enable_vectorized_aggregation to on;
 select sum(t) from svagg;
@@ -147,7 +146,7 @@ select s, sum(t), count(*) from svagg group by s order by s;
 (10 rows)
 
 -- another example that we used not to vectorize because of the projection.
-explain (costs off)
+explain (buffers off, costs off)
 select sum(t), s, count(*) from svagg group by s order by s;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------

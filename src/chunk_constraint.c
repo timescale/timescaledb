@@ -428,34 +428,6 @@ create_non_dimensional_constraint(const ChunkConstraint *cc, Oid chunk_oid, int3
 		ts_process_utility_set_expect_chunk_modification(false);
 	}
 
-	/*
-	 * The table constraint might not have been created if this constraint
-	 * corresponds to a dimension slice that covers the entire range of values
-	 * in the particular dimension. In that case, there is no need to add a
-	 * table constraint.
-	 */
-	if (!OidIsValid(chunk_constraint_oid))
-		return InvalidOid;
-
-	Oid hypertable_constraint_oid =
-		get_relation_constraint_oid(hypertable_oid,
-									NameStr(cc->fd.hypertable_constraint_name),
-									false);
-	HeapTuple tuple = SearchSysCache1(CONSTROID, hypertable_constraint_oid);
-
-	if (HeapTupleIsValid(tuple))
-	{
-		FormData_pg_constraint *constr = (FormData_pg_constraint *) GETSTRUCT(tuple);
-
-		if (OidIsValid(constr->conindid) && constr->contype != CONSTRAINT_FOREIGN)
-			ts_chunk_index_create_from_constraint(hypertable_id,
-												  hypertable_constraint_oid,
-												  chunk_id,
-												  chunk_constraint_oid);
-
-		ReleaseSysCache(tuple);
-	}
-
 	return chunk_constraint_oid;
 }
 
@@ -743,7 +715,14 @@ ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_id, ChunkCo
 static bool
 chunk_constraint_need_on_chunk(Form_pg_constraint conform)
 {
-	if (conform->contype == CONSTRAINT_CHECK)
+	if (conform->contype == CONSTRAINT_CHECK
+#if PG18_GE
+		/* Avoid NOT NULL constraints
+		 * https://github.com/postgres/postgres/commit/b0e96f31
+		 */
+		|| conform->contype == CONSTRAINT_NOTNULL
+#endif
+	)
 	{
 		/*
 		 * check and not null constraints handled by regular inheritance (from
@@ -909,33 +888,6 @@ hypertable_constraint_matches_tuple(TupleInfo *ti, const char *hypertable_constr
 }
 
 static void
-chunk_constraint_delete_metadata(TupleInfo *ti)
-{
-	bool isnull;
-	Datum constrname = slot_getattr(ti->slot, Anum_chunk_constraint_constraint_name, &isnull);
-	int32 chunk_id = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull));
-	/* Get the chunk relid. Note that, at this point, the chunk table can be
-	 * deleted already */
-	Oid chunk_relid = ts_chunk_get_relid(chunk_id, true);
-
-	if (OidIsValid(chunk_relid))
-	{
-		Oid index_relid = get_constraint_index(
-			get_relation_constraint_oid(chunk_relid, NameStr(*DatumGetName(constrname)), true));
-
-		/*
-		 * If this is an index constraint, we need to cleanup the index
-		 * metadata. Don't drop the index though, since that will happen when
-		 * the constraint is dropped.
-		 */
-		if (OidIsValid(index_relid))
-			ts_chunk_index_delete(chunk_id, get_rel_name(index_relid), false);
-	}
-
-	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
-}
-
-static void
 chunk_constraint_drop_constraint(TupleInfo *ti)
 {
 	bool isnull;
@@ -954,14 +906,14 @@ chunk_constraint_drop_constraint(TupleInfo *ti)
 		};
 
 		if (OidIsValid(constrobj.objectId))
-			performDeletion(&constrobj, DROP_RESTRICT, 0);
+			/* must use DROP_CASCADE if regular table references a hypertable */
+			performDeletion(&constrobj, DROP_CASCADE, 0);
 	}
 }
 
 int
 ts_chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
-														 const char *hypertable_constraint_name,
-														 bool delete_metadata, bool drop_constraint)
+														 const char *hypertable_constraint_name)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
@@ -977,18 +929,15 @@ ts_chunk_constraint_delete_by_hypertable_constraint_name(int32 chunk_id,
 
 		count++;
 
-		if (delete_metadata)
-			chunk_constraint_delete_metadata(ts_scan_iterator_tuple_info(&iterator));
-
-		if (drop_constraint)
-			chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+		chunk_constraint_drop_constraint(ti);
 	}
 	return count;
 }
 
 int
-ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id, const char *constraint_name,
-											  bool delete_metadata, bool drop_constraint)
+ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id, const char *constraint_name)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
@@ -998,11 +947,8 @@ ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id, const char *constr
 	ts_scanner_foreach(&iterator)
 	{
 		count++;
-		if (delete_metadata)
-			chunk_constraint_delete_metadata(ts_scan_iterator_tuple_info(&iterator));
-
-		if (drop_constraint)
-			chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
 	return count;
 }
@@ -1011,11 +957,8 @@ ts_chunk_constraint_delete_by_constraint_name(int32 chunk_id, const char *constr
  * Delete all constraints for a chunk. Optionally, collect the deleted constraints.
  */
 int
-ts_chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs, bool delete_metadata,
-									   bool drop_constraint)
+ts_chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs, bool drop_constraint)
 {
-	Assert(delete_metadata || drop_constraint);
-
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
 	int count = 0;
@@ -1027,8 +970,8 @@ ts_chunk_constraint_delete_by_chunk_id(int32 chunk_id, ChunkConstraints *ccs, bo
 		count++;
 
 		ts_chunk_constraints_add_from_tuple(ccs, ts_scan_iterator_tuple_info(&iterator));
-		if (delete_metadata)
-			chunk_constraint_delete_metadata(ts_scan_iterator_tuple_info(&iterator));
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 
 		if (drop_constraint)
 			chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
@@ -1049,8 +992,9 @@ ts_chunk_constraint_delete_by_dimension_slice_id(int32 dimension_slice_id)
 	{
 		count++;
 
-		chunk_constraint_delete_metadata(ts_scan_iterator_tuple_info(&iterator));
-		chunk_constraint_drop_constraint(ts_scan_iterator_tuple_info(&iterator));
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+		chunk_constraint_drop_constraint(ti);
 	}
 	return count;
 }
@@ -1127,12 +1071,6 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *new_nam
 										   NameStr(new_chunk_constraint_name));
 
 	new_tuple = heap_modify_tuple(tuple, tupdesc, values, nulls, doReplace);
-
-	ts_chunk_index_adjust_meta(chunk_id,
-							   NameStr(new_hypertable_constraint_name),
-							   NameStr(*old_chunk_constraint_name),
-							   NameStr(new_chunk_constraint_name));
-
 	ts_catalog_update(ti->scanrel, new_tuple);
 	heap_freetuple(new_tuple);
 
@@ -1144,14 +1082,14 @@ chunk_constraint_rename_hypertable_from_tuple(TupleInfo *ti, const char *new_nam
  * Adjust internal metadata after index/constraint rename
  */
 int
-ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name,
-								const char *old_name, const char *new_name)
+ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_name, const char *chunk_old_name,
+								const char *chunk_new_name)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
 	int count = 0;
 
-	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, old_name);
+	init_scan_by_chunk_id_constraint_name(&iterator, chunk_id, chunk_old_name);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -1171,9 +1109,9 @@ ts_chunk_constraint_adjust_meta(int32 chunk_id, const char *ht_constraint_name,
 		 * after them.
 		 */
 		NameData ht_constraint_namedata;
-		namestrcpy(&ht_constraint_namedata, ht_constraint_name);
+		namestrcpy(&ht_constraint_namedata, ht_name);
 		NameData new_namedata;
-		namestrcpy(&new_namedata, new_name);
+		namestrcpy(&new_namedata, chunk_new_name);
 
 		values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
 			NameGetDatum(&ht_constraint_namedata);
@@ -1300,8 +1238,7 @@ ts_chunk_constraint_get_name_from_hypertable_constraint(Oid chunk_relid,
 }
 
 int
-ts_chunk_constraint_delete_dimensional_constraints(int32 chunk_id, ChunkConstraints *ccs,
-												   bool delete_metadata, bool drop_constraint)
+ts_chunk_constraint_delete_dimensional_constraints(int32 chunk_id, ChunkConstraints *ccs)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, RowExclusiveLock, CurrentMemoryContext);
@@ -1322,11 +1259,8 @@ ts_chunk_constraint_delete_dimensional_constraints(int32 chunk_id, ChunkConstrai
 		count++;
 
 		ts_chunk_constraints_add_from_tuple(ccs, ti);
-		if (delete_metadata)
-			chunk_constraint_delete_metadata(ti);
-
-		if (drop_constraint)
-			chunk_constraint_drop_constraint(ti);
+		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+		chunk_constraint_drop_constraint(ti);
 	}
 	return count;
 }
@@ -1363,9 +1297,12 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 	TupleTableSlot *slot;
 	TableScanDesc scandesc;
 	bool isnull;
+	int attno = get_attnum(chunk_relid, NameStr(dim->fd.column_name));
+	Ensure(attno != InvalidAttrNumber, "invalid attribute number");
 
+	PushActiveSnapshot(GetLatestSnapshot());
 	rel = table_open(chunk_relid, AccessShareLock);
-	scandesc = table_beginscan(rel, GetLatestSnapshot(), 0, NULL);
+	scandesc = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
 	slot = table_slot_create(rel, NULL);
 
 	while (table_scan_getnextslot(scandesc, ForwardScanDirection, slot))
@@ -1373,11 +1310,15 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 		Datum datum;
 		int64 value;
 
-		if (NULL != dim->partitioning)
-			datum = ts_partitioning_func_apply_slot(dim->partitioning, slot, &isnull);
-		else
-			datum = slot_getattr(slot, dim->column_attno, &isnull);
+		datum = slot_getattr(slot, attno, &isnull);
 		Assert(!isnull);
+
+		if (NULL != dim->partitioning)
+		{
+			Oid collation = TupleDescAttr(slot->tts_tupleDescriptor, AttrNumberGetAttrOffset(attno))
+								->attcollation;
+			datum = ts_partitioning_func_apply(dim->partitioning, collation, datum);
+		}
 
 		if (dim->type == DIMENSION_TYPE_OPEN)
 			value = ts_time_value_to_internal(datum, ts_dimension_get_partition_type(dim));
@@ -1396,6 +1337,7 @@ check_chunk_constraint_violated(Oid chunk_relid, const Dimension *dim, const Dim
 	ExecDropSingleTupleTableSlot(slot);
 	table_endscan(scandesc);
 	table_close(rel, NoLock);
+	PopActiveSnapshot();
 }
 
 /*

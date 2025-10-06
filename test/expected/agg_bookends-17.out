@@ -9,7 +9,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') as "TEST_LOAD_NAME",
 \gset
 SELECT format('\! diff -u  --label "Unoptimized result" --label "Optimized result" %s %s', :'TEST_RESULTS_UNOPTIMIZED', :'TEST_RESULTS_OPTIMIZED') as "DIFF_CMD"
 \gset
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
@@ -53,113 +53,107 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
 :PREFIX SELECT time, gp, temp FROM btest ORDER BY time;
                                               QUERY PLAN                                               
 -------------------------------------------------------------------------------------------------------
- Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=6 loops=1)
+ Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=6.00 loops=1)
 (1 row)
 
 :PREFIX SELECT last(temp, time) FROM btest;
                                                  QUERY PLAN                                                 
 ------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
 (4 rows)
 
 :PREFIX SELECT first(temp, time) FROM btest;
                                                      QUERY PLAN                                                      
 ---------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
 (4 rows)
 
 :PREFIX SELECT last(temp, time_alt) FROM btest;
                          QUERY PLAN                         
 ------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
 (2 rows)
 
 :PREFIX SELECT first(temp, time_alt) FROM btest;
                          QUERY PLAN                         
 ------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
 (2 rows)
 
 :PREFIX SELECT gp, last(temp, time) FROM btest GROUP BY gp ORDER BY gp;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Sort (actual rows=2 loops=1)
+ Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
 (7 rows)
 
 :PREFIX SELECT gp, first(temp, time) FROM btest GROUP BY gp ORDER BY gp;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Sort (actual rows=2 loops=1)
+ Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
 (7 rows)
 
 --check whole row
 :PREFIX SELECT gp, first(btest, time) FROM btest GROUP BY gp ORDER BY gp;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Sort (actual rows=2 loops=1)
+ Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
 (7 rows)
 
 --check toasted col
 :PREFIX SELECT gp, left(last(strid, time), 10) FROM btest GROUP BY gp ORDER BY gp;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Sort (actual rows=2 loops=1)
+ Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
 (7 rows)
 
 :PREFIX SELECT gp, last(temp, strid) FROM btest GROUP BY gp ORDER BY gp;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Sort (actual rows=2 loops=1)
+ Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
 (7 rows)
 
 :PREFIX SELECT gp, last(strid, temp) FROM btest GROUP BY gp ORDER BY gp;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Sort (actual rows=2 loops=1)
+ Sort (actual rows=2.00 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  HashAggregate (actual rows=2.00 loops=1)
          Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
 (7 rows)
 
 BEGIN;
@@ -168,12 +162,12 @@ INSERT INTO btest VALUES('2018-01-20T09:00:43', '2017-01-20T09:00:55', 2, NULL);
 :PREFIX SELECT last(temp, time) FROM btest;
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
 (7 rows)
 
@@ -182,12 +176,12 @@ INSERT INTO btest VALUES('2019-01-20T09:00:43', '2018-01-20T09:00:55', 2, 30.5);
 :PREFIX SELECT last(temp, time) FROM btest;
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
 (8 rows)
@@ -197,22 +191,22 @@ INSERT INTO btest VALUES('2018-01-20T09:00:43', NULL, 2, 32.3);
 :PREFIX SELECT last(temp, time_alt) FROM btest;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=9 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=9.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
 (5 rows)
 
 -- fist returns NULL value
 :PREFIX SELECT first(temp, time_alt) FROM btest;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=9 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=9.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
 (5 rows)
 
 -- test first return non NULL value
@@ -220,12 +214,12 @@ INSERT INTO btest VALUES('2016-01-20T09:00:00', '2016-01-20T09:00:00', 2, 36.5);
 :PREFIX SELECT first(temp, time_alt) FROM btest;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=10 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=10.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
 (6 rows)
 
 --check non null cmp element insert after null cmp
@@ -233,43 +227,42 @@ INSERT INTO btest VALUES('2020-01-20T09:00:43', '2020-01-20T09:00:43', 2, 35.3);
 :PREFIX SELECT last(temp, time_alt) FROM btest;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=11 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=11.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 (7 rows)
 
 :PREFIX SELECT first(temp, time_alt) FROM btest;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=11 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=11.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 (7 rows)
 
 --cmp nulls should be ignored and not present in groups
 :PREFIX SELECT gp, last(temp, time_alt) FROM btest GROUP BY gp ORDER BY gp;
                                QUERY PLAN                               
 ------------------------------------------------------------------------
- Sort (actual rows=2 loops=1)
-   Sort Key: _hyper_1_1_chunk.gp
+ Sort (actual rows=2.00 loops=1)
+   Sort Key: btest.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
-         Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
-         ->  Append (actual rows=11 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+   ->  HashAggregate (actual rows=2.00 loops=1)
+         Group Key: btest.gp
+         ->  Append (actual rows=11.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 (12 rows)
 
 --Previously, some bugs were found with NULLS and numeric types, so test that
@@ -277,10 +270,10 @@ INSERT INTO btest_numeric VALUES ('2019-01-20T09:00:43', NULL);
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Index Scan using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Index Scan using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (actual rows=1.00 loops=1)
 (4 rows)
 
 --check non-null element "overrides" NULL because it comes after.
@@ -288,12 +281,12 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time" DESC
-                 ->  Index Scan using _hyper_2_7_chunk_btest_numeric_time_idx on _hyper_2_7_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_2_7_chunk_btest_numeric_time_idx on _hyper_2_7_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_2_6_chunk_btest_numeric_time_idx on _hyper_2_6_chunk (never executed)
 (7 rows)
 
@@ -301,12 +294,12 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT last(temp, time) FROM btest;
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                  ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
@@ -317,12 +310,12 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT first(temp, time) FROM btest;
                                                         QUERY PLAN                                                         
 ---------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time"
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                  ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                  ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
@@ -333,25 +326,25 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT first(temp, time_alt) FROM btest;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=11 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=11.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 (7 rows)
 
 -- do index scan for subquery
 :PREFIX SELECT * FROM (SELECT last(temp, time) FROM btest) last;
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                  ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
@@ -362,30 +355,29 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT last(temp, time) FROM btest GROUP BY gp ORDER BY gp;
                                QUERY PLAN                               
 ------------------------------------------------------------------------
- Sort (actual rows=2 loops=1)
-   Sort Key: _hyper_1_1_chunk.gp
+ Sort (actual rows=2.00 loops=1)
+   Sort Key: btest.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
-         Group Key: _hyper_1_1_chunk.gp
-         Batches: 1 
-         ->  Append (actual rows=11 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+   ->  HashAggregate (actual rows=2.00 loops=1)
+         Group Key: btest.gp
+         ->  Append (actual rows=11.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 (12 rows)
 
 -- do index scan when agg function is used in CTE subquery
 :PREFIX WITH last_temp AS (SELECT last(temp, time) FROM btest) SELECT * from last_temp;
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                  ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
@@ -396,21 +388,21 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT first(temp, time), last(temp, time) FROM btest;
                                                                   QUERY PLAN                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                  ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                  ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
    InitPlan 2
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1.00 loops=1)
                  Order: btest_1."time"
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1.00 loops=1)
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
                  ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (never executed)
                  ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (never executed)
@@ -421,21 +413,21 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT first(temp, time), last(temp, time) FROM btest;
                                                                   QUERY PLAN                                                                  
 ----------------------------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                  ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
                  ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
    InitPlan 2
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest btest_1 (actual rows=1.00 loops=1)
                  Order: btest_1."time"
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk _hyper_1_4_chunk_1 (actual rows=1.00 loops=1)
                  ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk _hyper_1_1_chunk_1 (never executed)
                  ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk _hyper_1_2_chunk_1 (never executed)
                  ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk _hyper_1_3_chunk_1 (never executed)
@@ -446,12 +438,12 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT last(temp, time) FROM btest WHERE time <= '2017-01-20T09:00:02';
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                        Index Cond: ("time" <= 'Fri Jan 20 09:00:02 2017'::timestamp without time zone)
                  ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Index Cond: ("time" <= 'Fri Jan 20 09:00:02 2017'::timestamp without time zone)
@@ -461,50 +453,50 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT max(time), last(temp, time) FROM btest;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=11 loops=1)
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=11.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+         ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 (7 rows)
 
 -- can't do index scan when using FIRST/LAST in ORDER BY
 :PREFIX SELECT last(temp, time) FROM btest ORDER BY last(temp, time);
                                QUERY PLAN                               
 ------------------------------------------------------------------------
- Sort (actual rows=1 loops=1)
-   Sort Key: (last(_hyper_1_1_chunk.temp, _hyper_1_1_chunk."time"))
+ Sort (actual rows=1.00 loops=1)
+   Sort Key: (last(btest.temp, btest."time"))
    Sort Method: quicksort 
-   ->  Aggregate (actual rows=1 loops=1)
-         ->  Append (actual rows=11 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1.00 loops=1)
+         ->  Append (actual rows=11.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 (10 rows)
 
 -- do index scan
 :PREFIX SELECT last(temp, time) FROM btest WHERE temp < 30;
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=0 loops=1)
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=0.00 loops=1)
                        Filter: (temp < '30'::double precision)
                        Rows Removed by Filter: 1
-                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=0 loops=1)
+                 ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (actual rows=0.00 loops=1)
                        Filter: (temp < '30'::double precision)
                        Rows Removed by Filter: 1
-                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=0 loops=1)
+                 ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (actual rows=0.00 loops=1)
                        Filter: (temp < '30'::double precision)
                        Rows Removed by Filter: 2
-                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                        Filter: (temp < '30'::double precision)
                  ->  Index Scan using _hyper_1_4_chunk_btest_time_idx on _hyper_1_4_chunk (never executed)
                        Filter: (temp < '30'::double precision)
@@ -515,12 +507,12 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT first(temp, time) FROM btest WHERE time >= '2017-01-20 09:00:47';
                                                         QUERY PLAN                                                         
 ---------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time"
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                        Index Cond: ("time" >= 'Fri Jan 20 09:00:47 2017'::timestamp without time zone)
                  ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                        Index Cond: ("time" >= 'Fri Jan 20 09:00:47 2017'::timestamp without time zone)
@@ -534,28 +526,28 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 :PREFIX SELECT gp, last(temp, time) OVER (PARTITION BY gp) AS last FROM btest;
                                QUERY PLAN                               
 ------------------------------------------------------------------------
- WindowAgg (actual rows=11 loops=1)
-   ->  Sort (actual rows=11 loops=1)
-         Sort Key: _hyper_1_1_chunk.gp
+ WindowAgg (actual rows=11.00 loops=1)
+   ->  Sort (actual rows=11.00 loops=1)
+         Sort Key: btest.gp
          Sort Method: quicksort 
-         ->  Append (actual rows=11 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+         ->  Append (actual rows=11.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 (10 rows)
 
 -- test constants
 :PREFIX SELECT first(100, 100) FROM btest;
                                    QUERY PLAN                                   
 --------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Result (actual rows=1 loops=1)
-                 ->  Append (actual rows=1 loops=1)
-                       ->  Seq Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Result (actual rows=1.00 loops=1)
+                 ->  Append (actual rows=1.00 loops=1)
+                       ->  Seq Scan on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                        ->  Seq Scan on _hyper_1_2_chunk (never executed)
                        ->  Seq Scan on _hyper_1_3_chunk (never executed)
                        ->  Seq Scan on _hyper_1_4_chunk (never executed)
@@ -567,20 +559,20 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 :PREFIX SELECT last(temp, time_alt) FROM btest;
                                                           QUERY PLAN                                                           
 -------------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Merge Append (actual rows=1 loops=1)
-                 Sort Key: _hyper_1_1_chunk.time_alt DESC
-                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_alt_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Merge Append (actual rows=1.00 loops=1)
+                 Sort Key: btest.time_alt DESC
+                 ->  Index Scan Backward using _hyper_1_1_chunk_btest_time_alt_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                        Index Cond: (time_alt IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_alt_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_2_chunk_btest_time_alt_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                        Index Cond: (time_alt IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_alt_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_3_chunk_btest_time_alt_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                        Index Cond: (time_alt IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_alt_idx on _hyper_1_4_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_4_chunk_btest_time_alt_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
                        Index Cond: (time_alt IS NOT NULL)
-                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_alt_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_1_5_chunk_btest_time_alt_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                        Index Cond: (time_alt IS NOT NULL)
 (15 rows)
 
@@ -588,12 +580,12 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 :PREFIX SELECT abs(last(temp, time)) FROM btest;
                                                     QUERY PLAN                                                    
 ------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest (actual rows=1.00 loops=1)
                  Order: btest."time" DESC
-                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_1_5_chunk_btest_time_idx on _hyper_1_5_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_1_3_chunk_btest_time_idx on _hyper_1_3_chunk (never executed)
                  ->  Index Scan using _hyper_1_2_chunk_btest_time_idx on _hyper_1_2_chunk (never executed)
                  ->  Index Scan using _hyper_1_1_chunk_btest_time_idx on _hyper_1_1_chunk (never executed)
@@ -602,18 +594,18 @@ CREATE INDEX btest_time_alt_idx ON btest(time_alt);
 
 -- test nested FIRST/LAST in ORDER BY - no optimization possible
 :PREFIX SELECT abs(last(temp, time)) FROM btest ORDER BY abs(last(temp,time));
-                               QUERY PLAN                                
--------------------------------------------------------------------------
- Sort (actual rows=1 loops=1)
-   Sort Key: (abs(last(_hyper_1_1_chunk.temp, _hyper_1_1_chunk."time")))
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Sort (actual rows=1.00 loops=1)
+   Sort Key: (abs(last(btest.temp, btest."time")))
    Sort Method: quicksort 
-   ->  Aggregate (actual rows=1 loops=1)
-         ->  Append (actual rows=11 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+   ->  Aggregate (actual rows=1.00 loops=1)
+         ->  Append (actual rows=11.00 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1.00 loops=1)
 (10 rows)
 
 ROLLBACK;
@@ -624,16 +616,16 @@ TRUNCATE btest_numeric;
 :PREFIX SELECT first(btest_numeric, time) FROM btest_numeric;
               QUERY PLAN              
 --------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Result (actual rows=0 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
 (3 rows)
 
 :PREFIX SELECT last(btest_numeric, time) FROM btest_numeric;
               QUERY PLAN              
 --------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Result (actual rows=0 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
 (3 rows)
 
@@ -643,33 +635,33 @@ INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
 :PREFIX SELECT first(quantity, time) FROM btest_numeric;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
 (4 rows)
 
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Index Scan using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Index Scan using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
 (4 rows)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
                          QUERY PLAN                         
 ------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
 (2 rows)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
                          QUERY PLAN                         
 ------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
 (2 rows)
 
 -- NULL values followed by non-NULL values
@@ -678,43 +670,43 @@ INSERT INTO btest_numeric VALUES('2019-01-20T09:00:43', 2);
 :PREFIX SELECT first(quantity, time) FROM btest_numeric;
                                                             QUERY PLAN                                                             
 -----------------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time"
-                 ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan Backward using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (never executed)
 (7 rows)
 
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time" DESC
-                 ->  Index Scan using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_2_9_chunk_btest_numeric_time_idx on _hyper_2_9_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_2_8_chunk_btest_numeric_time_idx on _hyper_2_8_chunk (never executed)
 (7 rows)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=4 loops=1)
-         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_2_9_chunk (actual rows=2 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=4.00 loops=1)
+         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_2_9_chunk (actual rows=2.00 loops=1)
 (4 rows)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
                             QUERY PLAN                            
 ------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=4 loops=1)
-         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_2_9_chunk (actual rows=2 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=4.00 loops=1)
+         ->  Seq Scan on _hyper_2_8_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_2_9_chunk (actual rows=2.00 loops=1)
 (4 rows)
 
 TRUNCATE btest_numeric;
@@ -726,43 +718,43 @@ INSERT INTO btest_numeric VALUES('2018-01-20T09:00:43', NULL);
 :PREFIX SELECT first(quantity, time) FROM btest_numeric;
                                                              QUERY PLAN                                                              
 -------------------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time"
-                 ->  Index Scan Backward using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (actual rows=1 loops=1)
+                 ->  Index Scan Backward using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan Backward using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (never executed)
 (7 rows)
 
 :PREFIX SELECT last(quantity, time) FROM btest_numeric;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
- Result (actual rows=1 loops=1)
+ Result (actual rows=1.00 loops=1)
    InitPlan 1
-     ->  Limit (actual rows=1 loops=1)
-           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1 loops=1)
+     ->  Limit (actual rows=1.00 loops=1)
+           ->  Custom Scan (ChunkAppend) on btest_numeric (actual rows=1.00 loops=1)
                  Order: btest_numeric."time" DESC
-                 ->  Index Scan using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (actual rows=1 loops=1)
+                 ->  Index Scan using _hyper_2_10_chunk_btest_numeric_time_idx on _hyper_2_10_chunk (actual rows=1.00 loops=1)
                  ->  Index Scan using _hyper_2_11_chunk_btest_numeric_time_idx on _hyper_2_11_chunk (never executed)
 (7 rows)
 
 :PREFIX SELECT first(time, quantity) FROM btest_numeric;
                             QUERY PLAN                             
 -------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=4 loops=1)
-         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_2_11_chunk (actual rows=2 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=4.00 loops=1)
+         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_2_11_chunk (actual rows=2.00 loops=1)
 (4 rows)
 
 :PREFIX SELECT last(time, quantity) FROM btest_numeric;
                             QUERY PLAN                             
 -------------------------------------------------------------------
- Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=4 loops=1)
-         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2 loops=1)
-         ->  Seq Scan on _hyper_2_11_chunk (actual rows=2 loops=1)
+ Aggregate (actual rows=1.00 loops=1)
+   ->  Append (actual rows=4.00 loops=1)
+         ->  Seq Scan on _hyper_2_10_chunk (actual rows=2.00 loops=1)
+         ->  Seq Scan on _hyper_2_11_chunk (actual rows=2.00 loops=1)
 (4 rows)
 
 ROLLBACK;

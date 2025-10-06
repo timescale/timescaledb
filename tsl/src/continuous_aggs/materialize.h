@@ -41,5 +41,6 @@ void continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousA
 										   SchemaAndName partial_view,
 										   SchemaAndName materialization_table,
 										   const NameData *time_column_name,
-										   InternalTimeRange new_materialization_range,
-										   InternalTimeRange invalidation_range, int32 chunk_id);
+										   InternalTimeRange materialization_range, int32 chunk_id);
+bool continuous_agg_has_pending_materializations(const ContinuousAgg *cagg,
+												 InternalTimeRange materialization_range);

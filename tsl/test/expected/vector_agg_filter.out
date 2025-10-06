@@ -16,7 +16,6 @@ create function stable_abs(x int4) returns int4 as 'int4abs' language internal s
 create table aggfilter(t int, s int,
     cint2 int2, dropped int4, cint4 int4);
 select create_hypertable('aggfilter', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
-NOTICE:  adding not-null constraint to column "s"
    create_hypertable    
 ------------------------
  (1,public,aggfilter,t)
@@ -130,7 +129,7 @@ select
             function, variable)
 from
     unnest(array[
-        'explain (costs off) ',
+        'explain (buffers off, costs off) ',
         null]) explain,
     unnest(array[
         's',
@@ -3033,6 +3032,48 @@ order by 2, 3;
  11 | 20019 |  9895
     | 20019 | 10125
 (10 rows)
+
+reset timescaledb.debug_require_vector_agg;
+-- Grouping with a scalar UUID column (segmentby or default).
+create table uuid_default(ts int, value int4)
+    with (tsdb.hypertable, tsdb.partition_column = 'ts', tsdb.compress,
+        tsdb.chunk_interval = 1000);
+insert into uuid_default select generate_series(0, 999), 1;
+select count(compress_chunk(x)) from show_chunks('uuid_default') x;
+ count 
+-------
+     1
+(1 row)
+
+alter table uuid_default add column id uuid default '842ab294-923a-4f50-be7d-af6c51903a5f';
+alter table uuid_default set (tsdb.compress_segmentby = 'id');
+insert into uuid_default select generate_series(1000, 1999), 2, '5dd0565f-1ddf-4a6c-9e96-9b2b8c8c3993';
+select count(compress_chunk(x)) from show_chunks('uuid_default') x;
+NOTICE:  chunk "_hyper_3_5_chunk" is already converted to columnstore
+ count 
+-------
+     2
+(1 row)
+
+set timescaledb.debug_require_vector_agg = 'require';
+select id, sum(value) from uuid_default group by id;
+                  id                  | sum  
+--------------------------------------+------
+ 5dd0565f-1ddf-4a6c-9e96-9b2b8c8c3993 | 2000
+ 842ab294-923a-4f50-be7d-af6c51903a5f | 1000
+(2 rows)
+
+select sum(value) filter (where id = '5dd0565f-1ddf-4a6c-9e96-9b2b8c8c3993') from uuid_default;
+ sum  
+------
+ 2000
+(1 row)
+
+select sum(value) filter (where id = '842ab294-923a-4f50-be7d-af6c51903a5f') from uuid_default;
+ sum  
+------
+ 1000
+(1 row)
 
 reset timescaledb.debug_require_vector_agg;
 reset max_parallel_workers_per_gather;

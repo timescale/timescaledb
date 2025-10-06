@@ -22,7 +22,6 @@ CREATE EXTENSION timescaledb;
 RESET client_min_messages;
 CREATE TABLE t(time timestamptz);
 SELECT create_hypertable('t','time');
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (1,public,t,t)

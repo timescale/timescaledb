@@ -16,8 +16,8 @@ SELECT format('\! diff -u --label "Uncompressed results" --label "Compressed res
 \ir :TEST_LOAD_NAME
 
 -- get EXPLAIN output for all variations
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
-\set PREFIX_VERBOSE 'EXPLAIN (analyze, costs off, timing off, summary off, verbose)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
+\set PREFIX_VERBOSE 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off, verbose)'
 
 set work_mem to '64MB';
 set max_parallel_workers_per_gather to 0;

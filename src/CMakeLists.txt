@@ -8,6 +8,7 @@ set(SOURCES
     chunk_adaptive.c
     chunk_constraint.c
     chunk_index.c
+    chunk_insert_state.c
     chunk_scan.c
     chunk_tuple_routing.c
     constraint.c
@@ -109,7 +110,7 @@ if(USE_OPENSSL)
 endif(USE_OPENSSL)
 
 set(TSL_CAGG_INVALIDATION_PLUGIN_NAME
-    "${PROJECT_NAME}-invalidations"
+    "${PROJECT_NAME}-invalidations-${PROJECT_VERSION_MOD}"
     CACHE STRING "Continuous aggregates invalidation plugin name")
 
 configure_file(config.h.in config.h)

@@ -53,36 +53,34 @@ reset timescaledb.debug_require_vector_agg;
 
 
 -- More tests for dictionary encoding.
-create table text_table(ts int);
+create table text_table(ts int, a text);
 select create_hypertable('text_table', 'ts', chunk_time_interval => 3);
-alter table text_table set (timescaledb.compress);
 
-insert into text_table select 0 /*, default */ from generate_series(1, 1000) x;
+alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'a');
+insert into text_table select -1, 'scalar' from generate_series(1, 1000) x;
 select count(compress_chunk(x)) from show_chunks('text_table') x;
-
-alter table text_table add column a text collate "POSIX" default 'default';
-alter table text_table set (timescaledb.compress,
-    timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
 
 insert into text_table select 1, '' from generate_series(1, 1000) x;
 insert into text_table select 2, 'same' from generate_series(1, 1000) x;
 insert into text_table select 3, 'different' || x from generate_series(1, 1000) x;
-insert into text_table select 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
-insert into text_table select 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
+insert into text_table select 4, case when x % 2 = 0 then null else 'samewithnulls' end from generate_series(1, 1000) x;
+insert into text_table select 5, case when x % 2 = 0 then null else 'differentwithnulls' || x end from generate_series(1, 1000) x;
 
+alter table text_table set (timescaledb.compress,
+    timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
 select count(compress_chunk(x)) from show_chunks('text_table') x;
 vacuum analyze text_table;
 
-
 set timescaledb.debug_require_vector_agg to 'require';
-select a, count(*) from text_table group by a order by a limit 10;
+select a, count(*) from text_table group by a order by count(*) desc, a limit 10;
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
--- reverse order.
+-- reverse order. We have to filter out the chunk where 'a' is segmentby.
 set timescaledb.debug_require_vector_agg to 'forbid';
-select a, count(*) from text_table group by a order by a desc limit 10;
+select a, count(*) from text_table where ts >= 0 group by a order by a desc limit 10;
 
 reset timescaledb.debug_require_vector_agg;
+reset enable_sort;
 
 
 -- with NULLS FIRST

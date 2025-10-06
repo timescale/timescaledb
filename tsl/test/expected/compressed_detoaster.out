@@ -5,7 +5,6 @@
 -- the various ways the compressed data can be toasted.
 create table longstr(ts int default 1, s1 text);
 select create_hypertable('longstr', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable   
 ----------------------
  (1,public,longstr,t)

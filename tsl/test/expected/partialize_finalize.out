@@ -216,7 +216,6 @@ create table foo( a integer, b timestamptz, toastval TEXT);
 -- easily compressable string and instead store it with TOAST
 ALTER TABLE foo ALTER COLUMN toastval SET STORAGE EXTERNAL;
 SELECT count(*) FROM create_hypertable('foo', 'b');
-NOTICE:  adding not-null constraint to column "b"
  count 
 -------
      1
@@ -227,13 +226,13 @@ INSERT INTO foo VALUES(1,  '2005-10-19 10:23:54', repeat('I am a tall big giraff
 INSERT INTO foo values( 1, '2005-01-01 00:00:00+00', NULL);
 INSERT INTO foo values( 2, '2005-01-01 00:00:00+00', NULL);
 create or replace  view v1(a, partialb, partialtv) as select a, _timescaledb_functions.partialize_agg( max(b) ), _timescaledb_functions.partialize_agg( min(toastval)) from foo group by a;
-EXPLAIN (VERBOSE, COSTS OFF)
+EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)
 create table t1 as select * from v1;
-                                                                                     QUERY PLAN                                                                                      
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                  QUERY PLAN                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------
  Partial HashAggregate
-   Output: _hyper_1_1_chunk.a, _timescaledb_functions.partialize_agg(PARTIAL max(_hyper_1_1_chunk.b)), _timescaledb_functions.partialize_agg(PARTIAL min(_hyper_1_1_chunk.toastval))
-   Group Key: _hyper_1_1_chunk.a
+   Output: foo.a, _timescaledb_functions.partialize_agg(PARTIAL max(foo.b)), _timescaledb_functions.partialize_agg(PARTIAL min(foo.toastval))
+   Group Key: foo.a
    ->  Append
          ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.a, _hyper_1_1_chunk.b, _hyper_1_1_chunk.toastval
@@ -406,7 +405,7 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 
 SET parallel_setup_cost = 0;
 -- Materialize partials from execution of parallel query plan
-EXPLAIN (VERBOSE, COSTS OFF)
+EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)
   SELECT
     _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
     _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,
@@ -414,12 +413,12 @@ EXPLAIN (VERBOSE, COSTS OFF)
     _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
     _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
-                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                      QUERY PLAN                                                                                                                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Partial Aggregate
-   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL min(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL max(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
+   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL min(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL max(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
    ->  Gather
-         Output: (PARTIAL sum(_hyper_2_4_chunk.value)), (PARTIAL avg(_hyper_2_4_chunk.value)), (PARTIAL min(_hyper_2_4_chunk.value)), (PARTIAL max(_hyper_2_4_chunk.value)), (PARTIAL count(*))
+         Output: (PARTIAL sum(issue4922.value)), (PARTIAL avg(issue4922.value)), (PARTIAL min(issue4922.value)), (PARTIAL max(issue4922.value)), (PARTIAL count(*))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -838,7 +837,7 @@ CREATE MATERIALIZED VIEW issue4922_partials_parallel AS
   FROM public.issue4922;
 -- Materialize partials from execution of non-parallel query plan
 SET max_parallel_workers_per_gather = 0;
-EXPLAIN (VERBOSE, COSTS OFF)
+EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)
   SELECT
     _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
     _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,
@@ -846,10 +845,10 @@ EXPLAIN (VERBOSE, COSTS OFF)
     _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
     _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
-                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                      QUERY PLAN                                                                                                                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Partial Aggregate
-   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL min(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL max(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
+   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL min(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL max(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
    ->  Append
          ->  Seq Scan on _timescaledb_internal._hyper_2_4_chunk
                Output: _hyper_2_4_chunk.value

@@ -5,13 +5,12 @@ SET timescaledb.enable_chunk_append TO false;
 SET timescaledb.enable_constraint_aware_append TO false;
 SET timescaledb.current_timestamp_mock TO '1990-01-01';
 SET timezone TO PST8PDT;
-\set PREFIX 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
+\set PREFIX 'EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)'
 -- create a test table
 -- any query with successful now_constify will have 1 chunk while
 -- others will have 2 chunks in plan
 CREATE TABLE const_now(time timestamptz, time2 timestamptz, device_id int, value float);
 SELECT table_name FROM create_hypertable('const_now','time');
-NOTICE:  adding not-null constraint to column "time"
  table_name 
  const_now
 (1 row)
@@ -397,7 +396,6 @@ DROP TABLE const_now;
 -- test prepared statements
 CREATE TABLE prep_const_now(time timestamptz, device int, value float);
 SELECT table_name FROM create_hypertable('prep_const_now', 'time');
-NOTICE:  adding not-null constraint to column "time"
    table_name   
  prep_const_now
 (1 row)
@@ -578,7 +576,6 @@ DROP TABLE const_now_dst;
 SET timescaledb.current_timestamp_mock TO '2003-01-01 0:30:00+00';
 CREATE TABLE now_view_test(time timestamptz,device text, value float);
 SELECT table_name FROM create_hypertable('now_view_test','time');
-NOTICE:  adding not-null constraint to column "time"
   table_name   
  now_view_test
 (1 row)
@@ -590,7 +587,7 @@ CREATE VIEW now_view AS SELECT time, device, avg(value) from now_view_test GROUP
 :PREFIX SELECT * FROM now_view;
 QUERY PLAN
  Finalize HashAggregate
-   Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+   Group Key: now_view_test."time", now_view_test.device
    ->  Append
          ->  Partial HashAggregate
                Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
@@ -613,7 +610,7 @@ QUERY PLAN
 :PREFIX SELECT * FROM now_view WHERE time > now() - '168h'::interval;
 QUERY PLAN
  Finalize HashAggregate
-   Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
+   Group Key: now_view_test."time", now_view_test.device
    ->  Append
          ->  Partial HashAggregate
                Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
@@ -675,36 +672,36 @@ SET timescaledb.current_timestamp_mock TO '2024-01-01 0:30:00+00';
 SET timescaledb.enable_chunk_append TO true;
 SET timescaledb.enable_constraint_aware_append TO true;
 -- for all the queries below, exclusion should be happening at plantime
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '1 day' AND now()
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 QUERY PLAN
- Sort (actual rows=0 loops=1)
+ Sort (actual rows=0.00 loops=1)
    Sort Key: "timestamp"
    Sort Method: quicksort 
-   ->  Result (actual rows=0 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
 (5 rows)
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 AND rawtag_id = 1 ORDER BY "timestamp" ASC;
 QUERY PLAN
- Sort (actual rows=0 loops=1)
+ Sort (actual rows=0.00 loops=1)
    Sort Key: "timestamp"
    Sort Method: quicksort 
-   ->  Result (actual rows=0 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
 (5 rows)
 
-EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
 timestamp <= now() AND timestamp >= now() - interval '1 day'
 ORDER BY "timestamp" ASC;
 QUERY PLAN
- Sort (actual rows=0 loops=1)
+ Sort (actual rows=0.00 loops=1)
    Sort Key: "timestamp"
    Sort Method: quicksort 
-   ->  Result (actual rows=0 loops=1)
+   ->  Result (actual rows=0.00 loops=1)
          One-Time Filter: false
 (5 rows)
 
@@ -713,7 +710,7 @@ SET timescaledb.current_timestamp_mock TO '2023-01-11';
 PREPARE pbtw AS SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
 ORDER BY "timestamp" ASC;
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
  Custom Scan (ChunkAppend) on logged_data
    Order: logged_data."timestamp"
@@ -732,7 +729,7 @@ EXECUTE pbtw;
 
 -- now move mock_now() to the future
 SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
  Custom Scan (ChunkAppend) on logged_data
    Order: logged_data."timestamp"
@@ -753,7 +750,7 @@ EXECUTE pbtw;
 
 -- much further into the future, no rows should be returned
 SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
  Custom Scan (ChunkAppend) on logged_data
    Order: logged_data."timestamp"
@@ -773,10 +770,10 @@ SET timescaledb.current_timestamp_mock TO '2023-01-11';
 PREPARE pbtw AS SELECT * FROM logged_data WHERE
 timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
 ORDER BY "timestamp" ASC;
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
  Merge Append
-   Sort Key: _hyper_X_X_chunk."timestamp"
+   Sort Key: logged_data."timestamp"
    ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
@@ -797,10 +794,10 @@ EXECUTE pbtw;
 
 -- now move mock_now() to the future
 SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
  Merge Append
-   Sort Key: _hyper_X_X_chunk."timestamp"
+   Sort Key: logged_data."timestamp"
    ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)
@@ -820,10 +817,10 @@ EXECUTE pbtw;
 
 -- much further into the future, no rows should be returned
 SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
-EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
 QUERY PLAN
  Merge Append
-   Sort Key: _hyper_X_X_chunk."timestamp"
+   Sort Key: logged_data."timestamp"
    ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk
          Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
          Filter: (rawtag_id = 1)

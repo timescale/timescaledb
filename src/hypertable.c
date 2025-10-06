@@ -240,7 +240,6 @@ Hypertable *
 ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 {
 	Hypertable *h = MemoryContextAllocZero(ti->mctx, sizeof(Hypertable));
-	char relkind;
 
 	ts_hypertable_formdata_fill(&h->fd, ti);
 	h->main_table_relid =
@@ -249,9 +248,6 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
-
-	if (OidIsValid(h->main_table_relid))
-		ts_get_rel_info(h->main_table_relid, &h->amoid, &relkind);
 
 	if (ts_guc_enable_chunk_skipping)
 	{
@@ -993,8 +989,8 @@ hypertable_chunk_store_free(void *entry)
  * Add the chunk to the cache that allows fast lookup of chunks
  * for a given hyperspace Point.
  */
-static Chunk *
-hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
+Chunk *
+ts_hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 {
 	MemoryContext old_mcxt;
 
@@ -1012,47 +1008,69 @@ hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 
 /*
  * Create a chunk for the point, given that it does not exist yet.
+ *
+ * If the chunk already exists (i.e., another process beat us to it), then
+ * lock the chunk with the specified lockmode. If the chunk is created, it
+ * will always be locked with AccessExclusivelock.
  */
 Chunk *
-ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point)
+ts_hypertable_create_chunk_for_point(const Hypertable *h, const Point *point,
+									 LOCKMODE chunk_lockmode)
 {
 	Assert(ts_subspace_store_get(h->chunk_cache, point) == NULL);
 
 	Chunk *chunk = ts_chunk_create_for_point(h,
 											 point,
 											 NameStr(h->fd.associated_schema_name),
-											 NameStr(h->fd.associated_table_prefix));
+											 NameStr(h->fd.associated_table_prefix),
+											 chunk_lockmode);
 
 	/* Also add the chunk to the hypertable's chunk store */
-	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);
+	Chunk *cached_chunk = ts_hypertable_chunk_store_add(h, chunk);
 	return cached_chunk;
 }
 
 /*
- * Find the chunk containing the given point, locking all its dimension slices
- * for share. NULL if not found.
- * Also uses hypertable chunk cache. The returned chunk is owned by the cache
- * and may become invalid after some subsequent call to this function.
+ * Find the chunk responsible for the given point.
+ *
+ * In case of a cache miss, a point scan will try to find a matching chunk. A
+ * matching chunk will be locked in the given lockmode (unless NoLock is
+ * specified) and added to the cache.
+ *
+ * If lockmode is higher than NoLock, all dimension slices will also be locked
+ * in LockTupleKeyShare.
+ *
+ * If no chunk is found, NULL is returned. The returned chunk is owned by the
+ * cache and may become invalid after some subsequent call to this function.
  * Leaks memory, so call in a short-lived context.
  */
 Chunk *
-ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point)
+ts_hypertable_find_chunk_for_point(const Hypertable *h, const Point *point, LOCKMODE lockmode)
 {
 	Chunk *chunk = ts_subspace_store_get(h->chunk_cache, point);
-	if (chunk != NULL)
-	{
-		return chunk;
-	}
 
-	chunk = ts_chunk_find_for_point(h, point);
-	if (chunk == NULL)
+	if (!chunk)
+	{
+		chunk = ts_chunk_find_for_point(h, point, lockmode);
+
+		if (chunk)
+			chunk = ts_hypertable_chunk_store_add(h, chunk);
+	}
+	else if (!ts_chunk_lock_if_exists(chunk->table_id, lockmode))
 	{
 		return NULL;
 	}
 
-	/* Also add the chunk to the hypertable's chunk store */
-	Chunk *cached_chunk = hypertable_chunk_store_add(h, chunk);
-	return cached_chunk;
+#ifdef USE_ASSERT_CHECKING
+	if (chunk)
+	{
+		Relation chunk_rel = RelationIdGetRelation(chunk->table_id);
+		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
+		RelationClose(chunk_rel);
+	}
+#endif
+
+	return chunk;
 }
 
 bool
@@ -1239,12 +1257,6 @@ hypertable_check_associated_schema_permissions(const char *schema_name, Oid user
 				 errmsg("permissions denied: cannot create chunks in schema \"%s\"", schema_name)));
 
 	return schema_oid;
-}
-
-static bool
-table_is_logged(Oid table_relid)
-{
-	return get_rel_persistence(table_relid) == RELPERSISTENCE_PERMANENT;
 }
 
 inline static bool
@@ -1905,12 +1917,11 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 				 errdetail(
 					 "It is not possible to turn tables that use inheritance into hypertables.")));
 
-	if (!table_is_logged(table_relid))
+	if (rel->rd_rel->relpersistence == RELPERSISTENCE_TEMP)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("table \"%s\" has to be logged", get_rel_name(table_relid)),
-				 errdetail(
-					 "It is not possible to turn temporary or unlogged tables into hypertables.")));
+				 errmsg("table \"%s\" cannot be temporary", get_rel_name(table_relid)),
+				 errdetail("It is not supported to turn temporary tables into hypertables.")));
 
 	if (table_has_rules(rel))
 		ereport(ERROR,

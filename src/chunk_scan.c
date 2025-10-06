@@ -131,10 +131,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	for (int i = 0; i < locked_chunk_count; i++)
 	{
 		Chunk *chunk = locked_chunks[i];
-
-		ts_get_rel_info(chunk->table_id, &chunk->amoid, &chunk->relkind);
-
-		Assert(OidIsValid(chunk->amoid) || chunk->fd.osm_chunk);
+		chunk->relkind = get_rel_relkind(chunk->table_id);
 	}
 
 	/*
@@ -185,9 +182,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 			 */
 			const int slice_id = constraint->fd.dimension_slice_id;
 			DimensionSlice *slice_ptr =
-				ts_dimension_slice_scan_iterator_get_by_id(&slice_iterator,
-														   slice_id,
-														   /* tuplock = */ NULL);
+				ts_dimension_slice_scan_iterator_get_by_id(&slice_iterator, slice_id);
 			if (slice_ptr == NULL)
 			{
 				elog(ERROR, "dimension slice %d is not found", slice_id);

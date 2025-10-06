@@ -19,7 +19,7 @@ SELECT
 SELECT format('\! diff %s %s', :'TEST_RESULTS_VIEW', :'TEST_RESULTS_TABLE') as "DIFF_CMD",
       format('\! diff %s %s', :'TEST_RESULTS_VIEW_HASHAGG', :'TEST_RESULTS_TABLE') as "DIFF_CMD2"
 \gset
-\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 SET client_min_messages TO NOTICE;
 CREATE TABLE conditions (
       timec        TIMESTAMPTZ       NOT NULL,
@@ -96,8 +96,8 @@ select * from mat_m1 order by sumh, sumt, minl, timec ;
                                                                                                    QUERY PLAN                                                                                                   
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.sumh, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.timec
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.sumh, _materialized_hypertable_2.sumt, _materialized_hypertable_2.minl, _materialized_hypertable_2.timec
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -124,14 +124,14 @@ select * from regview order by timec desc;
                                                                                                                      QUERY PLAN                                                                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
-   Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) DESC
+   Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (min(conditions.location)), (sum(conditions.temperature)), (sum(conditions.humidity))
+   Sort Key: (time_bucket('@ 1 day'::interval, conditions.timec)) DESC
    ->  Finalize GroupAggregate
-         Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
-         Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+         Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+         Group Key: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec))
          ->  Sort
-               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (PARTIAL min(_hyper_1_1_chunk.location)), (PARTIAL sum(_hyper_1_1_chunk.temperature)), (PARTIAL sum(_hyper_1_1_chunk.humidity))
-               Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (PARTIAL min(conditions.location)), (PARTIAL sum(conditions.temperature)), (PARTIAL sum(conditions.humidity))
+               Sort Key: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec))
                ->  Append
                      ->  Partial GroupAggregate
                            Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), PARTIAL min(_hyper_1_1_chunk.location), PARTIAL sum(_hyper_1_1_chunk.temperature), PARTIAL sum(_hyper_1_1_chunk.humidity)
@@ -160,8 +160,8 @@ select * from mat_m1 order by timec desc, location;
                                                                                                    QUERY PLAN                                                                                                   
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.timec DESC, _hyper_2_3_chunk.location
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -188,8 +188,8 @@ select * from mat_m1 order by location, timec desc;
                                                                                                    QUERY PLAN                                                                                                   
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec DESC
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec DESC
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -216,8 +216,8 @@ select * from mat_m1 order by location, timec asc;
                                                                                                    QUERY PLAN                                                                                                   
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.location, _materialized_hypertable_2.timec
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -407,14 +407,14 @@ select * from m1;
 -- should reorder mat_m1 group by only based on mat_m1 order-by
 :EXPLAIN
 select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec = mat_m2.timec order by mat_m1.timec desc;
-                                                                                                                                                 QUERY PLAN                                                                                                                                                 
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                         QUERY PLAN                                                                                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _hyper_3_5_chunk.firsth, _hyper_3_5_chunk.lasth, _hyper_3_5_chunk.maxtemp, _hyper_3_5_chunk.mintemp
+   Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
    Sort Key: _hyper_2_4_chunk.timec DESC
    ->  Hash Join
-         Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _hyper_3_5_chunk.location, _hyper_3_5_chunk.timec, _hyper_3_5_chunk.firsth, _hyper_3_5_chunk.lasth, _hyper_3_5_chunk.maxtemp, _hyper_3_5_chunk.mintemp
-         Hash Cond: (_hyper_3_5_chunk.timec = _hyper_2_4_chunk.timec)
+         Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _materialized_hypertable_3.location, _materialized_hypertable_3.timec, _materialized_hypertable_3.firsth, _materialized_hypertable_3.lasth, _materialized_hypertable_3.maxtemp, _materialized_hypertable_3.mintemp
+         Hash Cond: (_materialized_hypertable_3.timec = _hyper_2_4_chunk.timec)
          ->  Append
                ->  Append
                      ->  Index Scan using _hyper_3_5_chunk__materialized_hypertable_3_timec_idx on _timescaledb_internal._hyper_3_5_chunk
@@ -457,20 +457,20 @@ select * from mat_m1, mat_m2 where mat_m1.timec > '2018-10-01' and mat_m1.timec 
 --should reorder only for mat_m1.
 :EXPLAIN
 select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec = regview.timec order by mat_m1.timec desc;
-                                                                                                                                                               QUERY PLAN                                                                                                                                                               
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                QUERY PLAN                                                                                                                                                
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
+   Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (min(conditions.location)), (sum(conditions.temperature)), (sum(conditions.humidity))
    Sort Key: _hyper_2_4_chunk.timec DESC
    ->  Hash Join
-         Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
-         Hash Cond: ((time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) = _hyper_2_4_chunk.timec)
+         Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (min(conditions.location)), (sum(conditions.temperature)), (sum(conditions.humidity))
+         Hash Cond: ((time_bucket('@ 1 day'::interval, conditions.timec)) = _hyper_2_4_chunk.timec)
          ->  Finalize GroupAggregate
-               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
-               Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+               Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), min(conditions.location), sum(conditions.temperature), sum(conditions.humidity)
+               Group Key: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec))
                ->  Sort
-                     Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (PARTIAL min(_hyper_1_1_chunk.location)), (PARTIAL sum(_hyper_1_1_chunk.temperature)), (PARTIAL sum(_hyper_1_1_chunk.humidity))
-                     Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+                     Output: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec)), (PARTIAL min(conditions.location)), (PARTIAL sum(conditions.temperature)), (PARTIAL sum(conditions.humidity))
+                     Sort Key: conditions.location, (time_bucket('@ 1 day'::interval, conditions.timec))
                      ->  Append
                            ->  Partial GroupAggregate
                                  Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), PARTIAL min(_hyper_1_1_chunk.location), PARTIAL sum(_hyper_1_1_chunk.temperature), PARTIAL sum(_hyper_1_1_chunk.humidity)
@@ -534,8 +534,8 @@ select * from mat_m1 order by timec desc, location;
                                                                                                    QUERY PLAN                                                                                                   
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_2_3_chunk.location, _hyper_2_3_chunk.timec, _hyper_2_3_chunk.minl, _hyper_2_3_chunk.sumt, _hyper_2_3_chunk.sumh
-   Sort Key: _hyper_2_3_chunk.timec DESC, _hyper_2_3_chunk.location
+   Output: _materialized_hypertable_2.location, _materialized_hypertable_2.timec, _materialized_hypertable_2.minl, _materialized_hypertable_2.sumt, _materialized_hypertable_2.sumh
+   Sort Key: _materialized_hypertable_2.timec DESC, _materialized_hypertable_2.location
    ->  Append
          ->  Append
                ->  Index Scan using _hyper_2_3_chunk__materialized_hypertable_2_timec_idx on _timescaledb_internal._hyper_2_3_chunk
@@ -793,21 +793,18 @@ CREATE TABLE table_bigint (
   data bigint
 );
 SELECT create_hypertable('table_smallint', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:345: NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (7,public,table_smallint,t)
 (1 row)
 
 SELECT create_hypertable('table_int', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:346: NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (8,public,table_int,t)
 (1 row)
 
 SELECT create_hypertable('table_bigint', 'time', chunk_time_interval => 10);
-psql:include/cagg_query_common.sql:347: NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (9,public,table_bigint,t)

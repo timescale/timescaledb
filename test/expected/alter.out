@@ -14,7 +14,6 @@ ALTER TABLE alter_before ALTER COLUMN temp SET STATISTICS 100;
 ALTER TABLE alter_before ALTER COLUMN notes SET STORAGE EXTERNAL;
 SELECT create_hypertable('alter_before', 'time', chunk_time_interval => 2628000000000);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (1,public,alter_before,t)
@@ -66,7 +65,6 @@ ORDER BY c.relname, a.attnum;
 CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 SELECT create_hypertable('alter_after', 'time', chunk_time_interval => 2628000000000);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (2,public,alter_after,t)
@@ -257,7 +255,6 @@ WHERE tablename = 'hyper_in_space' OR tablename LIKE '\_hyper\__\__\_chunk' ORDE
 
 CREATE TABLE hyper_in_space(time bigint, temp float, device int);
 SELECT create_hypertable('hyper_in_space', 'time', 'device', 4, chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (3,public,hyper_in_space,t)
@@ -345,7 +342,6 @@ ERROR:  tablespace "tablespace1" is still attached to 1 hypertables
 DROP TABLE hyper_in_space;
 CREATE TABLE hyper_in_space(time bigint, temp float, device int) TABLESPACE tablespace1;
 SELECT create_hypertable('hyper_in_space', 'time', 'device', 4, chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (4,public,hyper_in_space,t)
@@ -713,14 +709,7 @@ INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:00:00', 3.2) ON CONFLIC
 INSERT INTO t_hypertable AS h VALUES ( 1, '2021-01-01 00:00:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 BEGIN;
 ALTER INDEX t_hypertable_id_time_key RENAME TO t_new_constraint;
--- chunk_index and chunk_constraint should both have updated constraint names
-SELECT hypertable_index_name, index_name from _timescaledb_catalog.chunk_index WHERE hypertable_index_name = 't_new_constraint' ORDER BY 1,2;
- hypertable_index_name |             index_name              
------------------------+-------------------------------------
- t_new_constraint      | _hyper_13_26_chunk_t_new_constraint
- t_new_constraint      | _hyper_13_27_chunk_t_new_constraint
-(2 rows)
-
+-- chunk_constraint should have updated constraint names
 SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
  hypertable_constraint_name |           constraint_name           
 ----------------------------+-------------------------------------
@@ -732,14 +721,7 @@ INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLIC
 ROLLBACK;
 BEGIN;
 ALTER TABLE t_hypertable RENAME CONSTRAINT t_hypertable_id_time_key TO t_new_constraint;
--- chunk_index and chunk_constraint should both have updated constraint names
-SELECT hypertable_index_name, index_name from _timescaledb_catalog.chunk_index WHERE hypertable_index_name = 't_new_constraint' ORDER BY 1,2;
- hypertable_index_name |      index_name       
------------------------+-----------------------
- t_new_constraint      | 26_5_t_new_constraint
- t_new_constraint      | 27_6_t_new_constraint
-(2 rows)
-
+-- chunk_constraint should have updated constraint names
 SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
  hypertable_constraint_name |    constraint_name    
 ----------------------------+-----------------------
@@ -762,13 +744,13 @@ ALTER TABLE p_hypertable DROP COLUMN b, ADD COLUMN d boolean;
 CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
 END;
 INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
-\d+ _timescaledb_internal._hyper_14_28_chunk
-                     Table "_timescaledb_internal._hyper_14_28_chunk"
- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
---------+---------+-----------+----------+---------+---------+--------------+-------------
- a      | integer |           | not null |         | plain   |              | 
- c      | integer |           |          |         | plain   |              | 
- d      | boolean |           |          |         | plain   |              | 
+\d _timescaledb_internal._hyper_14_28_chunk
+ Table "_timescaledb_internal._hyper_14_28_chunk"
+ Column |  Type   | Collation | Nullable | Default 
+--------+---------+-----------+----------+---------
+ a      | integer |           | not null | 
+ c      | integer |           |          | 
+ d      | boolean |           |          | 
 Indexes:
     "_hyper_14_28_chunk_idx_ht" btree (a, c) WHERE NOT d
     "_hyper_14_28_chunk_p_hypertable_a_idx" btree (a DESC)
@@ -810,7 +792,6 @@ DROP ROLE role_4474;
 -- root table's setting
 CREATE TABLE replid(time timestamptz, value int);
 SELECT create_hypertable('replid', 'time', chunk_time_interval => interval '1 day', create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------
  (16,public,replid,t)

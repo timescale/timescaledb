@@ -43,6 +43,12 @@ WHERE ht.compression_state != 2 --> no internal compression tables
   AND ht.interval_length IS NOT NULL
   AND ht.dimension_num = 1;
 
+-- Get status of existing jobs.
+--
+-- Note that we will always list all jobs that are available in the
+-- database, but some fields might be null if, for example, the job
+-- has not yet executed, or there is no hypertable associated with the
+-- job.
 CREATE OR REPLACE VIEW timescaledb_information.job_stats AS
 SELECT ht.schema_name AS hypertable_schema,
   ht.table_name AS hypertable_name,
@@ -75,7 +81,7 @@ SELECT ht.schema_name AS hypertable_schema,
   js.total_successes,
   js.total_failures
 FROM _timescaledb_config.bgw_job j
-  INNER JOIN _timescaledb_internal.bgw_job_stat js ON j.id = js.job_id
+  LEFT JOIN _timescaledb_internal.bgw_job_stat js ON j.id = js.job_id
   LEFT JOIN _timescaledb_catalog.hypertable ht ON j.hypertable_id = ht.id
   LEFT JOIN pg_stat_activity pgs ON pgs.datname = current_database()
     AND pgs.application_name = j.application_name

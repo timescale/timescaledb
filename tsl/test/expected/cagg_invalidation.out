@@ -891,7 +891,6 @@ ORDER BY 1,2;
 ----------------------------------------------
 CREATE table threshold_test (time int, value int);
 SELECT create_hypertable('threshold_test', 'time', chunk_time_interval => 4);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (7,public,threshold_test,t)
@@ -1196,8 +1195,6 @@ WHERE cagg_id = :cond_10_id;
 
 -- should trigger two individual refreshes
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
--- Allow at most 5 individual invalidations per refresh
-SET timescaledb.materializations_per_refresh_window=5;
 -- Insert into every second bucket
 INSERT INTO conditions VALUES (20, 1, 1.0);
 INSERT INTO conditions VALUES (40, 1, 1.0);
@@ -1207,34 +1204,6 @@ INSERT INTO conditions VALUES (100, 1, 1.0);
 INSERT INTO conditions VALUES (120, 1, 1.0);
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
--- Test acceptable values for materializations per refresh
-SET timescaledb.materializations_per_refresh_window=' 5 ';
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
--- Large value will be treated as LONG_MAX
-SET timescaledb.materializations_per_refresh_window=342239897234023842394249234766923492347;
-ERROR:  invalid value for parameter "timescaledb.materializations_per_refresh_window": "342239897234023842394249234766923492347"
-HINT:  Value exceeds integer range.
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
--- Test bad values for materializations per refresh
-SET timescaledb.materializations_per_refresh_window='foo';
-ERROR:  invalid value for parameter "timescaledb.materializations_per_refresh_window": "foo"
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-SET timescaledb.materializations_per_refresh_window='2bar';
-ERROR:  invalid value for parameter "timescaledb.materializations_per_refresh_window": "2bar"
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-SET timescaledb.materializations_per_refresh_window='-';
-ERROR:  invalid value for parameter "timescaledb.materializations_per_refresh_window": "-"
-INSERT INTO conditions VALUES (140, 1, 1.0);
-CALL refresh_continuous_aggregate('cond_10', 0, 200);
-\set VERBOSITY terse
-RESET timescaledb.materializations_per_refresh_window;
-\set ON_ERROR_STOP 1
 -- Test refresh with undefined invalidation threshold and variable sized buckets
 CREATE TABLE timestamp_ht (
   time timestamptz NOT NULL,
@@ -1430,7 +1399,7 @@ SELECT * FROM cond_10
 -- These should fail for different reasons
 \set ON_ERROR_STOP 0
 CALL _timescaledb_functions.process_hypertable_invalidations(NULL);
-ERROR:  invalid relation
+ERROR:  parameter cannot be null
 CALL _timescaledb_functions.process_hypertable_invalidations(0);
 ERROR:  invalid relation
 CALL _timescaledb_functions.process_hypertable_invalidations('measure_10');

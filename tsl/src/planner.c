@@ -169,7 +169,7 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 	}
 	/*
 	 * We do not support MERGE command with UPDATE/DELETE merge actions on
-	 * compressed hypertables, because Custom Scan (HypertableModify) node is
+	 * compressed hypertables, because Custom Scan (ModifyHypertable) node is
 	 * not generated in the plan for MERGE command on compressed hypertables
 	 */
 	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
@@ -219,19 +219,31 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 #ifdef TS_DEBUG
 	if (ts_guc_debug_require_vector_agg != DRO_Allow)
 	{
-		bool has_normal_agg = false;
-		const bool has_vector_agg = has_vector_agg_node(stmt->planTree, &has_normal_agg);
-		const bool should_have_vector_agg = (ts_guc_debug_require_vector_agg == DRO_Require);
+		bool has_postgres_partial_agg = false;
+		const bool has_vector_partial_agg =
+			has_vector_agg_node(stmt->planTree, &has_postgres_partial_agg);
 
 		/*
 		 * For convenience, we don't complain about queries that don't have
 		 * aggregation at all.
 		 */
-		if ((has_normal_agg || has_vector_agg) && (has_vector_agg != should_have_vector_agg))
+		if (has_postgres_partial_agg || has_vector_partial_agg)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-					 errmsg("vector aggregation inconsistent with debug_require_vector_agg GUC")));
+			if (has_postgres_partial_agg && ts_guc_debug_require_vector_agg == DRO_Require)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+						 errmsg("postgres partial aggregation nodes inconsistent with "
+								"debug_require_vector_agg GUC")));
+			}
+
+			if (has_vector_partial_agg && ts_guc_debug_require_vector_agg == DRO_Forbid)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+						 errmsg("vectorized partial aggregation nodes inconsistent with "
+								"debug_require_vector_agg GUC")));
+			}
 		}
 	}
 #endif

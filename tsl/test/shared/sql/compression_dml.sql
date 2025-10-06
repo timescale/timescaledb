@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set ANALYZE 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set ANALYZE 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 -- test constraint exclusion with prepared statements and generic plans
 CREATE TABLE i3719 (time timestamptz NOT NULL,data text);
@@ -83,7 +83,7 @@ SELECT count(compress_chunk(:'chunk_table'));
 -- insert a row into first compressed chunk
 INSERT INTO mytab SELECT '2022-10-07 05:30:10+05:30'::timestamp with time zone, 3, 3;
 -- should not crash
-EXPLAIN (costs off) SELECT * FROM :chunk_table;
+EXPLAIN (buffers off, costs off) SELECT * FROM :chunk_table;
 DROP TABLE mytab CASCADE;
 
 -- test varchar segmentby
@@ -111,19 +111,19 @@ SELECT count(compress_chunk(c)) FROM show_chunks('comp_seg_varchar') c;
 
 
 -- all tuples should come from compressed chunks
-EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+EXPLAIN (analyze,buffers off, costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 
 INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', 'test', 'test', '{}'::jsonb)
 ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 
 -- no tuples should be moved into uncompressed
-EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+EXPLAIN (analyze,buffers off, costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 
 INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', '1', '2', '{}'::jsonb)
 ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 
 -- 1 batch should be moved into uncompressed
-EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+EXPLAIN (analyze,buffers off, costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 
 DROP TABLE comp_seg_varchar;
 
@@ -366,7 +366,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('t8241') ch;
 PREPARE prep AS SELECT * FROM t8241;
 -- Should only see compressed chunk in the plan, this generic plan is now cached
 EXECUTE prep;
-EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
+EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
 
 -- Test Update
 BEGIN;
@@ -375,11 +375,11 @@ UPDATE t8241 SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
 -- generic plan created for compressed chunk should be invalidated even though we didn't commit
 -- we should get correct result and the plan should have both compressed and decompressed parts
 EXECUTE prep;
-EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
+EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
 ROLLBACK;
 
 -- Should see the compressed chunk only
-EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
+EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
 
 -- Test Insert
 BEGIN;
@@ -388,7 +388,7 @@ INSERT INTO t8241(time, device, value) VALUES ('2020-01-01 00:30:00', 'd1', 1.0)
 -- generic plan created for compressed chunk should be invalidated even though we didn't commit
 -- we should get correct result and the plan should have both compressed and decompressed parts
 EXECUTE prep;
-EXPLAIN (costs off, timing off, summary off) EXECUTE prep;
+EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
 ROLLBACK;
 
 DEALLOCATE prep;

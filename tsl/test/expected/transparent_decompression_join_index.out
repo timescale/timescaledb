@@ -37,7 +37,7 @@ analyze test;
 analyze test_copy;
 set jit = off;
 set max_parallel_workers_per_gather = 0;
-explain (costs off) with query_params as (
+explain (buffers off, costs off) with query_params as (
 	select distinct a, b
 	from test_copy
 	where test_copy.a IN ('lat', 'lon')
@@ -100,7 +100,7 @@ order by test.time;
 
 -- Also test outer join for better coverage of nullability handling.
 -- This test case generates a nullable equivalence member for test.b.
-explain (costs off)
+explain (buffers off, costs off)
 with query_params as (
     select distinct a, b + 1 as b
     from test_copy
@@ -113,8 +113,8 @@ full join query_params q
 full join query_params q2
     on q2.b = test.b
 ;
-                              QUERY PLAN                               
------------------------------------------------------------------------
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
  Hash Full Join
    Hash Cond: (_hyper_1_1_chunk.b = q2.b)
    CTE query_params
@@ -126,7 +126,7 @@ full join query_params q2
    ->  Hash Full Join
          Hash Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_a_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_2_chunk
          ->  Hash
                ->  CTE Scan on query_params q
    ->  Hash

@@ -14,7 +14,6 @@ SELECT * from _timescaledb_catalog.dimension;
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (1,public,should_drop,t)
@@ -23,7 +22,6 @@ NOTICE:  adding not-null constraint to column "time"
 CREATE TABLE hyper_with_dependencies (time timestamp, temp float8);
 SELECT create_hypertable('hyper_with_dependencies', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
  (2,public,hyper_with_dependencies,t)
@@ -37,16 +35,15 @@ ERROR:  cannot drop table hyper_with_dependencies because other objects depend o
 \set ON_ERROR_STOP 1
 DROP TABLE hyper_with_dependencies CASCADE;
 NOTICE:  drop cascades to view dependent_view
-\dv
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
+-- check that the view is dropped
+SELECT oid FROM pg_class WHERE relname = 'dependent_view';
+ oid 
+-----
 (0 rows)
 
 CREATE TABLE chunk_with_dependencies (time timestamp, temp float8);
 SELECT create_hypertable('chunk_with_dependencies', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable           
 --------------------------------------
  (3,public,chunk_with_dependencies,t)
@@ -60,10 +57,10 @@ ERROR:  cannot drop table _timescaledb_internal._hyper_3_2_chunk because other o
 \set ON_ERROR_STOP 1
 DROP TABLE chunk_with_dependencies CASCADE;
 NOTICE:  drop cascades to view dependent_view_chunk
-\dv
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
+-- check that the view is dropped
+SELECT oid FROM pg_class WHERE relname = 'dependent_view_chunk';
+ oid 
+-----
 (0 rows)
 
 -- Calling create hypertable again will increment hypertable ID
@@ -91,7 +88,6 @@ DROP TABLE should_drop;
 CREATE TABLE should_drop (time timestamp, temp float8);
 SELECT create_hypertable('should_drop', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (4,public,should_drop,t)
@@ -110,3 +106,12 @@ SELECT * from _timescaledb_catalog.dimension;
   4 |             4 | time        | timestamp without time zone | t       |            |                          |                   |    604800000000 |                          |                         | 
 (1 row)
 
+-- test dropping multiple objects at once
+CREATE TABLE t1 (time timestamptz) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO t1 VALUES ('2025-01-01');
+CREATE TABLE t2 (time timestamptz) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO t2 VALUES ('2025-01-01');
+CREATE TABLE t3 (time timestamptz);
+DROP TABLE t1, t2, t3;

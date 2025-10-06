@@ -298,7 +298,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		p->coordinates[p->num_coords++] = current_chunk->cube->slices[i]->fd.range_start;
 	}
 
-	previous_chunk = ts_hypertable_find_chunk_for_point(ht, p);
+	previous_chunk = ts_hypertable_find_chunk_for_point(ht, p, ExclusiveLock);
 
 	/* If there is no previous adjacent chunk along the time dimension or
 	 * if it hasn't been compressed yet, we can't merge.
@@ -332,7 +332,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	/* Get reloid of the previous compressed chunk via settings */
 	CompressionSettings *prev_comp_settings = ts_compression_settings_get(previous_chunk->table_id);
 	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
-	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
+	if (!ts_compression_settings_equal_with_defaults(ht_comp_settings, prev_comp_settings))
 		return NULL;
 
 	/* We don't support merging chunks with sequence numbers */
@@ -441,9 +441,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
-		/* Associate compressed chunk with main chunk. Needed for Hypercore
-		 * TAM to not recreate the compressed chunk again when the main chunk
-		 * rel is opened. */
+		/* Associate compressed chunk with main chunk. */
 		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 		new_compressed_chunk = true;
 		ereport(DEBUG1,
@@ -772,7 +770,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
 
 			if (!valid_orderby_settings ||
-				!ts_compression_settings_equal(ht_settings, chunk_settings))
+				!ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
 			{
 				decompress_chunk_impl(chunk, false);
 				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);

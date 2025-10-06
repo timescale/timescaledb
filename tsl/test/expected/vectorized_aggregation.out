@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 CREATE TABLE testtable (
 time timestamptz NOT NULL,
 segment_by_value integer,
@@ -57,9 +57,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -119,9 +119,9 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -191,9 +191,9 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0 AND int_v
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -265,9 +265,9 @@ SELECT sum(segment_by_value) FROM testtable WHERE int_value > 0;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -336,9 +336,9 @@ SELECT sum(segment_by_value) FROM testtable WHERE float_value > 0;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -408,10 +408,10 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), _hyper_1_1_chunk.float_value
-   Group Key: _hyper_1_1_chunk.float_value
+   Output: sum(testtable.segment_by_value), testtable.float_value
+   Group Key: testtable.float_value
    ->  Gather
-         Output: _hyper_1_1_chunk.float_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: testtable.float_value, (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -477,10 +477,10 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), _hyper_1_1_chunk.int_value
-   Group Key: _hyper_1_1_chunk.int_value
+   Output: sum(testtable.segment_by_value), testtable.int_value
+   Group Key: testtable.int_value
    ->  Gather
-         Output: _hyper_1_1_chunk.int_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: testtable.int_value, (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -544,83 +544,80 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
 -- Vectorization possible with grouping by multiple columns
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
-                                                                                                                                                           QUERY PLAN                                                                                                                                                           
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                        QUERY PLAN                                                                                                                                                        
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value
-   Group Key: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value
-   ->  Gather
-         Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
-         Workers Planned: 2
-         ->  Parallel Append
-               ->  Custom Scan (VectorAgg)
-                     Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
-                     Grouping Policy: hashed with serialized key
-                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
-                           Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value, _hyper_1_1_chunk.segment_by_value
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
-                                 Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
-               ->  Custom Scan (VectorAgg)
-                     Output: _hyper_1_2_chunk.int_value, _hyper_1_2_chunk.float_value, (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
-                     Grouping Policy: hashed with serialized key
-                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
-                           Output: _hyper_1_2_chunk.int_value, _hyper_1_2_chunk.float_value, _hyper_1_2_chunk.segment_by_value
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
-                                 Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
-               ->  Custom Scan (VectorAgg)
-                     Output: _hyper_1_3_chunk.int_value, _hyper_1_3_chunk.float_value, (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
-                     Grouping Policy: hashed with serialized key
-                     ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
-                           Output: _hyper_1_3_chunk.int_value, _hyper_1_3_chunk.float_value, _hyper_1_3_chunk.segment_by_value
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
-                                 Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
-               ->  Partial HashAggregate
-                     Output: _hyper_1_4_chunk.int_value, _hyper_1_4_chunk.float_value, PARTIAL sum(_hyper_1_4_chunk.segment_by_value)
-                     Group Key: _hyper_1_4_chunk.int_value, _hyper_1_4_chunk.float_value
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_4_chunk
-                           Output: _hyper_1_4_chunk.int_value, _hyper_1_4_chunk.float_value, _hyper_1_4_chunk.segment_by_value
-               ->  Partial HashAggregate
-                     Output: _hyper_1_5_chunk.int_value, _hyper_1_5_chunk.float_value, PARTIAL sum(_hyper_1_5_chunk.segment_by_value)
-                     Group Key: _hyper_1_5_chunk.int_value, _hyper_1_5_chunk.float_value
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_5_chunk
-                           Output: _hyper_1_5_chunk.int_value, _hyper_1_5_chunk.float_value, _hyper_1_5_chunk.segment_by_value
-               ->  Partial HashAggregate
-                     Output: _hyper_1_6_chunk.int_value, _hyper_1_6_chunk.float_value, PARTIAL sum(_hyper_1_6_chunk.segment_by_value)
-                     Group Key: _hyper_1_6_chunk.int_value, _hyper_1_6_chunk.float_value
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_6_chunk
-                           Output: _hyper_1_6_chunk.int_value, _hyper_1_6_chunk.float_value, _hyper_1_6_chunk.segment_by_value
-               ->  Partial HashAggregate
-                     Output: _hyper_1_7_chunk.int_value, _hyper_1_7_chunk.float_value, PARTIAL sum(_hyper_1_7_chunk.segment_by_value)
-                     Group Key: _hyper_1_7_chunk.int_value, _hyper_1_7_chunk.float_value
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_7_chunk
-                           Output: _hyper_1_7_chunk.int_value, _hyper_1_7_chunk.float_value, _hyper_1_7_chunk.segment_by_value
-               ->  Partial HashAggregate
-                     Output: _hyper_1_8_chunk.int_value, _hyper_1_8_chunk.float_value, PARTIAL sum(_hyper_1_8_chunk.segment_by_value)
-                     Group Key: _hyper_1_8_chunk.int_value, _hyper_1_8_chunk.float_value
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_8_chunk
-                           Output: _hyper_1_8_chunk.int_value, _hyper_1_8_chunk.float_value, _hyper_1_8_chunk.segment_by_value
-               ->  Partial HashAggregate
-                     Output: _hyper_1_9_chunk.int_value, _hyper_1_9_chunk.float_value, PARTIAL sum(_hyper_1_9_chunk.segment_by_value)
-                     Group Key: _hyper_1_9_chunk.int_value, _hyper_1_9_chunk.float_value
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_9_chunk
-                           Output: _hyper_1_9_chunk.int_value, _hyper_1_9_chunk.float_value, _hyper_1_9_chunk.segment_by_value
-               ->  Partial HashAggregate
-                     Output: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.float_value, PARTIAL sum(_hyper_1_10_chunk.segment_by_value)
-                     Group Key: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.float_value
-                     ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_10_chunk
-                           Output: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.float_value, _hyper_1_10_chunk.segment_by_value
-(63 rows)
+   Output: sum(testtable.segment_by_value), testtable.int_value, testtable.float_value
+   Group Key: testtable.int_value, testtable.float_value
+   ->  Append
+         ->  Custom Scan (VectorAgg)
+               Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+               Grouping Policy: hashed with serialized key
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
+                     Output: _hyper_1_1_chunk.int_value, _hyper_1_1_chunk.float_value, _hyper_1_1_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                           Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
+         ->  Custom Scan (VectorAgg)
+               Output: _hyper_1_2_chunk.int_value, _hyper_1_2_chunk.float_value, (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
+               Grouping Policy: hashed with serialized key
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
+                     Output: _hyper_1_2_chunk.int_value, _hyper_1_2_chunk.float_value, _hyper_1_2_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                           Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
+         ->  Custom Scan (VectorAgg)
+               Output: _hyper_1_3_chunk.int_value, _hyper_1_3_chunk.float_value, (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
+               Grouping Policy: hashed with serialized key
+               ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
+                     Output: _hyper_1_3_chunk.int_value, _hyper_1_3_chunk.float_value, _hyper_1_3_chunk.segment_by_value
+                     ->  Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                           Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
+         ->  Partial HashAggregate
+               Output: _hyper_1_4_chunk.int_value, _hyper_1_4_chunk.float_value, PARTIAL sum(_hyper_1_4_chunk.segment_by_value)
+               Group Key: _hyper_1_4_chunk.int_value, _hyper_1_4_chunk.float_value
+               ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+                     Output: _hyper_1_4_chunk.int_value, _hyper_1_4_chunk.float_value, _hyper_1_4_chunk.segment_by_value
+         ->  Partial HashAggregate
+               Output: _hyper_1_5_chunk.int_value, _hyper_1_5_chunk.float_value, PARTIAL sum(_hyper_1_5_chunk.segment_by_value)
+               Group Key: _hyper_1_5_chunk.int_value, _hyper_1_5_chunk.float_value
+               ->  Seq Scan on _timescaledb_internal._hyper_1_5_chunk
+                     Output: _hyper_1_5_chunk.int_value, _hyper_1_5_chunk.float_value, _hyper_1_5_chunk.segment_by_value
+         ->  Partial HashAggregate
+               Output: _hyper_1_6_chunk.int_value, _hyper_1_6_chunk.float_value, PARTIAL sum(_hyper_1_6_chunk.segment_by_value)
+               Group Key: _hyper_1_6_chunk.int_value, _hyper_1_6_chunk.float_value
+               ->  Seq Scan on _timescaledb_internal._hyper_1_6_chunk
+                     Output: _hyper_1_6_chunk.int_value, _hyper_1_6_chunk.float_value, _hyper_1_6_chunk.segment_by_value
+         ->  Partial HashAggregate
+               Output: _hyper_1_7_chunk.int_value, _hyper_1_7_chunk.float_value, PARTIAL sum(_hyper_1_7_chunk.segment_by_value)
+               Group Key: _hyper_1_7_chunk.int_value, _hyper_1_7_chunk.float_value
+               ->  Seq Scan on _timescaledb_internal._hyper_1_7_chunk
+                     Output: _hyper_1_7_chunk.int_value, _hyper_1_7_chunk.float_value, _hyper_1_7_chunk.segment_by_value
+         ->  Partial HashAggregate
+               Output: _hyper_1_8_chunk.int_value, _hyper_1_8_chunk.float_value, PARTIAL sum(_hyper_1_8_chunk.segment_by_value)
+               Group Key: _hyper_1_8_chunk.int_value, _hyper_1_8_chunk.float_value
+               ->  Seq Scan on _timescaledb_internal._hyper_1_8_chunk
+                     Output: _hyper_1_8_chunk.int_value, _hyper_1_8_chunk.float_value, _hyper_1_8_chunk.segment_by_value
+         ->  Partial HashAggregate
+               Output: _hyper_1_9_chunk.int_value, _hyper_1_9_chunk.float_value, PARTIAL sum(_hyper_1_9_chunk.segment_by_value)
+               Group Key: _hyper_1_9_chunk.int_value, _hyper_1_9_chunk.float_value
+               ->  Seq Scan on _timescaledb_internal._hyper_1_9_chunk
+                     Output: _hyper_1_9_chunk.int_value, _hyper_1_9_chunk.float_value, _hyper_1_9_chunk.segment_by_value
+         ->  Partial HashAggregate
+               Output: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.float_value, PARTIAL sum(_hyper_1_10_chunk.segment_by_value)
+               Group Key: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.float_value
+               ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
+                     Output: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.float_value, _hyper_1_10_chunk.segment_by_value
+(60 rows)
 
 -- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
 SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
-                                                                                                                                                           QUERY PLAN                                                                                                                                                           
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                              QUERY PLAN                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize HashAggregate
-   Output: sum(_hyper_1_1_chunk.int_value), _hyper_1_1_chunk.segment_by_value
-   Group Key: _hyper_1_1_chunk.segment_by_value
+   Output: sum(testtable.int_value), testtable.segment_by_value
+   Group Key: testtable.segment_by_value
    ->  Gather
-         Output: _hyper_1_1_chunk.segment_by_value, (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: testtable.segment_by_value, (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -628,22 +625,31 @@ SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
                      Grouping Policy: per compressed batch
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                            Output: _hyper_1_1_chunk.segment_by_value, _hyper_1_1_chunk.int_value
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                           ->  Sort
                                  Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
+                                 Sort Key: compress_hyper_2_11_chunk.segment_by_value
+                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                       Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
                ->  Custom Scan (VectorAgg)
                      Output: _hyper_1_2_chunk.segment_by_value, (PARTIAL sum(_hyper_1_2_chunk.int_value))
                      Grouping Policy: per compressed batch
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.segment_by_value, _hyper_1_2_chunk.int_value
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                           ->  Sort
                                  Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
+                                 Sort Key: compress_hyper_2_12_chunk.segment_by_value
+                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                       Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
                ->  Custom Scan (VectorAgg)
                      Output: _hyper_1_3_chunk.segment_by_value, (PARTIAL sum(_hyper_1_3_chunk.int_value))
                      Grouping Policy: per compressed batch
                      ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
                            Output: _hyper_1_3_chunk.segment_by_value, _hyper_1_3_chunk.int_value
-                           ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                           ->  Sort
                                  Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
+                                 Sort Key: compress_hyper_2_13_chunk.segment_by_value
+                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                       Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
                ->  Partial HashAggregate
                      Output: _hyper_1_4_chunk.segment_by_value, PARTIAL sum(_hyper_1_4_chunk.int_value)
                      Group Key: _hyper_1_4_chunk.segment_by_value
@@ -679,20 +685,20 @@ SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
                      Group Key: _hyper_1_10_chunk.segment_by_value
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                            Output: _hyper_1_10_chunk.segment_by_value, _hyper_1_10_chunk.int_value
-(63 rows)
+(72 rows)
 
 :EXPLAIN
 SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
-                                                                                                                                                              QUERY PLAN                                                                                                                                                              
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                 QUERY PLAN                                                                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: (sum(_hyper_1_1_chunk.segment_by_value)), _hyper_1_1_chunk.segment_by_value
-   Sort Key: (sum(_hyper_1_1_chunk.segment_by_value)), _hyper_1_1_chunk.segment_by_value
+   Output: (sum(testtable.segment_by_value)), testtable.segment_by_value
+   Sort Key: (sum(testtable.segment_by_value)), testtable.segment_by_value
    ->  Finalize HashAggregate
-         Output: sum(_hyper_1_1_chunk.segment_by_value), _hyper_1_1_chunk.segment_by_value
-         Group Key: _hyper_1_1_chunk.segment_by_value
+         Output: sum(testtable.segment_by_value), testtable.segment_by_value
+         Group Key: testtable.segment_by_value
          ->  Gather
-               Output: _hyper_1_1_chunk.segment_by_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+               Output: testtable.segment_by_value, (PARTIAL sum(testtable.segment_by_value))
                Workers Planned: 2
                ->  Parallel Append
                      ->  Custom Scan (VectorAgg)
@@ -700,22 +706,31 @@ SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_b
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                                  Output: _hyper_1_1_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
+                                       Sort Key: compress_hyper_2_11_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                             Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_2_chunk.segment_by_value, (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
+                                       Sort Key: compress_hyper_2_12_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                             Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_3_chunk.segment_by_value, (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
                                  Output: _hyper_1_3_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
+                                       Sort Key: compress_hyper_2_13_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                             Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
                      ->  Partial HashAggregate
                            Output: _hyper_1_4_chunk.segment_by_value, PARTIAL sum(_hyper_1_4_chunk.segment_by_value)
                            Group Key: _hyper_1_4_chunk.segment_by_value
@@ -751,7 +766,7 @@ SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_b
                            Group Key: _hyper_1_10_chunk.segment_by_value
                            ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                                  Output: _hyper_1_10_chunk.segment_by_value
-(66 rows)
+(75 rows)
 
 SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
  sum  | segment_by_value 
@@ -871,16 +886,16 @@ SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_b
 
 :EXPLAIN
 SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
-                                                                                                                                                              QUERY PLAN                                                                                                                                                              
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                 QUERY PLAN                                                                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Output: _hyper_1_1_chunk.segment_by_value, (sum(_hyper_1_1_chunk.segment_by_value))
-   Sort Key: _hyper_1_1_chunk.segment_by_value, (sum(_hyper_1_1_chunk.segment_by_value))
+   Output: testtable.segment_by_value, (sum(testtable.segment_by_value))
+   Sort Key: testtable.segment_by_value, (sum(testtable.segment_by_value))
    ->  Finalize HashAggregate
-         Output: _hyper_1_1_chunk.segment_by_value, sum(_hyper_1_1_chunk.segment_by_value)
-         Group Key: _hyper_1_1_chunk.segment_by_value
+         Output: testtable.segment_by_value, sum(testtable.segment_by_value)
+         Group Key: testtable.segment_by_value
          ->  Gather
-               Output: _hyper_1_1_chunk.segment_by_value, (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+               Output: testtable.segment_by_value, (PARTIAL sum(testtable.segment_by_value))
                Workers Planned: 2
                ->  Parallel Append
                      ->  Custom Scan (VectorAgg)
@@ -888,22 +903,31 @@ SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_b
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
                                  Output: _hyper_1_1_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
+                                       Sort Key: compress_hyper_2_11_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
+                                             Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_2_chunk.segment_by_value, (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_2_chunk
                                  Output: _hyper_1_2_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
+                                       Sort Key: compress_hyper_2_12_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
+                                             Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
                      ->  Custom Scan (VectorAgg)
                            Output: _hyper_1_3_chunk.segment_by_value, (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
                            Grouping Policy: per compressed batch
                            ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_3_chunk
                                  Output: _hyper_1_3_chunk.segment_by_value
-                                 ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                 ->  Sort
                                        Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
+                                       Sort Key: compress_hyper_2_13_chunk.segment_by_value
+                                       ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_13_chunk
+                                             Output: compress_hyper_2_13_chunk._ts_meta_count, compress_hyper_2_13_chunk.segment_by_value, compress_hyper_2_13_chunk._ts_meta_min_1, compress_hyper_2_13_chunk._ts_meta_max_1, compress_hyper_2_13_chunk."time", compress_hyper_2_13_chunk.int_value, compress_hyper_2_13_chunk.float_value
                      ->  Partial HashAggregate
                            Output: _hyper_1_4_chunk.segment_by_value, PARTIAL sum(_hyper_1_4_chunk.segment_by_value)
                            Group Key: _hyper_1_4_chunk.segment_by_value
@@ -939,7 +963,7 @@ SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_b
                            Group Key: _hyper_1_10_chunk.segment_by_value
                            ->  Parallel Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                                  Output: _hyper_1_10_chunk.segment_by_value
-(66 rows)
+(75 rows)
 
 SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
  segment_by_value | sum  
@@ -1069,9 +1093,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1137,9 +1161,9 @@ SELECT sum(float_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.float_value)
+   Output: sum(testtable.float_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.float_value))
+         Output: (PARTIAL sum(testtable.float_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1227,9 +1251,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1316,9 +1340,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1410,9 +1434,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1503,9 +1527,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1596,9 +1620,9 @@ SELECT sum(abs(int_value)) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(abs(_hyper_1_1_chunk.int_value))
+   Output: sum(abs(testtable.int_value))
    ->  Gather
-         Output: (PARTIAL sum(abs(_hyper_1_1_chunk.int_value)))
+         Output: (PARTIAL sum(abs(testtable.int_value)))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -1674,9 +1698,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -1754,9 +1778,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -1830,9 +1854,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -1924,9 +1948,9 @@ SELECT sum(int_value), sum(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value), sum(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value), sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2011,9 +2035,9 @@ SELECT sum(segment_by_value), sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value), sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2098,9 +2122,9 @@ SELECT sum(int_value), sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value), sum(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.int_value), sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value)), (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.int_value)), (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2191,9 +2215,9 @@ SELECT sum(int_value), bit_or(int_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.int_value), bit_or(_hyper_1_1_chunk.int_value)
+   Output: sum(testtable.int_value), bit_or(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.int_value)), (PARTIAL bit_or(_hyper_1_1_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value)), (PARTIAL bit_or(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -2268,9 +2292,9 @@ SELECT sum(segment_by_value), bit_or(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_1_chunk.segment_by_value), bit_or(_hyper_1_1_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value), bit_or(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value)), (PARTIAL bit_or(_hyper_1_1_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value)), (PARTIAL bit_or(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -2441,9 +2465,9 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_41_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_41_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2568,9 +2592,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                            QUERY PLAN                                                                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_41_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_41_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2763,9 +2787,9 @@ SELECT sum(segment_by_value) FROM testtable;
                                                                                                                                                               QUERY PLAN                                                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_81_chunk.segment_by_value)
+   Output: sum(testtable.segment_by_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_81_chunk.segment_by_value))
+         Output: (PARTIAL sum(testtable.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2845,9 +2869,9 @@ SELECT sum(int_value) FROM testtable;
                                                                                                                                                               QUERY PLAN                                                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_81_chunk.int_value)
+   Output: sum(testtable.int_value)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_81_chunk.int_value))
+         Output: (PARTIAL sum(testtable.int_value))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -2940,9 +2964,9 @@ SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testta
                                                                                                                                                               QUERY PLAN                                                                                                                                                               
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_1_81_chunk.segment_by_value) FILTER (WHERE (_hyper_1_81_chunk.segment_by_value > 99999))
+   Output: sum(testtable.segment_by_value) FILTER (WHERE (testtable.segment_by_value > 99999))
    ->  Gather
-         Output: (PARTIAL sum(_hyper_1_81_chunk.segment_by_value) FILTER (WHERE (_hyper_1_81_chunk.segment_by_value > 99999)))
+         Output: (PARTIAL sum(testtable.segment_by_value) FILTER (WHERE (testtable.segment_by_value > 99999)))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3083,9 +3107,9 @@ SELECT sum(segment_by_value1) FROM testtable2;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
+         Output: (PARTIAL sum(testtable2.segment_by_value1))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3164,9 +3188,9 @@ SELECT sum(segment_by_value2) FROM testtable2;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value2)
+   Output: sum(testtable2.segment_by_value2)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value2))
+         Output: (PARTIAL sum(testtable2.segment_by_value2))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3246,9 +3270,9 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0;
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
+         Output: (PARTIAL sum(testtable2.segment_by_value1))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3330,9 +3354,9 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND se
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
+         Output: (PARTIAL sum(testtable2.segment_by_value1))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3414,9 +3438,9 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND se
                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Gather
-         Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
+         Output: (PARTIAL sum(testtable2.segment_by_value1))
          Workers Planned: 2
          ->  Parallel Append
                ->  Custom Scan (VectorAgg)
@@ -3501,7 +3525,7 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND
                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                   
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Finalize Aggregate
-   Output: sum(_hyper_3_101_chunk.segment_by_value1)
+   Output: sum(testtable2.segment_by_value1)
    ->  Append
          ->  Custom Scan (VectorAgg)
                Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
@@ -3608,7 +3632,6 @@ SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY 
 --
 CREATE TABLE testtable3 (time timestamptz, location_id int, device_id int, sensor_id int);
 SELECT create_hypertable('testtable3', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (5,public,testtable3,t)
@@ -3623,7 +3646,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('testtable3') ch;
 (1 row)
 
 VACUUM FULL ANALYZE testtable3;
-EXPLAIN (costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
+EXPLAIN (buffers off, costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
                                                                          QUERY PLAN                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------
  HashAggregate

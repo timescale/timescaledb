@@ -327,7 +327,6 @@ select * from compression_rowcnt_view where chunk_name = :'compressed_chunk';
 -- PREPRE A SELECT before recompress and perform it after recompress
 CREATE TABLE mytab_prep (time timestamptz, a int, b int, c int);
 SELECT create_hypertable('mytab_prep', 'time');
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (9,public,mytab_prep,t)
@@ -349,19 +348,17 @@ INFO:  using tuplesort to scan rows from "_hyper_9_10_chunk" for converting to c
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 VACUUM ANALYZE mytab_prep;
 -- plan should be invalidated to return results from the uncompressed chunk also
-EXPLAIN (COSTS OFF) EXECUTE p1;
-                                                                                     QUERY PLAN                                                                                     
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Merge Append
-   Sort Key: _hyper_9_10_chunk.a, _hyper_9_10_chunk.c, _hyper_9_10_chunk."time" DESC
-   ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
-         ->  Sort
-               Sort Key: compress_hyper_10_11_chunk.a, compress_hyper_10_11_chunk.c, compress_hyper_10_11_chunk._ts_meta_min_1 DESC, compress_hyper_10_11_chunk._ts_meta_max_1 DESC
+set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
+                           QUERY PLAN                           
+----------------------------------------------------------------
+ Sort
+   Sort Key: mytab_prep.a, mytab_prep.c, mytab_prep."time" DESC
+   ->  Append
+         ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
                ->  Seq Scan on compress_hyper_10_11_chunk
-   ->  Sort
-         Sort Key: _hyper_9_10_chunk.a, _hyper_9_10_chunk.c, _hyper_9_10_chunk."time" DESC
          ->  Seq Scan on _hyper_9_10_chunk
-(9 rows)
+(6 rows)
 
 EXECUTE p1;
              time             | a | b | c 
@@ -371,6 +368,7 @@ EXECUTE p1;
  Sun Jan 01 00:00:00 2023 PST | 2 | 3 | 2
 (3 rows)
 
+reset enable_sort;
 -- check plan again after recompression
 SELECT compress_chunk(:'chunk_to_compress_prep');
 INFO:  Using index "compress_hyper_10_11_chunk_a_c__ts_meta_min_1__ts_meta_max__idx" for recompression
@@ -380,7 +378,7 @@ INFO:  Using index "compress_hyper_10_11_chunk_a_c__ts_meta_min_1__ts_meta_max__
 (1 row)
 
 VACUUM ANALYZE mytab_prep;
-EXPLAIN (COSTS OFF) EXECUTE p1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
                                                                                   QUERY PLAN                                                                                  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
@@ -403,7 +401,6 @@ EXECUTE p1;
 -- in the second case, a new compressed chunk is created
 CREATE TABLE mytab (time timestamptz, a int, b int, c int);
 SELECT create_hypertable('mytab', 'time');
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable  
 ---------------------
  (11,public,mytab,t)
@@ -453,7 +450,7 @@ INFO:  Using index "compress_hyper_12_13_chunk_a_c__ts_meta_min_1__ts_meta_max__
 VACUUM ANALYZE mytab;
 -- make sure we are hitting the index and that the index contains the tuples
 SET enable_seqscan TO off;
-EXPLAIN (COSTS OFF) SELECT count(*) FROM mytab where a = 2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT count(*) FROM mytab where a = 2;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
  Aggregate
@@ -505,7 +502,6 @@ select :'compressed_chunk_name_before_recompression' as before_recompression, :'
 select '2022-01-01 09:00:00+00' as start_time \gset
 create table nullseg_one (time timestamptz, a int, b int);
 select create_hypertable('nullseg_one', 'time');
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (14,public,nullseg_one,t)
@@ -558,7 +554,6 @@ select * from :compressed_chunk_name;
 -- test multiple NULL segmentby columns
 create table nullseg_many (time timestamptz, a int, b int, c int);
 select create_hypertable('nullseg_many', 'time');
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (16,public,nullseg_many,t)
@@ -617,7 +612,6 @@ select * from :compressed_chunk_name;
 -- Test behaviour when no segmentby columns are present
 CREATE TABLE noseg(time timestamptz, a int, b int, c int);
 SELECT create_hypertable('noseg', by_range('time', INTERVAL '1 day'));
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (18,t)
@@ -645,7 +639,6 @@ INFO:  Using index "compress_hyper_19_20_chunk__ts_meta_min_1__ts_meta_max_1_idx
 -- Test behaviour when default order by is empty: should not segmentwise-recompress in this case
 CREATE TABLE no_oby(ts int, c1 int);
 SELECT create_hypertable('no_oby','ts');
-NOTICE:  adding not-null constraint to column "ts"
   create_hypertable   
 ----------------------
  (20,public,no_oby,t)

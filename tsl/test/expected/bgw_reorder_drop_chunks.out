@@ -66,7 +66,6 @@ SELECT * FROM timescaledb_information.job_stats;
 ------------------------------
 CREATE TABLE test_reorder_table(time int, chunk_id int);
 SELECT create_hypertable('test_reorder_table', 'time', chunk_time_interval => 1);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable        
 ---------------------------------
  (1,public,test_reorder_table,t)
@@ -364,7 +363,6 @@ SELECT ts_bgw_params_reset_time();
 -----------------------------------
 CREATE TABLE test_drop_chunks_table(time timestamptz, drop_order int);
 SELECT create_hypertable('test_drop_chunks_table', 'time', chunk_time_interval => INTERVAL '1 week');
-NOTICE:  adding not-null constraint to column "time"
           create_hypertable          
 -------------------------------------
  (2,public,test_drop_chunks_table,t)
@@ -576,7 +574,6 @@ SELECT * FROM timescaledb_information.job_stats;
 -- Test for date
 CREATE TABLE test_drop_chunks_table_date(time date, drop_order int);
 SELECT create_hypertable('test_drop_chunks_table_date', 'time', chunk_time_interval => INTERVAL '1 week');
-NOTICE:  adding not-null constraint to column "time"
             create_hypertable             
 ------------------------------------------
  (3,public,test_drop_chunks_table_date,t)
@@ -602,7 +599,6 @@ SELECT ts_bgw_params_reset_time();
 -- Test for timestamp
 CREATE TABLE test_drop_chunks_table_tsntz(time date, drop_order int);
 SELECT create_hypertable('test_drop_chunks_table_tsntz', 'time', chunk_time_interval => INTERVAL '1 week');
-NOTICE:  adding not-null constraint to column "time"
              create_hypertable             
 -------------------------------------------
  (4,public,test_drop_chunks_table_tsntz,t)
@@ -650,7 +646,6 @@ SELECT * FROM sorted_bgw_log;
 -- test the schedule_interval parameter for policies
 CREATE TABLE test_schedint(time timestamptz, a int, b int);
 select create_hypertable('test_schedint', 'time');
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable      
 ----------------------------
  (5,public,test_schedint,t)

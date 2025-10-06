@@ -10,7 +10,6 @@ set enable_hashagg to off;
 --set timescaledb.debug_require_vector_agg to 'forbid';
 create table groupagg(t int, s int, value int);
 select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
-NOTICE:  adding not-null constraint to column "t"
    create_hypertable   
 -----------------------
  (1,public,groupagg,t)
@@ -102,77 +101,77 @@ select s, sum(value) from groupagg group by s order by s nulls first limit 10;
 
 reset timescaledb.debug_require_vector_agg;
 -- More tests for dictionary encoding.
-create table text_table(ts int);
+create table text_table(ts int, a text);
 select create_hypertable('text_table', 'ts', chunk_time_interval => 3);
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (3,public,text_table,t)
 (1 row)
 
-alter table text_table set (timescaledb.compress);
-insert into text_table select 0 /*, default */ from generate_series(1, 1000) x;
+alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'a');
+insert into text_table select -1, 'scalar' from generate_series(1, 1000) x;
 select count(compress_chunk(x)) from show_chunks('text_table') x;
  count 
 -------
      1
 (1 row)
 
-alter table text_table add column a text collate "POSIX" default 'default';
-alter table text_table set (timescaledb.compress,
-    timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
 insert into text_table select 1, '' from generate_series(1, 1000) x;
 insert into text_table select 2, 'same' from generate_series(1, 1000) x;
 insert into text_table select 3, 'different' || x from generate_series(1, 1000) x;
-insert into text_table select 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
-insert into text_table select 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
+insert into text_table select 4, case when x % 2 = 0 then null else 'samewithnulls' end from generate_series(1, 1000) x;
+insert into text_table select 5, case when x % 2 = 0 then null else 'differentwithnulls' || x end from generate_series(1, 1000) x;
+alter table text_table set (timescaledb.compress,
+    timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a');
 select count(compress_chunk(x)) from show_chunks('text_table') x;
+NOTICE:  chunk "_hyper_3_7_chunk" is already converted to columnstore
  count 
 -------
-     2
+     3
 (1 row)
 
 vacuum analyze text_table;
 set timescaledb.debug_require_vector_agg to 'require';
-select a, count(*) from text_table group by a order by a limit 10;
-            a            | count 
--------------------------+-------
-                         |  1000
- default                 |  1000
- different-with-nulls1   |     1
- different-with-nulls101 |     1
- different-with-nulls103 |     1
- different-with-nulls105 |     1
- different-with-nulls107 |     1
- different-with-nulls109 |     1
- different-with-nulls11  |     1
- different-with-nulls111 |     1
+select a, count(*) from text_table group by a order by count(*) desc, a limit 10;
+       a       | count 
+---------------+-------
+               |  1000
+ same          |  1000
+ scalar        |  1000
+ $             |  1000
+ samewithnulls |   500
+ different1    |     1
+ different10   |     1
+ different100  |     1
+ different1000 |     1
+ different101  |     1
 (10 rows)
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
--- reverse order.
+-- reverse order. We have to filter out the chunk where 'a' is segmentby.
 set timescaledb.debug_require_vector_agg to 'forbid';
-select a, count(*) from text_table group by a order by a desc limit 10;
-        a        | count 
------------------+-------
- $               |  1000
- same-with-nulls |   500
- same            |  1000
- different999    |     1
- different998    |     1
- different997    |     1
- different996    |     1
- different995    |     1
- different994    |     1
- different993    |     1
+select a, count(*) from text_table where ts >= 0 group by a order by a desc limit 10;
+           a           | count 
+-----------------------+-------
+ $                     |  1000
+ samewithnulls         |   500
+ same                  |  1000
+ differentwithnulls999 |     1
+ differentwithnulls997 |     1
+ differentwithnulls995 |     1
+ differentwithnulls993 |     1
+ differentwithnulls991 |     1
+ differentwithnulls99  |     1
+ differentwithnulls989 |     1
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;
+reset enable_sort;
 -- with NULLS FIRST
 select count(decompress_chunk(x)) from show_chunks('text_table') x;
  count 
 -------
-     2
+     3
 (1 row)
 
 alter table text_table set (timescaledb.compress,
@@ -180,23 +179,23 @@ alter table text_table set (timescaledb.compress,
 select count(compress_chunk(x)) from show_chunks('text_table') x;
  count 
 -------
-     2
+     3
 (1 row)
 
 set timescaledb.debug_require_vector_agg to 'require';
 select a, count(*) from text_table group by a order by a nulls first limit 10;
-            a            | count 
--------------------------+-------
- $                       |  1000
-                         |  1000
- default                 |  1000
- different-with-nulls1   |     1
- different-with-nulls101 |     1
- different-with-nulls103 |     1
- different-with-nulls105 |     1
- different-with-nulls107 |     1
- different-with-nulls109 |     1
- different-with-nulls11  |     1
+       a       | count 
+---------------+-------
+ $             |  1000
+               |  1000
+ different1    |     1
+ different10   |     1
+ different100  |     1
+ different1000 |     1
+ different101  |     1
+ different102  |     1
+ different103  |     1
+ different104  |     1
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;
@@ -205,7 +204,7 @@ set timescaledb.debug_require_vector_agg to 'forbid';
 select ts, a, count(*) from text_table group by ts, a order by ts, a limit 10;
  ts |       a       | count 
 ----+---------------+-------
-  0 | default       |  1000
+ -1 | scalar        |  1000
   1 |               |  1000
   2 | same          |  1000
   3 | different1    |     1
@@ -218,18 +217,18 @@ select ts, a, count(*) from text_table group by ts, a order by ts, a limit 10;
 (10 rows)
 
 select a, ts, count(*) from text_table group by a, ts order by a desc, ts desc limit 10;
-        a        | ts | count 
------------------+----+-------
- $               |  5 |   500
- $               |  4 |   500
- same-with-nulls |  4 |   500
- same            |  2 |  1000
- different999    |  3 |     1
- different998    |  3 |     1
- different997    |  3 |     1
- different996    |  3 |     1
- different995    |  3 |     1
- different994    |  3 |     1
+           a           | ts | count 
+-----------------------+----+-------
+ $                     |  5 |   500
+ $                     |  4 |   500
+ scalar                | -1 |  1000
+ samewithnulls         |  4 |   500
+ same                  |  2 |  1000
+ differentwithnulls999 |  5 |     1
+ differentwithnulls997 |  5 |     1
+ differentwithnulls995 |  5 |     1
+ differentwithnulls993 |  5 |     1
+ differentwithnulls991 |  5 |     1
 (10 rows)
 
 reset timescaledb.debug_require_vector_agg;

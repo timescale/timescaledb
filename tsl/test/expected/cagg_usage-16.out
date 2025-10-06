@@ -6,8 +6,10 @@
 SET client_min_messages TO NOTICE;
 SET work_mem TO '64MB';
 SET timezone TO PST8PDT;
+SELECT _timescaledb_functions.invalidation_plugin_name() AS plugin_name \gset
 CREATE VIEW invalidation_slots AS
-SELECT * FROM pg_replication_slots WHERE plugin = 'timescaledb-invalidations';
+SELECT * FROM pg_replication_slots
+ WHERE plugin = :'plugin_name';
 -- START OF USAGE TEST --
 --First create your hypertable
 CREATE TABLE device_readings (
@@ -246,7 +248,6 @@ $BODY$
 $BODY$;
 CREATE TABLE device_readings_int(time int, value float);
 SELECT create_hypertable('device_readings_int','time',chunk_time_interval:=10);
-NOTICE:  adding not-null constraint to column "time"
         create_hypertable         
 ----------------------------------
  (6,public,device_readings_int,t)
@@ -436,7 +437,6 @@ DROP TABLE sensor_data;
 -- END OF BASIC USAGE TESTS --
 CREATE TABLE metrics(time timestamptz, device TEXT, value float);
 SELECT table_name FROM create_hypertable('metrics','time');
-NOTICE:  adding not-null constraint to column "time"
  table_name 
 ------------
  metrics
@@ -606,7 +606,7 @@ ORDER BY 1;
 (2 rows)
 
 \set ON_ERROR_STOP 1
-SELECT count(*) FROM invalidation_slots;
+SELECT count(*) FROM invalidation_slots WHERE database = current_database();
  count 
 -------
      0
@@ -614,6 +614,7 @@ SELECT count(*) FROM invalidation_slots;
 
 CREATE TABLE magic1(time timestamptz not null, device int, value float);
 CREATE TABLE magic2(time timestamptz not null, device int, value float);
+CREATE TABLE magic3(time timestamptz not null, device int, value float);
 SELECT table_name FROM create_hypertable('magic1','time');
  table_name 
 ------------
@@ -626,11 +627,21 @@ SELECT table_name FROM create_hypertable('magic2','time');
  magic2
 (1 row)
 
+SELECT table_name FROM create_hypertable('magic3','time');
+ table_name 
+------------
+ magic3
+(1 row)
+
 INSERT INTO magic1
 SELECT generate_series('1999-12-20'::timestamptz, '2000-02-01'::timestamptz, '12 day'::interval),
        (100 * random())::int,
        100 * random();
 INSERT INTO magic2
+SELECT generate_series('1999-12-20'::timestamptz, '2000-02-01'::timestamptz, '12 day'::interval),
+       (100 * random())::int,
+       100 * random();
+INSERT INTO magic3
 SELECT generate_series('1999-12-20'::timestamptz, '2000-02-01'::timestamptz, '12 day'::interval),
        (100 * random())::int,
        100 * random();
@@ -657,7 +668,7 @@ select currval('_timescaledb_catalog.hypertable_id_seq') - 1 as prev_htid \gset
 select setval('_timescaledb_catalog.hypertable_id_seq', :prev_htid, false);
  setval 
 --------
-     18
+     19
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -744,6 +755,12 @@ CREATE MATERIALIZED VIEW magic_summary1_magic
          FROM magic1
      GROUP BY 1,2;
 ERROR:  unrecognized value "magic" for invalidate_using
+-- This should error out since we cannot add the trigger to the
+-- hypertable when there are multiple caggs connected. Changing
+-- invalidation collection method is more complicated than this.
+ALTER MATERIALIZED VIEW magic1_summary2_wal
+      SET (timescaledb.invalidate_using = 'trigger');
+ERROR:  cannot change invalidation method for continuous aggregate
 \set ON_ERROR_STOP 1
 -- Check that it was actually written to the catalog
 SELECT hypertable_name, view_name, invalidate_using
@@ -757,7 +774,7 @@ SELECT hypertable_name, view_name, invalidate_using
 (3 rows)
 
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
  count 
 -------
@@ -765,11 +782,11 @@ SELECT count(*) FROM pg_replication_slots
 (1 row)
 
 DROP MATERIALIZED VIEW magic2_summary1_wal;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_36_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_23_40_chunk
 -- Slot should be there. We have another hypertable using WAL-based
 -- invalidation collection.
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
  count 
 -------
@@ -777,11 +794,11 @@ SELECT count(*) FROM pg_replication_slots
 (1 row)
 
 DROP MATERIALIZED VIEW magic1_summary1_wal;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_34_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_38_chunk
 -- Slot should be there. We have yet another continuous aggregate for
 -- the hypertable using WAL-based invalidation collection.
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
  count 
 -------
@@ -789,11 +806,11 @@ SELECT count(*) FROM pg_replication_slots
 (1 row)
 
 DROP MATERIALIZED VIEW magic1_summary2_wal;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_35_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_39_chunk
 -- Now slot should be gone and we should not have any continuous
 -- aggregates using WAL-based invalidation collection.
 SELECT count(*) FROM pg_replication_slots
- WHERE plugin = 'timescaledb-invalidations'
+ WHERE plugin = :'plugin_name'
    AND database = current_database();
  count 
 -------
@@ -807,3 +824,33 @@ SELECT hypertable_name, view_name, invalidate_using
 -----------------+-----------+------------------
 (0 rows)
 
+-- Check that trigger-based invalidation works as well, and give
+-- proper errors when trying to modify them.
+CREATE MATERIALIZED VIEW magic3_day_summary_trigger
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'trigger')
+    AS SELECT time_bucket('1 day', time), device, avg(value)
+         FROM magic3
+     GROUP BY 1,2;
+NOTICE:  refreshing continuous aggregate "magic3_day_summary_trigger"
+CREATE MATERIALIZED VIEW magic3_week_summary_trigger
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'trigger')
+    AS SELECT time_bucket('1 week', time), device, avg(value)
+         FROM magic3
+     GROUP BY 1,2;
+NOTICE:  refreshing continuous aggregate "magic3_week_summary_trigger"
+\set ON_ERROR_STOP 0
+-- This should error out since we already are using trigger-based
+-- collection.
+CREATE MATERIALIZED VIEW magic3_week_summary_wal
+  WITH (timescaledb.continuous, timescaledb.invalidate_using = 'wal')
+    AS SELECT time_bucket('1 week', time), device, avg(value)
+         FROM magic3
+     GROUP BY 1,2;
+ERROR:  cannot use wal-based invalidation collection with hypertable that is using trigger-based invalidation collection
+-- This should error out since we cannot remove the trigger from the
+-- hypertable when there are multiple caggs connected. Switching
+-- invalidation collection method is more complicated than this.
+ALTER MATERIALIZED VIEW magic3_day_summary_trigger
+      SET (timescaledb.invalidate_using = 'wal');
+ERROR:  cannot change invalidation method for continuous aggregate
+\set ON_ERROR_STOP 1

@@ -54,6 +54,9 @@ default_ignored_tests = {
     "net",
 }
 
+# Some tests are ignored on PG earlier than 17 due to broken MergeAppend cost model there.
+ignored_before_pg17 = default_ignored_tests | {"merge_append_partially_compressed"}
+
 # Tests that we do not run as part of a Flake tests
 flaky_exclude_tests = {
     # Not executed as a flake test since it easily exhausts available
@@ -147,6 +150,7 @@ def macos_config(overrides):
     macos_ignored_tests = {
         "bgw_launcher",
         "pg_dump",
+        "compression_bgw",
         "compressed_collation",
     }
     base_config = dict(
@@ -169,9 +173,13 @@ def macos_config(overrides):
 
 
 # always test debug build on latest of all supported pg versions
-m["include"].append(build_debug_config({"pg": PG15_LATEST}))
+m["include"].append(
+    build_debug_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg17})
+)
 
-m["include"].append(build_debug_config({"pg": PG16_LATEST}))
+m["include"].append(
+    build_debug_config({"pg": PG16_LATEST, "ignored_tests": ignored_before_pg17})
+)
 
 m["include"].append(build_debug_config({"pg": PG17_LATEST}))
 
@@ -206,11 +214,11 @@ m["include"].append(
     )
 )
 
-# test building against PG18beta2
+# test building against PG18rc1
 m["include"].append(
     build_debug_config(
         {
-            "pg": "18beta2",
+            "pg": "18.0",
             "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
             "tsdb_build_args": "-DEXPERIMENTAL=ON -DWARNINGS_AS_ERRORS=OFF",
             "installcheck": False,
@@ -225,25 +233,41 @@ m["include"].append(
 # entries to the matrix
 if not pull_request:
     # add debug test for first supported PG15 version
-    m["include"].append(build_debug_config({"pg": PG15_EARLIEST}))
+    m["include"].append(
+        build_debug_config({"pg": PG15_EARLIEST, "ignored_tests": ignored_before_pg17})
+    )
 
     # add debug test for first supported PG16 version
-    m["include"].append(build_debug_config({"pg": PG16_EARLIEST}))
+    m["include"].append(
+        build_debug_config({"pg": PG16_EARLIEST, "ignored_tests": ignored_before_pg17})
+    )
 
     # add debug test for first supported PG17 version
     if PG17_EARLIEST != PG17_LATEST:
         m["include"].append(build_debug_config({"pg": PG17_EARLIEST}))
 
     # add debug tests for timescaledb on latest postgres release in MacOS
-    m["include"].append(build_debug_config(macos_config({"pg": PG15_LATEST})))
+    m["include"].append(
+        build_debug_config(
+            macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg17})
+        )
+    )
 
-    m["include"].append(build_debug_config(macos_config({"pg": PG16_LATEST})))
+    m["include"].append(
+        build_debug_config(
+            macos_config({"pg": PG16_LATEST, "ignored_tests": ignored_before_pg17})
+        )
+    )
 
     m["include"].append(build_debug_config(macos_config({"pg": PG17_LATEST})))
 
     # add release test for latest pg releases
-    m["include"].append(build_release_config({"pg": PG15_LATEST}))
-    m["include"].append(build_release_config({"pg": PG16_LATEST}))
+    m["include"].append(
+        build_release_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg17})
+    )
+    m["include"].append(
+        build_release_config({"pg": PG16_LATEST, "ignored_tests": ignored_before_pg17})
+    )
     m["include"].append(build_release_config({"pg": PG17_LATEST}))
 
     # add apache only test for latest pg versions
@@ -256,6 +280,18 @@ if not pull_request:
         build_debug_config(
             {
                 "pg": 15,
+                "ignored_tests": ignored_before_pg17
+                | {
+                    "bgw_custom",
+                    "bgw_scheduler_restart",
+                    "bgw_job_stat_history_errors_permissions",
+                    "bgw_job_stat_history_errors",
+                    "bgw_job_stat_history",
+                    "bgw_db_scheduler_fixed",
+                    "bgw_reorder_drop_chunks",
+                    "scheduler_fixed",
+                    "compress_bgw_reorder_drop_chunks",
+                },
                 "snapshot": "snapshot",
             }
         )
@@ -264,6 +300,7 @@ if not pull_request:
         build_debug_config(
             {
                 "pg": 16,
+                "ignored_tests": ignored_before_pg17,
                 "snapshot": "snapshot",
             }
         )

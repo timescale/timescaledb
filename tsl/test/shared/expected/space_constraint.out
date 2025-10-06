@@ -4,7 +4,7 @@
 SET timescaledb.enable_chunk_append TO false;
 SET timescaledb.enable_constraint_aware_append TO false;
 SET timescaledb.current_timestamp_mock TO '1990-01-01';
-\set PREFIX 'EXPLAIN (COSTS OFF, SUMMARY OFF, TIMING OFF)'
+\set PREFIX 'EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)'
 -- test SELECT FOR UPDATE
 :PREFIX SELECT FROM metrics_space WHERE device_id = 1 FOR UPDATE;
 QUERY PLAN
@@ -657,7 +657,6 @@ QUERY PLAN
 -- test multiple space dimensions and different datatypes
 CREATE TABLE space_constraint(time timestamptz, s1 text, s2 numeric, s3 int, v float);
 SELECT table_name FROM create_hypertable('space_constraint','time');
-NOTICE:  adding not-null constraint to column "time"
     table_name    
  space_constraint
 (1 row)
@@ -683,12 +682,12 @@ SELECT t,s1,s2,s3,0.12345 FROM
   (VALUES ('s1_1'),('s1_2')) v2(s1),
   (VALUES (1.23),(4.56)) v3(s2),
   (VALUES (1),(2)) v4(s3);
-\set PREFIX 'EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF)'
+\set PREFIX 'EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF)'
 BEGIN;
 :PREFIX DELETE FROM space_constraint WHERE s1 = 's1_2';
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Delete on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Delete on space_constraint (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk space_constraint_1
          Delete on _hyper_X_X_chunk space_constraint_2
          Delete on _hyper_X_X_chunk space_constraint_3
@@ -697,22 +696,22 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk space_constraint_6
          Delete on _hyper_X_X_chunk space_constraint_7
          Delete on _hyper_X_X_chunk space_constraint_8
-         ->  Append (actual rows=8 loops=1)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Append (actual rows=8.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                      Filter: (s1 = 's1_2'::text)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1.00 loops=1)
                      Filter: (s1 = 's1_2'::text)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_3 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_3 (actual rows=1.00 loops=1)
                      Filter: (s1 = 's1_2'::text)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_4 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_4 (actual rows=1.00 loops=1)
                      Filter: (s1 = 's1_2'::text)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_5 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_5 (actual rows=1.00 loops=1)
                      Filter: (s1 = 's1_2'::text)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_6 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_6 (actual rows=1.00 loops=1)
                      Filter: (s1 = 's1_2'::text)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_7 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_7 (actual rows=1.00 loops=1)
                      Filter: (s1 = 's1_2'::text)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_8 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_8 (actual rows=1.00 loops=1)
                      Filter: (s1 = 's1_2'::text)
 (27 rows)
 
@@ -720,14 +719,14 @@ ROLLBACK;
 BEGIN;
 :PREFIX DELETE FROM space_constraint WHERE s1 = 's1_2' AND s2 = 1.23 AND s3 = 2;
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Delete on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Delete on space_constraint (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk space_constraint_1
          Delete on _hyper_X_X_chunk space_constraint_2
-         ->  Append (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Append (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                      Filter: ((s1 = 's1_2'::text) AND (s2 = 1.23) AND (s3 = 2))
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1.00 loops=1)
                      Filter: ((s1 = 's1_2'::text) AND (s2 = 1.23) AND (s3 = 2))
 (9 rows)
 
@@ -735,10 +734,10 @@ ROLLBACK;
 BEGIN;
 :PREFIX DELETE FROM space_constraint WHERE time > '2000-06-01' AND s1 = 's1_2' AND s2 = 1.23 AND s3 = 2;
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Delete on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Delete on space_constraint (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk space_constraint_1
-         ->  Index Scan using _hyper_X_X_chunk_space_constraint_time_idx on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_X_X_chunk_space_constraint_time_idx on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                Index Cond: ("time" > 'Thu Jun 01 00:00:00 2000 PDT'::timestamp with time zone)
                Filter: ((s1 = 's1_2'::text) AND (s2 = 1.23) AND (s3 = 2))
 (6 rows)
@@ -747,14 +746,14 @@ ROLLBACK;
 BEGIN;
 :PREFIX DELETE FROM space_constraint WHERE s1 IN ('s1_2','s1_2') AND s2 = 1.23 AND s3 = 2;
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Delete on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Delete on space_constraint (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk space_constraint_1
          Delete on _hyper_X_X_chunk space_constraint_2
-         ->  Append (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Append (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                      Filter: ((s1 = ANY ('{s1_2,s1_2}'::text[])) AND (s2 = 1.23) AND (s3 = 2))
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1.00 loops=1)
                      Filter: ((s1 = ANY ('{s1_2,s1_2}'::text[])) AND (s2 = 1.23) AND (s3 = 2))
 (9 rows)
 
@@ -762,21 +761,21 @@ ROLLBACK;
 BEGIN;
 :PREFIX DELETE FROM space_constraint WHERE s1 IN ('s1_1','s1_3') AND s2 IN (1.23,4.44) AND s3 IN (1,100);
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Delete on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Delete on space_constraint (actual rows=0.00 loops=1)
          Delete on _hyper_X_X_chunk space_constraint_1
          Delete on _hyper_X_X_chunk space_constraint_2
          Delete on _hyper_X_X_chunk space_constraint_3
          Delete on _hyper_X_X_chunk space_constraint_4
-         ->  Append (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Append (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                      Filter: ((s1 = ANY ('{s1_1,s1_3}'::text[])) AND (s2 = ANY ('{1.23,4.44}'::numeric[])) AND (s3 = ANY ('{1,100}'::integer[])))
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=0 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=0.00 loops=1)
                      Filter: ((s1 = ANY ('{s1_1,s1_3}'::text[])) AND (s2 = ANY ('{1.23,4.44}'::numeric[])) AND (s3 = ANY ('{1,100}'::integer[])))
                      Rows Removed by Filter: 1
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_3 (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_3 (actual rows=1.00 loops=1)
                      Filter: ((s1 = ANY ('{s1_1,s1_3}'::text[])) AND (s2 = ANY ('{1.23,4.44}'::numeric[])) AND (s3 = ANY ('{1,100}'::integer[])))
-               ->  Seq Scan on _hyper_X_X_chunk space_constraint_4 (actual rows=0 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk space_constraint_4 (actual rows=0.00 loops=1)
                      Filter: ((s1 = ANY ('{s1_1,s1_3}'::text[])) AND (s2 = ANY ('{1.23,4.44}'::numeric[])) AND (s3 = ANY ('{1,100}'::integer[])))
                      Rows Removed by Filter: 1
 (17 rows)
@@ -785,8 +784,8 @@ ROLLBACK;
 BEGIN;
 :PREFIX UPDATE space_constraint SET v=0.7 WHERE s1 = 's1_2';
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Update on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Update on space_constraint (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk space_constraint_1
          Update on _hyper_X_X_chunk space_constraint_2
          Update on _hyper_X_X_chunk space_constraint_3
@@ -795,23 +794,23 @@ QUERY PLAN
          Update on _hyper_X_X_chunk space_constraint_6
          Update on _hyper_X_X_chunk space_constraint_7
          Update on _hyper_X_X_chunk space_constraint_8
-         ->  Result (actual rows=8 loops=1)
-               ->  Append (actual rows=8 loops=1)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Result (actual rows=8.00 loops=1)
+               ->  Append (actual rows=8.00 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                            Filter: (s1 = 's1_2'::text)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1.00 loops=1)
                            Filter: (s1 = 's1_2'::text)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_3 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_3 (actual rows=1.00 loops=1)
                            Filter: (s1 = 's1_2'::text)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_4 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_4 (actual rows=1.00 loops=1)
                            Filter: (s1 = 's1_2'::text)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_5 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_5 (actual rows=1.00 loops=1)
                            Filter: (s1 = 's1_2'::text)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_6 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_6 (actual rows=1.00 loops=1)
                            Filter: (s1 = 's1_2'::text)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_7 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_7 (actual rows=1.00 loops=1)
                            Filter: (s1 = 's1_2'::text)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_8 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_8 (actual rows=1.00 loops=1)
                            Filter: (s1 = 's1_2'::text)
 (28 rows)
 
@@ -819,15 +818,15 @@ ROLLBACK;
 BEGIN;
 :PREFIX UPDATE space_constraint SET v=0.7 WHERE s1 = 's1_2' AND s2 = 1.23 AND s3 = 2;
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Update on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Update on space_constraint (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk space_constraint_1
          Update on _hyper_X_X_chunk space_constraint_2
-         ->  Result (actual rows=2 loops=1)
-               ->  Append (actual rows=2 loops=1)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Result (actual rows=2.00 loops=1)
+               ->  Append (actual rows=2.00 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                            Filter: ((s1 = 's1_2'::text) AND (s2 = 1.23) AND (s3 = 2))
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1.00 loops=1)
                            Filter: ((s1 = 's1_2'::text) AND (s2 = 1.23) AND (s3 = 2))
 (10 rows)
 
@@ -835,11 +834,11 @@ ROLLBACK;
 BEGIN;
 :PREFIX UPDATE space_constraint SET v=0.7 WHERE time > '2000-06-01' AND s1 = 's1_2' AND s2 = 1.23 AND s3 = 2;
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Update on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Update on space_constraint (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk space_constraint_1
-         ->  Result (actual rows=1 loops=1)
-               ->  Index Scan using _hyper_X_X_chunk_space_constraint_time_idx on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Result (actual rows=1.00 loops=1)
+               ->  Index Scan using _hyper_X_X_chunk_space_constraint_time_idx on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                      Index Cond: ("time" > 'Thu Jun 01 00:00:00 2000 PDT'::timestamp with time zone)
                      Filter: ((s1 = 's1_2'::text) AND (s2 = 1.23) AND (s3 = 2))
 (7 rows)
@@ -848,15 +847,15 @@ ROLLBACK;
 BEGIN;
 :PREFIX UPDATE space_constraint SET v=0.7 WHERE s1 IN ('s1_2','s1_2') AND s2 = 1.23 AND s3 = 2;
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Update on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Update on space_constraint (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk space_constraint_1
          Update on _hyper_X_X_chunk space_constraint_2
-         ->  Result (actual rows=2 loops=1)
-               ->  Append (actual rows=2 loops=1)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Result (actual rows=2.00 loops=1)
+               ->  Append (actual rows=2.00 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                            Filter: ((s1 = ANY ('{s1_2,s1_2}'::text[])) AND (s2 = 1.23) AND (s3 = 2))
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=1.00 loops=1)
                            Filter: ((s1 = ANY ('{s1_2,s1_2}'::text[])) AND (s2 = 1.23) AND (s3 = 2))
 (10 rows)
 
@@ -864,22 +863,22 @@ ROLLBACK;
 BEGIN;
 :PREFIX UPDATE space_constraint SET v=0.7 WHERE s1 IN ('s1_1','s1_3') AND s2 IN (1.23,4.44) AND s3 IN (1,100);
 QUERY PLAN
- Custom Scan (ModifyHypertable) (actual rows=0 loops=1)
-   ->  Update on space_constraint (actual rows=0 loops=1)
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   ->  Update on space_constraint (actual rows=0.00 loops=1)
          Update on _hyper_X_X_chunk space_constraint_1
          Update on _hyper_X_X_chunk space_constraint_2
          Update on _hyper_X_X_chunk space_constraint_3
          Update on _hyper_X_X_chunk space_constraint_4
-         ->  Result (actual rows=2 loops=1)
-               ->  Append (actual rows=2 loops=1)
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1 loops=1)
+         ->  Result (actual rows=2.00 loops=1)
+               ->  Append (actual rows=2.00 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_1 (actual rows=1.00 loops=1)
                            Filter: ((s1 = ANY ('{s1_1,s1_3}'::text[])) AND (s2 = ANY ('{1.23,4.44}'::numeric[])) AND (s3 = ANY ('{1,100}'::integer[])))
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=0 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_2 (actual rows=0.00 loops=1)
                            Filter: ((s1 = ANY ('{s1_1,s1_3}'::text[])) AND (s2 = ANY ('{1.23,4.44}'::numeric[])) AND (s3 = ANY ('{1,100}'::integer[])))
                            Rows Removed by Filter: 1
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_3 (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_3 (actual rows=1.00 loops=1)
                            Filter: ((s1 = ANY ('{s1_1,s1_3}'::text[])) AND (s2 = ANY ('{1.23,4.44}'::numeric[])) AND (s3 = ANY ('{1,100}'::integer[])))
-                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_4 (actual rows=0 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk space_constraint_4 (actual rows=0.00 loops=1)
                            Filter: ((s1 = ANY ('{s1_1,s1_3}'::text[])) AND (s2 = ANY ('{1.23,4.44}'::numeric[])) AND (s3 = ANY ('{1,100}'::integer[])))
                            Rows Removed by Filter: 1
 (18 rows)

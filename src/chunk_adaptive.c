@@ -147,7 +147,8 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 	if (NULL == tce || !OidIsValid(tce->cmp_proc))
 		elog(ERROR, "no comparison function for type %u", atttype);
 
-	scan = table_beginscan(rel, GetTransactionSnapshot(), 0, NULL);
+	PushActiveSnapshot(GetTransactionSnapshot());
+	scan = table_beginscan(rel, GetActiveSnapshot(), 0, NULL);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -174,6 +175,7 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 
 	table_endscan(scan);
 	ExecDropSingleTupleTableSlot(slot);
+	PopActiveSnapshot();
 
 	return (nulls[0] || nulls[1]) ? MINMAX_NO_TUPLES : MINMAX_FOUND;
 }
@@ -184,7 +186,8 @@ minmax_heapscan(Relation rel, Oid atttype, AttrNumber attnum, Datum minmax[2])
 static MinMaxResult
 minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[2])
 {
-	IndexScanDesc scan = index_beginscan_compat(rel, idxrel, GetTransactionSnapshot(), NULL, 0, 0);
+	PushActiveSnapshot(GetTransactionSnapshot());
+	IndexScanDesc scan = index_beginscan_compat(rel, idxrel, GetActiveSnapshot(), NULL, 0, 0);
 	TupleTableSlot *slot = table_slot_create(rel, NULL);
 	bool nulls[2] = { true, true };
 	int i;
@@ -217,6 +220,7 @@ minmax_indexscan(Relation rel, Relation idxrel, AttrNumber attnum, Datum minmax[
 
 	index_endscan(scan);
 	ExecDropSingleTupleTableSlot(slot);
+	PopActiveSnapshot();
 
 	Assert((nulls[0] && nulls[1]) || (!nulls[0] && !nulls[1]));
 

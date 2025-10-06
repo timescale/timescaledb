@@ -1,0 +1,1 @@
+Implements: #8581 Allow mixing postgres and timescaledb options in ALTER TABLE SET

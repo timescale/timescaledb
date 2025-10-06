@@ -342,7 +342,6 @@ DROP TABLE extra_devices;
 -- test enabling compression on cagg after column rename
 CREATE TABLE comp_rename(time timestamptz);
 SELECT table_name FROM create_hypertable('comp_rename', 'time');
-NOTICE:  adding not-null constraint to column "time"
  table_name  
  comp_rename
 (1 row)

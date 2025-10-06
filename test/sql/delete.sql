@@ -25,12 +25,12 @@ END;
 $BODY$;
 
 -- ConstraintAwareAppend applied for SELECT
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
 
 -- ConstraintAwareAppend NOT applied for DELETE
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val());
 
@@ -47,3 +47,23 @@ DELETE FROM "two_Partitions"
 WHERE series_1 IN (SELECT series_1 FROM "two_Partitions" WHERE series_1 > series_val()) RETURNING "timeCustom";
 SELECT * FROM "two_Partitions" ORDER BY "timeCustom", device_id, series_0, series_1;
 ROLLBACK;
+
+-- test update on chunks directly
+CREATE TABLE direct_delete(time timestamptz) WITH (tsdb.hypertable);
+
+INSERT INTO direct_delete VALUES ('2020-01-01');
+SELECT show_chunks('direct_delete') AS "CHUNK" \gset
+
+--should have ModifyHyperable node
+EXPLAIN (costs off, timing off, summary off) DELETE FROM :CHUNK;
+EXPLAIN (costs off, timing off, summary off) DELETE FROM ONLY :CHUNK;
+
+-- DELETE should succeed
+BEGIN;
+DELETE FROM :CHUNK RETURNING *;
+ROLLBACK;
+
+BEGIN;
+DELETE FROM ONLY :CHUNK RETURNING *;
+ROLLBACK;
+
