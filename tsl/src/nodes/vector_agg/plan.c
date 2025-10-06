@@ -7,6 +7,7 @@
 #include <access/attnum.h>
 #include <commands/explain.h>
 #include <executor/executor.h>
+#include <funcapi.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -354,6 +355,8 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		{
 			switch (typlen)
 			{
+				case 1:
+					return VAGT_HashSerialized;
 				case 2:
 					return VAGT_HashSingleFixed2;
 				case 4:
