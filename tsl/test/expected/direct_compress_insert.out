@@ -271,7 +271,7 @@ BEGIN;
 SET timescaledb.enable_direct_compress_insert = true;
 CREATE MATERIALIZED VIEW metrics_cagg WITH (tsdb.continuous) AS SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value FROM metrics GROUP BY bucket, device WITH NO DATA;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
-WARNING:  disabling direct compress because the destination table has triggers
+WARNING:  disabling direct compress because the destination table has continuous aggregates
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
  Seq Scan on _hyper_1_31_chunk (actual rows=101.00 loops=1)
