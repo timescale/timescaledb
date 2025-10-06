@@ -63,6 +63,9 @@ reset timescaledb.enable_sparse_index_bloom;
 explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = any(array['1', '10']::varchar(255)[]);
 
+explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom::varchar = any(array['1', '10']);
+
 select * from (
     select 3 priority, 'C' "COLLATION"
     union all (select 2, collname from pg_collation where collname ilike 'en_us%' order by collencoding, collname limit 1)
