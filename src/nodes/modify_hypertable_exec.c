@@ -599,7 +599,6 @@ ExecInsert(ModifyTableContext *context,
 	TransitionCaptureState *ar_insert_trig_tcs;
 	ModifyTable *node = (ModifyTable *) mtstate->ps.plan;
 	OnConflictAction onconflict = node->onConflictAction;
-	MemoryContext oldContext;
 	bool skip_generated_column_computations = false;
 
 	Assert(!mtstate->mt_partition_tuple_routing);
@@ -657,104 +656,8 @@ ExecInsert(ModifyTableContext *context,
 	}
 	else if (resultRelInfo->ri_FdwRoutine)
 	{
-		/*
-		 * GENERATED expressions might reference the tableoid column, so
-		 * (re-)initialize tts_tableOid before evaluating them.
-		 */
-		slot->tts_tableOid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
-
-		/*
-		 * Compute stored generated columns
-		 */
-		if (resultRelationDesc->rd_att->constr &&
-			resultRelationDesc->rd_att->constr->has_generated_stored)
-			ExecComputeStoredGenerated(resultRelInfo, estate, slot,
-									   CMD_INSERT);
-
-		/*
-		 * If the FDW supports batching, and batching is requested, accumulate
-		 * rows and insert them in batches. Otherwise use the per-row inserts.
-		 */
-		if (resultRelInfo->ri_BatchSize > 1)
-		{
-			/*
-			 * When we've reached the desired batch size, perform the
-			 * insertion.
-			 */
-			if (resultRelInfo->ri_NumSlots == resultRelInfo->ri_BatchSize)
-			{
-				ExecBatchInsert(mtstate, resultRelInfo,
-								resultRelInfo->ri_Slots,
-								resultRelInfo->ri_PlanSlots,
-								resultRelInfo->ri_NumSlots,
-								estate, canSetTag);
-				resultRelInfo->ri_NumSlots = 0;
-			}
-
-			oldContext = MemoryContextSwitchTo(estate->es_query_cxt);
-
-			if (resultRelInfo->ri_Slots == NULL)
-			{
-				resultRelInfo->ri_Slots = palloc(sizeof(TupleTableSlot *) *
-												 resultRelInfo->ri_BatchSize);
-				resultRelInfo->ri_PlanSlots = palloc(sizeof(TupleTableSlot *) *
-													 resultRelInfo->ri_BatchSize);
-			}
-
-			/*
-			 * Initialize the batch slots. We don't know how many slots will
-			 * be needed, so we initialize them as the batch grows, and we
-			 * keep them across batches. To mitigate an inefficiency in how
-			 * resource owner handles objects with many references (as with
-			 * many slots all referencing the same tuple descriptor) we copy
-			 * the appropriate tuple descriptor for each slot.
-			 */
-			if (resultRelInfo->ri_NumSlots >= resultRelInfo->ri_NumSlotsInitialized)
-			{
-				TupleDesc	tdesc = CreateTupleDescCopy(slot->tts_tupleDescriptor);
-				TupleDesc	plan_tdesc =
-					CreateTupleDescCopy(planSlot->tts_tupleDescriptor);
-
-				resultRelInfo->ri_Slots[resultRelInfo->ri_NumSlots] =
-					MakeSingleTupleTableSlot(tdesc, slot->tts_ops);
-
-				resultRelInfo->ri_PlanSlots[resultRelInfo->ri_NumSlots] =
-					MakeSingleTupleTableSlot(plan_tdesc, planSlot->tts_ops);
-
-				/* remember how many batch slots we initialized */
-				resultRelInfo->ri_NumSlotsInitialized++;
-			}
-
-			ExecCopySlot(resultRelInfo->ri_Slots[resultRelInfo->ri_NumSlots],
-						 slot);
-
-			ExecCopySlot(resultRelInfo->ri_PlanSlots[resultRelInfo->ri_NumSlots],
-						 planSlot);
-
-			resultRelInfo->ri_NumSlots++;
-
-			MemoryContextSwitchTo(oldContext);
-
-			return NULL;
-		}
-
-		/*
-		 * insert into foreign table: let the FDW do it
-		 */
-		slot = resultRelInfo->ri_FdwRoutine->ExecForeignInsert(estate,
-															   resultRelInfo,
-															   slot,
-															   planSlot);
-
-		if (slot == NULL) /* "do nothing" */
-			return NULL;
-
-		/*
-		 * AFTER ROW Triggers or RETURNING expressions might reference the
-		 * tableoid column, so (re-)initialize tts_tableOid before evaluating
-		 * them.  (This covers the case where the FDW replaced the slot.)
-		 */
-		slot->tts_tableOid = RelationGetRelid(resultRelInfo->ri_RelationDesc);
+		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			errmsg("inserting into foreign tables not supported in hypertable context")));
 	}
 	else
 	{
@@ -1292,29 +1195,8 @@ ExecDelete(ModifyTableContext *context,
 	}
 	else if (resultRelInfo->ri_FdwRoutine)
 	{
-		/*
-		 * delete from foreign table: let the FDW do it
-		 *
-		 * We offer the returning slot as a place to store RETURNING data,
-		 * although the FDW can return some other slot if it wants.
-		 */
-		slot = ExecGetReturningSlot(estate, resultRelInfo);
-		slot = resultRelInfo->ri_FdwRoutine->ExecForeignDelete(estate,
-															   resultRelInfo,
-															   slot,
-															   context->planSlot);
-
-		if (slot == NULL)		/* "do nothing" */
-			return NULL;
-
-		/*
-		 * RETURNING expressions might reference the tableoid column, so
-		 * (re)initialize tts_tableOid before evaluating them.
-		 */
-		if (TTS_EMPTY(slot))
-			ExecStoreAllNullTuple(slot);
-
-		slot->tts_tableOid = RelationGetRelid(resultRelationDesc);
+		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			errmsg("deleting from foreign tables not supported in hypertable context")));
 	}
 	else
 	{
@@ -1830,26 +1712,8 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	}
 	else if (resultRelInfo->ri_FdwRoutine)
 	{
-		/* Fill in GENERATEd columns */
-		ExecUpdatePrepareSlot(resultRelInfo, slot, estate);
-
-		/*
-		 * update in foreign table: let the FDW do it
-		 */
-		slot = resultRelInfo->ri_FdwRoutine->ExecForeignUpdate(estate,
-															   resultRelInfo,
-															   slot,
-															   context->planSlot);
-
-		if (slot == NULL)		/* "do nothing" */
-			return NULL;
-
-		/*
-		 * AFTER ROW Triggers or RETURNING expressions might reference the
-		 * tableoid column, so (re-)initialize tts_tableOid before evaluating
-		 * them.  (This covers the case where the FDW replaced the slot.)
-		 */
-		slot->tts_tableOid = RelationGetRelid(resultRelationDesc);
+		ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			errmsg("updating foreign tables not supported in hypertable context")));
 	}
 	else
 	{
