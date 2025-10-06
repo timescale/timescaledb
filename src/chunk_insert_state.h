@@ -112,7 +112,7 @@ typedef struct ChunkInsertState
 
 extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,
 													  const ChunkTupleRouting *ctr);
-extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
+extern void ts_chunk_insert_state_destroy(ChunkInsertState *state, bool single_chunk_insert);
 ResultRelInfo *create_chunk_result_relation_info(ResultRelInfo *ht_rri, Relation rel,
 												 EState *estate);
 

@@ -47,7 +47,6 @@ typedef struct Hypertable
 	FormData_hypertable fd;
 	Oid main_table_relid;
 	Oid chunk_sizing_func;
-	Oid amoid;
 	Hyperspace *space;
 	SubspaceStore *chunk_cache;
 	ChunkRangeSpace *range_space;
@@ -124,9 +123,12 @@ extern int ts_hypertable_reset_associated_schema_name(const char *associated_sch
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
 extern TSDLLEXPORT Chunk *ts_hypertable_find_chunk_for_point(const Hypertable *h,
-															 const Point *point);
+															 const Point *point, LOCKMODE lockmode);
+extern TSDLLEXPORT Chunk *ts_hypertable_chunk_store_add(const Hypertable *h,
+														const Chunk *input_chunk);
 extern TSDLLEXPORT Chunk *ts_hypertable_create_chunk_for_point(const Hypertable *h,
-															   const Point *point);
+															   const Point *point,
+															   LOCKMODE chunk_lockmode);
 extern Oid ts_hypertable_relid(RangeVar *rv);
 extern TSDLLEXPORT bool ts_is_hypertable(Oid relid);
 extern bool ts_hypertable_has_tablespace(const Hypertable *ht, Oid tspc_oid);

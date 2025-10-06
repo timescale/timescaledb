@@ -561,7 +561,7 @@ debug_waitpoint_release
 
 step s2_merge_chunks: <... completed>
 step s3_merge_chunks: <... completed>
-ERROR:  relation does not exist
+ERROR:  chunk does not exist
 step s1_show_data: 
     select * from readings order by time desc, device;
     select count(*) as num_device_all, count(*) filter (where device=1) as num_device_1, count(*) filter (where device=5) as num_device_5 from readings;

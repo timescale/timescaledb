@@ -1818,33 +1818,10 @@ ts_update_placeholder(PG_FUNCTION_ARGS)
 /*
  * Get relation information from the syscache in one call.
  *
- * Returns relkind and access method used. Both are non-optional.
+ * Returns relid and relkind. All are non-optional.
  */
 void
-ts_get_rel_info(Oid relid, Oid *amoid, char *relkind)
-{
-	HeapTuple tuple;
-	Form_pg_class cform;
-
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-
-	cform = (Form_pg_class) GETSTRUCT(tuple);
-	*amoid = cform->relam;
-	*relkind = cform->relkind;
-	ReleaseSysCache(tuple);
-}
-
-/*
- * Get relation information from the syscache in one call.
- *
- * Returns relid, relkind and access method used. All are non-optional.
- */
-void
-ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *relid, Oid *amoid,
-						char *relkind)
+ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *relid, char *relkind)
 {
 	HeapTuple tuple;
 	Form_pg_class cform;
@@ -1857,7 +1834,6 @@ ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *reli
 
 	cform = (Form_pg_class) GETSTRUCT(tuple);
 	*relid = cform->oid;
-	*amoid = cform->relam;
 	*relkind = cform->relkind;
 	ReleaseSysCache(tuple);
 }

@@ -461,7 +461,8 @@ gp_hash_do_emit(GroupingPolicy *gp, TupleTableSlot *aggregated_slot)
 		const float keys = policy->hashing.last_used_key_index;
 		if (keys > 0)
 		{
-			DEBUG_LOG("spill after %ld input, %ld valid, %ld bulk filtered, %ld cons, %.0f keys, "
+			DEBUG_LOG("spill after " UINT64_FORMAT " input, " UINT64_FORMAT " valid, " UINT64_FORMAT
+					  " bulk filtered, " UINT64_FORMAT " cons, %.0f keys, "
 					  "%f ratio, %ld curctx bytes, %ld aggstate bytes",
 					  policy->stat_input_total_rows,
 					  policy->stat_input_valid_rows,

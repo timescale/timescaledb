@@ -1,6 +1,16 @@
-Parsed test spec with 2 sessions
+Parsed test spec with 3 sessions
 
-starting permutation: s1_begin s2_begin s1_copy s2_copy s2_commit s1_commit
+starting permutation: s3_compress_and_insert s1_begin s2_begin s1_copy s2_copy s2_commit s1_commit
+step s3_compress_and_insert: 
+    SELECT count(compress_chunk(chunk)) FROM show_chunks('metrics') chunk;
+    INSERT INTO metrics (time, device, value) VALUES ('2025-02-01 00:00:00', 'd1', 0.1);
+    INSERT INTO metrics (time, device, value) VALUES ('2025-03-01 00:00:00', 'd1', 0.1);
+
+count
+-----
+    1
+(1 row)
+
 step s1_begin: 
   BEGIN;
 
@@ -20,7 +30,17 @@ step s1_commit:
   COMMIT;
 
 
-starting permutation: s1_begin s2_begin s1_copy_february s2_copy_march s2_commit s1_commit
+starting permutation: s3_compress_and_insert s1_begin s2_begin s1_copy_february s2_copy_march s2_commit s1_commit
+step s3_compress_and_insert: 
+    SELECT count(compress_chunk(chunk)) FROM show_chunks('metrics') chunk;
+    INSERT INTO metrics (time, device, value) VALUES ('2025-02-01 00:00:00', 'd1', 0.1);
+    INSERT INTO metrics (time, device, value) VALUES ('2025-03-01 00:00:00', 'd1', 0.1);
+
+count
+-----
+    1
+(1 row)
+
 step s1_begin: 
   BEGIN;
 
@@ -38,4 +58,59 @@ step s2_commit:
 
 step s1_commit: 
   COMMIT;
+
+
+starting permutation: s3_wp_on s3_count s3_show_compressed s1_copy s2_copy s3_wp_off s2_empty s3_show_compressed s3_count
+step s3_wp_on: SELECT debug_waitpoint_enable('insert_create_compressed');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s3_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+    1
+(1 row)
+
+step s3_show_compressed: 
+    SELECT is_compressed FROM timescaledb_information.chunks WHERE hypertable_name='metrics';
+
+is_compressed
+-------------
+f            
+(1 row)
+
+step s1_copy: 
+COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-01-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
+ <waiting ...>
+step s2_copy: 
+COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-01-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
+ <waiting ...>
+step s3_wp_off: SELECT debug_waitpoint_release('insert_create_compressed');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_copy: <... completed>
+step s2_copy: <... completed>
+step s2_empty: 
+step s3_show_compressed: 
+    SELECT is_compressed FROM timescaledb_information.chunks WHERE hypertable_name='metrics';
+
+is_compressed
+-------------
+t            
+(1 row)
+
+step s3_count: 
+    SELECT count(*) FROM metrics;
+
+count
+-----
+   21
+(1 row)
 

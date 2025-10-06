@@ -1080,3 +1080,20 @@ ORDER BY 1;
 
 DROP TABLE gen_column;
 
+-- test insert into compressed chunk directly works
+-- to ensure maintenance operations work unhindered we dont
+-- want to block direct inserts into compressed chunks
+CREATE TABLE direct_compressed_insert (time timestamptz) WITH (tsdb.hypertable);
+
+INSERT INTO direct_compressed_insert SELECT generate_series('2024-01-01'::timestamptz, '2024-01-01 1:00:00'::timestamptz, '1 second');
+SELECT count(compress_chunk(c)) FROM show_chunks('direct_compressed_insert') c;
+SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+
+CREATE TABLE compressed_batches AS SELECT * FROM :CHUNK;
+SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;
+
+-- should have not ModifyHypertable node
+EXPLAIN (costs off,timing off, summary off) INSERT INTO :CHUNK SELECT * FROM compressed_batches;
+INSERT INTO :CHUNK SELECT * FROM compressed_batches;
+
+SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;

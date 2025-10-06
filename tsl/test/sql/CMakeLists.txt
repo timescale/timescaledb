@@ -71,6 +71,7 @@ set(TEST_FILES
     skip_scan.sql
     split_chunk.sql
     transparent_decompression_join_index.sql
+    unlogged.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
     vector_agg_param.sql

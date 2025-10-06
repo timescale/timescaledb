@@ -71,7 +71,7 @@ should_use_direct_compress(ModifyHypertableState *state)
 		return false;
 	}
 
-	if (ts_indexing_relation_has_primary_or_unique_index(state->ctr->partition_root))
+	if (ts_indexing_relation_has_primary_or_unique_index(state->ctr->root_rel))
 	{
 		ereport(WARNING,
 				(errmsg("disabling direct compress because the destination table has unique "

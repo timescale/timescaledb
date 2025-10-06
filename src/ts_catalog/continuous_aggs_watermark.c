@@ -317,7 +317,6 @@ cagg_watermark_update_internal(int32 mat_hypertable_id, Oid ht_relid, int64 new_
 
 	bool watermark_updated =
 		ts_scanner_scan_one(&iterator.ctx, false, "continuous aggregate watermark");
-	ts_scan_iterator_close(&iterator);
 	UnregisterSnapshot(iterator.ctx.snapshot);
 
 	if (!watermark_updated)

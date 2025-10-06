@@ -1,0 +1,1 @@
+Fixes: #8728 Don't block dropping hypertables with other objects

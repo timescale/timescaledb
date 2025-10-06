@@ -1,2 +1,0 @@
-Fixes: #8657 Fix CREATE TABLE WITH when using UUID partitioning
-Thanks: @brandonpurcell-dev for creating a test case that showed a bug in CREATE TABLE WITH when using UUID partitioning

@@ -430,6 +430,12 @@ cagg_sort_pushdown(Query *parse, int *cursor_opts)
 		cagg_group = list_nth(rt_rte->subquery->groupClause, rt_tle->ressortgroupref - 1);
 		cagg_group->sortop = sort->sortop;
 		cagg_group->nulls_first = sort->nulls_first;
+#if PG18_GE
+		/* Track sort order
+		 * https://github.com/postgres/postgres/commit/0d2aa4d4
+		 */
+		cagg_group->reverse_sort = sort->reverse_sort;
+#endif
 
 		linitial_node(SortGroupClause, rt_rte->subquery->sortClause)->tleSortGroupRef =
 			rt_tle->ressortgroupref;

@@ -60,7 +60,7 @@ Select location, count(*) from conditions
  group by time_bucket('1week', timec) , location)
 select * from m1 WITH NO DATA;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 --with DISTINCT ON
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 as

@@ -615,3 +615,32 @@ SELECT * from mat_m1 EXCEPT SELECT * from mat_m2;
 
 DROP MATERIALIZED VIEW mat_m1;
 DROP MATERIALIZED VIEW mat_m2;
+
+/* Concurrent policies aren't allowed on hierarchical continuous aggs */
+CREATE MATERIALIZED VIEW mat_m1
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 day', time) AS bucket,
+    count(a) AS counta,
+    sum(b) AS sumb
+FROM overlap_test_timestamptz
+GROUP BY 1
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW mat_m1_rollup
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 month', bucket) AS bucket,
+    sum(counta) AS counta,
+    sum(sumb) AS sumb
+FROM mat_m1
+GROUP BY 1
+WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interval, '12 h'::interval);
+\set ON_ERROR_STOP 0
+-- Multiple policies on hierarchical cagg should not be allowed
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', '29 days'::interval, NULL, '12 h'::interval);
+\set ON_ERROR_STOP 1

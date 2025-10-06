@@ -566,8 +566,20 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
 		appinfo = ts_get_appendrelinfo(root, chunk_rel->relid, false);
-		info->ht_rte = planner_rt_fetch(appinfo->parent_relid, root);
-		info->ht_rel = root->simple_rel_array[appinfo->parent_relid];
+		RangeTblEntry *rte = planner_rt_fetch(appinfo->parent_relid, root);
+		if (rte->rtekind == RTE_RELATION)
+		{
+			info->ht_rte = rte;
+			info->ht_rel = root->simple_rel_array[appinfo->parent_relid];
+		}
+		else
+		{
+			/* In UNION queries referencing chunks directly, the parent rel can be a subquery */
+			Assert(rte->rtekind == RTE_SUBQUERY);
+			info->single_chunk = true;
+			info->ht_rte = info->chunk_rte;
+			info->ht_rel = info->chunk_rel;
+		}
 	}
 	else
 	{
@@ -1027,7 +1039,6 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 		 * estimate.
 		 */
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
-		Assert(chunk_info->parent_reloid == ht->main_table_relid);
 		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
 		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
@@ -1941,6 +1952,7 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		/* given that the em is a var of the uncompressed chunk, the relid of the chunk should
 		 * be set on the em */
 		Assert(bms_is_member(info->ht_rel->relid, cur_em->em_relids));
+		Assert(OidIsValid(info->ht_rte->relid));
 
 		const char *attname = get_attname(info->ht_rte->relid, var->varattno, false);
 
@@ -1950,6 +1962,12 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context, attname);
 		if (child_expr == NULL)
 			continue;
+
+		/* #8681: coerce compressed var to current equivalence member type/collation,
+		 *  in case we dug the "cur_em->em_expr" var from under RelabelTypes
+		 */
+		child_expr =
+			canonicalize_ec_expression(child_expr, cur_em->em_datatype, cur_ec->ec_collation);
 
 		/*
 		 * Transform em_relids to match.  Note we do *not* do
@@ -2394,20 +2412,29 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 			if (IsA(ri->clause, OpExpr) && list_length(castNode(OpExpr, ri->clause)->args) == 2)
 			{
 				OpExpr *op = castNode(OpExpr, ri->clause);
-				Var *var;
+				Var *lvar, *rvar, *var;
 				Expr *other;
 
 				if (op->opretset)
 					continue;
 
-				if (IsA(linitial(op->args), Var))
+				lvar = linitial(op->args);
+				while (lvar && IsA(lvar, RelabelType))
+					lvar = (Var *) ((RelabelType *) lvar)->arg;
+
+				rvar = lsecond(op->args);
+				while (rvar && IsA(rvar, RelabelType))
+					rvar = (Var *) ((RelabelType *) rvar)->arg;
+
+				Assert(lvar && rvar);
+				if (IsA(lvar, Var))
 				{
-					var = castNode(Var, linitial(op->args));
+					var = castNode(Var, lvar);
 					other = lsecond(op->args);
 				}
-				else if (IsA(lsecond(op->args), Var))
+				else if (IsA(rvar, Var))
 				{
-					var = castNode(Var, lsecond(op->args));
+					var = castNode(Var, rvar);
 					other = linitial(op->args);
 				}
 				else
@@ -2448,6 +2475,8 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		compressed_pk_index++;
 		PathKey *pk = list_nth_node(PathKey, pathkeys, i);
 		Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
+		while (expr && IsA(expr, RelabelType))
+			expr = ((RelabelType *) expr)->arg;
 
 		if (expr == NULL || !IsA(expr, Var))
 		{
@@ -2625,6 +2654,8 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			Assert(bms_num_members(segmentby_columns) <= compression_info->num_segmentby_columns);
 
 			Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
+			while (expr && IsA(expr, RelabelType))
+				expr = ((RelabelType *) expr)->arg;
 
 			if (expr == NULL || !IsA(expr, Var))
 				break;

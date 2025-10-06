@@ -223,3 +223,32 @@ INSERT INTO metrics_status SELECT '2025-01-01'::timestamptz + (i || ' minute')::
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
 ROLLBACK;
 
+-- test direct compress into chunk directly
+CREATE TABLE metrics_chunk(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time');
+SET timescaledb.enable_direct_compress_insert = true;
+
+-- create uncompressed chunk
+INSERT INTO metrics_chunk SELECT '2025-01-01';
+-- status should be normal uncompressed chunk since it was single tuple insert
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_chunk') chunk;
+SELECT show_chunks('metrics_chunk') AS "CHUNK" \gset
+
+EXPLAIN (costs off,summary off,timing off) INSERT INTO :CHUNK SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(0,100) i;
+
+BEGIN;
+INSERT INTO :CHUNK SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(0,100) i;
+-- status should be COMPRESSED, UNORDERED, PARTIAL
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_chunk') chunk;
+-- delete should propagate to compressed chunk
+SELECT count(*) FROM :CHUNK;
+EXPLAIN (analyze,buffers off,costs off,summary off,timing off) DELETE FROM :CHUNK WHERE time > '2025-01-01'::timestamptz;
+SELECT count(*) FROM :CHUNK;
+ROLLBACK;
+
+BEGIN;
+SET timescaledb.enable_direct_compress_insert_client_sorted = true;
+INSERT INTO :CHUNK SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(0,100) i;
+-- status should be COMPRESSED, PARTIAL
+SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_chunk') chunk;
+ROLLBACK;
+

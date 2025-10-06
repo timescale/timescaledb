@@ -321,21 +321,6 @@ setup_on_conflict_state(ResultRelInfo *ht_rri, ModifyTableState *mtstate, ChunkI
 	}
 }
 
-static void
-destroy_on_conflict_state(ChunkInsertState *state)
-{
-	/*
-	 * Clean up per-chunk tuple table slots created for ON CONFLICT handling.
-	 */
-	if (NULL != state->existing_slot)
-		ExecDropSingleTupleTableSlot(state->existing_slot);
-
-	/* The ON CONFLICT projection slot is only chunk specific in case the
-	 * tuple descriptor didn't match the hypertable */
-	if (NULL != state->hyper_to_chunk_map && NULL != state->conflproj_slot)
-		ExecDropSingleTupleTableSlot(state->conflproj_slot);
-}
-
 /* Translate hypertable indexes to chunk indexes in the arbiter clause */
 static void
 set_arbiter_indexes(ChunkInsertState *state, List *ht_arbiter_indexes)
@@ -428,12 +413,6 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	ResultRelInfo *relinfo;
 	const Chunk *chunk;
 
-	/* permissions NOT checked here; were checked at hypertable level */
-	if (check_enable_rls(chunk_relid, InvalidOid, false) == RLS_ENABLED)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("hypertables do not support row-level security")));
-
 	MemoryContext old_mcxt =
 		MemoryContextSwitchTo(ctr->estate->es_per_tuple_exprcontext->ecxt_per_tuple_memory);
 	/*
@@ -442,7 +421,6 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	 * operations as they should take higher-level locks (ShareLock and
 	 * above).
 	 */
-	DEBUG_WAITPOINT("chunk_insert_before_lock");
 	rel = table_open(chunk_relid, RowExclusiveLock);
 
 	/*
@@ -457,7 +435,11 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
 	MemoryContextSwitchTo(cis_context);
-	relinfo = create_chunk_result_relation_info(ctr->hypertable_rri, rel, ctr->estate);
+	if (ctr->single_chunk_insert)
+		relinfo = ctr->root_rri;
+	else
+		relinfo = create_chunk_result_relation_info(ctr->root_rri, rel, ctr->estate);
+
 	if (ctr->mht_state)
 		CheckValidResultRelCompat(relinfo,
 								  ctr->mht_state->mt->operation,
@@ -497,20 +479,23 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 			elog(ERROR, "statement trigger on chunk table not supported");
 	}
 
-	parent_rel = table_open(ctr->hypertable->main_table_relid, AccessShareLock);
+	if (!ctr->single_chunk_insert)
+	{
+		parent_rel = table_open(ctr->hypertable->main_table_relid, AccessShareLock);
 
-	/* Set tuple conversion map, if tuple needs conversion. We don't want to
-	 * convert tuples going into foreign tables since these are actually sent to
-	 * data nodes for insert on that node's local hypertable. */
-	if (chunk->relkind != RELKIND_FOREIGN_TABLE)
+		/* Set tuple conversion map, if tuple needs conversion. */
 		state->hyper_to_chunk_map =
 			convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
 
-	if (ctr->mht_state)
-		adjust_projections(ctr->hypertable_rri,
-						   linitial_node(ModifyTableState, ctr->mht_state->cscan_state.custom_ps),
-						   state,
-						   RelationGetForm(rel)->reltype);
+		if (ctr->mht_state)
+			adjust_projections(ctr->root_rri,
+							   linitial_node(ModifyTableState,
+											 ctr->mht_state->cscan_state.custom_ps),
+							   state,
+							   RelationGetForm(rel)->reltype);
+
+		table_close(parent_rel, AccessShareLock);
+	}
 
 	/* Need a tuple table slot to store tuples going into this chunk. We don't
 	 * want this slot tied to the executor's tuple table, since that would tie
@@ -521,23 +506,9 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkTupleRouting *ctr)
 	 * the chunk insert state. */
 	state->slot = MakeSingleTupleTableSlot(RelationGetDescr(relinfo->ri_RelationDesc),
 										   table_slot_callbacks(relinfo->ri_RelationDesc));
-	table_close(parent_rel, AccessShareLock);
 
 	state->hypertable_relid = chunk->hypertable_relid;
 	state->chunk_id = chunk->fd.id;
-
-	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-	{
-#if PG16_LT
-		RangeTblEntry *rte = rt_fetch(relinfo->ri_RangeTableIndex, ctr->estate->es_range_table);
-
-		Assert(rte != NULL);
-
-		state->user_id = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
-#else
-		state->user_id = ExecGetResultRelCheckAsUser(relinfo, ctr->estate);
-#endif
-	}
 
 	MemoryContextSwitchTo(old_mcxt);
 
@@ -555,10 +526,8 @@ ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk)
 }
 
 extern void
-ts_chunk_insert_state_destroy(ChunkInsertState *state)
+ts_chunk_insert_state_destroy(ChunkInsertState *state, bool single_chunk_insert)
 {
-	ResultRelInfo *rri = state->result_relation_info;
-
 	/*
 	 * Check if we need to mark the chunk as partial.
 	 * We need to change chunk status to partial in the following cases:
@@ -574,15 +543,24 @@ ts_chunk_insert_state_destroy(ChunkInsertState *state)
 		ts_chunk_set_partial(chunk);
 	}
 
-	if (rri->ri_FdwRoutine && !rri->ri_usesFdwDirectModify && rri->ri_FdwRoutine->EndForeignModify)
-		rri->ri_FdwRoutine->EndForeignModify(state->estate, rri);
-
-	destroy_on_conflict_state(state);
-	ExecCloseIndices(state->result_relation_info);
-
 	table_close(state->rel, NoLock);
 	if (state->slot)
 		ExecDropSingleTupleTableSlot(state->slot);
 
-	MemoryContextDelete(state->mctx);
+	/*
+	 * Clean up per-chunk tuple table slots created for ON CONFLICT handling.
+	 */
+	if (NULL != state->existing_slot)
+		ExecDropSingleTupleTableSlot(state->existing_slot);
+
+	/* The ON CONFLICT projection slot is only chunk specific in case the
+	 * tuple descriptor didn't match the hypertable */
+	if (NULL != state->hyper_to_chunk_map && NULL != state->conflproj_slot)
+		ExecDropSingleTupleTableSlot(state->conflproj_slot);
+
+	if (!single_chunk_insert)
+	{
+		ExecCloseIndices(state->result_relation_info);
+		MemoryContextDelete(state->mctx);
+	}
 }
