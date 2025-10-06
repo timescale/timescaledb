@@ -272,6 +272,14 @@ continuous_agg_invalidate_mat_ht_all_default(const Hypertable *raw_ht, const Hyp
 	pg_unreachable();
 }
 
+static void
+continuous_agg_dml_invalidate_default(int32 hypertable_id, Relation chunk_rel,
+									  HeapTuple chunk_tuple, HeapTuple chunk_newtuple, bool update)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 
 PGDLLEXPORT Datum
@@ -364,6 +372,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
+	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,

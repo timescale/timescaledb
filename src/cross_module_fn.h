@@ -109,6 +109,9 @@ typedef struct CrossModuleFunctions
 	void (*continuous_agg_invalidate_raw_ht)(const Hypertable *raw_ht, int64 start, int64 end);
 	void (*continuous_agg_invalidate_mat_ht)(const Hypertable *raw_ht, const Hypertable *mat_ht,
 											 int64 start, int64 end);
+	void (*continuous_agg_dml_invalidate)(int32 hypertable_id, Relation chunk_rel,
+										  HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
+										  bool update);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_validate_query;
