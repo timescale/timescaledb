@@ -394,7 +394,7 @@ bloom1_update_val(void *builder_, Datum needle)
 }
 
 /*
- * We cache some information accross function calls in this context.
+ * We cache some information across function calls in this context.
  */
 typedef struct Bloom1ContainsContext
 {
