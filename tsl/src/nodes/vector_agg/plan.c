@@ -288,15 +288,16 @@ is_vector_var(const VectorQualInfo *vqinfo, Expr *expr)
 				return false;
 			}
 
-			/* FIXME */
-			if (!is_vector_type(var->vartype))
-			{
-				return false;
-			}
-
 			Assert(var->varattno <= vqinfo->maxattno);
 
-			return vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
+			const bool is_vector = vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
+
+			if (is_vector)
+			{
+				Assert(is_vector_type(var->vartype));
+			}
+
+			return is_vector;
 		}
 		default:
 			return false;
