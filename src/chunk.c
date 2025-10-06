@@ -2193,6 +2193,13 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		else
 			time_type = InvalidOid;
 
+		/*
+		 * Treat UUID (v7) as a timestamptz type. The expected input is an interval or absolute
+		 * timestamptz.
+		 */
+		if (IS_UUID_TYPE(time_type))
+			time_type = TIMESTAMPTZOID;
+
 		/* note that arg_types will be the same for all specified "ANY" elements for a given call */
 		arg_type = InvalidOid;
 		if (!PG_ARGISNULL(1))
@@ -4364,6 +4371,13 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 				 errmsg("hypertable has no open partitioning dimension")));
 
 	time_type = ts_dimension_get_partition_type(time_dim);
+
+	/*
+	 * Treat UUID (v7) as a timestamptz type. The expected input is an interval or absolute
+	 * timestamptz.
+	 */
+	if (IS_UUID_TYPE(time_type))
+		time_type = TIMESTAMPTZOID;
 
 	/* note that arg_types will be the same for all specified "ANY" elements for a given call */
 	if (!PG_ARGISNULL(1))
