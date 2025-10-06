@@ -138,10 +138,42 @@ SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 ORDER BY id DESC;
 
+CREATE VIEW chunk_ranges AS
+SELECT
+  chunk_name,
+  _timescaledb_functions.to_timestamp(range_start_integer) AS range_start,
+  _timescaledb_functions.to_timestamp(range_end_integer) AS range_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'uuid_events';
+
+SELECT * FROM chunk_ranges;
+SELECT show_chunks('uuid_events', older_than => INTERVAL '1 day');
+SELECT show_chunks('uuid_events', older_than => '2025-01-02');
+SELECT show_chunks('uuid_events', newer_than => '2025-01-02');
+SELECT drop_chunks('uuid_events', older_than => '2025-01-02');
+SELECT show_chunks('uuid_events');
+
 -- Insert non-v7 UUIDs
 \set ON_ERROR_STOP 0
 INSERT INTO uuid_events SELECT 'a8961135-cd89-4c4b-aa05-79df642407dd', 5, 5.0;
 \set ON_ERROR_STOP 1
+
+-- Insert as v7 UUID and later change to non-v7 to show effect on show_chunks()
+-- and drop_chunks()
+INSERT INTO uuid_events SELECT 'a8961135-cd89-7000-aa05-79df642407dd', 5, 5.0;
+SELECT * FROM chunk_ranges;
+UPDATE uuid_events
+SET id = 'a8961135-cd89-4c4b-aa05-79df642407dd'
+WHERE id = 'a8961135-cd89-7000-aa05-79df642407dd';
+
+SELECT show_chunks('uuid_events', newer_than => '2025-01-02');
+SELECT drop_chunks('uuid_events', newer_than => '2025-01-02');
+SELECT * FROM chunk_ranges;
+
+INSERT INTO uuid_events SELECT to_uuidv7(now()), 6, 6.0;
+SELECT show_chunks('uuid_events', newer_than => INTERVAL '2 months');
+SELECT drop_chunks('uuid_events', newer_than => INTERVAL '2 months');
+SELECT show_chunks('uuid_events', newer_than => INTERVAL '2 months');
 
 DROP TABLE uuid_events;
 
@@ -222,5 +254,7 @@ SELECT create_hypertable('events', 'event_id', chunk_time_interval => interval '
 SELECT (((interval_length/1000000)/60)/60)/24 AS days
 FROM _timescaledb_catalog.dimension d JOIN _timescaledb_catalog.hypertable h ON (h.id = d.hypertable_id)
 WHERE h.table_name='events';
+
 ROLLBACK;
+
 
