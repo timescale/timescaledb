@@ -108,7 +108,17 @@ select ts_bloom1_debug_hash('2025-05-05'::timestamp);
 select ts_bloom1_debug_hash('2025-05-05'::timestamptz);
 
 
--- Test that the stateful detoaster copes with different chunks.
+-- The "contains" functions should error out when called with wrong arguments.
+\set ON_ERROR_STOP 0
+
+select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, 1::bit) ;
+
+select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
+
+\set ON_ERROR_STOP 1
+
+
+-- Test that the "contains" function cope with different source chunks.
 create table detoaster(ts int, tag text) with (tsdb.hypertable,
     tsdb.partition_column = 'ts', tsdb.compress, tsdb.compress_orderby = 'ts')
 ;
