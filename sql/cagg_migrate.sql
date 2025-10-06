@@ -51,10 +51,15 @@ BEGIN
     END IF;
 
     IF EXISTS (
-        SELECT finalized
+        SELECT
         FROM _timescaledb_catalog.continuous_agg
         WHERE user_view_schema = _cagg_schema
         AND user_view_name = _cagg_name_new
+        AND NOT EXISTS (
+            SELECT FROM _timescaledb_catalog.continuous_agg_migrate_plan
+            WHERE mat_hypertable_id = _cagg_data.mat_hypertable_id
+            AND end_ts IS NULL
+        )
     ) THEN
         RAISE EXCEPTION 'continuous aggregate "%.%" already exists', _cagg_schema, _cagg_name_new;
     END IF;
@@ -491,8 +496,8 @@ BEGIN
             'INSERT INTO %I.%I SELECT * FROM %I.%I WHERE %I >= %L AND %I < %L',
             _mat_schema_name,
             _mat_table_name,
-            _mat_schema_name_old,
-            _mat_table_name_old,
+            _cagg_data.user_view_schema,
+            _cagg_data.user_view_name,
             _plan_step.config->>'bucket_column_name',
             _plan_step.config->>'start_ts',
             _plan_step.config->>'bucket_column_name',
