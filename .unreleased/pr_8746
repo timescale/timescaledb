@@ -1,0 +1,2 @@
+Fixes: #8746 Support show/drop chunks with UUIDv7 partitioning
+Thanks: @brandonpurcell-dev For highlighting issues with show_chunks() and UUIDv7 partitioning
