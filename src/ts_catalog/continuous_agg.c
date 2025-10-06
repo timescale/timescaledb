@@ -51,7 +51,6 @@
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
 
 TS_FUNCTION_INFO_V1(ts_invalidation_plugin_name);
-TS_FUNCTION_INFO_V1(ts_has_invalidation_trigger);
 
 /*
  * Return the full name of the invalidation plugin, with version and all.
@@ -60,12 +59,6 @@ Datum
 ts_invalidation_plugin_name(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_TEXT_P(cstring_to_text(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME));
-}
-
-Datum
-ts_has_invalidation_trigger(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_BOOL(has_invalidation_trigger(PG_GETARG_OID(0)));
 }
 
 static void
@@ -830,7 +823,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	ObjectAddress user_view = { 0 };
 	ObjectAddress partial_view = { 0 };
 	ObjectAddress direct_view = { 0 };
-	ObjectAddress raw_hypertable_trig = { 0 };
 	ObjectAddress raw_hypertable = { 0 };
 	ObjectAddress mat_hypertable = { 0 };
 	bool raw_hypertable_has_other_caggs;
@@ -887,16 +879,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 						RowExclusiveLock);
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 						RowExclusiveLock);
-
-		/* The trigger will be dropped if it exists (it does not for WAL-based
-		 * invalidation collection), the hypertable still exists and no other
-		 * caggs attached. */
-		Oid tgoid = get_trigger_oid(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME, true);
-		if (OidIsValid(raw_hypertable.objectId) && OidIsValid(tgoid))
-		{
-			ObjectAddressSet(raw_hypertable_trig, TriggerRelationId, tgoid);
-			LockRelationOid(raw_hypertable_trig.objectId, AccessExclusiveLock);
-		}
 	}
 
 	/*
@@ -946,11 +928,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	/* Perform actual deletions now */
 	if (OidIsValid(user_view.objectId))
 		performDeletion(&user_view, DROP_RESTRICT, 0);
-
-	if (OidIsValid(raw_hypertable_trig.objectId))
-	{
-		ts_hypertable_drop_trigger(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME);
-	}
 
 	/*
 	 * Drop invalidation slot if there are no hypertables using WAL-based
