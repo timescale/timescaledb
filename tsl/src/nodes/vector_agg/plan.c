@@ -7,7 +7,6 @@
 #include <access/attnum.h>
 #include <commands/explain.h>
 #include <executor/executor.h>
-#include <funcapi.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
