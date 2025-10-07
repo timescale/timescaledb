@@ -28,6 +28,7 @@
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
 #include <commands/defrem.h>
+#include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
 #include <commands/trigger.h>
@@ -814,238 +815,270 @@ static void
 cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
 			ContinuousAggTimeBucketInfo *bucket_info, WithClauseResult *with_clause_options)
 {
-	ObjectAddress mataddress;
-	char relnamebuf[NAMEDATALEN];
-	MaterializationHypertableColumnInfo mattblinfo;
-	FinalizeQueryInfo finalqinfo;
-	CatalogSecurityContext sec_ctx;
-	bool is_create_mattbl_index;
+	/* Prepare event trigger state */
+	bool needCleanup = false;
+	needCleanup = EventTriggerBeginCompleteQuery();
 
-	Query *final_selquery;
-	Query *partial_selquery;	/* query to populate the mattable*/
-	Query *orig_userview_query; /* copy of the original user query for dummy view */
-	Oid nspid;
-	RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
-	int32 materialize_hypertable_id;
-	bool materialized_only =
-		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
-	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
-	ContinuousAggInvalidateUsing invalidate_using = get_invalidate_using(with_clause_options);
-	bool trigger_exists = has_invalidation_trigger(bucket_info->htoid);
-	bool caggs_exists = has_continuous_aggs_attached(bucket_info->htid);
-	bool slot_prepared = false;
-
-	int64 matpartcol_interval = 0;
-	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
+	/* PG_TRY block is to ensure we call EventTriggerEndCompleteQuery */
+	PG_TRY();
 	{
-		matpartcol_interval = interval_to_usec(DatumGetIntervalP(
-			with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].parsed));
-	}
-	else
-	{
-		matpartcol_interval = bucket_info->htpartcol_interval_len;
+		/* Fire ddl_command_start event trigger */
+		EventTriggerDDLCommandStart((Node *) stmt);
 
-		/* Apply the factor just for non-Hierachical CAggs */
-		if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
-			matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
-	}
+		ObjectAddress mataddress;
+		char relnamebuf[NAMEDATALEN];
+		MaterializationHypertableColumnInfo mattblinfo;
+		FinalizeQueryInfo finalqinfo;
+		CatalogSecurityContext sec_ctx;
+		bool is_create_mattbl_index;
 
-	finalqinfo.finalized = finalized;
+		Query *final_selquery;
+		Query *partial_selquery;	/* query to populate the mattable*/
+		Query *orig_userview_query; /* copy of the original user query for dummy view */
+		Oid nspid;
+		RangeVar *part_rel = NULL, *mat_rel = NULL, *dum_rel = NULL;
+		int32 materialize_hypertable_id;
+		bool materialized_only =
+			DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
+		bool finalized =
+			DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
+		ContinuousAggInvalidateUsing invalidate_using = get_invalidate_using(with_clause_options);
+		bool trigger_exists = has_invalidation_trigger(bucket_info->htoid);
+		bool caggs_exists = has_continuous_aggs_attached(bucket_info->htid);
+		bool slot_prepared = false;
 
-	/*
-	 * Assign the column_name aliases in CREATE VIEW to the query.
-	 * No other modifications to panquery.
-	 */
-	fixup_userview_query_tlist(panquery, stmt->aliases);
-	mattablecolumninfo_init(&mattblinfo, copyObject(panquery->groupClause));
-	finalizequery_init(&finalqinfo, panquery, &mattblinfo);
-
-	/*
-	 * Invalidate all options on the stmt before using it
-	 * The options are valid only for internal use (ts_continuous).
-	 */
-	stmt->options = NULL;
-
-	/*
-	 * If we want to create a continuous aggregate using WAL-based
-	 * invalidation collection, it should not have an invalidation trigger
-	 * already.
-	 */
-	if (invalidate_using == ContinuousAggInvalidateUsingWal && trigger_exists)
-		error_not_in_prerequisite_state("wal", "trigger");
-
-	/*
-	 * If we want to create a continuous aggregate with a trigger, the
-	 * hypertable should either have a trigger already, or if there is no
-	 * trigger, no hypertables should be attached to it.
-	 */
-	if (invalidate_using == ContinuousAggInvalidateUsingTrigger && !trigger_exists && caggs_exists)
-		error_not_in_prerequisite_state("trigger", "wal");
-
-	/*
-	 * If we didn't specify which collection method to use, we pick whatever
-	 * is used, or the default if there are no continuous aggregates attached.
-	 */
-	if (invalidate_using == ContinuousAggInvalidateUsingDefault)
-	{
-		if (!caggs_exists)
-			invalidate_using = ContinuousAggInvalidateUsingTrigger; /* default case */
-		else if (trigger_exists)
-			invalidate_using = ContinuousAggInvalidateUsingTrigger;
+		int64 matpartcol_interval = 0;
+		if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
+		{
+			matpartcol_interval = interval_to_usec(DatumGetIntervalP(
+				with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].parsed));
+		}
 		else
-			invalidate_using = ContinuousAggInvalidateUsingWal;
-	}
-
-	/*
-	 * Step 0: Create logical replication slot if used. This needs to be first
-	 * since we cannot do this in a transaction that has performed any writes.
-	 */
-	char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
-	ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
-	if (invalidate_using == ContinuousAggInvalidateUsingWal &&
-		SearchNamedReplicationSlot(slot_name, true) == NULL)
-	{
-		cagg_add_logical_decoding_slot_prepare(slot_name);
-		slot_prepared = true;
-	}
-
-	/*
-	 * Old format caggs are not supported anymore, there is no need to add
-	 * an internal chunk id column for materialized hypertable.
-	 *
-	 * Step 1: create the materialization table.
-	 */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	materialize_hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-	ts_catalog_restore_user(&sec_ctx);
-	makeMaterializedTableName(relnamebuf, "_materialized_hypertable_%d", materialize_hypertable_id);
-	mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
-	is_create_mattbl_index =
-		DatumGetBool(with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].parsed);
-	mattablecolumninfo_create_materialization_table(&mattblinfo,
-													materialize_hypertable_id,
-													mat_rel,
-													bucket_info,
-													is_create_mattbl_index,
-													create_stmt->into->tableSpaceName,
-													create_stmt->into->accessMethod,
-													matpartcol_interval,
-													&mataddress);
-
-	/*
-	 * Step 2: Create view with select finalize from materialization table.
-	 */
-	final_selquery = finalizequery_get_select_query(&finalqinfo,
-													mattblinfo.matcollist,
-													&mataddress,
-													mat_rel->relname);
-
-	if (!materialized_only)
-		final_selquery = build_union_query(bucket_info,
-										   mattblinfo.matpartcolno,
-										   final_selquery,
-										   panquery,
-										   materialize_hypertable_id);
-
-	/* Copy view acl to materialization hypertable. */
-	ObjectAddress view_address = create_view_for_query(final_selquery, stmt->view);
-	ts_copy_relation_acl(view_address.objectId, mataddress.objectId, GetUserId());
-
-	/*
-	 * Step 3: create the internal view with select partialize(..).
-	 */
-	partial_selquery =
-		mattablecolumninfo_get_partial_select_query(&mattblinfo, panquery, finalqinfo.finalized);
-
-	makeMaterializedTableName(relnamebuf, "_partial_view_%d", materialize_hypertable_id);
-	part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
-	create_view_for_query(partial_selquery, part_rel);
-
-	/*
-	 * Additional miscellaneous steps.
-	 */
-
-	/*
-	 * Create a dummy view to store the user supplied view query.
-	 * This is to get PG to display the view correctly without
-	 * having to replicate the PG source code for make_viewdef.
-	 */
-	orig_userview_query = copyObject(panquery);
-	makeMaterializedTableName(relnamebuf, "_direct_view_%d", materialize_hypertable_id);
-	dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
-	create_view_for_query(orig_userview_query, dum_rel);
-
-	/* Step 4: Add catalog table entry for the objects we just created. */
-	nspid = RangeVarGetCreationNamespace(stmt->view);
-
-	create_cagg_catalog_entry(materialize_hypertable_id,
-							  bucket_info->htid,
-							  get_namespace_name(nspid), /*schema name for user view */
-							  stmt->view->relname,
-							  part_rel->schemaname,
-							  part_rel->relname,
-							  materialized_only,
-							  dum_rel->schemaname,
-							  dum_rel->relname,
-							  finalized,
-							  bucket_info->parent_mat_hypertable_id);
-
-	char *bucket_origin = NULL;
-	char *bucket_offset = NULL;
-	char *bucket_width = NULL;
-
-	if (IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info->bf))
-	{
-		/* Bucketing on time */
-		Assert(bucket_info->bf->bucket_time_width != NULL);
-		bucket_width = DatumGetCString(
-			DirectFunctionCall1(interval_out,
-								IntervalPGetDatum(bucket_info->bf->bucket_time_width)));
-
-		if (!TIMESTAMP_NOT_FINITE(bucket_info->bf->bucket_time_origin))
 		{
-			bucket_origin = DatumGetCString(
-				DirectFunctionCall1(timestamptz_out,
-									TimestampTzGetDatum(bucket_info->bf->bucket_time_origin)));
+			matpartcol_interval = bucket_info->htpartcol_interval_len;
+
+			/* Apply the factor just for non-Hierachical CAggs */
+			if (bucket_info->parent_mat_hypertable_id == INVALID_HYPERTABLE_ID)
+				matpartcol_interval *= MATPARTCOL_INTERVAL_FACTOR;
 		}
 
-		if (bucket_info->bf->bucket_time_offset != NULL)
+		finalqinfo.finalized = finalized;
+
+		/*
+		 * Assign the column_name aliases in CREATE VIEW to the query.
+		 * No other modifications to panquery.
+		 */
+		fixup_userview_query_tlist(panquery, stmt->aliases);
+		mattablecolumninfo_init(&mattblinfo, copyObject(panquery->groupClause));
+		finalizequery_init(&finalqinfo, panquery, &mattblinfo);
+
+		/*
+		 * Invalidate all options on the stmt before using it
+		 * The options are valid only for internal use (ts_continuous).
+		 */
+		stmt->options = NULL;
+
+		/*
+		 * If we want to create a continuous aggregate using WAL-based
+		 * invalidation collection, it should not have an invalidation trigger
+		 * already.
+		 */
+		if (invalidate_using == ContinuousAggInvalidateUsingWal && trigger_exists)
+			error_not_in_prerequisite_state("wal", "trigger");
+
+		/*
+		 * If we want to create a continuous aggregate with a trigger, the
+		 * hypertable should either have a trigger already, or if there is no
+		 * trigger, no hypertables should be attached to it.
+		 */
+		if (invalidate_using == ContinuousAggInvalidateUsingTrigger && !trigger_exists &&
+			caggs_exists)
+			error_not_in_prerequisite_state("trigger", "wal");
+
+		/*
+		 * If we didn't specify which collection method to use, we pick whatever
+		 * is used, or the default if there are no continuous aggregates attached.
+		 */
+		if (invalidate_using == ContinuousAggInvalidateUsingDefault)
 		{
-			bucket_offset = DatumGetCString(
+			if (!caggs_exists)
+				invalidate_using = ContinuousAggInvalidateUsingTrigger; /* default case */
+			else if (trigger_exists)
+				invalidate_using = ContinuousAggInvalidateUsingTrigger;
+			else
+				invalidate_using = ContinuousAggInvalidateUsingWal;
+		}
+
+		/*
+		 * Step 0: Create logical replication slot if used. This needs to be first
+		 * since we cannot do this in a transaction that has performed any writes.
+		 */
+		char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
+		ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
+		if (invalidate_using == ContinuousAggInvalidateUsingWal &&
+			SearchNamedReplicationSlot(slot_name, true) == NULL)
+		{
+			cagg_add_logical_decoding_slot_prepare(slot_name);
+			slot_prepared = true;
+		}
+
+		/*
+		 * Old format caggs are not supported anymore, there is no need to add
+		 * an internal chunk id column for materialized hypertable.
+		 *
+		 * Step 1: create the materialization table.
+		 */
+		ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+		materialize_hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
+		ts_catalog_restore_user(&sec_ctx);
+		makeMaterializedTableName(relnamebuf,
+								  "_materialized_hypertable_%d",
+								  materialize_hypertable_id);
+		mat_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
+		is_create_mattbl_index =
+			DatumGetBool(with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].parsed);
+		mattablecolumninfo_create_materialization_table(&mattblinfo,
+														materialize_hypertable_id,
+														mat_rel,
+														bucket_info,
+														is_create_mattbl_index,
+														create_stmt->into->tableSpaceName,
+														create_stmt->into->accessMethod,
+														matpartcol_interval,
+														&mataddress);
+
+		/*
+		 * Step 2: Create view with select finalize from materialization table.
+		 */
+		final_selquery = finalizequery_get_select_query(&finalqinfo,
+														mattblinfo.matcollist,
+														&mataddress,
+														mat_rel->relname);
+
+		if (!materialized_only)
+			final_selquery = build_union_query(bucket_info,
+											   mattblinfo.matpartcolno,
+											   final_selquery,
+											   panquery,
+											   materialize_hypertable_id);
+
+		/* Copy view acl to materialization hypertable. */
+		ObjectAddress view_address = create_view_for_query(final_selquery, stmt->view);
+		ts_copy_relation_acl(view_address.objectId, mataddress.objectId, GetUserId());
+
+		/*
+		 * Step 3: create the internal view with select partialize(..).
+		 */
+		partial_selquery = mattablecolumninfo_get_partial_select_query(&mattblinfo,
+																	   panquery,
+																	   finalqinfo.finalized);
+
+		makeMaterializedTableName(relnamebuf, "_partial_view_%d", materialize_hypertable_id);
+		part_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
+		create_view_for_query(partial_selquery, part_rel);
+
+		/*
+		 * Additional miscellaneous steps.
+		 */
+
+		/*
+		 * Create a dummy view to store the user supplied view query.
+		 * This is to get PG to display the view correctly without
+		 * having to replicate the PG source code for make_viewdef.
+		 */
+		orig_userview_query = copyObject(panquery);
+		makeMaterializedTableName(relnamebuf, "_direct_view_%d", materialize_hypertable_id);
+		dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
+		create_view_for_query(orig_userview_query, dum_rel);
+
+		/* Step 4: Add catalog table entry for the objects we just created. */
+		nspid = RangeVarGetCreationNamespace(stmt->view);
+
+		create_cagg_catalog_entry(materialize_hypertable_id,
+								  bucket_info->htid,
+								  get_namespace_name(nspid), /*schema name for user view */
+								  stmt->view->relname,
+								  part_rel->schemaname,
+								  part_rel->relname,
+								  materialized_only,
+								  dum_rel->schemaname,
+								  dum_rel->relname,
+								  finalized,
+								  bucket_info->parent_mat_hypertable_id);
+
+		char *bucket_origin = NULL;
+		char *bucket_offset = NULL;
+		char *bucket_width = NULL;
+
+		if (IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info->bf))
+		{
+			/* Bucketing on time */
+			Assert(bucket_info->bf->bucket_time_width != NULL);
+			bucket_width = DatumGetCString(
 				DirectFunctionCall1(interval_out,
-									IntervalPGetDatum(bucket_info->bf->bucket_time_offset)));
+									IntervalPGetDatum(bucket_info->bf->bucket_time_width)));
+
+			if (!TIMESTAMP_NOT_FINITE(bucket_info->bf->bucket_time_origin))
+			{
+				bucket_origin = DatumGetCString(
+					DirectFunctionCall1(timestamptz_out,
+										TimestampTzGetDatum(bucket_info->bf->bucket_time_origin)));
+			}
+
+			if (bucket_info->bf->bucket_time_offset != NULL)
+			{
+				bucket_offset = DatumGetCString(
+					DirectFunctionCall1(interval_out,
+										IntervalPGetDatum(bucket_info->bf->bucket_time_offset)));
+			}
 		}
-	}
-	else
-	{
-		/* Bucketing on integers */
-		bucket_width = palloc0(MAXINT8LEN + 1);
-		pg_lltoa(bucket_info->bf->bucket_integer_width, bucket_width);
-
-		/* Integer buckets with origin are not supported, so noting to do. */
-		Assert(bucket_origin == NULL);
-
-		if (bucket_info->bf->bucket_integer_offset != 0)
+		else
 		{
-			bucket_offset = palloc0(MAXINT8LEN + 1);
-			pg_lltoa(bucket_info->bf->bucket_integer_offset, bucket_offset);
+			/* Bucketing on integers */
+			bucket_width = palloc0(MAXINT8LEN + 1);
+			pg_lltoa(bucket_info->bf->bucket_integer_width, bucket_width);
+
+			/* Integer buckets with origin are not supported, so noting to do. */
+			Assert(bucket_origin == NULL);
+
+			if (bucket_info->bf->bucket_integer_offset != 0)
+			{
+				bucket_offset = palloc0(MAXINT8LEN + 1);
+				pg_lltoa(bucket_info->bf->bucket_integer_offset, bucket_offset);
+			}
 		}
+
+		create_bucket_function_catalog_entry(materialize_hypertable_id,
+											 bucket_info->bf->bucket_function,
+											 bucket_width,
+											 bucket_origin,
+											 bucket_offset,
+											 bucket_info->bf->bucket_time_timezone,
+											 bucket_info->bf->bucket_fixed_interval);
+
+		/* Step 5: Create trigger on raw hypertable, if needed, and finalize slot
+		 * creation if that needs to be done. */
+		if (invalidate_using == ContinuousAggInvalidateUsingTrigger)
+			cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
+		else if (slot_prepared)
+			cagg_add_logical_decoding_slot_finalize();
+
+		/* Collect information on the current command*/
+		EventTriggerCollectSimpleCommand(view_address, InvalidObjectAddress, (Node *) stmt);
+		/* fire ddl_end trigger */
+		EventTriggerDDLCommandEnd((Node *) stmt);
+		/* clean up event trigger context */
+		if (needCleanup)
+			EventTriggerEndCompleteQuery();
 	}
-
-	create_bucket_function_catalog_entry(materialize_hypertable_id,
-										 bucket_info->bf->bucket_function,
-										 bucket_width,
-										 bucket_origin,
-										 bucket_offset,
-										 bucket_info->bf->bucket_time_timezone,
-										 bucket_info->bf->bucket_fixed_interval);
-
-	/* Step 5: Create trigger on raw hypertable, if needed, and finalize slot
-	 * creation if that needs to be done. */
-	if (invalidate_using == ContinuousAggInvalidateUsingTrigger)
-		cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
-	else if (slot_prepared)
-		cagg_add_logical_decoding_slot_finalize();
+	/* Use PG_CATCH() until we tweak compiler to accept PG_FINALLY.*/
+	PG_CATCH();
+	{
+		if (needCleanup)
+			EventTriggerEndCompleteQuery();
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 }
 
 DDLResult
@@ -1107,6 +1140,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 											  schema_name,
 											  stmt->into->rel->relname,
 											  true);
+
 	cagg_create(stmt, &viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
 
 	/* Insert the MIN of the time dimension type for the new watermark */

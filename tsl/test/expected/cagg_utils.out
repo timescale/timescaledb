@@ -429,3 +429,81 @@ ORDER BY user_view_name;
  temperature_tz_4h_3 | time_bucket(interval,timestamp with time zone)
 (1 row)
 
+---------------------------------
+--Event trigger on cagg DDL
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- Create a base table
+create table foo(time timestamptz NOT NULL, val int );
+select create_hypertable('foo', 'time');
+ create_hypertable 
+-------------------
+ (16,public,foo,t)
+(1 row)
+
+insert into foo values ('2025-01-01', 1);
+insert into foo values ('2025-01-02', 2);
+-- Create a trigger function that raises a notice
+CREATE OR REPLACE FUNCTION log_any_command()
+RETURNS event_trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    cmd RECORD;
+BEGIN
+    RAISE NOTICE 'command % for event %', tg_tag, tg_event;
+    FOR cmd IN SELECT * FROM pg_event_trigger_ddl_commands()
+    LOOP
+        RAISE NOTICE 'tag: %, object: %', cmd.command_tag, cmd.object_identity;
+    END LOOP;
+END;
+$$;
+--create trigger on ddl start
+CREATE EVENT TRIGGER log_ddl_start ON ddl_command_start
+EXECUTE FUNCTION log_any_command();
+--create trigger on ddl end
+CREATE EVENT TRIGGER log_ddl_end ON ddl_command_end
+EXECUTE FUNCTION log_any_command();
+--create trigger on ddl drop
+CREATE EVENT TRIGGER log_ddl_drop ON sql_drop
+EXECUTE FUNCTION log_any_command();
+--create a continuous aggregate, the ddl_start and ddl_end trigger should be fired
+create materialized view foo_cagg with (timescaledb.continuous)
+as select time_bucket('1 day', time) as day, sum(val) as total from foo group by day;
+NOTICE:  command CREATE VIEW for event ddl_command_start
+NOTICE:  command CREATE VIEW for event ddl_command_end
+NOTICE:  tag: CREATE VIEW, object: public.foo_cagg
+NOTICE:  refreshing continuous aggregate "foo_cagg"
+--TimescaleDB's options for ALTER MATERIALIZED VIEW now should also fire ddl_start and ddl_end event triggers
+--WITH options (event triggers work as is for Postgres's original actions)
+ALTER MATERIALIZED VIEW foo_cagg SET (timescaledb.materialized_only = false);
+NOTICE:  command ALTER MATERIALIZED VIEW for event ddl_command_start
+NOTICE:  command ALTER MATERIALIZED VIEW for event ddl_command_end
+NOTICE:  tag: ALTER MATERIALIZED VIEW, object: public.foo_cagg
+-- Change owner
+ALTER MATERIALIZED VIEW foo_cagg OWNER TO :ROLE_SUPERUSER;
+NOTICE:  command ALTER MATERIALIZED VIEW for event ddl_command_start
+NOTICE:  command ALTER MATERIALIZED VIEW for event ddl_command_end
+NOTICE:  tag: ALTER MATERIALIZED VIEW, object: public.foo_cagg
+--Change Tablespace
+SET client_min_messages = ERROR;
+DROP TABLESPACE IF EXISTS tablespace1;
+SET client_min_messages = NOTICE;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
+ALTER MATERIALIZED VIEW foo_cagg SET TABLESPACE tablespace1;
+NOTICE:  command ALTER MATERIALIZED VIEW for event ddl_command_start
+NOTICE:  command ALTER MATERIALIZED VIEW for event ddl_command_end
+NOTICE:  tag: ALTER MATERIALIZED VIEW, object: public.foo_cagg
+--Event triggers for DROP MATERIALIZED VIEW will work as is because
+--the TimescaleDB's interceptor on the drop statement returns DDL_CONTINUE,
+--eventually fallback to the default drop materialized view behavior
+DROP MATERIALIZED VIEW foo_cagg;
+NOTICE:  command DROP VIEW for event ddl_command_start
+NOTICE:  command DROP VIEW for event sql_drop
+NOTICE:  drop cascades to 2 other objects
+NOTICE:  command DROP VIEW for event ddl_command_end
+--clean up
+DROP EVENT TRIGGER log_ddl_start;
+DROP EVENT TRIGGER log_ddl_end;
+DROP EVENT TRIGGER log_ddl_drop;
+DROP FUNCTION log_any_command();
+DROP TABLE foo cascade;
