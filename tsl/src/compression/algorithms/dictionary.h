@@ -59,6 +59,6 @@ ArrowArray *tsl_dictionary_decompress_all(Datum compressed, Oid element_type,
 		.compressed_data_send = dictionary_compressed_send,                                        \
 		.compressed_data_recv = dictionary_compressed_recv,                                        \
 		.compressor_for_type = dictionary_compressor_for_type,                                     \
-		.compressed_data_storage = TOAST_STORAGE_EXTENDED,                                         \
+		.compressed_data_storage = TOAST_STORAGE_EXTERNAL,                                         \
 		.decompress_all = tsl_dictionary_decompress_all,                                           \
 	}
