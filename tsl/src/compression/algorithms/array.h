@@ -82,6 +82,6 @@ ArrowArray *text_array_decompress_all_serialized_no_header(StringInfo si, bool h
 		.compressed_data_send = array_compressed_send,                                             \
 		.compressed_data_recv = array_compressed_recv,                                             \
 		.compressor_for_type = array_compressor_for_type,                                          \
-		.compressed_data_storage = TOAST_STORAGE_EXTENDED,                                         \
+		.compressed_data_storage = TOAST_STORAGE_EXTERNAL,                                         \
 		.decompress_all = tsl_array_decompress_all,                                                \
 	}
