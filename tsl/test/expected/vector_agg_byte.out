@@ -1,0 +1,188 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Tests for grouping by single-byte data types. Only bool for now, because char
+-- lacks a vectorized representation.
+create table groupbyte(ts int, b bool, x text, i int)
+    with (tsdb.hypertable, tsdb.partition_column = 'ts', tsdb.chunk_interval = '10',
+        tsdb.compress, tsdb.compress_segmentby = 'b', tsdb.compress_orderby = ts);
+insert into groupbyte select 1,
+    case when x % 11 = 0 then null else x % 3 = 0 end,
+    case when x % 13 = 0 then null else 'tag' || (x % 7) end,
+    x
+from generate_series(1, 1000) x;
+select count(compress_chunk(x)) from show_chunks('groupbyte') x;
+ count 
+-------
+     1
+(1 row)
+
+alter table groupbyte set (tsdb.compress_segmentby = '');
+insert into groupbyte select 11,
+    case when x % 11 = 0 then null else x % 3 = 0 end,
+    case when x % 13 = 0 then null else 'tag' || (x % 7) end,
+    x
+from generate_series(1, 1000) x;
+select count(compress_chunk(x)) from show_chunks('groupbyte') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
+ count 
+-------
+     2
+(1 row)
+
+set timescaledb.debug_require_vector_agg = 'require';
+-- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off; set timescaledb.debug_require_vector_agg = 'allow';
+select
+    format('select %s%s from groupbyte%s%s;',
+            grouping || ', ',
+            function,
+            ' group by ' || grouping,
+            ' order by ' || function || ', ' || grouping || ' limit 10')
+from
+    unnest(array[
+        'count(*)'
+        , 'count(b)'
+        , 'sum(i)'
+    ]) function,
+    unnest(array[
+        null
+        , 'b'
+        , 'b, x'
+        , 'x, b'
+    ]) with ordinality as grouping(grouping, n)
+order by function, grouping.n
+\gexec
+select count(*) from groupbyte;
+ count 
+-------
+  2000
+(1 row)
+
+select b, count(*) from groupbyte group by b order by count(*), b limit 10;
+ b | count 
+---+-------
+   |   180
+ t |   606
+ f |  1214
+(3 rows)
+
+select b, x, count(*) from groupbyte group by b, x order by count(*), b, x limit 10;
+ b |  x   | count 
+---+------+-------
+   |      |    12
+   | tag0 |    24
+   | tag1 |    24
+   | tag2 |    24
+   | tag3 |    24
+   | tag4 |    24
+   | tag5 |    24
+   | tag6 |    24
+ t |      |    46
+ t | tag1 |    78
+(10 rows)
+
+select x, b, count(*) from groupbyte group by x, b order by count(*), x, b limit 10;
+  x   | b | count 
+------+---+-------
+      |   |    12
+ tag0 |   |    24
+ tag1 |   |    24
+ tag2 |   |    24
+ tag3 |   |    24
+ tag4 |   |    24
+ tag5 |   |    24
+ tag6 |   |    24
+      | t |    46
+ tag1 | t |    78
+(10 rows)
+
+select count(b) from groupbyte;
+ count 
+-------
+  1820
+(1 row)
+
+select b, count(b) from groupbyte group by b order by count(b), b limit 10;
+ b | count 
+---+-------
+   |     0
+ t |   606
+ f |  1214
+(3 rows)
+
+select b, x, count(b) from groupbyte group by b, x order by count(b), b, x limit 10;
+ b |  x   | count 
+---+------+-------
+   | tag0 |     0
+   | tag1 |     0
+   | tag2 |     0
+   | tag3 |     0
+   | tag4 |     0
+   | tag5 |     0
+   | tag6 |     0
+   |      |     0
+ t |      |    46
+ t | tag1 |    78
+(10 rows)
+
+select x, b, count(b) from groupbyte group by x, b order by count(b), x, b limit 10;
+  x   | b | count 
+------+---+-------
+ tag0 |   |     0
+ tag1 |   |     0
+ tag2 |   |     0
+ tag3 |   |     0
+ tag4 |   |     0
+ tag5 |   |     0
+ tag6 |   |     0
+      |   |     0
+      | t |    46
+ tag1 | t |    78
+(10 rows)
+
+select sum(i) from groupbyte;
+   sum   
+---------
+ 1001000
+(1 row)
+
+select b, sum(i) from groupbyte group by b order by sum(i), b limit 10;
+ b |  sum   
+---+--------
+   |  90090
+ t | 302976
+ f | 607934
+(3 rows)
+
+select b, x, sum(i) from groupbyte group by b, x order by sum(i), b, x limit 10;
+ b |  x   |  sum  
+---+------+-------
+   |      |  6006
+   | tag4 | 10582
+   | tag1 | 11154
+   | tag5 | 11726
+   | tag0 | 12012
+   | tag2 | 12298
+   | tag6 | 12870
+   | tag3 | 13442
+ t |      | 22776
+ t | tag3 | 39342
+(10 rows)
+
+select x, b, sum(i) from groupbyte group by x, b order by sum(i), x, b limit 10;
+  x   | b |  sum  
+------+---+-------
+      |   |  6006
+ tag4 |   | 10582
+ tag1 |   | 11154
+ tag5 |   | 11726
+ tag0 |   | 12012
+ tag2 |   | 12298
+ tag6 |   | 12870
+ tag3 |   | 13442
+      | t | 22776
+ tag3 | t | 39342
+(10 rows)
+
+reset timescaledb.debug_require_vector_agg;
