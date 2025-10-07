@@ -937,3 +937,36 @@ continuous_agg_get_bucket_function_info(PG_FUNCTION_ARGS)
 	/* Return all bucket function info */
 	PG_RETURN_DATUM(cagg_get_bucket_function_datum(PG_GETARG_INT32(0), fcinfo));
 }
+
+Datum
+continuous_agg_get_groupingcols(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	List *cagg_group_cols = NIL;
+	Oid cagg_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	/* after first call , we just return the existing list */
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext oldcontext;
+
+		ContinuousAgg *cagg = cagg_get_by_relid_or_fail(cagg_relid);
+		Cache *hcache = ts_hypertable_cache_pin();
+		Hypertable *mat_ht =
+			ts_hypertable_cache_get_entry_by_id(hcache, cagg->data.mat_hypertable_id);
+		Assert(mat_ht != NULL);
+		/* Initial multi function call setup */
+		funcctx = SRF_FIRSTCALL_INIT();
+
+		/* store grouping calls info here */
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		cagg_group_cols = cagg_find_groupingcols(cagg, mat_ht);
+		MemoryContextSwitchTo(oldcontext);
+
+		/* store data for multi function call */
+		funcctx->max_calls = list_length(cagg_group_cols);
+		funcctx->user_fctx = cagg_group_cols;
+		ts_cache_release(&hcache);
+	}
+	return ts_list_return_srf(fcinfo);
+}
