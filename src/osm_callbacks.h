@@ -11,10 +11,10 @@
 /* range_start and range_end are in PG internal timestamp format. */
 typedef int (*chunk_insert_check_hook_type)(Oid ht_oid, int64 range_start, int64 range_end);
 typedef void (*hypertable_drop_hook_type)(const char *schema_name, const char *table_name);
-typedef List *(*hypertable_drop_chunks_hook_type)(Oid osm_chunk_oid,
-												  const char *hypertable_schema_name,
-												  const char *hypertable_name, int64 range_start,
-												  int64 range_end);
+typedef void (*hypertable_drop_chunks_hook_type)(Oid osm_chunk_oid,
+												 const char *hypertable_schema_name,
+												 const char *hypertable_name, int64 range_start,
+												 int64 range_end);
 
 /*
  * Object Storage Manager callbacks.
