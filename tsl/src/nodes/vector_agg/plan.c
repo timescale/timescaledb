@@ -354,6 +354,12 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		{
 			switch (typlen)
 			{
+				case 1:
+#ifdef TS_USE_UMASH
+					return VAGT_HashSerialized;
+#else
+					return VAGT_Invalid;
+#endif
 				case 2:
 					return VAGT_HashSingleFixed2;
 				case 4:
