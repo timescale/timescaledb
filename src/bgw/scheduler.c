@@ -248,7 +248,14 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 
 		job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 
-		Assert(job_stat != NULL);
+		/* If there is no job stat, there is nothing to do below, so exit
+		 * early. Since there is no job stat entry, we don't need to mark the
+		 * end either. */
+		if (!job_stat)
+		{
+			sjob->may_need_mark_end = false;
+			return;
+		}
 
 		if (!ts_bgw_job_stat_end_was_marked(job_stat))
 		{

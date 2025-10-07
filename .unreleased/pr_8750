@@ -1,0 +1,1 @@
+Fixes: #8750 Skip updating job_stat if none exist
