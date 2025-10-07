@@ -566,8 +566,20 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
 		appinfo = ts_get_appendrelinfo(root, chunk_rel->relid, false);
-		info->ht_rte = planner_rt_fetch(appinfo->parent_relid, root);
-		info->ht_rel = root->simple_rel_array[appinfo->parent_relid];
+		RangeTblEntry *rte = planner_rt_fetch(appinfo->parent_relid, root);
+		if (rte->rtekind == RTE_RELATION)
+		{
+			info->ht_rte = rte;
+			info->ht_rel = root->simple_rel_array[appinfo->parent_relid];
+		}
+		else
+		{
+			/* In UNION queries referencing chunks directly, the parent rel can be a subquery */
+			Assert(rte->rtekind == RTE_SUBQUERY);
+			info->single_chunk = true;
+			info->ht_rte = info->chunk_rte;
+			info->ht_rel = info->chunk_rel;
+		}
 	}
 	else
 	{
@@ -1113,7 +1125,6 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, con
 		 * estimate.
 		 */
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
-		Assert(chunk_info->parent_reloid == ht->main_table_relid);
 		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
 		const double delta = new_row_estimate - chunk_rel->rows;
@@ -1975,17 +1986,29 @@ static bool
 add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 								   CompressionInfo *info, EMCreationContext *context)
 {
-	ListCell *lc;
-
 	TimescaleDBPrivate *compressed_fdw_private =
 		(TimescaleDBPrivate *) info->compressed_rel->fdw_private;
 	Assert(compressed_fdw_private != NULL);
 
+	EquivalenceMember *cur_em;
+#if PG18_GE
+	/* Use specialized iterator to include child ems.
+	 *
+	 * https://github.com/postgres/postgres/commit/d69d45a5
+	 */
+	EquivalenceMemberIterator it;
+
+	setup_eclass_member_iterator(&it, cur_ec, bms_make_singleton(info->chunk_rel->relid));
+	while ((cur_em = eclass_member_iterator_next(&it)) != NULL)
+	{
+#else
+	ListCell *lc;
 	foreach (lc, cur_ec->ec_members)
 	{
+		cur_em = (EquivalenceMember *) lfirst(lc);
+#endif
 		Expr *child_expr;
 		Relids new_relids;
-		EquivalenceMember *cur_em = (EquivalenceMember *) lfirst(lc);
 		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
@@ -2020,6 +2043,7 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		/* given that the em is a var of the uncompressed chunk, the relid of the chunk should
 		 * be set on the em */
 		Assert(bms_is_member(info->ht_rel->relid, cur_em->em_relids));
+		Assert(OidIsValid(info->ht_rte->relid));
 
 		const char *attname = get_attname(info->ht_rte->relid, var->varattno, false);
 
@@ -2029,6 +2053,12 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context, attname);
 		if (child_expr == NULL)
 			continue;
+
+		/* #8681: coerce compressed var to current equivalence member type/collation,
+		 *  in case we dug the "cur_em->em_expr" var from under RelabelTypes
+		 */
+		child_expr =
+			canonicalize_ec_expression(child_expr, cur_em->em_datatype, cur_ec->ec_collation);
 
 		/*
 		 * Transform em_relids to match.  Note we do *not* do
@@ -2085,33 +2115,7 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 			cur_ec->ec_members = lappend(cur_ec->ec_members, em);
 			cur_ec->ec_relids = bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
 #else
-			/* In PG18, child ems are not added to ec_members
-			 * but need to be maintained in separate Lists.
-			 *
-			 * https://github.com/postgres/postgres/commit/d69d45a5
-			 */
-			/* copied from add_child_eq_member */
-			/*
-			 * Allocate the array to store child members; an array of Lists indexed by
-			 * relid, or expand the existing one, if necessary.
-			 */
-			if (unlikely(cur_ec->ec_childmembers_size < root->simple_rel_array_size))
-			{
-				cur_ec->ec_relids =
-					bms_add_members(cur_ec->ec_relids, info->compressed_rel->relids);
-				if (cur_ec->ec_childmembers == NULL)
-					cur_ec->ec_childmembers = palloc0_array(List *, root->simple_rel_array_size);
-				else
-					cur_ec->ec_childmembers = repalloc0_array(cur_ec->ec_childmembers,
-															  List *,
-															  cur_ec->ec_childmembers_size,
-															  root->simple_rel_array_size);
-				cur_ec->ec_childmembers_size = root->simple_rel_array_size;
-			}
-
-			/* add member to the ec_childmembers List for the given child_relid */
-			cur_ec->ec_childmembers[info->compressed_rel->relid] =
-				lappend(cur_ec->ec_childmembers[info->compressed_rel->relid], em);
+			ts_add_child_eq_member(root, cur_ec, em, info->compressed_rel->relid);
 #endif
 
 			/*
@@ -2500,20 +2504,29 @@ find_const_segmentby(RelOptInfo *chunk_rel, const CompressionInfo *info)
 			if (IsA(ri->clause, OpExpr) && list_length(castNode(OpExpr, ri->clause)->args) == 2)
 			{
 				OpExpr *op = castNode(OpExpr, ri->clause);
-				Var *var;
+				Var *lvar, *rvar, *var;
 				Expr *other;
 
 				if (op->opretset)
 					continue;
 
-				if (IsA(linitial(op->args), Var))
+				lvar = linitial(op->args);
+				while (lvar && IsA(lvar, RelabelType))
+					lvar = (Var *) ((RelabelType *) lvar)->arg;
+
+				rvar = lsecond(op->args);
+				while (rvar && IsA(rvar, RelabelType))
+					rvar = (Var *) ((RelabelType *) rvar)->arg;
+
+				Assert(lvar && rvar);
+				if (IsA(lvar, Var))
 				{
-					var = castNode(Var, linitial(op->args));
+					var = castNode(Var, lvar);
 					other = lsecond(op->args);
 				}
-				else if (IsA(lsecond(op->args), Var))
+				else if (IsA(rvar, Var))
 				{
-					var = castNode(Var, lsecond(op->args));
+					var = castNode(Var, rvar);
 					other = linitial(op->args);
 				}
 				else
@@ -2554,6 +2567,8 @@ match_pathkeys_to_compression_orderby(List *pathkeys, List *chunk_em_exprs,
 		compressed_pk_index++;
 		PathKey *pk = list_nth_node(PathKey, pathkeys, i);
 		Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
+		while (expr && IsA(expr, RelabelType))
+			expr = ((RelabelType *) expr)->arg;
 
 		if (expr == NULL || !IsA(expr, Var))
 		{
@@ -2731,6 +2746,8 @@ build_sortinfo(PlannerInfo *root, const Chunk *chunk, RelOptInfo *chunk_rel,
 			Assert(bms_num_members(segmentby_columns) <= compression_info->num_segmentby_columns);
 
 			Expr *expr = (Expr *) list_nth(chunk_em_exprs, i);
+			while (expr && IsA(expr, RelabelType))
+				expr = ((RelabelType *) expr)->arg;
 
 			if (expr == NULL || !IsA(expr, Var))
 				break;

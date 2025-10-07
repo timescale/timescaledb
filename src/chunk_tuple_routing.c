@@ -4,16 +4,17 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/tableam.h>
+#include <storage/lockdefs.h>
 #include <utils/rls.h>
 
+#include "chunk_insert_state.h"
 #include "chunk_tuple_routing.h"
+#include "cross_module_fn.h"
 #include "debug_point.h"
+#include "guc.h"
 #include "hypercube.h"
-#include "nodes/chunk_dispatch/chunk_insert_state.h"
-#include "nodes/modify_hypertable.h"
 #include "subspace_store.h"
-
-static ChunkInsertState *chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr);
 
 ChunkTupleRouting *
 ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
@@ -28,21 +29,34 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 	 * single tuple into a partitioned table and this must be fast.
 	 */
 	ctr = (ChunkTupleRouting *) palloc0(sizeof(ChunkTupleRouting));
-	ctr->hypertable_rri = rri;
-	ctr->partition_root = rri->ri_RelationDesc;
-	ctr->memcxt = CurrentMemoryContext;
+	ctr->root_rri = rri;
+	ctr->root_rel = rri->ri_RelationDesc;
 	ctr->estate = estate;
 	ctr->counters = palloc0(sizeof(SharedCounters));
 
 	ctr->hypertable =
 		ts_hypertable_cache_get_cache_and_entry(RelationGetRelid(rri->ri_RelationDesc),
-												CACHE_FLAG_NONE,
+												CACHE_FLAG_MISSING_OK,
 												&ctr->hypertable_cache);
+
+	/*
+	 * If we are inserting into a chunk directly, rri will point to the chunk
+	 * itself, so we need to get the hypertable from the chunk.
+	 */
+	if (!ctr->hypertable)
+	{
+		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(rri->ri_RelationDesc), true);
+		ctr->hypertable = ts_hypertable_cache_get_entry(ctr->hypertable_cache,
+														chunk->hypertable_relid,
+														CACHE_FLAG_NONE);
+		ctr->single_chunk_insert = true;
+	}
 	ctr->subspace = ts_subspace_store_init(ctr->hypertable->space,
 										   estate->es_query_cxt,
 										   ts_guc_max_open_chunks_per_insert);
 
-	ctr->onConflictAction = ONCONFLICT_NONE;
+	ctr->has_dropped_attrs = false;
+
 	return ctr;
 }
 
@@ -56,9 +70,15 @@ ts_chunk_tuple_routing_destroy(ChunkTupleRouting *ctr)
 }
 
 static void
+destroy_chunk_insert_state_single_chunk(void *cis)
+{
+	ts_chunk_insert_state_destroy((ChunkInsertState *) cis, true);
+}
+
+static void
 destroy_chunk_insert_state(void *cis)
 {
-	ts_chunk_insert_state_destroy((ChunkInsertState *) cis);
+	ts_chunk_insert_state_destroy((ChunkInsertState *) cis, false);
 }
 
 extern ChunkInsertState *
@@ -78,6 +98,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 	{
 		bool chunk_created = false;
 		bool needs_partial = false;
+		const LOCKMODE lockmode = RowExclusiveLock;
 
 		/*
 		 * Normally, for every row of the chunk except the first one, we expect
@@ -87,16 +108,28 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 		 * locking the hypertable. This serves as a fast path for the usual case
 		 * where the chunk already exists.
 		 */
-		chunk = ts_hypertable_find_chunk_for_point(ctr->hypertable, point);
+		DEBUG_WAITPOINT("chunk_insert_before_lock");
+		chunk = ts_hypertable_find_chunk_for_point(ctr->hypertable, point, lockmode);
 
 		/*
-		 * Frozen chunks require at least PG14.
+		 * When inserting directly into a chunk, we should always find the chunk and
+		 * the returned chunk should match the relid we are inserting into.
 		 */
+		if (ctr->single_chunk_insert)
+		{
+			if (!chunk || chunk->table_id != RelationGetRelid(ctr->root_rri->ri_RelationDesc))
+				ereport(ERROR,
+						(errcode(ERRCODE_CHECK_VIOLATION),
+						 errmsg("new row for relation \"%s\" violates chunk constraint",
+								RelationGetRelationName(ctr->root_rri->ri_RelationDesc))));
+		}
+
 		if (chunk && ts_chunk_is_frozen(chunk))
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot INSERT into frozen chunk \"%s\"",
 							get_rel_name(chunk->table_id))));
+
 		if (chunk && IS_OSM_CHUNK(chunk))
 		{
 			const Dimension *time_dim = hyperspace_get_open_dimension(ctr->hypertable->space, 0);
@@ -119,21 +152,53 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 
 		if (!chunk)
 		{
-			chunk = ts_hypertable_create_chunk_for_point(ctr->hypertable, point);
+			chunk = ts_hypertable_create_chunk_for_point(ctr->hypertable, point, lockmode);
 			chunk_created = true;
 		}
 
 		Ensure(chunk, "no chunk found or created");
 
+#ifdef USE_ASSERT_CHECKING
+		/* Ensure we always hold a lock on the chunk table at this point */
+		Relation chunk_rel = RelationIdGetRelation(chunk->table_id);
+		Assert(CheckRelationLockedByMe(chunk_rel, lockmode, true));
+		RelationClose(chunk_rel);
+#endif
 		if (ctr->create_compressed_chunk && !chunk->fd.compressed_chunk_id)
 		{
 			/*
-			 * When we try to create a compressed chunk, we need to grab a lock on the
-			 * chunk to synchronize with other concurrent insert operations trying to
-			 * create the same compressed chunk.
+			 * When creating a compressed chunk, the operation must be
+			 * synchronized with other operations. A RowExclusiveLock is
+			 * already held on the chunk table itself so it will conflict with
+			 * explicit compress calls like compress_chunk() or
+			 * convert_to_columnstore() that take at least
+			 * ExclusiveLock. However, it is also necessary to synchronize
+			 * with other concurrent inserts doing the same thing.
+			 *
+			 * We don't want to do a lock upgrade on the chunk table since
+			 * that increases the risk of deadlocks.
+			 *
+			 * Instead we synchronize around a tuple lock on the chunk
+			 * metadata row since this is the row getting updated with new
+			 * compression status.
 			 */
-			LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
-			chunk = ts_chunk_get_by_id(chunk->fd.id, CACHE_FLAG_NONE);
+			TM_Result lockres;
+
+			DEBUG_WAITPOINT("insert_create_compressed");
+
+			lockres = ts_chunk_lock_for_creating_compressed_chunk(chunk->fd.id,
+																  &chunk->fd.compressed_chunk_id);
+
+			/*
+			 * Since the locking function blocks and follows the update chain,
+			 * the only reasonable return value is TM_Ok. Everything else is
+			 * an error.
+			 */
+			Ensure(lockres == TM_Ok,
+				   "could not lock chunk row for creating "
+				   "compressed chunk. Lock result %d",
+				   lockres);
+
 			/* recheck whether compressed chunk exists after acquiring the lock */
 			if (!chunk->fd.compressed_chunk_id)
 			{
@@ -142,6 +207,7 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 				Chunk *compressed_chunk =
 					ts_cm_functions->compression_chunk_create(compressed_ht, chunk);
 				ts_chunk_set_compressed_chunk(chunk, compressed_chunk->fd.id);
+				chunk->fd.compressed_chunk_id = compressed_chunk->fd.id;
 
 				/* mark chunk as partial unless completely new chunk */
 				if (!chunk_created)
@@ -149,9 +215,13 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 			}
 		}
 
-		cis = chunk_insert_state_create(chunk->table_id, ctr);
+		cis = ts_chunk_insert_state_create(chunk->table_id, ctr);
 		cis->needs_partial = needs_partial;
-		ts_subspace_store_add(ctr->subspace, chunk->cube, cis, destroy_chunk_insert_state);
+		ts_subspace_store_add(ctr->subspace,
+							  chunk->cube,
+							  cis,
+							  ctr->single_chunk_insert ? destroy_chunk_insert_state_single_chunk :
+														 destroy_chunk_insert_state);
 	}
 
 	MemoryContextSwitchTo(old_context);
@@ -159,100 +229,6 @@ ts_chunk_tuple_routing_find_chunk(ChunkTupleRouting *ctr, Point *point)
 	Assert(cis != NULL);
 
 	return cis;
-}
-
-static ChunkInsertState *
-chunk_insert_state_create(Oid chunk_relid, ChunkTupleRouting *ctr)
-{
-	ChunkInsertState *state;
-	Relation rel, parent_rel;
-	MemoryContext cis_context = AllocSetContextCreate(ctr->estate->es_query_cxt,
-													  "chunk insert state memory context",
-													  ALLOCSET_DEFAULT_SIZES);
-	ResultRelInfo *relinfo;
-	const Chunk *chunk;
-
-	/* permissions NOT checked here; were checked at hypertable level */
-	if (check_enable_rls(chunk_relid, InvalidOid, false) == RLS_ENABLED)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("hypertables do not support row-level security")));
-
-	/*
-	 * Since we insert data and won't modify metadata, a RowExclusiveLock
-	 * should be sufficient. This should conflict with any metadata-modifying
-	 * operations as they should take higher-level locks (ShareLock and
-	 * above).
-	 */
-	DEBUG_WAITPOINT("chunk_insert_before_lock");
-	rel = table_open(chunk_relid, RowExclusiveLock);
-
-	/*
-	 * A concurrent chunk operation (e.g., compression) might have changed the
-	 * chunk metadata before we got a lock, so re-read it.
-	 *
-	 * This works even in higher levels of isolation since catalog data is
-	 * always read from latest snapshot.
-	 */
-	chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	Assert(chunk->relkind == RELKIND_RELATION);
-	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
-
-	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
-	relinfo = create_chunk_result_relation_info(ctr->hypertable_rri, rel, ctr->estate);
-
-	state = palloc0(sizeof(ChunkInsertState));
-	state->counters = ctr->counters;
-	state->mctx = cis_context;
-	state->rel = rel;
-	state->result_relation_info = relinfo;
-	state->estate = ctr->estate;
-	ts_set_compression_status(state, chunk);
-
-	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
-		ExecOpenIndices(relinfo, ctr->onConflictAction != ONCONFLICT_NONE);
-
-	if (relinfo->ri_TrigDesc != NULL)
-	{
-		TriggerDesc *tg = relinfo->ri_TrigDesc;
-
-		/* instead of triggers can only be created on VIEWs */
-		Assert(!tg->trig_insert_instead_row);
-
-		/*
-		 * A statement that targets a parent table in an inheritance or
-		 * partitioning hierarchy does not cause the statement-level triggers
-		 * of affected child tables to be fired; only the parent table's
-		 * statement-level triggers are fired. However, row-level triggers
-		 * of any affected child tables will be fired.
-		 * During chunk creation we only copy ROW trigger to chunks so
-		 * statement triggers should not exist on chunks.
-		 */
-		if (tg->trig_insert_after_statement || tg->trig_insert_before_statement)
-			elog(ERROR, "statement trigger on chunk table not supported");
-	}
-
-	parent_rel = table_open(ctr->hypertable->main_table_relid, AccessShareLock);
-	state->hyper_to_chunk_map =
-		convert_tuples_by_name(RelationGetDescr(parent_rel), RelationGetDescr(rel));
-
-	/* Need a tuple table slot to store tuples going into this chunk. We don't
-	 * want this slot tied to the executor's tuple table, since that would tie
-	 * the slot's lifetime to the entire length of the execution and we want
-	 * to be able to dynamically create and destroy chunk insert
-	 * state. Otherwise, memory might blow up when there are many chunks being
-	 * inserted into. This also means that the slot needs to be destroyed with
-	 * the chunk insert state. */
-	state->slot = MakeSingleTupleTableSlot(RelationGetDescr(relinfo->ri_RelationDesc),
-										   table_slot_callbacks(relinfo->ri_RelationDesc));
-	table_close(parent_rel, AccessShareLock);
-
-	state->hypertable_relid = chunk->hypertable_relid;
-	state->chunk_id = chunk->fd.id;
-
-	MemoryContextSwitchTo(old_mcxt);
-
-	return state;
 }
 
 extern void

@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <access/multixact.h>
+#include <access/relation.h>
 #include <catalog/catalog.h>
 #include <catalog/dependency.h>
 #include <catalog/heap.h>
@@ -12,7 +13,9 @@
 #include <catalog/pg_constraint.h>
 #include <commands/tablecmds.h>
 #include <storage/bufmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/acl.h>
+#include <utils/relcache.h>
 #include <utils/syscache.h>
 
 #include "chunk.h"
@@ -828,22 +831,47 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		LOCKMODE lockmode =
 			(lock_upgrade == MERGE_LOCK_ACCESS_EXCLUSIVE) ? AccessExclusiveLock : ExclusiveLock;
 
-		rel = try_table_open(relid, lockmode);
+		chunk = ts_chunk_get_by_relid_locked(relid, lockmode, false);
 
-		/* Check if the table actually exists. If not, it could have been
-		 * deleted in a concurrent merge. */
-		if (rel == NULL)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_TABLE),
-					 errmsg("relation does not exist"),
-					 errdetail("The relation with OID %u might have been removed "
-							   "by a concurrent merge or other operation.",
-							   relid)));
+		if (chunk == NULL)
+		{
+			/*
+			 * The relation is not a chunk, or it was deleted. Use
+			 * try_relation_open() to figure out which case. It will
+			 * automatically check that the relation still exists after the
+			 * lock is acquired. We only need AccessShareLock here since we
+			 * know the relation isn't a chunk and we only want to generate an
+			 * informative error.
+			 */
+			rel = try_relation_open(relid, AccessShareLock);
 
-		if (rel->rd_rel->relkind != RELKIND_RELATION)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot merge non-table relations")));
+			if (rel)
+			{
+				bool is_table = (rel->rd_rel->relkind == RELKIND_RELATION);
+				relation_close(rel, AccessShareLock);
+
+				if (is_table)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("can only merge hypertable chunks")));
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("cannot merge non-table relations")));
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_TABLE),
+						 errmsg("chunk does not exist"),
+						 errdetail("The relation with OID %u might have been removed "
+								   "by a concurrent merge or other operation.",
+								   relid)));
+			}
+		}
+
+		/* Chunk already locked so we can get the relation directly from the cache */
+		rel = table_open(relid, NoLock);
 
 		/* Only owner is allowed to merge */
 		if (!object_ownercheck(RelationRelationId, relid, GetUserId()))
@@ -860,25 +888,6 @@ chunk_merge_chunks(PG_FUNCTION_ARGS)
 		 * including open scans and pending AFTER trigger events.
 		 */
 		CheckTableNotInUse(rel, "merge_chunks");
-
-		if (IsSystemRelation(rel))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("cannot merge system catalog relations")));
-
-		/*
-		 * Find the chunk corresponding to the relation for final checks. Done
-		 * after locking the chunk relation because scanning for the chunk
-		 * will grab locks on other objects, which might otherwise lead to
-		 * deadlocks during concurrent merges instead of more helpful messages
-		 * (like chunk does not exist because it was merged).
-		 */
-		chunk = ts_chunk_get_by_relid(relid, false);
-
-		if (NULL == chunk)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("can only merge hypertable chunks")));
 
 		if (!merge_chunks_multidim_allowed())
 		{

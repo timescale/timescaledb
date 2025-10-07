@@ -156,7 +156,7 @@ process_compress_table_default(Hypertable *ht, WithClauseResult *with_clause_opt
 }
 
 static void
-compression_enable_default(Hypertable *ht, WithClauseResult *with_clause_options)
+columnstore_setup_default(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -272,15 +272,6 @@ continuous_agg_invalidate_mat_ht_all_default(const Hypertable *raw_ht, const Hyp
 	pg_unreachable();
 }
 
-static void
-continuous_agg_call_invalidation_trigger_default(int32 hypertable_id, Relation chunk_rel,
-												 HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
-												 bool update)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 
 PGDLLEXPORT Datum
@@ -313,7 +304,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.set_rel_pathlist_query = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
-	.process_explain_def = NULL,
 
 	/* gapfill */
 	.gapfill_marker = error_no_default_fn_pg_community,
@@ -370,7 +360,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.finalize_agg_ffunc = error_no_default_fn_pg_community,
 	.process_cagg_viewstmt = process_cagg_viewstmt_default,
 	.continuous_agg_invalidation_trigger = error_no_default_fn_pg_community,
-	.continuous_agg_call_invalidation_trigger = continuous_agg_call_invalidation_trigger_default,
 	.continuous_agg_refresh = error_no_default_fn_pg_community,
 	.continuous_agg_process_hypertable_invalidations = error_no_default_fn_pg_community,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht_all_default,
@@ -412,7 +401,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.decompress_batches_for_insert = error_no_default_fn_chunk_insert_state_community,
 	.init_decompress_state_for_insert = error_no_default_fn_chunk_insert_state_community,
 
-	.compression_enable = compression_enable_default,
+	.columnstore_setup = columnstore_setup_default,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,

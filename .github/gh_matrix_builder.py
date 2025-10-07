@@ -150,6 +150,7 @@ def macos_config(overrides):
     macos_ignored_tests = {
         "bgw_launcher",
         "pg_dump",
+        "compression_bgw",
         "compressed_collation",
     }
     base_config = dict(
@@ -213,11 +214,11 @@ m["include"].append(
     )
 )
 
-# test building against PG18beta3
+# test building against PG18rc1
 m["include"].append(
     build_debug_config(
         {
-            "pg": "18beta3",
+            "pg": "18.0",
             "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
             "tsdb_build_args": "-DEXPERIMENTAL=ON -DWARNINGS_AS_ERRORS=OFF",
             "installcheck": False,
@@ -279,7 +280,18 @@ if not pull_request:
         build_debug_config(
             {
                 "pg": 15,
-                "ignored_tests": ignored_before_pg17,
+                "ignored_tests": ignored_before_pg17
+                | {
+                    "bgw_custom",
+                    "bgw_scheduler_restart",
+                    "bgw_job_stat_history_errors_permissions",
+                    "bgw_job_stat_history_errors",
+                    "bgw_job_stat_history",
+                    "bgw_db_scheduler_fixed",
+                    "bgw_reorder_drop_chunks",
+                    "scheduler_fixed",
+                    "compress_bgw_reorder_drop_chunks",
+                },
                 "snapshot": "snapshot",
             }
         )

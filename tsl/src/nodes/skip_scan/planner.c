@@ -363,6 +363,8 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 							break;
 						}
 					}
+					if (!distinct_clause)
+						return NULL;
 				}
 				/* We can get PathKey with ec_sortref = 0 in PG15
 				 * when False filter is not pushed into a relation with distinct column (i.e. it's

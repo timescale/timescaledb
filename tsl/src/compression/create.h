@@ -33,4 +33,4 @@ int compressed_column_metadata_attno(const CompressionSettings *settings, Oid ch
 									 AttrNumber chunk_attno, Oid compressed_reloid,
 									 char *metadata_type);
 
-void tsl_compression_enable(Hypertable *ht, WithClauseResult *with_clause_options);
+void tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options);

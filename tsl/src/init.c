@@ -135,7 +135,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
 	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
-	.continuous_agg_call_invalidation_trigger = execute_cagg_trigger,
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_process_hypertable_invalidations =
 		continuous_agg_process_hypertable_invalidations,
@@ -180,7 +179,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.init_decompress_state_for_insert = init_decompress_state_for_insert,
 	.decompress_target_segments = decompress_target_segments,
-	.compression_enable = tsl_compression_enable,
+	.columnstore_setup = tsl_columnstore_setup,
 	.compressor_init = tsl_compressor_init,
 	.compressor_add_slot = tsl_compressor_add_slot,
 	.compressor_flush = tsl_compressor_flush,

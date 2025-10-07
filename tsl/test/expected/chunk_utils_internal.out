@@ -1016,12 +1016,12 @@ Child tables: _timescaledb_internal._hyper_5_10_chunk,
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
- Append (actual rows=3 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on compress_hyper_10_19_chunk (actual rows=1 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_5_18_chunk (actual rows=1 loops=1)
-         ->  Seq Scan on compress_hyper_10_20_chunk (actual rows=1 loops=1)
-   ->  Seq Scan on _hyper_5_18_chunk (actual rows=1 loops=1)
+ Append (actual rows=3.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on compress_hyper_10_19_chunk (actual rows=1.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_5_18_chunk (actual rows=1.00 loops=1)
+         ->  Seq Scan on compress_hyper_10_20_chunk (actual rows=1.00 loops=1)
+   ->  Seq Scan on _hyper_5_18_chunk (actual rows=1.00 loops=1)
 (6 rows)
 
 ROLLBACK;
@@ -1851,5 +1851,125 @@ RESET timescaledb.enable_event_triggers;
 DROP EVENT TRIGGER ddl_start_trigger;
 DROP EVENT TRIGGER ddl_end_trigger;
 DROP TABLE ht_try;
+--TEST ALTER TABLE propagation with foreign chunks
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE ht_alter(ts timestamptz) WITH (tsdb.hypertable,tsdb.compress=false);
+NOTICE:  using column "ts" as partitioning column
+INSERT INTO ht_alter SELECT '2025-01-01';
+\c postgres_fdw_db :ROLE_4
+CREATE TABLE fdw_ht_alter(ts timestamptz NOT NULL, device text, value float);
+INSERT INTO fdw_ht_alter SELECT '2021-05-05';
+\c :TEST_DBNAME :ROLE_4
+-- this is a stand-in for the OSM table
+CREATE FOREIGN TABLE child_ht_alter(ts timestamptz NOT NULL)
+ SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_ht_alter');
+SELECT _timescaledb_functions.attach_osm_table_chunk('ht_alter', 'child_ht_alter');
+ attach_osm_table_chunk 
+------------------------
+ t
+(1 row)
+
+ALTER TABLE ht_alter SET (autovacuum_enabled = false);
+ALTER TABLE ht_alter RESET (autovacuum_enabled);
+-- test DML blocker on frozen chunks
+CREATE TABLE dml_blocks (time timestamptz, device text, value float) WITH (tsdb.hypertable, tsdb.segmentby='device');
+NOTICE:  using column "time" as partitioning column
+-- DML on hypertable before freezing should work
+INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
+BEGIN;
+UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM dml_blocks WHERE device = 'dev2';
+COPY dml_blocks FROM STDIN;
+ROLLBACK;
+SELECT show_chunks('dml_blocks') AS "CHUNK" \gset
+-- DML on chunk before freezing should work
+BEGIN;
+INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
+UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
+DELETE FROM :CHUNK WHERE device = 'dev2';
+COPY :CHUNK FROM STDIN;
+ROLLBACK;
+SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
+ freeze_chunk 
+--------------
+ t
+(1 row)
+
+-- DML on hypertable after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
+UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+DELETE FROM dml_blocks WHERE device = 'dev2';
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+COPY dml_blocks FROM STDIN;
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
+\set ON_ERROR_STOP 1
+-- DML on chunk after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
+UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+DELETE FROM :CHUNK WHERE device = 'dev2';
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+COPY :CHUNK FROM STDIN;
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
+\set ON_ERROR_STOP 1
+-- repeat tests with compressed chunk
+SELECT _timescaledb_functions.unfreeze_chunk(:'CHUNK');
+ unfreeze_chunk 
+----------------
+ t
+(1 row)
+
+SELECT compress_chunk(:'CHUNK');
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_27_44_chunk
+(1 row)
+
+SELECT _timescaledb_functions.freeze_chunk(:'CHUNK');
+ freeze_chunk 
+--------------
+ t
+(1 row)
+
+SELECT format('%I.%I', schema_name, table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+-- DML on hypertable after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO dml_blocks VALUES ('2025-01-01','dev1',1.0);
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
+UPDATE dml_blocks SET value = 2.0 WHERE device = 'dev1';
+ERROR:  cannot modify frozen chunk status
+DELETE FROM dml_blocks WHERE device = 'dev2';
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+COPY dml_blocks FROM STDIN;
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
+\set ON_ERROR_STOP 1
+-- DML on chunk after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2025-01-01','dev1',1.0);
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
+UPDATE :CHUNK SET value = 2.0 WHERE device = 'dev1';
+ERROR:  cannot modify frozen chunk status
+DELETE FROM :CHUNK WHERE device = 'dev2';
+ERROR:  cannot update/delete rows from chunk "_hyper_27_44_chunk" as it is frozen
+COPY :CHUNK FROM STDIN;
+ERROR:  cannot INSERT into frozen chunk "_hyper_27_44_chunk"
+\set ON_ERROR_STOP 1
+-- DML on chunk after freezing should be blocked
+\set ON_ERROR_STOP 0
+INSERT INTO :COMPRESSED_CHUNK SELECT;
+ERROR:  cannot modify compressed chunk belonging to a frozen chunk
+UPDATE :COMPRESSED_CHUNK SET device = 'dev3' WHERE device = 'dev1';
+ERROR:  cannot modify compressed chunk belonging to a frozen chunk
+DELETE FROM :COMPRESSED_CHUNK WHERE device = 'dev1';
+ERROR:  cannot modify compressed chunk belonging to a frozen chunk
+COPY :COMPRESSED_CHUNK FROM STDIN;
+ERROR:  cannot COPY into chunk belonging to a frozen chunk
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_SUPERUSER
 -- clean up databases created
 DROP DATABASE postgres_fdw_db WITH (FORCE);

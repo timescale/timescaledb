@@ -36,6 +36,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
+    compressed_insert.sql
     compression.sql
     compression_allocation.sql
     compression_conflicts.sql
@@ -59,7 +60,6 @@ set(TEST_FILES
     custom_hashagg.sql
     decompress_index.sql
     foreign_keys_test.sql
-    merge_append_partially_compressed.sql
     merge_chunks.sql
     merge_compress.sql
     modify_exclusion.sql
@@ -71,6 +71,7 @@ set(TEST_FILES
     skip_scan.sql
     split_chunk.sql
     transparent_decompression_join_index.sql
+    unlogged.sql
     vector_agg_functions.sql
     vector_agg_groupagg.sql
     vector_agg_param.sql
@@ -187,7 +188,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
-  list(APPEND TEST_FILES privilege_maintain.sql)
+  list(APPEND TEST_FILES privilege_maintain.sql
+       merge_append_partially_compressed.sql)
 endif()
 
 set(SOLO_TESTS

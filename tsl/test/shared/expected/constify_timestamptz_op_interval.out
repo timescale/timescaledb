@@ -121,11 +121,14 @@ SELECT time
 FROM metrics_compressed
 WHERE time < '2000-01-01'::timestamptz - '6h'::interval;
 QUERY PLAN
- Custom Scan (ColumnarScan) on _hyper_X_X_chunk
-   Vectorized Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
-   ->  Seq Scan on compress_hyper_X_X_chunk
-         Filter: (_ts_meta_min_1 < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
-(4 rows)
+ Append
+   ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk
+         Vectorized Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
+         ->  Seq Scan on compress_hyper_X_X_chunk
+               Filter: (_ts_meta_min_1 < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
+   ->  Index Only Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
+(7 rows)
 
 -- test on space-partitioned compressed hypertable
 :PREFIX

@@ -134,3 +134,36 @@ SELECT i4489('1'), i4489('1');
 -- should return 0 (zero) in all cases handled by the exception
 SELECT i4489(), i4489();
 SELECT i4489('a'), i4489('a');
+
+-- test ALTER TABLE ONLY for hypertables
+CREATE TABLE at_test(time timestamptz) WITH (tsdb.hypertable);
+
+-- adding column only on the parent table should be blocked
+\set ON_ERROR_STOP 0
+ALTER TABLE ONLY at_test ADD COLUMN value INT;
+\set ON_ERROR_STOP 1
+
+ALTER TABLE ONLY at_test SET (autovacuum_enabled = false);
+ALTER TABLE ONLY at_test RESET (autovacuum_enabled);
+
+-- test again after creating some chunks
+INSERT INTO at_test VALUES ('2025-01-01');
+INSERT INTO at_test VALUES ('2025-02-01');
+
+ALTER TABLE ONLY at_test SET (autovacuum_enabled = false);
+ALTER TABLE ONLY at_test RESET (autovacuum_enabled);
+
+-- test DDL inside function
+CREATE OR REPLACE FUNCTION ddl_function() RETURNS VOID LANGUAGE PLPGSQL AS $$
+BEGIN
+  DROP TABLE IF EXISTS func_table;
+  CREATE TABLE func_table(time timestamptz) WITH (tsdb.hypertable);
+END
+$$;
+
+SELECT ddl_function();
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+
+SELECT ddl_function();
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+

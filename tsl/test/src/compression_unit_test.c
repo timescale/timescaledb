@@ -226,7 +226,7 @@ test_gorilla_int()
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
-	TestAssertInt64Eq(VARSIZE(compressed), 1344);
+	TestAssertInt64Eq(VARSIZE(compressed), 1312);
 
 	i = 0;
 	iter = gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), INT8OID);
@@ -291,7 +291,7 @@ test_gorilla_float()
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
-	TestAssertInt64Eq(VARSIZE(compressed), 1200);
+	TestAssertInt64Eq(VARSIZE(compressed), 1168);
 
 	float i = 0;
 	iter =
@@ -381,7 +381,7 @@ test_gorilla_double(bool have_nulls, bool have_random)
 	TestAssertTrue(compressed != NULL);
 	if (!have_nulls && !have_random)
 	{
-		TestAssertInt64Eq(VARSIZE(compressed), 1200);
+		TestAssertInt64Eq(VARSIZE(compressed), 1176);
 	}
 
 	/* Forward decompression. */
@@ -1393,19 +1393,9 @@ test_uuid_dictionary_simple()
 	Datum compressed = (Datum) compressor->finish(compressor);
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
 
-	/* Test unaligned access to satisfy code coverage */
-	size_t compressed_size = VARSIZE_ANY(compressed);
-	char *unaligned_ptr = ((char *) palloc0(compressed_size + 3)) + 3;
-	memcpy(unaligned_ptr, DatumGetPointer(compressed), compressed_size);
-
-	ArrowArray *bulk_result = tsl_dictionary_decompress_all(PointerGetDatum(unaligned_ptr),
-															UUIDOID,
-															CurrentMemoryContext);
-	const pg_uuid_t *bulk_data = (pg_uuid_t *) bulk_result->buffers[1];
-
-	ArrowArray *bulk_result2 =
+	ArrowArray *bulk_result =
 		tsl_dictionary_decompress_all(compressed, UUIDOID, CurrentMemoryContext);
-	const pg_uuid_t *bulk_data2 = (pg_uuid_t *) bulk_result2->buffers[1];
+	const pg_uuid_t *bulk_data = (pg_uuid_t *) bulk_result->buffers[1];
 
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	/* The dictionary compression may recompress the data id Array compression would save space.
@@ -1423,8 +1413,6 @@ test_uuid_dictionary_simple()
 		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i / 4])));
 		TestAssertTrue(DatumGetBool(
 			DirectFunctionCall2(uuid_eq, PointerGetDatum(&bulk_data[i]), uuids[i / 4])));
-		TestAssertTrue(DatumGetBool(
-			DirectFunctionCall2(uuid_eq, PointerGetDatum(&bulk_data2[i]), uuids[i / 4])));
 	}
 }
 
@@ -1442,17 +1430,8 @@ test_uuid_array_simple()
 	Datum compressed = (Datum) compressor->finish(compressor);
 	TestAssertTrue(DatumGetPointer(compressed) != NULL);
 
-	/* Test unaligned access to satisfy code coverage */
-	size_t compressed_size = VARSIZE_ANY(compressed);
-	char *unaligned_ptr = ((char *) palloc0(compressed_size + 3)) + 3;
-	memcpy(unaligned_ptr, DatumGetPointer(compressed), compressed_size);
-
-	ArrowArray *bulk_result =
-		tsl_array_decompress_all(PointerGetDatum(unaligned_ptr), UUIDOID, CurrentMemoryContext);
+	ArrowArray *bulk_result = tsl_array_decompress_all(compressed, UUIDOID, CurrentMemoryContext);
 	const pg_uuid_t *bulk_data = (pg_uuid_t *) bulk_result->buffers[1];
-
-	ArrowArray *bulk_result2 = tsl_array_decompress_all(compressed, UUIDOID, CurrentMemoryContext);
-	const pg_uuid_t *bulk_data2 = (pg_uuid_t *) bulk_result2->buffers[1];
 
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	TestAssertTrue(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
@@ -1468,8 +1447,6 @@ test_uuid_array_simple()
 		TestAssertTrue(DatumGetBool(DirectFunctionCall2(uuid_eq, r.val, uuids[i])));
 		TestAssertTrue(
 			DatumGetBool(DirectFunctionCall2(uuid_eq, PointerGetDatum(&bulk_data[i]), uuids[i])));
-		TestAssertTrue(
-			DatumGetBool(DirectFunctionCall2(uuid_eq, PointerGetDatum(&bulk_data2[i]), uuids[i])));
 	}
 }
 

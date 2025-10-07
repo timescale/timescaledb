@@ -650,8 +650,6 @@ fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 										Relation uncompressed_chunk_rel, Snapshot snapshot)
 {
 	bool matching_exist = false;
-	/* Let compression TAM know it should only return tuples from the
-	 * non-compressed relation. */
 
 	TableScanDesc scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, 0);
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);

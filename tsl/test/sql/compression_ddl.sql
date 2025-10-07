@@ -1224,6 +1224,16 @@ ALTER TABLE alias SET (tsdb.compress, tsdb.compress_orderby='time DESC',tsdb.com
 INSERT INTO alias SELECT '2025-01-01';
 SELECT count(compress_chunk(ch)) FROM show_chunks('alias') ch;
 
+-- test mixing postgres and timescaledb options
+CREATE TABLE mix_pg_ts(time timestamptz, device text) WITH (tsdb.hypertable,tsdb.partition_column='time',fillfactor=90);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
+ALTER TABLE mix_pg_ts SET (timescaledb.compress, fillfactor=70, tsdb.orderby='time', timescaledb.compress_segmentby='device', autovacuum_enabled=true);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
 
-
+-- test resetting options
+ALTER TABLE mix_pg_ts RESET (fillfactor, tsdb.segmentby);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
 

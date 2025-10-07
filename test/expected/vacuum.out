@@ -87,19 +87,7 @@ ORDER BY tablename, attname, array_to_string(histogram_bounds, ',');
 -----------+---------+------------------+------------
 (0 rows)
 
-ANALYZE VERBOSE analyze_test;
-INFO:  analyzing "_timescaledb_internal._hyper_2_4_chunk"
-INFO:  "_hyper_2_4_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  analyzing "_timescaledb_internal._hyper_2_5_chunk"
-INFO:  "_hyper_2_5_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  analyzing "_timescaledb_internal._hyper_2_6_chunk"
-INFO:  "_hyper_2_6_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  analyzing "public.analyze_test"
-INFO:  "analyze_test": scanned 0 of 0 pages, containing 0 live rows and 0 dead rows; 0 rows in sample, 0 estimated total rows
-INFO:  analyzing "public.analyze_test" inheritance tree
-INFO:  "_hyper_2_4_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_2_5_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
-INFO:  "_hyper_2_6_chunk": scanned 1 of 1 pages, containing 2 live rows and 0 dead rows; 2 rows in sample, 2 estimated total rows
+ANALYZE analyze_test;
 -- stats should exist for all three chunks
 SELECT tablename, attname, histogram_bounds, n_distinct FROM pg_stats
 WHERE schemaname = '_timescaledb_internal' AND tablename LIKE '_hyper_%_chunk'

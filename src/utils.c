@@ -45,7 +45,6 @@
 #include "chunk.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
-#include "guc.h"
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
 #include "time_utils.h"
@@ -811,11 +810,24 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 Expr *
 ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
+	EquivalenceMember *em;
+#if PG18_GE
+	/* Use specialized iterator to include child ems.
+	 *
+	 * https://github.com/postgres/postgres/commit/d69d45a5
+	 */
+	EquivalenceMemberIterator it;
+
+	setup_eclass_member_iterator(&it, ec, bms_make_singleton(rel->relid));
+	while ((em = eclass_member_iterator_next(&it)) != NULL)
+	{
+#else
 	ListCell *lc_em;
 
 	foreach (lc_em, ec->ec_members)
 	{
-		EquivalenceMember *em = lfirst(lc_em);
+		em = lfirst(lc_em);
+#endif
 
 		if (bms_is_subset(em->em_relids, rel->relids) && !bms_is_empty(em->em_relids))
 		{
@@ -1806,33 +1818,10 @@ ts_update_placeholder(PG_FUNCTION_ARGS)
 /*
  * Get relation information from the syscache in one call.
  *
- * Returns relkind and access method used. Both are non-optional.
+ * Returns relid and relkind. All are non-optional.
  */
 void
-ts_get_rel_info(Oid relid, Oid *amoid, char *relkind)
-{
-	HeapTuple tuple;
-	Form_pg_class cform;
-
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-
-	cform = (Form_pg_class) GETSTRUCT(tuple);
-	*amoid = cform->relam;
-	*relkind = cform->relkind;
-	ReleaseSysCache(tuple);
-}
-
-/*
- * Get relation information from the syscache in one call.
- *
- * Returns relid, relkind and access method used. All are non-optional.
- */
-void
-ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *relid, Oid *amoid,
-						char *relkind)
+ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *relid, char *relkind)
 {
 	HeapTuple tuple;
 	Form_pg_class cform;
@@ -1845,7 +1834,6 @@ ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *reli
 
 	cform = (Form_pg_class) GETSTRUCT(tuple);
 	*relid = cform->oid;
-	*amoid = cform->relam;
 	*relkind = cform->relkind;
 	ReleaseSysCache(tuple);
 }
@@ -2025,4 +2013,27 @@ ts_get_attr_expr(Relation rel, AttrNumber attno)
 	}
 
 	return expr;
+}
+
+char *
+ts_list_to_string(List *list, append_cell_func append)
+{
+	StringInfoData info;
+	ListCell *lc;
+
+	initStringInfo(&info);
+
+	foreach (lc, list)
+	{
+		if (!lnext(list, lc))
+			appendStringInfoString(&info, "and ");
+		append(&info, lc);
+		if (lnext(list, lc))
+		{
+			if (list_length(list) > 2)
+				appendStringInfoChar(&info, ',');
+			appendStringInfoChar(&info, ' ');
+		}
+	}
+	return info.data;
 }

@@ -22,6 +22,10 @@ TSDLLEXPORT const char *ts_sparse_index_common_keys[] = { "type", "column", "sou
 static ScanTupleResult compression_settings_tuple_update(TupleInfo *ti, void *data);
 static HeapTuple compression_settings_formdata_make_tuple(const FormData_compression_settings *fd,
 														  TupleDesc desc);
+
+/*
+ * Compare two compression settings for equality
+ */
 bool
 ts_compression_settings_equal(const CompressionSettings *left, const CompressionSettings *right)
 {
@@ -30,6 +34,30 @@ ts_compression_settings_equal(const CompressionSettings *left, const Compression
 		   ts_array_equal(left->fd.orderby_desc, right->fd.orderby_desc) &&
 		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst) &&
 		   ts_jsonb_equal(left->fd.index, right->fd.index);
+}
+
+/*
+ * Compare two compression settings for equality while ignoring default values.
+ *
+ * This essentially means that any NULL
+ * values should be considered a match because they represent default
+ * values which are determined at chunk level.
+ *
+ * This also means first argument needs to be the hypertable because chunks
+ * cannot have implicit defaults.
+ */
+bool
+ts_compression_settings_equal_with_defaults(const CompressionSettings *ht,
+											const CompressionSettings *chunk)
+{
+	Assert(!OidIsValid(ht->fd.compress_relid));
+	return (ht->fd.segmentby == NULL || ts_array_equal(ht->fd.segmentby, chunk->fd.segmentby)) &&
+		   (ht->fd.orderby == NULL || ts_array_equal(ht->fd.orderby, chunk->fd.orderby)) &&
+		   (ht->fd.orderby_desc == NULL ||
+			ts_array_equal(ht->fd.orderby_desc, chunk->fd.orderby_desc)) &&
+		   (ht->fd.orderby_nullsfirst == NULL ||
+			ts_array_equal(ht->fd.orderby_nullsfirst, chunk->fd.orderby_nullsfirst)) &&
+		   (ht->fd.index == NULL || ts_jsonb_equal(ht->fd.index, chunk->fd.index));
 }
 
 CompressionSettings *

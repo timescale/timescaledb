@@ -1768,7 +1768,7 @@ join pg_class c
     and tablename = relname
 where tablename in (select materialization_hypertable_name from timescaledb_information.continuous_aggregates
 where view_name like 'cagg_index_%')
-order by tablename;
+order by tablename, indexname;
 -[ RECORD 1 ]-------------------------------------------------------------------------------------------------------------------------------------------------
 schemaname | _timescaledb_internal
 tablename  | _materialized_hypertable_49

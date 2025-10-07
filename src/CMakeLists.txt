@@ -8,6 +8,7 @@ set(SOURCES
     chunk_adaptive.c
     chunk_constraint.c
     chunk_index.c
+    chunk_insert_state.c
     chunk_scan.c
     chunk_tuple_routing.c
     constraint.c

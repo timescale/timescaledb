@@ -16,6 +16,7 @@
 #include <foreign/foreign.h>
 #include <nodes/extensible.h>
 #include <nodes/pathnodes.h>
+#include <optimizer/paths.h>
 #include <utils/builtins.h>
 #include <utils/datetime.h>
 #include <utils/jsonb.h>
@@ -406,10 +407,12 @@ ts_datum_set_objectid(const AttrNumber attno, NullableDatum *datums, const Oid v
 		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
 }
 
+typedef void (*append_cell_func)(StringInfo, ListCell *);
+
 extern TSDLLEXPORT void ts_get_rel_info_by_name(const char *relnamespace, const char *relname,
-												Oid *relid, Oid *amoid, char *relkind);
-extern TSDLLEXPORT void ts_get_rel_info(Oid relid, Oid *amoid, char *relkind);
+												Oid *relid, char *relkind);
 extern TSDLLEXPORT Oid ts_get_rel_am(Oid relid);
 extern TSDLLEXPORT void ts_relation_set_reloption(Relation rel, List *options, LOCKMODE lockmode);
 extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);
 extern TSDLLEXPORT char *ts_get_attr_expr(Relation rel, AttrNumber attno);
+extern TSDLLEXPORT char *ts_list_to_string(List *list, append_cell_func append);

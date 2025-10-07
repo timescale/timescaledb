@@ -1017,7 +1017,7 @@ WHERE conditions.city IN (
 AND conditions.device_id = devices.device_id
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 CREATE MATERIALIZED VIEW conditions_summary_subselect
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -1033,7 +1033,7 @@ WHERE conditions.city IN (
       WHERE currency = 'EUR'))
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 CREATE MATERIALIZED VIEW conditions_summary_subselect
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -1049,7 +1049,7 @@ WHERE conditions.city IN (
       WHERE currency = 'EUR'))
 GROUP BY name, bucket;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 DROP TABLE cities CASCADE;
 --Error out when join is between two hypertables
 CREATE MATERIALIZED VIEW cagg_ht

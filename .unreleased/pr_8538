@@ -1,1 +1,0 @@
-Fixes: #8538 Do not exhaust error stack when parsing with clause options

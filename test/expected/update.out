@@ -162,3 +162,45 @@ SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series
  1257987600000000000 | dev1      |      1.5 |       47 |          | t
 (12 rows)
 
+-- test update on chunks directly
+CREATE TABLE direct_update(time timestamptz) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+INSERT INTO direct_update VALUES ('2020-01-01');
+SELECT show_chunks('direct_update') AS "CHUNK" \gset
+--should have ModifyHyperable node
+EXPLAIN (costs off, timing off, summary off) UPDATE :CHUNK SET time = time + INTERVAL '1 minute';
+                QUERY PLAN                
+------------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Update on _hyper_2_4_chunk
+         ->  Seq Scan on _hyper_2_4_chunk
+(3 rows)
+
+EXPLAIN (costs off, timing off, summary off) UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 minute';
+                QUERY PLAN                
+------------------------------------------
+ Custom Scan (ModifyHypertable)
+   ->  Update on _hyper_2_4_chunk
+         ->  Seq Scan on _hyper_2_4_chunk
+(3 rows)
+
+-- correct time range should succeed
+UPDATE :CHUNK SET time = time + INTERVAL '1 minute' RETURNING *;
+             time             
+------------------------------
+ Wed Jan 01 00:01:00 2020 PST
+(1 row)
+
+UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 minute' RETURNING *;
+             time             
+------------------------------
+ Wed Jan 01 00:02:00 2020 PST
+(1 row)
+
+-- crossing chunk boundary should fail
+\set ON_ERROR_STOP 0
+UPDATE :CHUNK SET time = time + INTERVAL '1 month' RETURNING *;
+ERROR:  new row for relation "_hyper_2_4_chunk" violates check constraint "constraint_4"
+UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 month' RETURNING *;
+ERROR:  new row for relation "_hyper_2_4_chunk" violates check constraint "constraint_4"
+\set ON_ERROR_STOP 1

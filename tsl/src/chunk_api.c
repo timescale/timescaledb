@@ -381,7 +381,6 @@ chunk_create(PG_FUNCTION_ARGS)
 												 schema_name,
 												 table_name,
 												 chunk_table_relid,
-												 InvalidOid,
 												 &created);
 	Assert(NULL != chunk);
 
@@ -546,7 +545,6 @@ chunk_attach(PG_FUNCTION_ARGS)
 												 get_namespace_name(get_rel_namespace(chunk_relid)),
 												 get_rel_name(chunk_relid),
 												 chunk_relid,
-												 InvalidOid,
 												 &created);
 	Assert(chunk != NULL);
 	ts_cache_release(&hcache);

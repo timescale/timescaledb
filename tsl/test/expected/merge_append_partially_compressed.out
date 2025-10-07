@@ -42,25 +42,94 @@ SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group
  _timescaledb_internal._hyper_1_3_chunk | Wed Jan 15 16:00:00 2020 PST | Fri Jan 17 16:00:00 2020 PST
 (3 rows)
 
+SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
+-- test UNION with partially compressed chunks
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK;
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Append (actual rows=282.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=84.00 loops=1)
+         ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3.00 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=57.00 loops=1)
+(7 rows)
+
+:PREFIX SELECT * FROM :CHUNK UNION ALL SELECT * FROM :CHUNK ORDER BY time DESC;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Sort (actual rows=282.00 loops=1)
+   Sort Key: _hyper_1_1_chunk."time" DESC
+   Sort Method: quicksort 
+   ->  Append (actual rows=282.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=84.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=57.00 loops=1)
+(10 rows)
+
+:PREFIX SELECT device FROM :CHUNK UNION ALL SELECT device FROM :CHUNK ORDER BY device DESC;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Merge Append (actual rows=282.00 loops=1)
+   Sort Key: _hyper_1_1_chunk.device DESC
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
+               Sort Key: compress_hyper_2_4_chunk.device DESC
+               Sort Method: quicksort 
+               ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+   ->  Sort (actual rows=57.00 loops=1)
+         Sort Key: _hyper_1_1_chunk.device DESC
+         Sort Method: quicksort 
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=84.00 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
+               Sort Key: compress_hyper_2_4_chunk_1.device DESC
+               Sort Method: quicksort 
+               ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3.00 loops=1)
+   ->  Sort (actual rows=57.00 loops=1)
+         Sort Key: _hyper_1_1_chunk_1.device DESC
+         Sort Method: quicksort 
+         ->  Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=57.00 loops=1)
+(20 rows)
+
+:PREFIX SELECT value FROM :CHUNK UNION ALL SELECT value FROM :CHUNK ORDER BY value DESC;
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
+ Sort (actual rows=282.00 loops=1)
+   Sort Key: _hyper_1_1_chunk.value DESC
+   Sort Method: quicksort 
+   ->  Append (actual rows=282.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=84.00 loops=1)
+               ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3.00 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=57.00 loops=1)
+(10 rows)
+
 -- chunkAppend eligible queries (from tsbench)
 -- sort is not pushed down
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time DESC, device LIMIT 1;
                                            QUERY PLAN                                            
 -------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1.00 loops=1)
          Order: ht_metrics_compressed."time" DESC, ht_metrics_compressed.device
-         ->  Merge Append (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: ht_metrics_compressed."time" DESC, ht_metrics_compressed.device
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_1_3_chunk."time" DESC, _hyper_1_3_chunk.device
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27 loops=1)
-                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_1_3_chunk."time" DESC, _hyper_1_3_chunk.device
                      Sort Method: top-N heapsort 
-                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=15 loops=1)
+                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=15.00 loops=1)
          ->  Merge Append (never executed)
                Sort Key: ht_metrics_compressed."time" DESC, ht_metrics_compressed.device
                ->  Sort (never executed)
@@ -84,55 +153,55 @@ SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('1d', time) DESC, device LIMIT 1;
                                                       QUERY PLAN                                                       
 -----------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: (time_bucket('@ 1 day'::interval, ht_metrics_compressed."time")) DESC, ht_metrics_compressed.device
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")) DESC, _hyper_1_1_chunk.device
                Sort Method: top-N heapsort 
-               ->  Result (actual rows=84 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84 loops=1)
-                           ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+               ->  Result (actual rows=84.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")) DESC, _hyper_1_1_chunk.device
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")) DESC, _hyper_1_2_chunk.device
                Sort Method: top-N heapsort 
-               ->  Result (actual rows=84 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=84 loops=1)
-                           ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+               ->  Result (actual rows=84.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=84.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")) DESC, _hyper_1_2_chunk.device
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=57 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=57.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")) DESC, _hyper_1_3_chunk.device
                Sort Method: top-N heapsort 
-               ->  Result (actual rows=27 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27 loops=1)
-                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+               ->  Result (actual rows=27.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")) DESC, _hyper_1_3_chunk.device
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=15 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=15.00 loops=1)
 (33 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time desc limit 10;
                                                            QUERY PLAN                                                           
 --------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=10.00 loops=1)
          Order: ht_metrics_compressed."time" DESC
-         ->  Merge Append (actual rows=10 loops=1)
+         ->  Merge Append (actual rows=10.00 loops=1)
                Sort Key: ht_metrics_compressed."time" DESC
-               ->  Sort (actual rows=7 loops=1)
+               ->  Sort (actual rows=7.00 loops=1)
                      Sort Key: _hyper_1_3_chunk."time" DESC
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27 loops=1)
-                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=4.00 loops=1)
          ->  Merge Append (never executed)
                Sort Key: ht_metrics_compressed."time" DESC
                ->  Sort (never executed)
@@ -152,18 +221,18 @@ SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('2d',time) DESC LIMIT 1;
                                                            QUERY PLAN                                                           
 --------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1.00 loops=1)
          Order: time_bucket('@ 2 days'::interval, ht_metrics_compressed."time") DESC
-         ->  Merge Append (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: (time_bucket('@ 2 days'::interval, ht_metrics_compressed."time")) DESC
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_3_chunk."time")) DESC
                      Sort Method: top-N heapsort 
-                     ->  Result (actual rows=27 loops=1)
-                           ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27 loops=1)
-                                 ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+                     ->  Result (actual rows=27.00 loops=1)
+                           ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27.00 loops=1)
+                                 ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
          ->  Merge Append (never executed)
                Sort Key: (time_bucket('@ 2 days'::interval, ht_metrics_compressed."time")) DESC
                ->  Sort (never executed)
@@ -185,19 +254,19 @@ SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time DESC LIMIT 1;
                                                            QUERY PLAN                                                           
 --------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1.00 loops=1)
          Order: ht_metrics_compressed."time" DESC
-         ->  Merge Append (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: ht_metrics_compressed."time" DESC
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_1_3_chunk."time" DESC
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=27.00 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
                                  Filter: (device = ANY ('{1,2,3}'::integer[]))
-               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                      Filter: (device = ANY ('{1,2,3}'::integer[]))
          ->  Merge Append (never executed)
                Sort Key: ht_metrics_compressed."time" DESC
@@ -224,22 +293,22 @@ SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time, device DESC LIMIT 1;
                                            QUERY PLAN                                            
 -------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1.00 loops=1)
          Order: ht_metrics_compressed."time", ht_metrics_compressed.device DESC
-         ->  Merge Append (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: ht_metrics_compressed."time", ht_metrics_compressed.device DESC
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device DESC
                      Sort Method: top-N heapsort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-                           ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+                           ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
                                  Filter: (device = ANY ('{1,2,3}'::integer[]))
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device DESC
                      Sort Method: top-N heapsort 
-                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=57 loops=1)
+                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
          ->  Merge Append (never executed)
                Sort Key: ht_metrics_compressed."time", ht_metrics_compressed.device DESC
@@ -271,20 +340,20 @@ SELECT tableoid::regclass, min(time), max(time) from ht_metrics_compressed group
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1; -- index scan, no resorting required
                                                            QUERY PLAN                                                           
 --------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1.00 loops=1)
          Order: ht_metrics_compressed."time" DESC
-         ->  Merge Append (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: ht_metrics_compressed."time" DESC
-               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                      Filter: (device = 3)
-                     ->  Sort (actual rows=1 loops=1)
+                     ->  Sort (actual rows=1.00 loops=1)
                            Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
                            Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1.00 loops=1)
                                  Filter: (device = 3)
                                  Rows Removed by Filter: 2
-               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                      Filter: (device = 3)
                      Rows Removed by Filter: 2
          ->  Merge Append (never executed)
@@ -318,40 +387,40 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC LIMIT 1; -- this uses the index and does not do sort on top
                                                         QUERY PLAN                                                        
 --------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: ht_metrics_compressed."time" DESC
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                Filter: (device = 3)
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
                            Filter: (device = 3)
                            Rows Removed by Filter: 2
-         ->  Index Scan using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                Filter: (device = 3)
                Rows Removed by Filter: 2
-         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                Filter: (device = 3)
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=1.00 loops=1)
                            Filter: (device = 3)
                            Rows Removed by Filter: 2
-         ->  Index Scan using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_2_chunk_ht_metrics_compressed_time_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                Filter: (device = 3)
                Rows Removed by Filter: 2
-         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                Filter: (device = 3)
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=1.00 loops=1)
                            Filter: (device = 3)
                            Rows Removed by Filter: 2
-         ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Index Scan using _hyper_1_3_chunk_ht_metrics_compressed_time_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                Filter: (device = 3)
                Rows Removed by Filter: 2
 (36 rows)
@@ -365,20 +434,20 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC LIMIT 1; -- this also uses the index and does not do sort on top
                                                                QUERY PLAN                                                                
 -----------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1.00 loops=1)
          Order: ht_metrics_compressed."time"
-         ->  Merge Append (actual rows=1 loops=1)
+         ->  Merge Append (actual rows=1.00 loops=1)
                Sort Key: ht_metrics_compressed."time"
-               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                      Filter: (device = 3)
-                     ->  Sort (actual rows=1 loops=1)
+                     ->  Sort (actual rows=1.00 loops=1)
                            Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
                            Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
                                  Filter: (device = 3)
                                  Rows Removed by Filter: 2
-               ->  Index Scan Backward using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using _hyper_1_1_chunk_ht_metrics_compressed_time_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                      Filter: (device = 3)
          ->  Merge Append (never executed)
                Sort Key: ht_metrics_compressed."time"
@@ -412,79 +481,79 @@ SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY device, time DESC LIMIT 1; -- with pushdown
                                                                         QUERY PLAN                                                                         
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: ht_metrics_compressed.device, ht_metrics_compressed."time" DESC
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time" DESC
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_1_2_chunk.device, _hyper_1_2_chunk."time" DESC
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=57 loops=1)
-         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=57.00 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_1_3_chunk.device, _hyper_1_3_chunk."time" DESC
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=15 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=15.00 loops=1)
 (30 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY device, time DESC LIMIT 1; -- with pushdown
                                                                         QUERY PLAN                                                                         
 -----------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
+ Limit (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=1.00 loops=1)
          Sort Key: ht_metrics_compressed.device, ht_metrics_compressed."time" DESC
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time" DESC
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
                      Filter: (device = ANY ('{1,2,3}'::integer[]))
-         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_min_1 DESC, compress_hyper_2_5_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3 loops=1)
+                     ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_1_2_chunk.device, _hyper_1_2_chunk."time" DESC
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=57 loops=1)
+               ->  Seq Scan on _hyper_1_2_chunk (actual rows=57.00 loops=1)
                      Filter: (device = ANY ('{1,2,3}'::integer[]))
-         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                Filter: (device = ANY ('{1,2,3}'::integer[]))
-               ->  Sort (actual rows=1 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_min_1 DESC, compress_hyper_2_6_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
+                     ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_1_3_chunk.device, _hyper_1_3_chunk."time" DESC
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=15 loops=1)
+               ->  Seq Scan on _hyper_1_3_chunk (actual rows=15.00 loops=1)
                      Filter: (device = ANY ('{1,2,3}'::integer[]))
 (39 rows)
 
@@ -494,18 +563,18 @@ select * from show_chunks('ht_metrics_compressed') chunk order by chunk limit 1 
 SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
                                                                    QUERY PLAN                                                                    
 -------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=3 loops=1)
+                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
                Sort Key: _hyper_1_1_chunk.device, _hyper_1_1_chunk."time"
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
 (12 rows)
 
 SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
@@ -522,18 +591,18 @@ SELECT * FROM :chunk ORDER BY device, time LIMIT 5;
 SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
                                                                            QUERY PLAN                                                                           
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: _hyper_1_1_chunk.device DESC, _hyper_1_1_chunk."time" DESC
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: compress_hyper_2_4_chunk.device DESC, compress_hyper_2_4_chunk._ts_meta_min_1 DESC, compress_hyper_2_4_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=3 loops=1)
+                     ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
                Sort Key: _hyper_1_1_chunk.device DESC, _hyper_1_1_chunk."time" DESC
                Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57 loops=1)
+               ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
 (12 rows)
 
 SELECT * FROM :chunk ORDER BY device DESC, time DESC LIMIT 5;
@@ -582,19 +651,19 @@ ANALYZE test1;
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC LIMIT 10;
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5.00 loops=1)
          Order: test1."time" DESC
-         ->  Merge Append (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=5.00 loops=1)
                Sort Key: test1."time" DESC
-               ->  Sort (actual rows=4 loops=1)
+               ->  Sort (actual rows=4.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC
                      Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
                            Rows Removed by Filter: 10000
-                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-               ->  Index Scan using _hyper_3_7_chunk_test1_time_idx on _hyper_3_7_chunk (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Index Scan using _hyper_3_7_chunk_test1_time_idx on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (14 rows)
 
@@ -603,22 +672,22 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC LIMIT 10;
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST LIMIT 10;
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5.00 loops=1)
          Order: test1."time" DESC, test1.x3
-         ->  Merge Append (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=5.00 loops=1)
                Sort Key: test1."time" DESC, test1.x3
-               ->  Sort (actual rows=4 loops=1)
+               ->  Sort (actual rows=4.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3
                      Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
                            Rows Removed by Filter: 10000
-                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
 (17 rows)
 
@@ -627,22 +696,22 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC NULLS FIRST, x3 ASC NU
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST LIMIT 10;
                                               QUERY PLAN                                              
 ------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5.00 loops=1)
          Order: test1."time" DESC, test1.x3, test1.x4
-         ->  Merge Append (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=5.00 loops=1)
                Sort Key: test1."time" DESC, test1.x3, test1.x4
-               ->  Sort (actual rows=4 loops=1)
+               ->  Sort (actual rows=4.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
                      Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
                            Rows Removed by Filter: 10000
-                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
 (17 rows)
 
@@ -650,22 +719,22 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC NULLS FIRST, x3 ASC NU
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST LIMIT 10;
                                                 QUERY PLAN                                                 
 -----------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5.00 loops=1)
          Order: test1."time" DESC, test1.x3, test1.x4 DESC
-         ->  Merge Append (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=5.00 loops=1)
                Sort Key: test1."time" DESC, test1.x3, test1.x4 DESC
-               ->  Sort (actual rows=4 loops=1)
+               ->  Sort (actual rows=4.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4 DESC
                      Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
                            Rows Removed by Filter: 10000
-                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
 (17 rows)
 
@@ -673,19 +742,19 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time DESC NULLS FIRST, x3 ASC NU
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS LAST LIMIT 10;
                                                        QUERY PLAN                                                        
 -------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5.00 loops=1)
          Order: test1."time"
-         ->  Merge Append (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=5.00 loops=1)
                Sort Key: test1."time"
-               ->  Sort (actual rows=4 loops=1)
+               ->  Sort (actual rows=4.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time"
                      Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
                            Rows Removed by Filter: 10000
-                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-               ->  Index Scan Backward using _hyper_3_7_chunk_test1_time_idx on _hyper_3_7_chunk (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Index Scan Backward using _hyper_3_7_chunk_test1_time_idx on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (14 rows)
 
@@ -693,22 +762,22 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS LAST LIMIT 10;
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST LIMIT 10;
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5.00 loops=1)
          Order: test1."time", test1.x3 DESC
-         ->  Merge Append (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=5.00 loops=1)
                Sort Key: test1."time", test1.x3 DESC
-               ->  Sort (actual rows=4 loops=1)
+               ->  Sort (actual rows=4.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC
                      Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
                            Rows Removed by Filter: 10000
-                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
 (17 rows)
 
@@ -716,22 +785,22 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS LAST, x3 DESC NUL
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST LIMIT 10;
                                                 QUERY PLAN                                                 
 -----------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5.00 loops=1)
          Order: test1."time", test1.x3 DESC, test1.x4 DESC
-         ->  Merge Append (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=5.00 loops=1)
                Sort Key: test1."time", test1.x3 DESC, test1.x4 DESC
-               ->  Sort (actual rows=4 loops=1)
+               ->  Sort (actual rows=4.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC, _hyper_3_7_chunk.x4 DESC
                      Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
                            Rows Removed by Filter: 10000
-                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC, _hyper_3_7_chunk.x4 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
 (17 rows)
 
@@ -739,22 +808,22 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS LAST, x3 DESC NUL
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC LIMIT 10;
                                                          QUERY PLAN                                                          
 -----------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on test1 (actual rows=5.00 loops=1)
          Order: test1."time" NULLS FIRST, test1.x3 DESC NULLS LAST, test1.x4
-         ->  Merge Append (actual rows=5 loops=1)
+         ->  Merge Append (actual rows=5.00 loops=1)
                Sort Key: test1."time" NULLS FIRST, test1.x3 DESC NULLS LAST, test1.x4
-               ->  Sort (actual rows=4 loops=1)
+               ->  Sort (actual rows=4.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" NULLS FIRST, _hyper_3_7_chunk.x3 DESC NULLS LAST, _hyper_3_7_chunk.x4
                      Sort Method: quicksort 
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
                            Rows Removed by Filter: 10000
-                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-               ->  Sort (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+               ->  Sort (actual rows=1.00 loops=1)
                      Sort Key: _hyper_3_7_chunk."time" NULLS FIRST, _hyper_3_7_chunk.x3 DESC NULLS LAST, _hyper_3_7_chunk.x4
                      Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                            Filter: ((x4 % 11) <> 0)
 (17 rows)
 
@@ -764,26 +833,26 @@ SELECT x1, x2, max(time) FROM (SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY t
 GROUP BY x1, x2, time ORDER BY time limit 10;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  GroupAggregate (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  GroupAggregate (actual rows=5.00 loops=1)
          Group Key: test1."time", test1.x1, test1.x2
-         ->  Limit (actual rows=5 loops=1)
-               ->  Result (actual rows=5 loops=1)
-                     ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+         ->  Limit (actual rows=5.00 loops=1)
+               ->  Result (actual rows=5.00 loops=1)
+                     ->  Custom Scan (ChunkAppend) on test1 (actual rows=5.00 loops=1)
                            Order: test1."time", test1.x1, test1.x2
-                           ->  Merge Append (actual rows=5 loops=1)
+                           ->  Merge Append (actual rows=5.00 loops=1)
                                  Sort Key: test1."time", test1.x1, test1.x2
-                                 ->  Sort (actual rows=4 loops=1)
+                                 ->  Sort (actual rows=4.00 loops=1)
                                        Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
                                        Sort Method: quicksort 
-                                       ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                                       ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                                              Filter: ((x4 % 11) <> 0)
                                              Rows Removed by Filter: 10000
-                                             ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-                                 ->  Sort (actual rows=1 loops=1)
+                                             ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+                                 ->  Sort (actual rows=1.00 loops=1)
                                        Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
                                        Sort Method: quicksort 
-                                       ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+                                       ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                                              Filter: ((x4 % 11) <> 0)
 (21 rows)
 
@@ -792,20 +861,20 @@ reset enable_hashagg;
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4, time LIMIT 10;
                                                              QUERY PLAN                                                              
 -------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: test1.x1, test1.x2, test1.x5, test1.x4, test1."time"
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk.x4, _hyper_3_7_chunk."time"
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk.x4, _hyper_3_7_chunk."time"
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (15 rows)
 
@@ -813,20 +882,20 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4, time LIMIT 10;
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x4 LIMIT 10;
                                                              QUERY PLAN                                                              
 -------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x4
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x4
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (15 rows)
 
@@ -834,20 +903,20 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x4 LIMIT 10;
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x3 LIMIT 10;
                                                              QUERY PLAN                                                              
 -------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x3
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (15 rows)
 
@@ -855,20 +924,20 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x3 LIMIT 10;
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x3, x4 LIMIT 10;
                                                                         QUERY PLAN                                                                        
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x3, test1.x4
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (15 rows)
 
@@ -876,20 +945,20 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x3, x4 LIMIT 1
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x4 DESC LIMIT 10; -- no pushdown because orderby does not match
                                                                 QUERY PLAN                                                                
 ------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x4 DESC
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x4 DESC
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x4 DESC
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (15 rows)
 
@@ -898,20 +967,20 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x4 DESC LIMIT 
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
                                                                                               QUERY PLAN                                                                                               
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: test1.x1, test1.x2, test1.x5, test1."time"
-         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13 loops=1)
+               ->  Sort (actual rows=13.00 loops=1)
                      Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time"
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (15 rows)
 
@@ -919,20 +988,20 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time DESC, x3 ASC, x4 ASC LIMIT 10; -- pushdown
                                                                                                                                                                                      QUERY PLAN                                                                                                                                                                                      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: test1.x1, test1.x2, test1.x5, test1."time" DESC, test1.x3, test1.x4
-         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13 loops=1)
+               ->  Sort (actual rows=13.00 loops=1)
                      Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1 DESC, compress_hyper_4_8_chunk._ts_meta_max_1 DESC, compress_hyper_4_8_chunk._ts_meta_min_2, compress_hyper_4_8_chunk._ts_meta_max_2, compress_hyper_4_8_chunk._ts_meta_min_3, compress_hyper_4_8_chunk._ts_meta_max_3
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time" DESC, _hyper_3_7_chunk.x3, _hyper_3_7_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (15 rows)
 
@@ -940,20 +1009,20 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time DESC, x3 ASC, x
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time ASC, x3 DESC, x4 DESC LIMIT 10; -- pushdown
                                                                                                                                                                                           QUERY PLAN                                                                                                                                                                                           
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x3 DESC, test1.x4 DESC
-         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13 loops=1)
+               ->  Sort (actual rows=13.00 loops=1)
                      Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1, compress_hyper_4_8_chunk._ts_meta_min_2 DESC, compress_hyper_4_8_chunk._ts_meta_max_2 DESC, compress_hyper_4_8_chunk._ts_meta_min_3 DESC, compress_hyper_4_8_chunk._ts_meta_max_3 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC, _hyper_3_7_chunk.x4 DESC
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (15 rows)
 
@@ -961,20 +1030,20 @@ SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time ASC, x3 DESC, x
 SELECT * FROM test1 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 10;
                                                                                                                                             QUERY PLAN                                                                                                                                             
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=5 loops=1)
-   ->  Merge Append (actual rows=5 loops=1)
+ Limit (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=5.00 loops=1)
          Sort Key: test1.x1, test1.x2, test1.x5, test1."time", test1.x3 DESC
-         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13 loops=1)
+               ->  Sort (actual rows=13.00 loops=1)
                      Sort Key: compress_hyper_4_8_chunk.x1, compress_hyper_4_8_chunk.x2, compress_hyper_4_8_chunk.x5, compress_hyper_4_8_chunk._ts_meta_min_1, compress_hyper_4_8_chunk._ts_meta_max_1, compress_hyper_4_8_chunk._ts_meta_min_2 DESC, compress_hyper_4_8_chunk._ts_meta_max_2 DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk.x5, _hyper_3_7_chunk."time", _hyper_3_7_chunk.x3 DESC
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_3_7_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (15 rows)
 
@@ -989,17 +1058,17 @@ SELECT * FROM test1 t1 JOIN join_table jt ON t1.x1 = jt.x1
 ORDER BY t1.x1, jt.y1;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
- Sort (actual rows=4 loops=1)
+ Sort (actual rows=4.00 loops=1)
    Sort Key: t1.x1, jt.y1
    Sort Method: quicksort 
-   ->  Hash Join (actual rows=4 loops=1)
+   ->  Hash Join (actual rows=4.00 loops=1)
          Hash Cond: (jt.x1 = t1.x1)
-         ->  Seq Scan on join_table jt (actual rows=2 loops=1)
-         ->  Hash (actual rows=10005 loops=1)
-               ->  Append (actual rows=10005 loops=1)
-                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk t1_1 (actual rows=10004 loops=1)
-                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13 loops=1)
-                     ->  Seq Scan on _hyper_3_7_chunk t1_1 (actual rows=1 loops=1)
+         ->  Seq Scan on join_table jt (actual rows=2.00 loops=1)
+         ->  Hash (actual rows=10005.00 loops=1)
+               ->  Append (actual rows=10005.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk t1_1 (actual rows=10004.00 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=13.00 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk t1_1 (actual rows=1.00 loops=1)
 (12 rows)
 
 ---------------------------------------------------------------------------
@@ -1048,32 +1117,32 @@ set enable_indexscan = off;
 :PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
                                                                                                  QUERY PLAN                                                                                                 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test2.x1, test2.x2, test2.x5, test2.x3
-         ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13 loops=1)
+               ->  Sort (actual rows=13.00 loops=1)
                      Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_min_1, compress_hyper_6_11_chunk._ts_meta_max_1
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13 loops=1)
+               ->  Sort (actual rows=13.00 loops=1)
                      Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_min_1, compress_hyper_6_12_chunk._ts_meta_max_1
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_10_chunk.x1, _hyper_5_10_chunk.x2, _hyper_5_10_chunk.x5, _hyper_5_10_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (27 rows)
 
@@ -1095,32 +1164,32 @@ SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
 :PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
                                                                                                                                            QUERY PLAN                                                                                                                                           
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test2.x1, test2.x2, test2.x5, test2.x3, test2.x4
-         ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13 loops=1)
+               ->  Sort (actual rows=13.00 loops=1)
                      Sort Key: compress_hyper_6_11_chunk.x1, compress_hyper_6_11_chunk.x2, compress_hyper_6_11_chunk.x5, compress_hyper_6_11_chunk._ts_meta_min_1, compress_hyper_6_11_chunk._ts_meta_max_1, compress_hyper_6_11_chunk._ts_meta_min_2, compress_hyper_6_11_chunk._ts_meta_max_2
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x3, _hyper_5_9_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=13 loops=1)
+               ->  Sort (actual rows=13.00 loops=1)
                      Sort Key: compress_hyper_6_12_chunk.x1, compress_hyper_6_12_chunk.x2, compress_hyper_6_12_chunk.x5, compress_hyper_6_12_chunk._ts_meta_min_1, compress_hyper_6_12_chunk._ts_meta_max_1, compress_hyper_6_12_chunk._ts_meta_min_2, compress_hyper_6_12_chunk._ts_meta_max_2
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_10_chunk.x1, _hyper_5_10_chunk.x2, _hyper_5_10_chunk.x5, _hyper_5_10_chunk.x3, _hyper_5_10_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (27 rows)
 
@@ -1143,32 +1212,32 @@ SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
 :PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x3 LIMIT 10;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test2.x1, test2.x2, test2.x3
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x3
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_5_10_chunk.x1, _hyper_5_10_chunk.x2, _hyper_5_10_chunk.x3
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_10_chunk.x1, _hyper_5_10_chunk.x2, _hyper_5_10_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (27 rows)
 
@@ -1190,32 +1259,32 @@ SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x3 LIMIT 10;
 :PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4 LIMIT 10;
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test2.x1, test2.x2, test2.x5, test2.x4
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x4
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_5_10_chunk.x1, _hyper_5_10_chunk.x2, _hyper_5_10_chunk.x5, _hyper_5_10_chunk.x4
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_10_chunk.x1, _hyper_5_10_chunk.x2, _hyper_5_10_chunk.x5, _hyper_5_10_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (27 rows)
 
@@ -1237,32 +1306,32 @@ SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4 LIMIT 10;
 :PREFIX SELECT * FROM test2 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test2.x1, test2.x2, test2.x5, test2."time"
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk."time"
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_5_9_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_11_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_9_chunk.x1, _hyper_5_9_chunk.x2, _hyper_5_9_chunk.x5, _hyper_5_9_chunk."time"
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_9_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=4 loops=1)
+         ->  Sort (actual rows=4.00 loops=1)
                Sort Key: _hyper_5_10_chunk.x1, _hyper_5_10_chunk.x2, _hyper_5_10_chunk.x5, _hyper_5_10_chunk."time"
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_5_10_chunk (actual rows=4.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_6_12_chunk (actual rows=13.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_5_10_chunk.x1, _hyper_5_10_chunk.x2, _hyper_5_10_chunk.x5, _hyper_5_10_chunk."time"
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_5_10_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (27 rows)
 
@@ -1340,56 +1409,56 @@ set enable_indexscan = off;
 :PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
                                                                                                  QUERY PLAN                                                                                                 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test3.x1, test3.x2, test3.x5, test3.x3
-         ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=12 loops=1)
+               ->  Sort (actual rows=12.00 loops=1)
                      Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_min_1, compress_hyper_8_17_chunk._ts_meta_max_1
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=11 loops=1)
+               ->  Sort (actual rows=11.00 loops=1)
                      Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_min_1, compress_hyper_8_18_chunk._ts_meta_max_1
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_14_chunk.x1, _hyper_7_14_chunk.x2, _hyper_7_14_chunk.x5, _hyper_7_14_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=12 loops=1)
+               ->  Sort (actual rows=12.00 loops=1)
                      Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_min_1, compress_hyper_8_19_chunk._ts_meta_max_1
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_15_chunk.x1, _hyper_7_15_chunk.x2, _hyper_7_15_chunk.x5, _hyper_7_15_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=11 loops=1)
+               ->  Sort (actual rows=11.00 loops=1)
                      Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_min_1, compress_hyper_8_20_chunk._ts_meta_max_1
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_16_chunk.x1, _hyper_7_16_chunk.x2, _hyper_7_16_chunk.x5, _hyper_7_16_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (51 rows)
 
@@ -1411,56 +1480,56 @@ SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3 LIMIT 10;
 :PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
                                                                                                                                            QUERY PLAN                                                                                                                                           
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test3.x1, test3.x2, test3.x5, test3.x3, test3.x4
-         ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=12 loops=1)
+               ->  Sort (actual rows=12.00 loops=1)
                      Sort Key: compress_hyper_8_17_chunk.x1, compress_hyper_8_17_chunk.x2, compress_hyper_8_17_chunk.x5, compress_hyper_8_17_chunk._ts_meta_min_1, compress_hyper_8_17_chunk._ts_meta_max_1, compress_hyper_8_17_chunk._ts_meta_min_2, compress_hyper_8_17_chunk._ts_meta_max_2
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x3, _hyper_7_13_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=11 loops=1)
+               ->  Sort (actual rows=11.00 loops=1)
                      Sort Key: compress_hyper_8_18_chunk.x1, compress_hyper_8_18_chunk.x2, compress_hyper_8_18_chunk.x5, compress_hyper_8_18_chunk._ts_meta_min_1, compress_hyper_8_18_chunk._ts_meta_max_1, compress_hyper_8_18_chunk._ts_meta_min_2, compress_hyper_8_18_chunk._ts_meta_max_2
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_14_chunk.x1, _hyper_7_14_chunk.x2, _hyper_7_14_chunk.x5, _hyper_7_14_chunk.x3, _hyper_7_14_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=12 loops=1)
+               ->  Sort (actual rows=12.00 loops=1)
                      Sort Key: compress_hyper_8_19_chunk.x1, compress_hyper_8_19_chunk.x2, compress_hyper_8_19_chunk.x5, compress_hyper_8_19_chunk._ts_meta_min_1, compress_hyper_8_19_chunk._ts_meta_max_1, compress_hyper_8_19_chunk._ts_meta_min_2, compress_hyper_8_19_chunk._ts_meta_max_2
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_15_chunk.x1, _hyper_7_15_chunk.x2, _hyper_7_15_chunk.x5, _hyper_7_15_chunk.x3, _hyper_7_15_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1 loops=1)
+         ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                Filter: ((x4 % 11) <> 0)
                Rows Removed by Filter: 10000
-               ->  Sort (actual rows=11 loops=1)
+               ->  Sort (actual rows=11.00 loops=1)
                      Sort Key: compress_hyper_8_20_chunk.x1, compress_hyper_8_20_chunk.x2, compress_hyper_8_20_chunk.x5, compress_hyper_8_20_chunk._ts_meta_min_1, compress_hyper_8_20_chunk._ts_meta_max_1, compress_hyper_8_20_chunk._ts_meta_min_2, compress_hyper_8_20_chunk._ts_meta_max_2
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_16_chunk.x1, _hyper_7_16_chunk.x2, _hyper_7_16_chunk.x5, _hyper_7_16_chunk.x3, _hyper_7_16_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (51 rows)
 
@@ -1483,56 +1552,56 @@ SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x3, x4 LIMIT 10;
 :PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x3 LIMIT 10;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test3.x1, test3.x2, test3.x3
-         ->  Sort (actual rows=3 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x3
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_14_chunk.x1, _hyper_7_14_chunk.x2, _hyper_7_14_chunk.x3
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_14_chunk.x1, _hyper_7_14_chunk.x2, _hyper_7_14_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=3 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
                Sort Key: _hyper_7_15_chunk.x1, _hyper_7_15_chunk.x2, _hyper_7_15_chunk.x3
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_15_chunk.x1, _hyper_7_15_chunk.x2, _hyper_7_15_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_16_chunk.x1, _hyper_7_16_chunk.x2, _hyper_7_16_chunk.x3
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_16_chunk.x1, _hyper_7_16_chunk.x2, _hyper_7_16_chunk.x3
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (51 rows)
 
@@ -1554,56 +1623,56 @@ SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x3 LIMIT 10;
 :PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4 LIMIT 10;
                                                    QUERY PLAN                                                   
 ----------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test3.x1, test3.x2, test3.x5, test3.x4
-         ->  Sort (actual rows=3 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x4
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_14_chunk.x1, _hyper_7_14_chunk.x2, _hyper_7_14_chunk.x5, _hyper_7_14_chunk.x4
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_14_chunk.x1, _hyper_7_14_chunk.x2, _hyper_7_14_chunk.x5, _hyper_7_14_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=3 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
                Sort Key: _hyper_7_15_chunk.x1, _hyper_7_15_chunk.x2, _hyper_7_15_chunk.x5, _hyper_7_15_chunk.x4
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_15_chunk.x1, _hyper_7_15_chunk.x2, _hyper_7_15_chunk.x5, _hyper_7_15_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_16_chunk.x1, _hyper_7_16_chunk.x2, _hyper_7_16_chunk.x5, _hyper_7_16_chunk.x4
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_16_chunk.x1, _hyper_7_16_chunk.x2, _hyper_7_16_chunk.x5, _hyper_7_16_chunk.x4
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (51 rows)
 
@@ -1625,56 +1694,56 @@ SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, x4 LIMIT 10;
 :PREFIX SELECT * FROM test3 WHERE x4 % 11 != 0 ORDER BY x1, x2, x5, time LIMIT 10;
                                                      QUERY PLAN                                                     
 --------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=10 loops=1)
-   ->  Merge Append (actual rows=10 loops=1)
+ Limit (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
          Sort Key: test3.x1, test3.x2, test3.x5, test3."time"
-         ->  Sort (actual rows=3 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk."time"
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_13_chunk (actual rows=3.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_17_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_13_chunk.x1, _hyper_7_13_chunk.x2, _hyper_7_13_chunk.x5, _hyper_7_13_chunk."time"
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_13_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_14_chunk.x1, _hyper_7_14_chunk.x2, _hyper_7_14_chunk.x5, _hyper_7_14_chunk."time"
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_18_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_14_chunk.x1, _hyper_7_14_chunk.x2, _hyper_7_14_chunk.x5, _hyper_7_14_chunk."time"
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_14_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=3 loops=1)
+         ->  Sort (actual rows=3.00 loops=1)
                Sort Key: _hyper_7_15_chunk.x1, _hyper_7_15_chunk.x2, _hyper_7_15_chunk.x5, _hyper_7_15_chunk."time"
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_15_chunk (actual rows=3.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_19_chunk (actual rows=12.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_15_chunk.x1, _hyper_7_15_chunk.x2, _hyper_7_15_chunk.x5, _hyper_7_15_chunk."time"
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_15_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
-         ->  Sort (actual rows=1 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_16_chunk.x1, _hyper_7_16_chunk.x2, _hyper_7_16_chunk.x5, _hyper_7_16_chunk."time"
                Sort Method: quicksort 
-               ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
                      Rows Removed by Filter: 10000
-                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11 loops=1)
-         ->  Sort (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_8_20_chunk (actual rows=11.00 loops=1)
+         ->  Sort (actual rows=1.00 loops=1)
                Sort Key: _hyper_7_16_chunk.x1, _hyper_7_16_chunk.x2, _hyper_7_16_chunk.x5, _hyper_7_16_chunk."time"
                Sort Method: quicksort 
-               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_7_16_chunk (actual rows=1.00 loops=1)
                      Filter: ((x4 % 11) <> 0)
 (51 rows)
 
@@ -1726,15 +1795,15 @@ SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, 
 EXPLAIN (buffers off, costs off, analyze, timing off, summary off) SELECT time, device FROM _timescaledb_internal._hyper_9_21_chunk GROUP BY time, device;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
- Group (actual rows=3 loops=1)
+ Group (actual rows=3.00 loops=1)
    Group Key: _hyper_9_21_chunk."time", _hyper_9_21_chunk.device
-   ->  Sort (actual rows=4 loops=1)
+   ->  Sort (actual rows=4.00 loops=1)
          Sort Key: _hyper_9_21_chunk."time", _hyper_9_21_chunk.device
          Sort Method: quicksort 
-         ->  Append (actual rows=4 loops=1)
-               ->  Custom Scan (ColumnarScan) on _hyper_9_21_chunk (actual rows=3 loops=1)
-                     ->  Seq Scan on compress_hyper_10_22_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_9_21_chunk (actual rows=1 loops=1)
+         ->  Append (actual rows=4.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_9_21_chunk (actual rows=3.00 loops=1)
+                     ->  Seq Scan on compress_hyper_10_22_chunk (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_9_21_chunk (actual rows=1.00 loops=1)
 (9 rows)
 
 reset timescaledb.enable_decompression_sorted_merge;

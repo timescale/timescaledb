@@ -9,10 +9,25 @@ CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings 
 
 create table test_settings(x int, value text, u uuid, ts timestamp);
 select create_hypertable('test_settings', 'x');
+
+-- defaults
+alter table test_settings set (timescaledb.compress);
+select * from settings;
+
+-- no custom sparse indexes
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x');
+select * from settings;
+
+-- one sparse index
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
-    timescaledb.compress_index = 'bloom("u"),minmax("ts")');
+    timescaledb.compress_index = 'bloom("u")');
+select * from settings;
 
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'minmax("ts")');
 select * from settings;
 
 --multi column
@@ -275,7 +290,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
 \d+ :chunk
 select * from settings;
 
--- Test deafult orderby without sparse index
+-- Test default orderby without sparse index
 set timescaledb.enable_sparse_index_bloom to false;
 alter table test_sparse_index reset (timescaledb.compress_segmentby,
     timescaledb.compress_orderby,

@@ -2,22 +2,20 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
+SET client_min_messages TO WARNING;
 CREATE OR REPLACE FUNCTION customtype_in(cstring) RETURNS customtype AS
 'timestamptz_in'
 LANGUAGE internal IMMUTABLE STRICT;
-NOTICE:  type "customtype" is not yet defined
 CREATE OR REPLACE FUNCTION customtype_out(customtype) RETURNS cstring AS
 'timestamptz_out'
 LANGUAGE internal IMMUTABLE STRICT;
-NOTICE:  argument type customtype is only a shell
 CREATE OR REPLACE FUNCTION customtype_recv(internal) RETURNS customtype AS
 'timestamptz_recv'
 LANGUAGE internal IMMUTABLE STRICT;
-NOTICE:  return type customtype is only a shell
 CREATE OR REPLACE FUNCTION customtype_send(customtype) RETURNS bytea AS
 'timestamptz_send'
 LANGUAGE internal IMMUTABLE STRICT;
-NOTICE:  argument type customtype is only a shell
+SET client_min_messages TO DEFAULT;
 CREATE TYPE customtype (
  INPUT = customtype_in,
  OUTPUT = customtype_out,

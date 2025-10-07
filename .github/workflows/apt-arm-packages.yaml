@@ -1,5 +1,5 @@
 # Test installing our ubuntu and debian ARM64 packages for the latest version.
-name: APT ARM64 packages
+name: "Packaging tests: APT ARM64"
 "on":
   schedule:
     # run daily 0:00 on main branch
@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:11-slim", "debian:12-slim", "ubuntu:22.04", "ubuntu:24.04" ]
+        image: [ "debian:11-slim", "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04" ]
         pg: [ 15, 16, 17 ]
 
     steps:
@@ -92,6 +92,22 @@ jobs:
           if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
             false
           fi
+        EOF
+
+    - name: Install toolkit
+      run: |
+        cat <<"EOF" | docker exec -i arm_container bash
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            timescaledb-toolkit-postgresql-${{ matrix.pg }}
+        EOF
+
+    - name: List available toolkit versions
+      run: |
+        cat <<"EOF" | docker exec -i arm_container bash
+          apt-cache show timescaledb-toolkit-postgresql-${{ matrix.pg }} \
+            | grep -e Version: -e Depends: \
+            | tr '\n' ' ' \
+            | sed -e 's! Version: !\n!g' -e 's!Version: !!' -e 's!$!\n!'
         EOF
 
     - name: Kill container

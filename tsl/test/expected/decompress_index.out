@@ -115,3 +115,60 @@ explain (buffers off, costs off) select distinct on (device) device, time from :
 
 RESET timescaledb.enable_skipscan_for_distinct_aggregates;
 drop table ht_metrics_compressed;
+-- Fix for issue #8681: IndexScan is not chosen for columnstore segmented on varchar column
+-- We should chose IndexScan now, and use SkipScan as well
+CREATE TABLE record (time timestamptz not null, data varchar);
+SELECT table_name FROM create_hypertable('record','time');
+WARNING:  column type "character varying" used for "data" does not follow best practices
+ table_name 
+------------
+ record
+(1 row)
+
+ALTER TABLE record SET (timescaledb.compress,timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='data');
+INSERT INTO record
+SELECT time, (array['Yes', 'No', 'Maybe'])[floor(random() * 3 + 1)]
+FROM generate_series('2000-01-01'::timestamptz,'2000-01-03'::timestamptz, '10 minute'::interval) AS g1(time);
+analyze record;
+SELECT compress_chunk(ch) FROM show_chunks('record') ch;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_5_chunk
+(1 row)
+
+-- enable_seqscan is OFF, should see IndexScan
+explain (buffers off, costs off) SELECT * FROM record ORDER BY data;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+(2 rows)
+
+-- SkipScan is chosen because IndexScan is chosen
+explain (buffers off, costs off) SELECT DISTINCT ON(data) * FROM record;
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Unique
+   ->  Custom Scan (SkipScan) on _hyper_3_5_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+               ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+(4 rows)
+
+-- (seg_col = const) condition is checked even when seg_col is coerced
+explain (buffers off, costs off) SELECT * FROM record WHERE data='Yes' ORDER BY data;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+         Index Cond: ((data)::text = 'Yes'::text)
+(3 rows)
+
+explain (buffers off, costs off) SELECT * FROM record WHERE 'Yes' <= data ORDER BY data;
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_3_5_chunk
+   ->  Index Scan using compress_hyper_4_6_chunk_data__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_4_6_chunk
+         Index Cond: ((data)::text >= 'Yes'::text)
+(3 rows)
+
+drop table record cascade;

@@ -29,6 +29,7 @@
 #include <commands/vacuum.h>
 #include <executor/spi.h>
 #include <miscadmin.h>
+#include <nodes/lockoptions.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
@@ -166,6 +167,8 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_ReAddStatistics:
 				case AT_SetCompression:
 				case AT_SetAccessMethod:
+				case AT_SetLogged:
+				case AT_SetUnLogged:
 					/* allowed on chunks */
 					break;
 				case AT_AddConstraint:
@@ -296,6 +299,8 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_DropNotNull:
 			case AT_SetNotNull:
 			case AT_SetAccessMethod:
+			case AT_SetLogged:
+			case AT_SetUnLogged:
 				continue;
 				/*
 				 * BLOCKED:
@@ -792,10 +797,35 @@ process_copy(ProcessUtilityArgs *args)
 
 		ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
-		if (ht == NULL)
+		if (!ht)
 		{
-			ts_cache_release(&hcache);
-			return DDL_CONTINUE;
+			Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+			/* target is neither hypertable nor chunk so let postgres handle it */
+			if (!chunk)
+			{
+				ts_cache_release(&hcache);
+				return DDL_CONTINUE;
+			}
+
+			ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
+			if (ht->fd.compression_state == HypertableInternalCompressionTable)
+			{
+				/*
+				 * For operations on internal compressed chunks we block modifications
+				 * if the chunk belongs to a frozen chunk otherwise let postgres handle it.
+				 * Uncompressed frozen chunks are intercepted as part of tuple routing.
+				 */
+				Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
+				if (ts_chunk_is_frozen(uncompressed))
+					ereport(ERROR,
+							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+							 errmsg("cannot COPY into chunk belonging to a frozen "
+									"chunk")));
+
+				ts_cache_release(&hcache);
+				return DDL_CONTINUE;
+			}
 		}
 	}
 
@@ -803,7 +833,7 @@ process_copy(ProcessUtilityArgs *args)
 	 * hypertable data are in the hypertable chunks and no data would be
 	 * copied, we skip the copy for COPY TO, but print an informative
 	 * message. */
-	if (!stmt->is_from || NULL == stmt->relation)
+	if (!stmt->is_from || !stmt->relation)
 	{
 		if (ht && stmt->relation)
 			ereport(NOTICE,
@@ -861,6 +891,34 @@ foreach_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
 	foreach (lc, chunks)
 	{
 		process_chunk(ht, lfirst_oid(lc), arg);
+		n++;
+	}
+
+	return n;
+}
+
+/*
+ * Applies a function to each compressed internal chunk of a hypertable.
+ *
+ * Returns the number of processed chunks, or -1 if the table was not a
+ * hypertable.
+ */
+static int
+foreach_compressed_chunk(Hypertable *ht, process_chunk_t process_chunk, void *arg)
+{
+	List *chunks;
+	ListCell *lc;
+	int n = 0;
+
+	if (!ht || !ht->fd.compressed_hypertable_id)
+		return -1;
+
+	chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+
+	foreach (lc, chunks)
+	{
+		Chunk *chunk = lfirst(lc);
+		process_chunk(ht, chunk->table_id, arg);
 		n++;
 	}
 
@@ -1271,7 +1329,7 @@ process_truncate(ProcessUtilityArgs *args)
 						 * the truncated region. */
 						if (ts_continuous_agg_hypertable_status(ht->fd.id) == HypertableIsRawTable)
 							ts_continuous_agg_invalidate_chunk(ht, chunk);
-						/* Truncate the compressed chunk too, unless the chunk is using TAM. */
+						/* Truncate the compressed chunk too */
 						if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 						{
 							Chunk *compressed_chunk =
@@ -1393,14 +1451,22 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 	{
 		List *object = lfirst(lc);
 		RangeVar *relation = makeRangeVarFromNameList(object);
-		Oid relid;
+		ScanTupLock slice_lock = {
+			.lockmode = LockTupleExclusive,
+			.waitpolicy = LockWaitBlock,
+			.lockflags = TUPLE_LOCK_FLAG_FIND_LAST_VERSION,
+		};
 		Chunk *chunk;
 
 		if (NULL == relation)
 			continue;
 
-		relid = RangeVarGetRelid(relation, NoLock, true);
-		chunk = ts_chunk_get_by_relid(relid, false);
+		chunk = ts_chunk_get_by_name_with_memory_context(relation->schemaname,
+														 relation->relname,
+														 AccessExclusiveLock,
+														 &slice_lock,
+														 CurrentMemoryContext,
+														 false);
 
 		if (chunk != NULL)
 		{
@@ -1417,7 +1483,11 @@ process_drop_chunk(ProcessUtilityArgs *args, DropStmt *stmt)
 			 *  it would be blocked if there are dependent objects */
 			if (stmt->behavior == DROP_CASCADE && chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 			{
-				Chunk *compressed_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+				Chunk *compressed_chunk =
+					ts_chunk_get_by_id_with_slice_lock(chunk->fd.compressed_chunk_id,
+													   AccessExclusiveLock,
+													   &slice_lock,
+													   false);
 				/* The chunk may have been delete by a CASCADE */
 				if (compressed_chunk != NULL)
 					ts_chunk_drop(compressed_chunk, stmt->behavior, DEBUG1);
@@ -1466,11 +1536,8 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 
 			ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 
-			if (NULL != ht)
+			if (ht)
 			{
-				if (list_length(stmt->objects) != 1)
-					elog(ERROR, "cannot drop a hypertable along with other objects");
-
 				if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -2302,11 +2369,23 @@ static void
 alter_hypertable_constraint(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	AlterTableCmd *cmd = (AlterTableCmd *) arg;
-	Constraint *cmd_constraint;
 	char *hypertable_constraint_name;
 
+#if PG18_LT
+	Constraint *cmd_constraint;
 	Assert(IsA(cmd->def, Constraint));
 	cmd_constraint = (Constraint *) cmd->def;
+#else
+	/* PG18 adds ATAlterConstraint struct which is used
+	 * instead of Constraint struct
+	 *
+	 * https://github.com/postgres/postgres/commit/80d7f990
+	 */
+	ATAlterConstraint *cmd_constraint;
+	Assert(IsA(cmd->def, ATAlterConstraint));
+	cmd_constraint = (ATAlterConstraint *) cmd->def;
+#endif
+
 	hypertable_constraint_name = cmd_constraint->conname;
 
 	cmd_constraint->conname =
@@ -2664,6 +2743,17 @@ process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 					 */
 				case CONSTR_FOREIGN:
 					break;
+#if PG18_GE
+					/* NULL and NOT NULL constraints have been added to
+					 * pg_constraints in PG18, we can safely ignore them at end
+					 * just like at beginning.
+					 *
+					 * https://github.com/postgres/postgres/commit/b0e96f31
+					 */
+				case CONSTR_NULL:
+				case CONSTR_NOTNULL:
+					break;
+#endif
 				case CONSTR_CHECK:
 				{
 					validate_check_constraint(chunk, con);
@@ -3409,24 +3499,6 @@ chunk_index_mappings_cmp(const void *p1, const void *p2)
 	return 0;
 }
 
-static DDLResult
-process_explain_start(ProcessUtilityArgs *args)
-{
-	ExplainStmt *stmt = castNode(ExplainStmt, args->parsetree);
-	ListCell *lc;
-
-	if (ts_cm_functions->process_explain_def)
-	{
-		foreach (lc, stmt->options)
-		{
-			DefElem *opt = (DefElem *) lfirst(lc);
-			if (ts_cm_functions->process_explain_def(opt))
-				foreach_delete_current(stmt->options, lc);
-		}
-	}
-	return DDL_CONTINUE;
-}
-
 /*
  * Cluster a hypertable.
  *
@@ -3611,6 +3683,43 @@ typedef struct CreateTableInfo
 } CreateTableInfo;
 
 static CreateTableInfo create_table_info = { 0 };
+
+/*
+ * Scan the table for a suitable default partitioning column.
+ *
+ * The default partitioning column is the first timestamp column
+ *
+ * Caller is expected to have appropriate lock on the table.
+ */
+static char *
+get_default_partition_column(Oid relid)
+{
+	Relation rel;
+	TupleDesc tupdesc;
+	int i;
+	char *column_name = NULL;
+
+	rel = relation_open(relid, NoLock);
+	tupdesc = RelationGetDescr(rel);
+
+	for (i = 0; i < tupdesc->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(tupdesc, i);
+
+		if (att->attisdropped)
+			continue;
+
+		if (att->atttypid == TIMESTAMPOID || att->atttypid == TIMESTAMPTZOID)
+		{
+			column_name = pstrdup(NameStr(att->attname));
+			break;
+		}
+	}
+
+	relation_close(rel, NoLock);
+	return column_name;
+}
+
 /*
  * Process create table statements.
  *
@@ -3659,8 +3768,28 @@ process_create_table_end(Node *parsetree)
 	if (create_table_info.hypertable)
 	{
 		Oid table_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
-		char *time_column =
-			TextDatumGetCString(create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+		char *time_column = NULL;
+		if (create_table_info.with_clauses[CreateTableFlagTimeColumn].is_default)
+		{
+			time_column = get_default_partition_column(table_relid);
+			if (time_column)
+				ereport(NOTICE,
+						(errmsg("using column \"%s\" as partitioning column", time_column),
+						 errhint("Use \"timescaledb.partition_column\" to specify a different "
+								 "column to use as "
+								 "partitioning column.")));
+			else
+				ereport(ERROR,
+						(errcode(ERRCODE_UNDEFINED_COLUMN),
+						 errmsg("partition column could not be determined"),
+						 errhint(
+							 "Use \"timescaledb.partition_column\" to specify the column to use as "
+							 "partitioning column.")));
+		}
+		else
+			time_column = TextDatumGetCString(
+				create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+
 		NameData time_column_name;
 		NameData associated_schema_name;
 		NameData associated_table_prefix;
@@ -3753,7 +3882,7 @@ process_create_table_end(Node *parsetree)
 			if (enable_columnstore)
 			{
 				Hypertable *ht = ts_hypertable_get_by_id(ht_id);
-				ts_cm_functions->compression_enable(ht, create_table_info.with_clauses);
+				ts_cm_functions->columnstore_setup(ht, create_table_info.with_clauses);
 			}
 		}
 	}
@@ -3879,6 +4008,13 @@ static void
 process_altertable_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	AlterTableCmd *cmd = arg;
+
+	/* Don't propagate ALTER TABLE SET to foreign tables */
+	if (get_rel_relkind(chunk_relid) == RELKIND_FOREIGN_TABLE &&
+		(cmd->subtype == AT_SetOptions || cmd->subtype == AT_ResetOptions ||
+		 cmd->subtype == AT_SetRelOptions || cmd->subtype == AT_ReplaceRelOptions ||
+		 cmd->subtype == AT_ResetRelOptions))
+		return;
 
 	AlterTableInternal(chunk_relid, list_make1(cmd), false);
 }
@@ -4025,8 +4161,8 @@ process_altertable_end_index(Node *parsetree, CollectedCommand *cmd)
 	ts_cache_release(&hcache);
 }
 
-static inline void
-process_altertable_chunk_set_tablespace(AlterTableCmd *cmd, Oid relid)
+static void
+process_altertable_chunk_propagate_to_compressed(AlterTableCmd *cmd, Oid relid)
 {
 	Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
@@ -4069,7 +4205,28 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 		ts_hypertable_permissions_check_by_id(ht->fd.id);
 		check_continuous_agg_alter_table_allowed(ht, stmt);
 		check_alter_table_allowed_on_ht_with_compression(ht, stmt);
-		relation_not_only(stmt->relation);
+
+		if (!stmt->relation->inh)
+		{
+			/* only allow ALTER TABLE ... SET (option) with ONLY */
+			foreach (lc, stmt->cmds)
+			{
+				AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
+				switch (cmd->subtype)
+				{
+					case AT_SetRelOptions:
+					case AT_ResetRelOptions:
+					case AT_ReplaceRelOptions:
+					case AT_SetOptions:
+					case AT_ResetOptions:
+						continue;
+
+					default:
+						relation_not_only(stmt->relation);
+						break;
+				}
+			}
+		}
 	}
 	foreach (lc, stmt->cmds)
 	{
@@ -4179,8 +4336,10 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				break;
 			case AT_SetTableSpace:
-				if (NULL == ht)
-					process_altertable_chunk_set_tablespace(cmd, reloid);
+			case AT_SetLogged:
+			case AT_SetUnLogged:
+				if (!ht)
+					process_altertable_chunk_propagate_to_compressed(cmd, reloid);
 				break;
 			default:
 				break;
@@ -4447,12 +4606,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ClusterOn:
 			process_altertable_clusteron_end(ht, cmd);
 			break;
-		case AT_SetUnLogged:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("logging cannot be turned off for hypertables")));
-			/* Break here to silence compiler */
-			break;
 		case AT_ReplicaIdentity:
 			process_altertable_replica_identity(ht, cmd);
 			break;
@@ -4475,9 +4628,12 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 #endif
 			process_altertable_validate_constraint_end(ht, cmd);
 			break;
-		case AT_DropCluster:
+		case AT_SetLogged:
+		case AT_SetUnLogged:
 			foreach_chunk(ht, process_altertable_chunk, cmd);
+			foreach_compressed_chunk(ht, process_altertable_chunk, cmd);
 			break;
+		case AT_DropCluster:
 		case AT_SetNotNull:
 		case AT_DropNotNull:
 		case AT_SetRelOptions:
@@ -4499,7 +4655,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertables do not support inheritance")));
 		case AT_SetStatistics:
-		case AT_SetLogged:
 		case AT_SetStorage:
 		case AT_ColumnDefault:
 		case AT_CookedColumnDefault:
@@ -4842,25 +4997,16 @@ check_no_timescale_options(AlterTableCmd *cmd, Oid reloid)
 static DDLResult
 process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 {
-	List *pg_options = NIL, *compress_options = NIL;
+	List *pg_options = NIL, *tsdb_options = NIL;
 	WithClauseResult *parse_results = NULL;
-	List *inpdef = NIL;
-	/* is this a compress table stmt */
-	Assert(IsA(cmd->def, List));
-	inpdef = (List *) cmd->def;
-	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
 
-	if (!compress_options)
+	/* split postgres and timescaledb options */
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
+
+	if (!tsdb_options)
 		return DDL_CONTINUE;
 
-	if (pg_options != NIL)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only timescaledb.enable_columnstore parameters allowed when specifying "
-						"columnstore "
-						"parameters for hypertable")));
-
-	parse_results = ts_alter_table_with_clause_parse(compress_options);
+	parse_results = ts_alter_table_with_clause_parse(tsdb_options);
 
 	if (ht && !parse_results[AlterTableFlagChunkTimeInterval].is_default)
 	{
@@ -4885,25 +5031,24 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 		!parse_results[AlterTableFlagIndex].is_default)
 		ts_cm_functions->process_compress_table(ht, parse_results);
 
-	return DDL_DONE;
+	cmd->def = (Node *) pg_options;
+
+	return cmd->def ? DDL_CONTINUE : DDL_DONE;
 }
 
 static DDLResult
 process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 {
-	List *pg_options = NIL, *compress_options = NIL;
-	List *inpdef = NIL;
+	List *pg_options = NIL, *tsdb_options = NIL;
 	WithClauseResult *parse_results = NULL;
 
-	/* is this a compress table stmt */
-	Assert(IsA(cmd->def, List));
-	inpdef = (List *) cmd->def;
-	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
+	/* split postgres and timescaledb options */
+	ts_with_clause_filter(castNode(List, cmd->def), &tsdb_options, &pg_options);
 
-	if (!compress_options)
+	if (!tsdb_options)
 		return DDL_CONTINUE;
 
-	parse_results = ts_alter_table_reset_with_clause_parse(compress_options);
+	parse_results = ts_alter_table_reset_with_clause_parse(tsdb_options);
 	if (parse_results[AlterTableFlagOrderBy].is_default &&
 		parse_results[AlterTableFlagSegmentBy].is_default &&
 		parse_results[AlterTableFlagIndex].is_default)
@@ -4926,7 +5071,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 
 	if (!parse_results[AlterTableFlagOrderBy].is_default)
 	{
-		ts_remove_orderby_sparse_index(settings);
+		settings->fd.index = ts_remove_orderby_sparse_index(settings);
 		settings->fd.orderby = NULL;
 		settings->fd.orderby_desc = NULL;
 		settings->fd.orderby_nullsfirst = NULL;
@@ -4939,6 +5084,7 @@ process_altertable_reset_options(AlterTableCmd *cmd, Hypertable *ht)
 	}
 
 	ts_compression_settings_update(settings);
+
 	return DDL_CONTINUE;
 }
 
@@ -5032,17 +5178,6 @@ process_create_stmt(ProcessUtilityArgs *args)
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("timescaledb options requires hypertable option"),
 					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
-
-		if (create_table_info.hypertable)
-		{
-			if (!create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed)
-				ereport(ERROR,
-						(errcode(ERRCODE_UNDEFINED_COLUMN),
-						 errmsg("hypertable option requires partition_column"),
-						 errhint(
-							 "Use \"timescaledb.partition_column\" to specify the column to use as "
-							 "partitioning column.")));
-		}
 	}
 
 	return DDL_CONTINUE;
@@ -5175,10 +5310,6 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 		case T_ExecuteStmt:
 			check_read_only = false;
 			handler = preprocess_execute;
-			break;
-		case T_ExplainStmt:
-			check_read_only = false;
-			handler = process_explain_start;
 			break;
 
 		default:
@@ -5408,9 +5539,13 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	}
 
 	/*
-	 * Process Utility/DDL operation locally then pass it on for
-	 * execution in TSL.
+	 * Since we might alter the parsetree and strip timescaledb options
+	 * before passing it to Postgres, we need to make a copy of the original
+	 * statement in case it is cached.
 	 */
+	args.pstmt = copyObject(pstmt);
+	args.parsetree = args.pstmt->utilityStmt;
+
 	result = process_ddl_command_start(&args);
 
 	if (result == DDL_CONTINUE)

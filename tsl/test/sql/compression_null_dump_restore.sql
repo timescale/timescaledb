@@ -47,5 +47,5 @@ select public.timescaledb_post_restore();
 select * from public.null_dump order by 1;
 
 \c postgres :ROLE_SUPERUSER
-drop database :TEST_DBNAME_2;
-drop database :TEST_DBNAME_3;
+drop database :TEST_DBNAME_2 WITH (FORCE);
+drop database :TEST_DBNAME_3 WITH (FORCE);

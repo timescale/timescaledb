@@ -101,7 +101,7 @@ step s1_attach: CALL attach_chunk('attach_test', 'chunk_to_attach', jsonb_build_
 step s4_violate: INSERT INTO chunk_to_attach VALUES ('2025-08-01 20:00', 1, 34); <waiting ...>
 step s1c: COMMIT;
 step s4_violate: <... completed>
-ERROR:  new row for relation "chunk_to_attach" violates check constraint "constraint_X"
+ERROR:  new row for relation "chunk_to_attach" violates chunk constraint
 step s3_show_num_chunks: SELECT count(*) FROM show_chunks('attach_test');
 count
 -----
