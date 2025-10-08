@@ -2,7 +2,7 @@ DO $$
 BEGIN
     UPDATE _timescaledb_config.bgw_job
       SET config = config || '{"max_successes_per_job": 1000, "max_failures_per_job": 1000}',
-          schedule_interval = '1 day'
+          schedule_interval = '6 hours'
     WHERE id = 3; -- system job retention
 
     RAISE WARNING 'job history configuration modified'

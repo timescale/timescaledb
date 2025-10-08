@@ -82,6 +82,7 @@ jobs:
         merge_append_partially_compressed
         metadata
         telemetry
+        vector_agg_byte
         vector_agg_filter
         vector_agg_groupagg
         vector_agg_grouping

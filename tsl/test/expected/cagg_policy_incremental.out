@@ -492,12 +492,13 @@ SELECT * FROM sorted_bgw_log;
  msg_no |  mock_time  |              application_name              |                                                                            msg                                                                            
 --------+-------------+--------------------------------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------
       0 | 21600000000 | DB Scheduler                               | [TESTING] Registered new background worker
-      1 | 21600000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      1 | 21600000000 | DB Scheduler                               | [TESTING] Registered new background worker
+      2 | 21600000000 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | refresh window size (7 days) is smaller than or equal to batch size (10 days), falling back to single batch processing
       1 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | continuous aggregate refresh (individual invalidation) on "conditions_by_day" in window [ Mon Nov 24 00:00:00 4714 UTC BC, Thu Mar 06 00:00:00 2025 UTC ]
       2 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_2"
       3 | 21600000000 | Refresh Continuous Aggregate Policy [1000] | inserted 1 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_2"
-(6 rows)
+(7 rows)
 
 -- Should return 1 row
 SELECT count(*) FROM conditions_by_day;
