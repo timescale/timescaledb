@@ -238,9 +238,7 @@ def should_backport_by_labels(number, title, labels):
         )
         return False
 
-    force_labels = labels.intersection(
-        ["bug", "force-auto-backport"]
-    )
+    force_labels = labels.intersection(["bug", "force-auto-backport"])
     if force_labels:
         print(
             f"#{number} '{title}' is labeled as '{list(force_labels)[0]}' which requests automated backporting."
