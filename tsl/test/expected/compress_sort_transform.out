@@ -47,10 +47,9 @@ group by 1, 2 order by 1, 2 limit 1;
          Group Key: ht_metrics_partially_compressed.device, (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
          ->  Merge Append (actual rows=3.00 loops=1)
                Sort Key: ht_metrics_partially_compressed.device, (time_bucket('@ 1 min'::interval, ht_metrics_partially_compressed."time"))
-               ->  Partial GroupAggregate (actual rows=2.00 loops=1)
-                     Group Key: _hyper_1_1_chunk.device, time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
-                           ->  Sort (actual rows=1.00 loops=1)
+               ->  Custom Scan (VectorAgg) (actual rows=2.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1440.00 loops=1)
+                           ->  Sort (actual rows=3.00 loops=1)
                                  Sort Key: compress_hyper_2_4_chunk.device, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
@@ -60,10 +59,9 @@ group by 1, 2 order by 1, 2 limit 1;
                            Sort Key: _hyper_1_1_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
                            Sort Method: quicksort 
                            ->  Seq Scan on _hyper_1_1_chunk (actual rows=960.00 loops=1)
-               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
-                     Group Key: _hyper_1_2_chunk.device, time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time")
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=2.00 loops=1)
-                           ->  Sort (actual rows=1.00 loops=1)
+               ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=1512.00 loops=1)
+                           ->  Sort (actual rows=3.00 loops=1)
                                  Sort Key: compress_hyper_2_5_chunk.device, compress_hyper_2_5_chunk._ts_meta_min_1, compress_hyper_2_5_chunk._ts_meta_max_1
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3.00 loops=1)
@@ -73,10 +71,9 @@ group by 1, 2 order by 1, 2 limit 1;
                            Sort Key: _hyper_1_2_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_2_chunk."time"))
                            Sort Method: quicksort 
                            ->  Seq Scan on _hyper_1_2_chunk (actual rows=1008.00 loops=1)
-               ->  Partial GroupAggregate (actual rows=1.00 loops=1)
-                     Group Key: _hyper_1_3_chunk.device, time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time")
-                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=2.00 loops=1)
-                           ->  Sort (actual rows=1.00 loops=1)
+               ->  Custom Scan (VectorAgg) (actual rows=1.00 loops=1)
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=507.00 loops=1)
+                           ->  Sort (actual rows=3.00 loops=1)
                                  Sort Key: compress_hyper_2_6_chunk.device, compress_hyper_2_6_chunk._ts_meta_min_1, compress_hyper_2_6_chunk._ts_meta_max_1
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
@@ -86,7 +83,7 @@ group by 1, 2 order by 1, 2 limit 1;
                            Sort Key: _hyper_1_3_chunk.device, (time_bucket('@ 1 min'::interval, _hyper_1_3_chunk."time"))
                            Sort Method: quicksort 
                            ->  Seq Scan on _hyper_1_3_chunk (actual rows=339.00 loops=1)
-(44 rows)
+(41 rows)
 
 -- Batch sorted merge.
 :PREFIX
