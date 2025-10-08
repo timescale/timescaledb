@@ -476,6 +476,8 @@ for index, pr_info in enumerate(
         report_backport_not_done(original_pr, "cherry-pick failed", details)
         continue
 
+    changed_files = {file.filename for file in original_pr.get_files()}
+
     # Push the backport branch.
     git_check(f"push {source_remote} @:refs/heads/{backport_branch}")
 
