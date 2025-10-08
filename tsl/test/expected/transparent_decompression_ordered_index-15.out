@@ -1140,3 +1140,194 @@ RESET enable_bitmapscan ;
 RESET enable_hashjoin ;
 RESET enable_mergejoin;
 -- end github bug 2917
+-- When we cannot use compression sort as query keys do not match,
+-- and have useful and cheap IndexScans due to selective index conditions,
+-- we should be able to use ChunkAppend after sorting IndexScans to desired query keys.
+-- Before, we would only try to sort SeqScans in such scenarios.
+SET enable_seqscan = false;
+-- IndexScan keys (device_id, device_id_peer, time) do not match query keys, can't push sort into compressed index.
+-- Cannot use batch sort either as have to order on (time, device_id_peer).
+-- IndexScan can be cheap because of (device_id>2),
+-- should allow ChunkAppend with LIMIT after sorting decompressed IndexScans on query keys.
+:PREFIX select * from metrics_ordered_idx where device_id > 2 order by "time" desc, device_id_peer limit 10;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_ordered_idx (actual rows=10.00 loops=1)
+         Order: metrics_ordered_idx."time" DESC, metrics_ordered_idx.device_id_peer
+         ->  Sort (actual rows=4.00 loops=1)
+               Sort Key: _hyper_1_5_chunk."time" DESC, _hyper_1_5_chunk.device_id_peer
+               Sort Method: quicksort 
+               ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk (actual rows=4.00 loops=1)
+                     ->  Index Scan using compress_hyper_2_10_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_2_10_chunk (actual rows=4.00 loops=1)
+                           Index Cond: (device_id > 2)
+         ->  Sort (actual rows=6.00 loops=1)
+               Sort Key: _hyper_1_4_chunk."time" DESC, _hyper_1_4_chunk.device_id_peer
+               Sort Method: top-N heapsort 
+               ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk (actual rows=48.00 loops=1)
+                     ->  Index Scan using compress_hyper_2_9_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_9_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (device_id > 2)
+         ->  Sort (never executed)
+               Sort Key: _hyper_1_3_chunk."time" DESC, _hyper_1_3_chunk.device_id_peer
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (never executed)
+                     ->  Index Scan using compress_hyper_2_8_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_8_chunk (never executed)
+                           Index Cond: (device_id > 2)
+         ->  Sort (never executed)
+               Sort Key: _hyper_1_2_chunk."time" DESC, _hyper_1_2_chunk.device_id_peer
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
+                     ->  Index Scan using compress_hyper_2_7_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_7_chunk (never executed)
+                           Index Cond: (device_id > 2)
+         ->  Sort (never executed)
+               Sort Key: _hyper_1_1_chunk."time" DESC, _hyper_1_1_chunk.device_id_peer
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (never executed)
+                     ->  Index Scan using compress_hyper_2_6_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_6_chunk (never executed)
+                           Index Cond: (device_id > 2)
+(30 rows)
+
+-- Make sure we can use ChunkAppend over sorted decompressed parametrized IndexScans and SeqScans
+-- Parametrized IndexScans
+:PREFIX SELECT nd.node,
+    mt.*
+FROM metrics_ordered_idx mt,
+    nodetime nd
+WHERE mt.time > nd.start_time
+    AND mt.device_id = nd.node
+    AND mt.time < nd.stop_time
+ORDER BY "time", mt.device_id limit 5;
+                                                                             QUERY PLAN                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5.00 loops=1)
+   ->  Nested Loop (actual rows=5.00 loops=1)
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (mt.device_id = nd.node))
+         Rows Removed by Join Filter: 1488
+         ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1493.00 loops=1)
+               Order: mt."time", mt.device_id
+               ->  Sort (actual rows=480.00 loops=1)
+                     Sort Key: mt_1."time", mt_1.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk mt_1 (actual rows=480.00 loops=1)
+                           ->  Index Scan using compress_hyper_2_6_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_6_chunk (actual rows=5.00 loops=1)
+               ->  Sort (actual rows=960.00 loops=1)
+                     Sort Key: mt_2."time", mt_2.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk mt_2 (actual rows=960.00 loops=1)
+                           ->  Index Scan using compress_hyper_2_7_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_7_chunk (actual rows=5.00 loops=1)
+               ->  Sort (actual rows=48.00 loops=1)
+                     Sort Key: mt_3."time", mt_3.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk mt_3 (actual rows=48.00 loops=1)
+                           ->  Index Scan using compress_hyper_2_8_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_8_chunk (actual rows=1.00 loops=1)
+               ->  Sort (actual rows=5.00 loops=1)
+                     Sort Key: mt_4."time", mt_4.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk mt_4 (actual rows=48.00 loops=1)
+                           ->  Index Scan using compress_hyper_2_9_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_9_chunk (actual rows=1.00 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: mt_5."time", mt_5.device_id
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk mt_5 (never executed)
+                           ->  Index Scan using compress_hyper_2_10_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_2_10_chunk (never executed)
+         ->  Materialize (actual rows=1.00 loops=1493)
+               ->  Seq Scan on nodetime nd (actual rows=1.00 loops=1)
+(32 rows)
+
+-- Parametrized SeqScans
+RESET enable_seqscan;
+SET enable_indexscan = false;
+:PREFIX SELECT nd.node,
+    mt.*
+FROM metrics_ordered_idx mt,
+    nodetime nd
+WHERE mt.time > nd.start_time
+    AND mt.device_id = nd.node
+    AND mt.time < nd.stop_time
+ORDER BY "time", mt.device_id limit 5;
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5.00 loops=1)
+   ->  Nested Loop (actual rows=5.00 loops=1)
+         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (mt.device_id = nd.node))
+         Rows Removed by Join Filter: 1488
+         ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1493.00 loops=1)
+               Order: mt."time", mt.device_id
+               ->  Sort (actual rows=480.00 loops=1)
+                     Sort Key: mt_1."time", mt_1.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk mt_1 (actual rows=480.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5.00 loops=1)
+               ->  Sort (actual rows=960.00 loops=1)
+                     Sort Key: mt_2."time", mt_2.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk mt_2 (actual rows=960.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5.00 loops=1)
+               ->  Sort (actual rows=48.00 loops=1)
+                     Sort Key: mt_3."time", mt_3.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk mt_3 (actual rows=48.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1.00 loops=1)
+               ->  Sort (actual rows=5.00 loops=1)
+                     Sort Key: mt_4."time", mt_4.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk mt_4 (actual rows=48.00 loops=1)
+                           ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1.00 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: mt_5."time", mt_5.device_id
+                     ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk mt_5 (never executed)
+                           ->  Seq Scan on compress_hyper_2_10_chunk (never executed)
+         ->  Materialize (actual rows=1.00 loops=1493)
+               ->  Seq Scan on nodetime nd (actual rows=1.00 loops=1)
+(32 rows)
+
+SET enable_seqscan = false;
+RESET enable_indexscan;
+-- When we decompress top chunk, uncompressed IndexScan is sorted on (time DESC),
+-- should allow ChunkAppend with LIMIT
+-- over (Sort(time, device_id_peer) <- IndexScan + Sort(time, device_id_peer) <- DecompressChunk ...)
+select show_chunks as chunk_to_decompress_1 from show_chunks('metrics_ordered_idx') order by 1 desc limit 1 \gset
+select decompress_chunk(:'chunk_to_decompress_1');
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+(1 row)
+
+:PREFIX select * from metrics_ordered_idx where device_id > 2 order by "time" desc, device_id_peer limit 10;
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual rows=10.00 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_ordered_idx (actual rows=10.00 loops=1)
+         Order: metrics_ordered_idx."time" DESC, metrics_ordered_idx.device_id_peer
+         ->  Sort (actual rows=4.00 loops=1)
+               Sort Key: _hyper_1_5_chunk."time" DESC, _hyper_1_5_chunk.device_id_peer
+               Sort Method: quicksort 
+               ->  Index Scan using _hyper_1_5_chunk_metrics_ordered_idx_time_idx on _hyper_1_5_chunk (actual rows=4.00 loops=1)
+                     Filter: (device_id > 2)
+                     Rows Removed by Filter: 1
+         ->  Sort (actual rows=6.00 loops=1)
+               Sort Key: _hyper_1_4_chunk."time" DESC, _hyper_1_4_chunk.device_id_peer
+               Sort Method: top-N heapsort 
+               ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk (actual rows=48.00 loops=1)
+                     ->  Index Scan using compress_hyper_2_9_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_9_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (device_id > 2)
+         ->  Sort (never executed)
+               Sort Key: _hyper_1_3_chunk."time" DESC, _hyper_1_3_chunk.device_id_peer
+               ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (never executed)
+                     ->  Index Scan using compress_hyper_2_8_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_8_chunk (never executed)
+                           Index Cond: (device_id > 2)
+         ->  Sort (never executed)
+               Sort Key: _hyper_1_2_chunk."time" DESC, _hyper_1_2_chunk.device_id_peer
+               ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (never executed)
+                     ->  Index Scan using compress_hyper_2_7_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_7_chunk (never executed)
+                           Index Cond: (device_id > 2)
+         ->  Sort (never executed)
+               Sort Key: _hyper_1_1_chunk."time" DESC, _hyper_1_1_chunk.device_id_peer
+               ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (never executed)
+                     ->  Index Scan using compress_hyper_2_6_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_6_chunk (never executed)
+                           Index Cond: (device_id > 2)
+(30 rows)
+
+select compress_chunk(:'chunk_to_decompress_1');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+(1 row)
+
+RESET enable_seqscan;
