@@ -634,6 +634,81 @@ FROM
 ----------
  f
 
+-- Tests with Variable sized bucket
+SELECT delete_job(:job_id);
+ delete_job 
+------------
+ 
+
+TRUNCATE conditions;
+INSERT INTO conditions
+SELECT
+    t, d, 10
+FROM
+    generate_series(
+        '2025-01-01 00:00:00+00',
+        '2025-10-08 00:00:00+00',
+        '1 hour'::interval) AS t,
+    generate_series(1,5) AS d;
+CREATE MATERIALIZED VIEW conditions_by_month
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+    time_bucket('1 month', time),
+    device_id,
+    count(*),
+    min(temperature),
+    max(temperature),
+    avg(temperature),
+    sum(temperature)
+FROM
+    conditions
+GROUP BY
+    1, 2
+WITH NO DATA;
+SELECT
+    add_continuous_aggregate_policy(
+        'conditions_by_month',
+        start_offset => INTERVAL '600 days',
+        end_offset => INTERVAL '7 days',
+        schedule_interval => INTERVAL '1 day',
+        refresh_newest_first => false
+    ) AS job_id \gset
+SELECT
+    config
+FROM
+    timescaledb_information.jobs
+WHERE
+    job_id = :'job_id';
+                                                     config                                                      
+-----------------------------------------------------------------------------------------------------------------
+ {"end_offset": "@ 7 days", "start_offset": "@ 600 days", "mat_hypertable_id": 4, "refresh_newest_first": false}
+
+TRUNCATE bgw_log, conditions_by_day;
+SELECT ts_bgw_params_reset_time(0, true);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+
+SELECT * FROM sorted_bgw_log;
+ msg_no | mock_time |              application_name              |                                                                                   msg                                                                                   
+--------+-----------+--------------------------------------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      0 |         0 | DB Scheduler                               | [TESTING] Registered new background worker
+      1 |         0 | DB Scheduler                               | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Mon Dec 23 00:00:00 2024 UTC, Wed Jan 22 00:00:00 2025 UTC ] (batch 1 of 3)
+      1 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
+      2 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
+      3 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Wed Jan 22 00:00:00 2025 UTC, Fri Feb 21 00:00:00 2025 UTC ] (batch 2 of 3)
+      4 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 5 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
+      5 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 10 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
+      6 |         0 | Refresh Continuous Aggregate Policy [1004] | continuous aggregate refresh (individual invalidation) on "conditions_by_month" in window [ Fri Feb 21 00:00:00 2025 UTC, Sat Mar 01 00:00:00 2025 UTC ] (batch 3 of 3)
+      7 |         0 | Refresh Continuous Aggregate Policy [1004] | deleted 5 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_4"
+      8 |         0 | Refresh Continuous Aggregate Policy [1004] | inserted 5 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_4"
+
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_CLUSTER_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
