@@ -718,7 +718,6 @@ cost_decompress_chunk(PlannerInfo *root, const CompressionInfo *compression_info
 		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
 	/* total_cost is cost for fetching all tuples */
-	// path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
 	path->rows = compressed_path->rows * compression_info->compressed_batch_size;
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 }
