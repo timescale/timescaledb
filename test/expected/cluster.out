@@ -6,14 +6,12 @@ SELECT create_hypertable('cluster_test', 'time', chunk_time_interval => interval
      create_hypertable     
 ---------------------------
  (1,public,cluster_test,t)
-(1 row)
 
 -- Show default indexes
 SELECT * FROM test.show_indexes('cluster_test');
          Index         | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
 -----------------------+---------+------+--------+---------+-----------+------------
  cluster_test_time_idx | {time}  |      | f      | f       | f         | 
-(1 row)
 
 -- Create two chunks
 INSERT INTO cluster_test VALUES ('2017-01-20T09:00:01', 23.4, 1),
@@ -33,7 +31,6 @@ WHERE indisclustered = true ORDER BY 1;
  cluster_test_time_idx                                        | t
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
  _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
-(3 rows)
 
 -- Reorder just our table
 CLUSTER VERBOSE cluster_test;
@@ -50,7 +47,6 @@ WHERE indisclustered = true ORDER BY 1;
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
  _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
  _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_idx | t
-(4 rows)
 
 -- Reorder all tables (although will only be our test table)
 CLUSTER VERBOSE;
@@ -74,7 +70,6 @@ WHERE indisclustered = true ORDER BY 1;
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_location_idx | t
  _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_location_idx | t
  _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_location_idx | t
-(4 rows)
 
 --check the setting of cluster indexes on hypertables and chunks
 ALTER TABLE cluster_test CLUSTER ON cluster_test_time_idx;
@@ -88,7 +83,6 @@ ORDER BY 1,2;
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
  _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx | t
  _timescaledb_internal._hyper_1_3_chunk_cluster_test_time_idx | t
-(4 rows)
 
 CLUSTER VERBOSE cluster_test;
 INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
@@ -101,7 +95,6 @@ WHERE indisclustered = true
 ORDER BY 1,2;
  indexrelid | indisclustered 
 ------------+----------------
-(0 rows)
 
 \set ON_ERROR_STOP 0
 CLUSTER VERBOSE cluster_test;
@@ -115,7 +108,6 @@ ORDER BY 1,2;
                           indexrelid                          | indisclustered 
 --------------------------------------------------------------+----------------
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx | t
-(1 row)
 
 CLUSTER VERBOSE _timescaledb_internal._hyper_1_1_chunk;
 INFO:  clustering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan and sort
@@ -126,7 +118,6 @@ WHERE indisclustered = true
 ORDER BY 1,2;
  indexrelid | indisclustered 
 ------------+----------------
-(0 rows)
 
 \set ON_ERROR_STOP 0
 CLUSTER VERBOSE _timescaledb_internal._hyper_1_1_chunk;
@@ -140,7 +131,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
   table_name   
 ---------------
  cluster_alter
-(1 row)
 
 INSERT INTO cluster_alter VALUES('2020-01-01', '123', 1);
 CLUSTER cluster_alter using idstuff;

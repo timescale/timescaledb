@@ -29,7 +29,6 @@ SELECT create_hypertable('skip_scan_ht', 'time', chunk_time_interval => 250, cre
      create_hypertable     
 ---------------------------
  (1,public,skip_scan_ht,t)
-(1 row)
 
 INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
 ALTER TABLE skip_scan_ht DROP COLUMN f1;
@@ -47,7 +46,6 @@ SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, cr
      create_hypertable      
 ----------------------------
  (3,public,skip_scan_htc,t)
-(1 row)
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -85,7 +83,6 @@ SELECT create_hypertable('skip_scan_htcl', 'time', chunk_time_interval => 250, c
       create_hypertable      
 -----------------------------
  (5,public,skip_scan_htcl,t)
-(1 row)
 
 ALTER TABLE skip_scan_htcl SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -94,7 +91,6 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_5_9_chunk
-(1 row)
 
 ALTER TABLE skip_scan_htcl DROP COLUMN f1;
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
@@ -111,7 +107,6 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch order by 1 desc 
  _timescaledb_internal._hyper_5_13_chunk
  _timescaledb_internal._hyper_5_12_chunk
  _timescaledb_internal._hyper_5_11_chunk
-(3 rows)
 
 ANALYZE skip_scan_htcl;
 -- adjust statistics so we get skipscan plans
@@ -628,7 +623,6 @@ RESET timescaledb.enable_skipscan;
  -----------------
 - off
 + on
- (1 row)
  
   dev 
 -- run tests on hypertable and diff results
@@ -1139,7 +1133,6 @@ RESET timescaledb.enable_skipscan;
  -----------------
 - off
 + on
- (1 row)
  
   dev 
 -- run tests on compressed hypertable with different compression settings and diff results
@@ -1635,7 +1628,6 @@ RESET timescaledb.enable_compressed_skipscan;
  ----------------------------
 - off
 + on
- (1 row)
  
               compress_chunk             
 -- run tests on compressed hypertable with different layouts of compressed chunks
@@ -1887,7 +1879,6 @@ RESET timescaledb.enable_compressed_skipscan;
  ----------------------------
 - off
 + on
- (1 row)
  
   dev 
 -- run tests on compressed hypertable with different layouts of compressed chunks
@@ -1917,7 +1908,6 @@ SELECT create_hypertable('mskip_scan_ht', 'time', chunk_time_interval => 100, cr
      create_hypertable      
 ----------------------------
  (7,public,mskip_scan_ht,t)
-(1 row)
 
 INSERT INTO mskip_scan_ht SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(0, 99) t, generate_series(1, 4) r, generate_series(1, 5) d;
 INSERT INTO mskip_scan_ht SELECT t, 1, 'reg_' || r::text, d, 'device_' || d::text, t*d FROM generate_series(100, 199) t, generate_series(1, 4) r, generate_series(1, 5) d;
@@ -1933,7 +1923,6 @@ SELECT create_hypertable('mskip_scan_htc', 'time', chunk_time_interval => 100, c
       create_hypertable      
 -----------------------------
  (8,public,mskip_scan_htc,t)
-(1 row)
 
 -- Cannot have reverse orders on segmented columns in columnar index, so it won't be tested for columnar table
 ALTER TABLE mskip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='status,region,dev,dev_name');
@@ -1948,7 +1937,6 @@ SELECT compress_chunk(ch) FROM show_chunks('mskip_scan_htc') ch;
  _timescaledb_internal._hyper_8_70_chunk
  _timescaledb_internal._hyper_8_71_chunk
  _timescaledb_internal._hyper_8_72_chunk
-(4 rows)
 
 ANALYZE mskip_scan_htc;
 alter table mskip_scan set (autovacuum_enabled = off);
@@ -2126,7 +2114,6 @@ RESET timescaledb.enable_multikey_skipscan;
  --------------------------
 - off
 + on
- (1 row)
  
   time | status | region | dev | dev_name | val 
 \set TABLE mskip_scan_ht
@@ -2299,7 +2286,6 @@ RESET timescaledb.enable_multikey_skipscan;
  --------------------------
 - off
 + on
- (1 row)
  
   time | status | region | dev | dev_name | val  
 \set TABLE mskip_scan_htc
@@ -2472,7 +2458,6 @@ RESET timescaledb.enable_multikey_skipscan;
  --------------------------
 - off
 + on
- (1 row)
  
   time | status | region | dev | dev_name | val  
 -- make sure multikey SkipScan is applied correctly

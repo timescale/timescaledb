@@ -15,7 +15,6 @@ SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false
   create_hypertable   
 ----------------------
  (1,public,metrics,t)
-(1 row)
 
 insert into metrics SELECT t, 1, extract(epoch from t) from generate_series
         ( '2007-02-01'::timestamp
@@ -32,32 +31,27 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
             get_segmentby_defaults            
 ----------------------------------------------
  {"columns": ["device_id"], "confidence": 10}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
               get_orderby_defaults               
 -------------------------------------------------
  {"clauses": ["\"time\" DESC"], "confidence": 8}
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 select * from chunk_settings;
  hypertable | chunks | segmentby |   orderby   |                            index                            
 ------------+--------+-----------+-------------+-------------------------------------------------------------
  metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
-(1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
 ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
@@ -65,19 +59,16 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 select * from chunk_settings;
  hypertable | chunks | segmentby |   orderby   |                            index                            
 ------------+--------+-----------+-------------+-------------------------------------------------------------
  metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
-(1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
 --make sure all the GUC combinations work
@@ -89,7 +80,6 @@ SELECT * FROM _timescaledb_catalog.compression_settings;
   relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 ---------+----------------+-----------+---------+--------------+--------------------+-------
  metrics |                | {}        | {time}  | {t}          | {t}                | 
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
 SET timescaledb.compression_segmentby_default_function   = '';
@@ -99,19 +89,16 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 select * from chunk_settings;
  hypertable | chunks | segmentby |        orderby        |                                                            index                                                            
 ------------+--------+-----------+-----------------------+-----------------------------------------------------------------------------------------------------------------------------
  metrics    |     27 |           | device_id,"time" DESC | [{"type": "minmax", "column": "device_id", "source": "orderby"}, {"type": "minmax", "column": "time", "source": "orderby"}]
-(1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
 RESET timescaledb.compression_segmentby_default_function;
@@ -121,19 +108,16 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 select * from chunk_settings;
  hypertable | chunks | segmentby |   orderby   |                            index                            
 ------------+--------+-----------+-------------+-------------------------------------------------------------
  metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
-(1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
 RESET timescaledb.compression_segmentby_default_function;
@@ -145,13 +129,11 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
             get_segmentby_defaults            
 ----------------------------------------------
  {"columns": ["device_id"], "confidence": 10}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
               get_orderby_defaults               
 -------------------------------------------------
  {"clauses": ["\"time\" DESC"], "confidence": 8}
-(1 row)
 
 --use a high-cardinality column in the index
 drop index test_idx;
@@ -160,13 +142,11 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
            get_segmentby_defaults            
 ---------------------------------------------
  {"columns": ["device_id"], "confidence": 7}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
                   get_orderby_defaults                  
 --------------------------------------------------------
  {"clauses": ["val", "\"time\" DESC"], "confidence": 8}
-(1 row)
 
 --use a non-unique index
 drop index test_idx;
@@ -175,13 +155,11 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
            get_segmentby_defaults            
 ---------------------------------------------
  {"columns": ["device_id"], "confidence": 8}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
               get_orderby_defaults               
 -------------------------------------------------
  {"clauses": ["\"time\" DESC"], "confidence": 5}
-(1 row)
 
 --another non-unique index column order
 drop index test_idx;
@@ -190,13 +168,11 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
            get_segmentby_defaults            
 ---------------------------------------------
  {"columns": ["device_id"], "confidence": 8}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
                   get_orderby_defaults                  
 --------------------------------------------------------
  {"clauses": ["\"time\" DESC", "val"], "confidence": 5}
-(1 row)
 
 --use a high-cardinality column in the non-unque index
 drop index test_idx;
@@ -205,13 +181,11 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
            get_segmentby_defaults            
 ---------------------------------------------
  {"columns": ["device_id"], "confidence": 7}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
                   get_orderby_defaults                  
 --------------------------------------------------------
  {"clauses": ["\"time\" DESC", "val"], "confidence": 5}
-(1 row)
 
 --use 2 indexes
 drop index test_idx;
@@ -221,13 +195,11 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
            get_segmentby_defaults            
 ---------------------------------------------
  {"columns": ["device_id"], "confidence": 8}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
                   get_orderby_defaults                  
 --------------------------------------------------------
  {"clauses": ["\"time\" DESC", "val"], "confidence": 5}
-(1 row)
 
 --no indexes
 drop index test_idx1;
@@ -236,32 +208,27 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
            get_segmentby_defaults            
 ---------------------------------------------
  {"columns": ["device_id"], "confidence": 7}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
               get_orderby_defaults               
 -------------------------------------------------
  {"clauses": ["\"time\" DESC"], "confidence": 5}
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 select * from chunk_settings;
  hypertable | chunks | segmentby |   orderby   |                            index                            
 ------------+--------+-----------+-------------+-------------------------------------------------------------
  metrics    |     27 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
-(1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     27
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
 -- tables with no stats --
@@ -277,20 +244,17 @@ SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false
   create_hypertable   
 ----------------------
  (8,public,metrics,t)
-(1 row)
 
 --no indexes
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                                                                            get_segmentby_defaults                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
               get_orderby_defaults               
 -------------------------------------------------
  {"clauses": ["\"time\" DESC"], "confidence": 5}
-(1 row)
 
 --minimum index
 CREATE UNIQUE INDEX test_idx ON metrics(id, time);
@@ -298,7 +262,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                                                                            get_segmentby_defaults                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
-(1 row)
 
 --index with device_id
 drop index test_idx;
@@ -307,7 +270,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                             get_segmentby_defaults                                                            
 ----------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
-(1 row)
 
 --two indexes
 drop index test_idx;
@@ -317,7 +279,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                             get_segmentby_defaults                                                            
 ----------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
-(1 row)
 
 --separate indexes
 drop index test_idx;
@@ -328,7 +289,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                                                                            get_segmentby_defaults                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
-(1 row)
 
 --make sure generated identity also works
 drop table metrics;
@@ -342,7 +302,6 @@ SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false
   create_hypertable   
 ----------------------
  (9,public,metrics,t)
-(1 row)
 
 --minimum index
 CREATE UNIQUE INDEX test_idx ON metrics(id, time);
@@ -350,7 +309,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                                                                            get_segmentby_defaults                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
-(1 row)
 
 --index with device_id
 drop index test_idx;
@@ -359,7 +317,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                             get_segmentby_defaults                                                            
 ----------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
-(1 row)
 
 --test default indexes
 drop table metrics;
@@ -373,32 +330,27 @@ SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>true)
    create_hypertable   
 -----------------------
  (10,public,metrics,t)
-(1 row)
 
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                                                                            get_segmentby_defaults                                                                                                           
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes", "confidence": 5}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
               get_orderby_defaults               
 -------------------------------------------------
  {"clauses": ["\"time\" DESC"], "confidence": 5}
-(1 row)
 
 CREATE INDEX test_idx ON metrics(device_id);
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                             get_segmentby_defaults                                                            
 ----------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
               get_orderby_defaults               
 -------------------------------------------------
  {"clauses": ["\"time\" DESC"], "confidence": 5}
-(1 row)
 
 drop index test_idx;
 CREATE UNIQUE INDEX test_idx ON metrics(device_id, time);
@@ -406,13 +358,11 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
                                                             get_segmentby_defaults                                                            
 ----------------------------------------------------------------------------------------------------------------------------------------------
  {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
               get_orderby_defaults               
 -------------------------------------------------
  {"clauses": ["\"time\" DESC"], "confidence": 8}
-(1 row)
 
 --test table with skewed statistics
 drop table metrics;
@@ -426,7 +376,6 @@ SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false
    create_hypertable   
 -----------------------
  (11,public,metrics,t)
-(1 row)
 
 --skew device_id distribution compared to device_id2.
 --device_id2 will be the favourable default segmentby
@@ -454,7 +403,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
             get_segmentby_defaults             
 -----------------------------------------------
  {"columns": ["device_id2"], "confidence": 10}
-(1 row)
 
 --opposite order of columns
 drop index test_idx;
@@ -465,7 +413,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
             get_segmentby_defaults             
 -----------------------------------------------
  {"columns": ["device_id2"], "confidence": 10}
-(1 row)
 
 --use a high-cardinality column in the index (still choose device_id2)
 drop index test_idx;
@@ -474,7 +421,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
             get_segmentby_defaults             
 -----------------------------------------------
  {"columns": ["device_id2"], "confidence": 10}
-(1 row)
 
 --use a non-unique index
 drop index test_idx;
@@ -485,7 +431,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
             get_segmentby_defaults            
 ----------------------------------------------
  {"columns": ["device_id2"], "confidence": 8}
-(1 row)
 
 --another non-unique index column order (choose device_id since it is in a lower index position)
 drop index test_idx;
@@ -496,7 +441,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
            get_segmentby_defaults            
 ---------------------------------------------
  {"columns": ["device_id"], "confidence": 8}
-(1 row)
 
 --use a high-cardinality column in the non-unque index (still choose device_id2)
 drop index test_idx;
@@ -505,7 +449,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
             get_segmentby_defaults            
 ----------------------------------------------
  {"columns": ["device_id2"], "confidence": 8}
-(1 row)
 
 --use 2 indexes (choose device_id since it is an indexed column)
 drop index test_idx;
@@ -516,7 +459,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
            get_segmentby_defaults            
 ---------------------------------------------
  {"columns": ["device_id"], "confidence": 8}
-(1 row)
 
 --no indexes (choose device_id2)
 drop index test_idx;
@@ -525,26 +467,22 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
             get_segmentby_defaults            
 ----------------------------------------------
  {"columns": ["device_id2"], "confidence": 7}
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = true);
 select count(compress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     38
-(1 row)
 
 select * from chunk_settings;
  hypertable | chunks | segmentby  |   orderby   |                            index                            
 ------------+--------+------------+-------------+-------------------------------------------------------------
  metrics    |     38 | device_id2 | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
-(1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     38
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
 ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
@@ -552,19 +490,16 @@ select count(compress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     38
-(1 row)
 
 select * from chunk_settings;
  hypertable | chunks | segmentby |   orderby   |                            index                            
 ------------+--------+-----------+-------------+-------------------------------------------------------------
  metrics    |     38 | device_id | "time" DESC | [{"type": "minmax", "column": "time", "source": "orderby"}]
-(1 row)
 
 select count(decompress_chunk(x)) from show_chunks('metrics') x;
  count 
 -------
     38
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
 DROP TABLE metrics;
@@ -574,20 +509,17 @@ SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
   create_hypertable   
 ----------------------
  (14,public,table1,t)
-(1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('table1', ARRAY['col1']::text[]);
        get_orderby_defaults       
 ----------------------------------
  {"clauses": [], "confidence": 5}
-(1 row)
 
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 SELECT * FROM _timescaledb_catalog.compression_settings;
  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 --------+----------------+-----------+---------+--------------+--------------------+-------
  table1 |                | {col1}    |         |              |                    | 
-(1 row)
 
 ALTER TABLE table1 SET (timescaledb.compress = false);
 \set ON_ERROR_STOP 0
@@ -612,7 +544,6 @@ SELECT public.create_hypertable('public.t1', 'time');
  create_hypertable 
 -------------------
  (16,public,t1,t)
-(1 row)
 
 ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
 RESET search_path;
@@ -631,7 +562,6 @@ SELECT create_hypertable('schema1.page_events2', 'time');
       create_hypertable      
 -----------------------------
  (18,schema1,page_events2,t)
-(1 row)
 
 ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
@@ -645,7 +575,6 @@ SELECT create_hypertable('schema2.page_events2', 'time');
       create_hypertable      
 -----------------------------
  (20,schema2,page_events2,t)
-(1 row)
 
 ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
@@ -663,7 +592,6 @@ SELECT create_hypertable('schema1.page_events2', 'time');
       create_hypertable      
 -----------------------------
  (22,schema1,page_events2,t)
-(1 row)
 
 ALTER TABLE schema1.page_events2 SET (
  timescaledb.compress,
@@ -678,7 +606,6 @@ SELECT create_hypertable('schema2.page_events2', 'time');
       create_hypertable      
 -----------------------------
  (24,schema2,page_events2,t)
-(1 row)
 
 ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
@@ -699,7 +626,6 @@ SELECT create_hypertable(
     create_hypertable     
 --------------------------
  (26,public,test_table,t)
-(1 row)
 
 INSERT INTO test_table (ts, uuid, val) VALUES
   (1, 1001, 10.1),
@@ -709,7 +635,6 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.test_table');
                                                        get_segmentby_defaults                                                       
 ------------------------------------------------------------------------------------------------------------------------------------
  {"columns": ["uuid"], "message": "Please make sure uuid is not a unique column and appropriate for a segment by", "confidence": 5}
-(1 row)
 
 ALTER TABLE test_table SET (
     timescaledb.compress,
@@ -719,12 +644,10 @@ SELECT count(compress_chunk(x)) FROM show_chunks('test_table') x;
  count 
 -------
      1
-(1 row)
 
 select * from chunk_settings;
  hypertable | chunks | segmentby |   orderby    |                                                        index                                                         
 ------------+--------+-----------+--------------+----------------------------------------------------------------------------------------------------------------------
  test_table |      1 |           | uuid,ts DESC | [{"type": "minmax", "column": "uuid", "source": "orderby"}, {"type": "minmax", "column": "ts", "source": "orderby"}]
-(1 row)
 
 DROP TABLE test_table;

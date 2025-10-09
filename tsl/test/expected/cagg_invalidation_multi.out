@@ -7,7 +7,6 @@ SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
@@ -40,14 +39,12 @@ SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
-(1 row)
 
 CREATE TABLE measurements (time int NOT NULL, device int, temp float);
 SELECT create_hypertable('measurements', 'time', chunk_time_interval => 10);
      create_hypertable     
 ---------------------------
  (2,public,measurements,t)
-(1 row)
 
 CREATE OR REPLACE FUNCTION bigint_now() RETURNS bigint LANGUAGE SQL STABLE
 AS $$ SELECT coalesce(max(time), 0) FROM conditions $$;
@@ -57,13 +54,11 @@ SELECT set_integer_now_func('conditions', 'bigint_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 SELECT set_integer_now_func('measurements', 'int_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 INSERT INTO conditions
 SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::int,
@@ -85,12 +80,10 @@ SELECT * FROM conditions ORDER BY time DESC, device LIMIT 10;
    93 |      0 |    4
    92 |      0 |   32
    91 |      3 |   15
-(10 rows)
 
 SELECT * FROM invalidation_slots;
  slot_name | slot_type | database 
 -----------+-----------+----------
-(0 rows)
 
 -- Create two continuous aggregates on the same hypertable to test
 -- that invalidations are handled correctly across both of them.
@@ -135,7 +128,6 @@ SELECT hypertable_name, view_name, materialization_hypertable_name, invalidate_u
  conditions      | cond_10    | _materialized_hypertable_3      | wal
  conditions      | cond_20    | _materialized_hypertable_4      | wal
  measurements    | measure_10 | _materialized_hypertable_5      | wal
-(3 rows)
 
 -- We need to refresh to move the invalidation threshold, or
 -- invalidations will not be generated. Check initial value of
@@ -145,7 +137,6 @@ SELECT * FROM hypertable_invalidation_thresholds ORDER BY 1,2;
 --------------+-----------
  conditions   |       120
  measurements |       110
-(2 rows)
 
 SELECT * INTO saved_invals FROM mat_invals;
 INSERT INTO conditions VALUES
@@ -159,7 +150,6 @@ SELECT * FROM invalidation_slots;
    slot_name   | slot_type |          database          
 ---------------+-----------+----------------------------
  ts_DBOID_cagg | logical   | db_cagg_invalidation_multi
-(1 row)
 
 CALL _timescaledb_functions.process_hypertable_invalidations(
     ARRAY['measurements', 'conditions']
@@ -173,7 +163,6 @@ ORDER BY 1,2,3;
  cond_10        | _materialized_hypertable_3 |                    10 |                      80
  cond_20        | _materialized_hypertable_4 |                     0 |                      80
  measure_10     | _materialized_hypertable_5 |                    20 |                     210
-(3 rows)
 
 DROP TABLE saved_invals;
 -- Insert a lot of invalidations (more than 256) to trigger the code
@@ -185,7 +174,6 @@ SELECT * FROM hypertable_invalidation_thresholds ORDER BY 1,2;
 --------------+-----------
  conditions   |       120
  measurements |       110
-(2 rows)
 
 DO $$
 DECLARE
@@ -207,7 +195,6 @@ SELECT count(data)
  count 
 -------
   1000
-(1 row)
 
 -- We set the work memory quite low to trigger range shedding when
 -- running out of memory.
@@ -229,7 +216,6 @@ GROUP BY 1 ORDER BY 1,2;
 ----------------+---------
  cond_10        | [0,110)
  cond_20        | [0,120)
-(2 rows)
 
 -- This should be fine but not process any tables. Odd usage, but
 -- nothing wrong with it.

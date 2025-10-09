@@ -8,6 +8,6 @@ select _timescaledb_functions.bloom1_contains(
 	'1y.yield'::text)
 ;
  bloom1_contains 
+-----------------
  t
-(1 row)
 

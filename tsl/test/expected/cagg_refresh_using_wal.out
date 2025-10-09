@@ -12,7 +12,6 @@ SELECT create_hypertable('conditions', 'time');
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
-(1 row)
 
 -- Test refresh on a cagg built on an empty table
 CREATE MATERIALIZED VIEW daily_temp
@@ -31,7 +30,6 @@ SELECT setseed(.12);
  setseed 
 ---------
  
-(1 row)
 
 INSERT INTO conditions
 SELECT t, ceil(abs(timestamp_hash(t::timestamp))%4)::int, abs(timestamp_hash(t::timestamp))%40
@@ -52,21 +50,18 @@ LIMIT 10;
  Mon May 04 22:50:00 2020 PDT |      2 |   10
  Mon May 04 22:40:00 2020 PDT |      1 |   37
  Mon May 04 22:30:00 2020 PDT |      0 |    8
-(10 rows)
 
 -- The continuous aggregate should be empty
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
  day | device | avg_temp 
 -----+--------+----------
-(0 rows)
 
 -- Refresh one bucket (1 day):
 SHOW timezone;
  TimeZone 
 ----------
  PST8PDT
-(1 row)
 
 -- The refresh of a single bucket must align with the start of the day
 -- in the bucket's time zone (which is UTC, since time_bucket doesn't
@@ -119,7 +114,6 @@ ORDER BY day DESC, device;
  Sat May 02 17:00:00 2020 PDT |      1 |            18.75
  Sat May 02 17:00:00 2020 PDT |      2 |               20
  Sat May 02 17:00:00 2020 PDT |      3 | 21.5217391304348
-(12 rows)
 
 -- Refresh the rest
 CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
@@ -148,7 +142,6 @@ ORDER BY day DESC, device;
  Thu Apr 30 17:00:00 2020 PDT |      1 | 18.8333333333333
  Thu Apr 30 17:00:00 2020 PDT |      2 | 16.7586206896552
  Thu Apr 30 17:00:00 2020 PDT |      3 |            20.76
-(20 rows)
 
 SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp
 FROM conditions
@@ -176,7 +169,6 @@ ORDER BY 1 DESC,2;
  Thu Apr 30 17:00:00 2020 PDT |      1 | 18.8333333333333
  Thu Apr 30 17:00:00 2020 PDT |      2 | 16.7586206896552
  Thu Apr 30 17:00:00 2020 PDT |      3 |            20.76
-(20 rows)
 
 -- Test unusual, but valid input
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-01'::timestamptz, '2020-05-03'::date);
@@ -240,7 +232,6 @@ SELECT * FROM daily_temp
 ORDER BY day DESC, device;
  day | device | avg_temp 
 -----+--------+----------
-(0 rows)
 
 -- Run it again with force=>true, the data should be rematerialized
 CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00', force=>true);
@@ -260,7 +251,6 @@ ORDER BY day DESC, device;
  Sat May 02 17:00:00 2020 PDT |      1 |            18.75
  Sat May 02 17:00:00 2020 PDT |      2 |               20
  Sat May 02 17:00:00 2020 PDT |      3 | 21.5217391304348
-(12 rows)
 
 -- Test different time types
 CREATE TABLE conditions_date (time date NOT NULL, device int, temp float);
@@ -268,7 +258,6 @@ SELECT create_hypertable('conditions_date', 'time');
       create_hypertable       
 ------------------------------
  (3,public,conditions_date,t)
-(1 row)
 
 CREATE MATERIALIZED VIEW daily_temp_date
 WITH (timescaledb.continuous,
@@ -286,7 +275,6 @@ SELECT create_hypertable('conditions_smallint', 'time', chunk_time_interval => 2
         create_hypertable         
 ----------------------------------
  (5,public,conditions_smallint,t)
-(1 row)
 
 INSERT INTO conditions_smallint
 SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::smallint, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
@@ -313,7 +301,6 @@ SELECT set_integer_now_func('conditions_smallint', 'smallint_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 CREATE MATERIALIZED VIEW cond_20_smallint
 WITH (timescaledb.continuous,
@@ -339,7 +326,6 @@ ORDER BY 1,2;
      40 |      1 |             19.4
      40 |      2 |               22
      40 |      3 |             21.4
-(12 rows)
 
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('cond_20_smallint', NULL, NULL);
@@ -349,7 +335,6 @@ SELECT create_hypertable('conditions_int', 'time', chunk_time_interval => 20);
       create_hypertable      
 -----------------------------
  (7,public,conditions_int,t)
-(1 row)
 
 INSERT INTO conditions_int
 SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::int, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
@@ -364,7 +349,6 @@ SELECT set_integer_now_func('conditions_int', 'int_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 CREATE MATERIALIZED VIEW cond_20_int
 WITH (timescaledb.continuous,
@@ -390,7 +374,6 @@ ORDER BY 1,2;
      40 |      1 |             19.4
      40 |      2 |               22
      40 |      3 |             21.4
-(12 rows)
 
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('cond_20_int', NULL, NULL);
@@ -400,7 +383,6 @@ SELECT create_hypertable('conditions_bigint', 'time', chunk_time_interval => 20)
        create_hypertable        
 --------------------------------
  (9,public,conditions_bigint,t)
-(1 row)
 
 INSERT INTO conditions_bigint
 SELECT t, ceil(abs(timestamp_hash(to_timestamp(t)::timestamp))%4)::bigint, abs(timestamp_hash(to_timestamp(t)::timestamp))%40
@@ -415,7 +397,6 @@ SELECT set_integer_now_func('conditions_bigint', 'bigint_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 CREATE MATERIALIZED VIEW cond_20_bigint
 WITH (timescaledb.continuous,
@@ -441,7 +422,6 @@ ORDER BY 1,2;
      40 |      1 |             19.4
      40 |      2 |               22
      40 |      3 |             21.4
-(12 rows)
 
 -- Try max refresh window size
 CALL refresh_continuous_aggregate('cond_20_bigint', NULL, NULL);
@@ -466,7 +446,6 @@ psql:include/cagg_refresh_common.sql:281: NOTICE:  refreshing continuous aggrega
 SELECT * FROM weekly_temp_without_data;
  day | device | avg_temp 
 -----+--------+----------
-(0 rows)
 
 SELECT * FROM weekly_temp_with_data ORDER BY 1,2;
              day              | device |     avg_temp     
@@ -479,7 +458,6 @@ SELECT * FROM weekly_temp_with_data ORDER BY 1,2;
  Sun May 03 17:00:00 2020 PDT |      1 | 22.7272727272727
  Sun May 03 17:00:00 2020 PDT |      2 |  15.811320754717
  Sun May 03 17:00:00 2020 PDT |      3 |               19
-(8 rows)
 
 \set ON_ERROR_STOP 0
 -- REFRESH MATERIALIZED VIEW is blocked on continuous aggregates
@@ -604,7 +582,6 @@ SELECT compress_chunk(show_chunks('daily_temp_decompress_limit'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_17_26_chunk
-(1 row)
 
 INSERT INTO conditions_decompress_limit SELECT '2020-01-01','d' || i::text, 2.0 FROM generate_series(1,100) g(i);
 SET timescaledb.max_tuples_decompressed_per_dml_transaction TO 1;
@@ -613,7 +590,6 @@ SHOW timescaledb.max_tuples_decompressed_per_dml_transaction;
  timescaledb.max_tuples_decompressed_per_dml_transaction 
 ---------------------------------------------------------
  1
-(1 row)
 
 -- More tests for forceful refreshment
 TRUNCATE conditions;
@@ -646,7 +622,6 @@ SELECT * FROM conditions_by_hour ORDER BY bucket;
 ------------------------------+--------+-----+-----+-------
  Fri Jul 04 03:00:00 2025 PDT |      1 |   1 |   1 |     2
  Fri Jul 04 04:00:00 2025 PDT |      1 |   1 |   1 |     2
-(2 rows)
 
 CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 10:00:00+00'::timestamptz, '2025-07-04 12:00:00+00'::timestamptz, force=>true);
 -- It should return the same 2 buckets of previous query
@@ -655,7 +630,6 @@ SELECT * FROM conditions_by_hour ORDER BY bucket;
 ------------------------------+--------+-----+-----+-------
  Fri Jul 04 03:00:00 2025 PDT |      1 |   1 |   1 |     2
  Fri Jul 04 04:00:00 2025 PDT |      1 |   1 |   1 |     2
-(2 rows)
 
 -- Monthly buckets
 INSERT INTO conditions
@@ -684,7 +658,6 @@ SELECT * FROM conditions_by_month ORDER BY bucket;
 ------------------------------+--------+-----+-----+-------
  Wed Apr 30 17:00:00 2025 PDT |      1 |   1 |   1 |     2
  Sat May 31 17:00:00 2025 PDT |      1 |   1 |   1 |     2
-(2 rows)
 
 CALL refresh_continuous_aggregate('conditions_by_month', '2025-05-01 00:00:00+00'::timestamptz, '2025-07-01 12:00:00+00'::timestamptz, force=>true);
 -- It should return the same 2 buckets of previous query
@@ -693,5 +666,4 @@ SELECT * FROM conditions_by_month ORDER BY bucket;
 ------------------------------+--------+-----+-----+-------
  Wed Apr 30 17:00:00 2025 PDT |      1 |   1 |   1 |     2
  Sat May 31 17:00:00 2025 PDT |      1 |   1 |   1 |     2
-(2 rows)
 

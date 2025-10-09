@@ -17,45 +17,38 @@ SELECT table_name FROM create_hypertable('metrics_int2','time',chunk_time_interv
   table_name  
 --------------
  metrics_int2
-(1 row)
 
 SELECT table_name FROM create_hypertable('metrics_int4','time',chunk_time_interval:=10);
   table_name  
 --------------
  metrics_int4
-(1 row)
 
 SELECT table_name FROM create_hypertable('metrics_int8','time',chunk_time_interval:=10);
   table_name  
 --------------
  metrics_int8
-(1 row)
 
 SELECT table_name FROM create_hypertable('metrics_date','time');
   table_name  
 --------------
  metrics_date
-(1 row)
 
 SELECT table_name FROM create_hypertable('metrics_timestamp','time');
 psql:include/modify_exclusion_load.sql:17: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
     table_name     
 -------------------
  metrics_timestamp
-(1 row)
 
 SELECT table_name FROM create_hypertable('metrics_timestamptz','time');
      table_name      
 ---------------------
  metrics_timestamptz
-(1 row)
 
 SELECT table_name FROM create_hypertable('metrics_space','time','device',4);
 psql:include/modify_exclusion_load.sql:19: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
   table_name   
 ---------------
  metrics_space
-(1 row)
 
 CREATE FUNCTION drop_column(text) RETURNS VOID LANGUAGE PLPGSQL AS $$
 DECLARE
@@ -72,7 +65,6 @@ SELECT drop_column('c1');
  drop_column 
 -------------
  
-(1 row)
 
 INSERT INTO metrics_int2(time) VALUES (0);
 INSERT INTO metrics_int4(time) VALUES (0);
@@ -85,7 +77,6 @@ SELECT drop_column('c2');
  drop_column 
 -------------
  
-(1 row)
 
 INSERT INTO metrics_int2(time) VALUES (10);
 INSERT INTO metrics_int4(time) VALUES (10);
@@ -98,7 +89,6 @@ SELECT drop_column('c3');
  drop_column 
 -------------
  
-(1 row)
 
 INSERT INTO metrics_int2(time) VALUES (20);
 INSERT INTO metrics_int4(time) VALUES (20);
@@ -111,7 +101,6 @@ SELECT drop_column('c4');
  drop_column 
 -------------
  
-(1 row)
 
 INSERT INTO metrics_int2(time) VALUES (30);
 INSERT INTO metrics_int4(time) VALUES (30);
@@ -124,14 +113,12 @@ SELECT drop_column('c5');
  drop_column 
 -------------
  
-(1 row)
 
 CREATE TABLE metrics_compressed(time timestamptz NOT NULL, device int, value float);
 SELECT table_name FROM create_hypertable('metrics_compressed','time');
      table_name     
 --------------------
  metrics_compressed
-(1 row)
 
 ALTER TABLE metrics_compressed SET (timescaledb.compress);
 -- create first chunk and compress
@@ -140,7 +127,6 @@ SELECT count(compress_chunk(chunk)) FROM show_chunks('metrics_compressed') chunk
  count 
 -------
      1
-(1 row)
 
 -- create more chunks
 INSERT INTO metrics_compressed VALUES ('2010-01-01',1,0.5),('2011-01-01',1,0.5),('2012-01-01',1,0.5);
@@ -149,43 +135,36 @@ INSERT INTO metrics_compressed VALUES ('2010-01-01',1,0.5),('2011-01-01',1,0.5),
 -- should only hit 1 chunk and base table
 BEGIN;
 :PREFIX DELETE FROM metrics_int2 WHERE time = 15;
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int2 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_1_9_chunk metrics_int2_1
          ->  Index Scan using _hyper_1_9_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_9_chunk metrics_int2_1 (actual rows=0.00 loops=1)
                Output: metrics_int2_1.tableoid, metrics_int2_1.ctid
                Index Cond: (metrics_int2_1."time" = 15)
-(6 rows)
 
 :PREFIX DELETE FROM metrics_int4 WHERE time = 15;
-                                                                       QUERY PLAN                                                                       
---------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int4 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_2_10_chunk metrics_int4_1
          ->  Index Scan using _hyper_2_10_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_10_chunk metrics_int4_1 (actual rows=0.00 loops=1)
                Output: metrics_int4_1.tableoid, metrics_int4_1.ctid
                Index Cond: (metrics_int4_1."time" = 15)
-(6 rows)
 
 :PREFIX DELETE FROM metrics_int8 WHERE time = 15;
-                                                                       QUERY PLAN                                                                       
---------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int8 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_3_11_chunk metrics_int8_1
          ->  Index Scan using _hyper_3_11_chunk_metrics_int8_time_idx on _timescaledb_internal._hyper_3_11_chunk metrics_int8_1 (actual rows=0.00 loops=1)
                Output: metrics_int8_1.tableoid, metrics_int8_1.ctid
                Index Cond: (metrics_int8_1."time" = 15)
-(6 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int2 SET value = 0.5 WHERE time = 15;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int2 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_9_chunk metrics_int2_1
@@ -194,11 +173,9 @@ BEGIN;
                ->  Index Scan using _hyper_1_9_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_9_chunk metrics_int2_1 (actual rows=0.00 loops=1)
                      Output: metrics_int2_1.tableoid, metrics_int2_1.ctid
                      Index Cond: (metrics_int2_1."time" = 15)
-(8 rows)
 
 :PREFIX UPDATE metrics_int4 SET value = 0.5 WHERE time = 15;
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int4 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_2_10_chunk metrics_int4_1
@@ -207,11 +184,9 @@ BEGIN;
                ->  Index Scan using _hyper_2_10_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_10_chunk metrics_int4_1 (actual rows=0.00 loops=1)
                      Output: metrics_int4_1.tableoid, metrics_int4_1.ctid
                      Index Cond: (metrics_int4_1."time" = 15)
-(8 rows)
 
 :PREFIX UPDATE metrics_int8 SET value = 0.5 WHERE time = 15;
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int8 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_3_11_chunk metrics_int8_1
@@ -220,7 +195,6 @@ BEGIN;
                ->  Index Scan using _hyper_3_11_chunk_metrics_int8_time_idx on _timescaledb_internal._hyper_3_11_chunk metrics_int8_1 (actual rows=0.00 loops=1)
                      Output: metrics_int8_1.tableoid, metrics_int8_1.ctid
                      Index Cond: (metrics_int8_1."time" = 15)
-(8 rows)
 
 ROLLBACK;
 -- stable constraints
@@ -228,8 +202,7 @@ ROLLBACK;
 -- should only hit 1 chunk and base table
 BEGIN;
 :PREFIX DELETE FROM metrics_int2 WHERE time = length(substring(version(),1,23));
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int2 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_1_1_chunk metrics_int2
@@ -243,11 +216,9 @@ BEGIN;
                ->  Index Scan using _hyper_1_17_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_17_chunk metrics_int2_1 (actual rows=0.00 loops=1)
                      Output: metrics_int2_1.tableoid, metrics_int2_1.ctid
                      Index Cond: (metrics_int2_1."time" = length("substring"(version(), 1, 23)))
-(13 rows)
 
 :PREFIX DELETE FROM metrics_int4 WHERE time = length(substring(version(),1,23));
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int4 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_2_2_chunk metrics_int4
@@ -261,11 +232,9 @@ BEGIN;
                ->  Index Scan using _hyper_2_18_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_18_chunk metrics_int4_1 (actual rows=0.00 loops=1)
                      Output: metrics_int4_1.tableoid, metrics_int4_1.ctid
                      Index Cond: (metrics_int4_1."time" = length("substring"(version(), 1, 23)))
-(13 rows)
 
 :PREFIX DELETE FROM metrics_int8 WHERE time = length(substring(version(),1,23));
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int8 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_3_3_chunk metrics_int8
@@ -279,13 +248,11 @@ BEGIN;
                ->  Index Scan using _hyper_3_19_chunk_metrics_int8_time_idx on _timescaledb_internal._hyper_3_19_chunk metrics_int8_1 (actual rows=0.00 loops=1)
                      Output: metrics_int8_1.tableoid, metrics_int8_1.ctid
                      Index Cond: (metrics_int8_1."time" = length("substring"(version(), 1, 23)))
-(13 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int2 SET value = 0.3 WHERE time = length(substring(version(),1,23));
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int2 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_1_1_chunk metrics_int2
@@ -302,11 +269,9 @@ BEGIN;
                      ->  Index Scan using _hyper_1_17_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_17_chunk metrics_int2_1 (actual rows=0.00 loops=1)
                            Output: metrics_int2_1.tableoid, metrics_int2_1.ctid
                            Index Cond: (metrics_int2_1."time" = length("substring"(version(), 1, 23)))
-(16 rows)
 
 :PREFIX UPDATE metrics_int4 SET value = 0.3 WHERE time = length(substring(version(),1,23));
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int4 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_2_2_chunk metrics_int4
@@ -323,11 +288,9 @@ BEGIN;
                      ->  Index Scan using _hyper_2_18_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_18_chunk metrics_int4_1 (actual rows=0.00 loops=1)
                            Output: metrics_int4_1.tableoid, metrics_int4_1.ctid
                            Index Cond: (metrics_int4_1."time" = length("substring"(version(), 1, 23)))
-(16 rows)
 
 :PREFIX UPDATE metrics_int8 SET value = 0.3 WHERE time = length(substring(version(),1,23));
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int8 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_3_3_chunk metrics_int8
@@ -344,15 +307,13 @@ BEGIN;
                      ->  Index Scan using _hyper_3_19_chunk_metrics_int8_time_idx on _timescaledb_internal._hyper_3_19_chunk metrics_int8_1 (actual rows=0.00 loops=1)
                            Output: metrics_int8_1.tableoid, metrics_int8_1.ctid
                            Index Cond: (metrics_int8_1."time" = length("substring"(version(), 1, 23)))
-(16 rows)
 
 ROLLBACK;
 -- should have ChunkAppend since constraint is stable
 -- should only hit 1 chunk and base table, toplevel rows should be 1
 BEGIN;
 :PREFIX DELETE FROM metrics_int2 WHERE time = length(substring(version(),1,20)) RETURNING 'returning', time;
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), "time"
    ->  Delete on public.metrics_int2 (actual rows=1.00 loops=1)
@@ -368,11 +329,9 @@ BEGIN;
                ->  Index Scan using _hyper_1_17_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_17_chunk metrics_int2_1 (actual rows=1.00 loops=1)
                      Output: metrics_int2_1.tableoid, metrics_int2_1.ctid
                      Index Cond: (metrics_int2_1."time" = length("substring"(version(), 1, 20)))
-(15 rows)
 
 :PREFIX DELETE FROM metrics_int4 WHERE time = length(substring(version(),1,20)) RETURNING 'returning', time;
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), "time"
    ->  Delete on public.metrics_int4 (actual rows=1.00 loops=1)
@@ -388,11 +347,9 @@ BEGIN;
                ->  Index Scan using _hyper_2_18_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_18_chunk metrics_int4_1 (actual rows=1.00 loops=1)
                      Output: metrics_int4_1.tableoid, metrics_int4_1.ctid
                      Index Cond: (metrics_int4_1."time" = length("substring"(version(), 1, 20)))
-(15 rows)
 
 :PREFIX DELETE FROM metrics_int8 WHERE time = length(substring(version(),1,20)) RETURNING 'returning', time;
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), "time"
    ->  Delete on public.metrics_int8 (actual rows=1.00 loops=1)
@@ -408,13 +365,11 @@ BEGIN;
                ->  Index Scan using _hyper_3_19_chunk_metrics_int8_time_idx on _timescaledb_internal._hyper_3_19_chunk metrics_int8_1 (actual rows=1.00 loops=1)
                      Output: metrics_int8_1.tableoid, metrics_int8_1.ctid
                      Index Cond: (metrics_int8_1."time" = length("substring"(version(), 1, 20)))
-(15 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int2 SET value = 0.4 WHERE time = length(substring(version(),1,20)) RETURNING 'returning', time;
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), "time"
    ->  Update on public.metrics_int2 (actual rows=1.00 loops=1)
@@ -433,11 +388,9 @@ BEGIN;
                      ->  Index Scan using _hyper_1_17_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_17_chunk metrics_int2_1 (actual rows=1.00 loops=1)
                            Output: metrics_int2_1.tableoid, metrics_int2_1.ctid
                            Index Cond: (metrics_int2_1."time" = length("substring"(version(), 1, 20)))
-(18 rows)
 
 :PREFIX UPDATE metrics_int4 SET value = 0.4 WHERE time = length(substring(version(),1,20)) RETURNING 'returning', time;
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), "time"
    ->  Update on public.metrics_int4 (actual rows=1.00 loops=1)
@@ -456,11 +409,9 @@ BEGIN;
                      ->  Index Scan using _hyper_2_18_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_18_chunk metrics_int4_1 (actual rows=1.00 loops=1)
                            Output: metrics_int4_1.tableoid, metrics_int4_1.ctid
                            Index Cond: (metrics_int4_1."time" = length("substring"(version(), 1, 20)))
-(18 rows)
 
 :PREFIX UPDATE metrics_int8 SET value = 0.4 WHERE time = length(substring(version(),1,20)) RETURNING 'returning', time;
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), "time"
    ->  Update on public.metrics_int8 (actual rows=1.00 loops=1)
@@ -479,13 +430,11 @@ BEGIN;
                      ->  Index Scan using _hyper_3_19_chunk_metrics_int8_time_idx on _timescaledb_internal._hyper_3_19_chunk metrics_int8_1 (actual rows=1.00 loops=1)
                            Output: metrics_int8_1.tableoid, metrics_int8_1.ctid
                            Index Cond: (metrics_int8_1."time" = length("substring"(version(), 1, 20)))
-(18 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int2 SET value = 0.1 * value, data = 'update' WHERE time = length(substring(version(),1,20)) RETURNING 'returning', time;
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), "time"
    ->  Update on public.metrics_int2 (actual rows=1.00 loops=1)
@@ -504,11 +453,9 @@ BEGIN;
                      ->  Index Scan using _hyper_1_17_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_17_chunk metrics_int2_1 (actual rows=1.00 loops=1)
                            Output: metrics_int2_1.value, metrics_int2_1.tableoid, metrics_int2_1.ctid
                            Index Cond: (metrics_int2_1."time" = length("substring"(version(), 1, 20)))
-(18 rows)
 
 :PREFIX UPDATE metrics_int4 SET value = 0.1 * value, data = 'update' WHERE time = length(substring(version(),1,20)) RETURNING 'returning', time;
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), "time"
    ->  Update on public.metrics_int4 (actual rows=1.00 loops=1)
@@ -527,11 +474,9 @@ BEGIN;
                      ->  Index Scan using _hyper_2_18_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_18_chunk metrics_int4_1 (actual rows=1.00 loops=1)
                            Output: metrics_int4_1.value, metrics_int4_1.tableoid, metrics_int4_1.ctid
                            Index Cond: (metrics_int4_1."time" = length("substring"(version(), 1, 20)))
-(18 rows)
 
 :PREFIX UPDATE metrics_int8 SET value = 0.1 * value, data = 'update' WHERE time = length(substring(version(),1,20)) RETURNING 'returning', time;
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), "time"
    ->  Update on public.metrics_int8 (actual rows=1.00 loops=1)
@@ -550,7 +495,6 @@ BEGIN;
                      ->  Index Scan using _hyper_3_19_chunk_metrics_int8_time_idx on _timescaledb_internal._hyper_3_19_chunk metrics_int8_1 (actual rows=1.00 loops=1)
                            Output: metrics_int8_1.value, metrics_int8_1.tableoid, metrics_int8_1.ctid
                            Index Cond: (metrics_int8_1."time" = length("substring"(version(), 1, 20)))
-(18 rows)
 
 ROLLBACK;
 -- immutable constraints
@@ -558,52 +502,43 @@ ROLLBACK;
 -- should only hit 1 chunk and base table
 BEGIN;
 :PREFIX DELETE FROM metrics_date WHERE time = '2000-01-01';
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_date (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_4_4_chunk metrics_date_1
          ->  Index Scan using _hyper_4_4_chunk_metrics_date_time_idx on _timescaledb_internal._hyper_4_4_chunk metrics_date_1 (actual rows=1.00 loops=1)
                Output: metrics_date_1.tableoid, metrics_date_1.ctid
                Index Cond: (metrics_date_1."time" = '01-01-2000'::date)
-(6 rows)
 
 :PREFIX DELETE FROM metrics_timestamp WHERE time = '2000-01-01';
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_timestamp (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1
          ->  Index Scan using _hyper_5_5_chunk_metrics_timestamp_time_idx on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1 (actual rows=1.00 loops=1)
                Output: metrics_timestamp_1.tableoid, metrics_timestamp_1.ctid
                Index Cond: (metrics_timestamp_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone)
-(6 rows)
 
 :PREFIX DELETE FROM metrics_timestamptz WHERE time = '2000-01-01';
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_timestamptz (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1
          ->  Index Scan using _hyper_6_6_chunk_metrics_timestamptz_time_idx on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1 (actual rows=1.00 loops=1)
                Output: metrics_timestamptz_1.tableoid, metrics_timestamptz_1.ctid
                Index Cond: (metrics_timestamptz_1."time" = 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone)
-(6 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE time = '2000-01-01' AND device = '1';
-                                                                          QUERY PLAN                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_space (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
          ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1.00 loops=1)
                Output: metrics_space_1.tableoid, metrics_space_1.ctid
                Index Cond: ((metrics_space_1.device = '1'::text) AND (metrics_space_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
-(6 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE time = '2000-01-01';
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_space (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
@@ -615,13 +550,11 @@ BEGIN;
                ->  Index Scan using _hyper_7_8_chunk_metrics_space_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=1.00 loops=1)
                      Output: metrics_space_2.tableoid, metrics_space_2.ctid
                      Index Cond: (metrics_space_2."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone)
-(11 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_date SET value = 0.6 WHERE time = '2000-01-01';
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_date (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_4_4_chunk metrics_date_1
@@ -630,11 +563,9 @@ BEGIN;
                ->  Index Scan using _hyper_4_4_chunk_metrics_date_time_idx on _timescaledb_internal._hyper_4_4_chunk metrics_date_1 (actual rows=1.00 loops=1)
                      Output: metrics_date_1.tableoid, metrics_date_1.ctid
                      Index Cond: (metrics_date_1."time" = '01-01-2000'::date)
-(8 rows)
 
 :PREFIX UPDATE metrics_timestamp SET value = 0.6 WHERE time = '2000-01-01';
-                                                                              QUERY PLAN                                                                              
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_timestamp (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1
@@ -643,11 +574,9 @@ BEGIN;
                ->  Index Scan using _hyper_5_5_chunk_metrics_timestamp_time_idx on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1 (actual rows=1.00 loops=1)
                      Output: metrics_timestamp_1.tableoid, metrics_timestamp_1.ctid
                      Index Cond: (metrics_timestamp_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone)
-(8 rows)
 
 :PREFIX UPDATE metrics_timestamptz SET value = 0.6 WHERE time = '2000-01-01';
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_timestamptz (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1
@@ -656,11 +585,9 @@ BEGIN;
                ->  Index Scan using _hyper_6_6_chunk_metrics_timestamptz_time_idx on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1 (actual rows=1.00 loops=1)
                      Output: metrics_timestamptz_1.tableoid, metrics_timestamptz_1.ctid
                      Index Cond: (metrics_timestamptz_1."time" = 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone)
-(8 rows)
 
 :PREFIX UPDATE metrics_space SET value = 0.6 WHERE time = '2000-01-01' AND device = '1';
-                                                                             QUERY PLAN                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_space (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
@@ -669,11 +596,9 @@ BEGIN;
                ->  Index Scan using _hyper_7_7_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_7_chunk metrics_space_1 (actual rows=1.00 loops=1)
                      Output: metrics_space_1.tableoid, metrics_space_1.ctid
                      Index Cond: ((metrics_space_1.device = '1'::text) AND (metrics_space_1."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone))
-(8 rows)
 
 :PREFIX UPDATE metrics_space SET value = 0.6 WHERE time = '2000-01-01';
-                                                                             QUERY PLAN                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_space (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
@@ -687,7 +612,6 @@ BEGIN;
                      ->  Index Scan using _hyper_7_8_chunk_metrics_space_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=1.00 loops=1)
                            Output: metrics_space_2.tableoid, metrics_space_2.ctid
                            Index Cond: (metrics_space_2."time" = 'Sat Jan 01 00:00:00 2000'::timestamp without time zone)
-(13 rows)
 
 ROLLBACK;
 -- stable constraints
@@ -695,8 +619,7 @@ ROLLBACK;
 -- should only hit 1 chunk and base table
 BEGIN;
 :PREFIX DELETE FROM metrics_date WHERE time = '2000-01-01'::text::date;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_date (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_4_4_chunk metrics_date_1
@@ -710,11 +633,9 @@ BEGIN;
                ->  Index Scan using _hyper_4_4_chunk_metrics_date_time_idx on _timescaledb_internal._hyper_4_4_chunk metrics_date_1 (actual rows=1.00 loops=1)
                      Output: metrics_date_1.tableoid, metrics_date_1.ctid
                      Index Cond: (metrics_date_1."time" = ('2000-01-01'::cstring)::date)
-(13 rows)
 
 :PREFIX DELETE FROM metrics_timestamp WHERE time = '2000-01-01'::text::timestamp;
-                                                                              QUERY PLAN                                                                              
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_timestamp (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1
@@ -728,11 +649,9 @@ BEGIN;
                ->  Index Scan using _hyper_5_5_chunk_metrics_timestamp_time_idx on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1 (actual rows=1.00 loops=1)
                      Output: metrics_timestamp_1.tableoid, metrics_timestamp_1.ctid
                      Index Cond: (metrics_timestamp_1."time" = ('2000-01-01'::cstring)::timestamp without time zone)
-(13 rows)
 
 :PREFIX DELETE FROM metrics_timestamptz WHERE time = '2000-01-01'::text::timestamptz;
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_timestamptz (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1
@@ -746,13 +665,11 @@ BEGIN;
                ->  Index Scan using _hyper_6_6_chunk_metrics_timestamptz_time_idx on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1 (actual rows=1.00 loops=1)
                      Output: metrics_timestamptz_1.tableoid, metrics_timestamptz_1.ctid
                      Index Cond: (metrics_timestamptz_1."time" = ('2000-01-01'::cstring)::timestamp with time zone)
-(13 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_date SET value = 0.9 WHERE time = '2000-01-01'::text::date;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_date (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_4_4_chunk metrics_date_1
@@ -769,11 +686,9 @@ BEGIN;
                      ->  Index Scan using _hyper_4_4_chunk_metrics_date_time_idx on _timescaledb_internal._hyper_4_4_chunk metrics_date_1 (actual rows=1.00 loops=1)
                            Output: metrics_date_1.tableoid, metrics_date_1.ctid
                            Index Cond: (metrics_date_1."time" = ('2000-01-01'::cstring)::date)
-(16 rows)
 
 :PREFIX UPDATE metrics_timestamp SET value = 0.9 WHERE time = '2000-01-01'::text::timestamp;
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_timestamp (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1
@@ -790,11 +705,9 @@ BEGIN;
                      ->  Index Scan using _hyper_5_5_chunk_metrics_timestamp_time_idx on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1 (actual rows=1.00 loops=1)
                            Output: metrics_timestamp_1.tableoid, metrics_timestamp_1.ctid
                            Index Cond: (metrics_timestamp_1."time" = ('2000-01-01'::cstring)::timestamp without time zone)
-(16 rows)
 
 :PREFIX UPDATE metrics_timestamptz SET value = 0.9 WHERE time = '2000-01-01'::text::timestamptz;
-                                                                                   QUERY PLAN                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_timestamptz (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1
@@ -811,7 +724,6 @@ BEGIN;
                      ->  Index Scan using _hyper_6_6_chunk_metrics_timestamptz_time_idx on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1 (actual rows=1.00 loops=1)
                            Output: metrics_timestamptz_1.tableoid, metrics_timestamptz_1.ctid
                            Index Cond: (metrics_timestamptz_1."time" = ('2000-01-01'::cstring)::timestamp with time zone)
-(16 rows)
 
 ROLLBACK;
 -- space partitioning
@@ -819,8 +731,7 @@ ROLLBACK;
 -- should only hit 1 chunk and base table
 BEGIN;
 :PREFIX DELETE FROM metrics_space WHERE time = '2000-01-01'::text::timestamptz AND device = format('1');
-                                                                             QUERY PLAN                                                                              
----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_space (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
@@ -841,13 +752,11 @@ BEGIN;
                ->  Index Scan using _hyper_7_8_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=0.00 loops=1)
                      Output: metrics_space_2.tableoid, metrics_space_2.ctid
                      Index Cond: ((metrics_space_2.device = format('1'::text)) AND (metrics_space_2."time" = ('2000-01-01'::cstring)::timestamp with time zone))
-(20 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX DELETE FROM metrics_space WHERE device = format('1');
-                                                                              QUERY PLAN                                                                               
------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_space (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
@@ -886,13 +795,11 @@ BEGIN;
                ->  Index Scan using _hyper_7_32_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_32_chunk metrics_space_8 (actual rows=0.00 loops=1)
                      Output: metrics_space_8.tableoid, metrics_space_8.ctid
                      Index Cond: (metrics_space_8.device = format('1'::text))
-(38 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_space SET value = 0.1 WHERE time = '2000-01-01'::text::timestamptz AND device = format('1');
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_space (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
@@ -916,13 +823,11 @@ BEGIN;
                      ->  Index Scan using _hyper_7_8_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_8_chunk metrics_space_2 (actual rows=0.00 loops=1)
                            Output: metrics_space_2.tableoid, metrics_space_2.ctid
                            Index Cond: ((metrics_space_2.device = format('1'::text)) AND (metrics_space_2."time" = ('2000-01-01'::cstring)::timestamp with time zone))
-(23 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_space SET value = 0.1 WHERE device = format('1');
-                                                                                 QUERY PLAN                                                                                  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_space (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_7_7_chunk metrics_space_1
@@ -964,15 +869,13 @@ BEGIN;
                      ->  Index Scan using _hyper_7_32_chunk_metrics_space_device_time_idx on _timescaledb_internal._hyper_7_32_chunk metrics_space_8 (actual rows=0.00 loops=1)
                            Output: metrics_space_8.tableoid, metrics_space_8.ctid
                            Index Cond: (metrics_space_8.device = format('1'::text))
-(41 rows)
 
 ROLLBACK;
 -- should have ChunkAppend since constraint is stable
 -- should only hit 1 chunk and base table, toplevel rows should be 1
 BEGIN;
 :PREFIX DELETE FROM metrics_date WHERE time = '2000-01-01'::text::date RETURNING 'returning', time;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), metrics_date_1."time"
    ->  Delete on public.metrics_date (actual rows=1.00 loops=1)
@@ -988,11 +891,9 @@ BEGIN;
                ->  Index Scan using _hyper_4_4_chunk_metrics_date_time_idx on _timescaledb_internal._hyper_4_4_chunk metrics_date_1 (actual rows=1.00 loops=1)
                      Output: metrics_date_1.tableoid, metrics_date_1.ctid
                      Index Cond: (metrics_date_1."time" = ('2000-01-01'::cstring)::date)
-(15 rows)
 
 :PREFIX DELETE FROM metrics_timestamp WHERE time = '2000-01-01'::text::timestamp RETURNING 'returning', time;
-                                                                              QUERY PLAN                                                                              
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), metrics_timestamp_1."time"
    ->  Delete on public.metrics_timestamp (actual rows=1.00 loops=1)
@@ -1008,11 +909,9 @@ BEGIN;
                ->  Index Scan using _hyper_5_5_chunk_metrics_timestamp_time_idx on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1 (actual rows=1.00 loops=1)
                      Output: metrics_timestamp_1.tableoid, metrics_timestamp_1.ctid
                      Index Cond: (metrics_timestamp_1."time" = ('2000-01-01'::cstring)::timestamp without time zone)
-(15 rows)
 
 :PREFIX DELETE FROM metrics_timestamptz WHERE time = '2000-01-01'::text::timestamptz RETURNING 'returning', time;
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), metrics_timestamptz_1."time"
    ->  Delete on public.metrics_timestamptz (actual rows=1.00 loops=1)
@@ -1028,13 +927,11 @@ BEGIN;
                ->  Index Scan using _hyper_6_6_chunk_metrics_timestamptz_time_idx on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1 (actual rows=1.00 loops=1)
                      Output: metrics_timestamptz_1.tableoid, metrics_timestamptz_1.ctid
                      Index Cond: (metrics_timestamptz_1."time" = ('2000-01-01'::cstring)::timestamp with time zone)
-(15 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_date SET value = 0.2 WHERE time = '2000-01-01'::text::date RETURNING 'returning', time;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), metrics_date_1."time"
    ->  Update on public.metrics_date (actual rows=1.00 loops=1)
@@ -1053,11 +950,9 @@ BEGIN;
                      ->  Index Scan using _hyper_4_4_chunk_metrics_date_time_idx on _timescaledb_internal._hyper_4_4_chunk metrics_date_1 (actual rows=1.00 loops=1)
                            Output: metrics_date_1.tableoid, metrics_date_1.ctid
                            Index Cond: (metrics_date_1."time" = ('2000-01-01'::cstring)::date)
-(18 rows)
 
 :PREFIX UPDATE metrics_timestamp SET value = 0.2 WHERE time = '2000-01-01'::text::timestamp RETURNING 'returning', time;
-                                                                                 QUERY PLAN                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), metrics_timestamp_1."time"
    ->  Update on public.metrics_timestamp (actual rows=1.00 loops=1)
@@ -1076,11 +971,9 @@ BEGIN;
                      ->  Index Scan using _hyper_5_5_chunk_metrics_timestamp_time_idx on _timescaledb_internal._hyper_5_5_chunk metrics_timestamp_1 (actual rows=1.00 loops=1)
                            Output: metrics_timestamp_1.tableoid, metrics_timestamp_1.ctid
                            Index Cond: (metrics_timestamp_1."time" = ('2000-01-01'::cstring)::timestamp without time zone)
-(18 rows)
 
 :PREFIX UPDATE metrics_timestamptz SET value = 0.2 WHERE time = '2000-01-01'::text::timestamptz RETURNING 'returning', time;
-                                                                                   QUERY PLAN                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=1.00 loops=1)
    Output: ('returning'::text), metrics_timestamptz_1."time"
    ->  Update on public.metrics_timestamptz (actual rows=1.00 loops=1)
@@ -1099,15 +992,13 @@ BEGIN;
                      ->  Index Scan using _hyper_6_6_chunk_metrics_timestamptz_time_idx on _timescaledb_internal._hyper_6_6_chunk metrics_timestamptz_1 (actual rows=1.00 loops=1)
                            Output: metrics_timestamptz_1.tableoid, metrics_timestamptz_1.ctid
                            Index Cond: (metrics_timestamptz_1."time" = ('2000-01-01'::cstring)::timestamp with time zone)
-(18 rows)
 
 ROLLBACK;
 -- subselects
 -- no chunk exclusion for subqueries joins atm
 BEGIN;
 :PREFIX DELETE FROM metrics_int4 WHERE time IN (SELECT time FROM metrics_int2) AND time < length(version());
-                                                                                 QUERY PLAN                                                                                  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int4 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_2_2_chunk metrics_int4_1
@@ -1145,13 +1036,11 @@ BEGIN;
                                        Output: metrics_int2_3.ctid, metrics_int2_3."time", metrics_int2_3.tableoid
                                  ->  Seq Scan on _timescaledb_internal._hyper_1_25_chunk metrics_int2_4 (actual rows=1.00 loops=1)
                                        Output: metrics_int2_4.ctid, metrics_int2_4."time", metrics_int2_4.tableoid
-(39 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX DELETE FROM metrics_int4 WHERE time IN (SELECT time FROM metrics_int2 WHERE time < length(version()));
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int4 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_2_2_chunk metrics_int4_1
@@ -1189,13 +1078,11 @@ BEGIN;
                                  ->  Index Scan Backward using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk metrics_int2_4 (actual rows=1.00 loops=1)
                                        Output: metrics_int2_4.ctid, metrics_int2_4."time", metrics_int2_4.tableoid
                                        Index Cond: (metrics_int2_4."time" < length(version()))
-(39 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX DELETE FROM metrics_int4 WHERE time IN (SELECT time FROM metrics_int2 WHERE time < length(version())) AND time < length(version());
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int4 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_2_2_chunk metrics_int4_1
@@ -1237,13 +1124,11 @@ BEGIN;
                                  ->  Index Scan Backward using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk metrics_int2_4 (actual rows=1.00 loops=1)
                                        Output: metrics_int2_4.ctid, metrics_int2_4."time", metrics_int2_4.tableoid
                                        Index Cond: (metrics_int2_4."time" < length(version()))
-(43 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int4 SET value = 0.1 WHERE time IN (SELECT time FROM metrics_int2) AND time < length(version());
-                                                                                 QUERY PLAN                                                                                  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int4 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_2_2_chunk metrics_int4_1
@@ -1281,13 +1166,11 @@ BEGIN;
                                        Output: metrics_int2_3.ctid, metrics_int2_3."time", metrics_int2_3.tableoid
                                  ->  Seq Scan on _timescaledb_internal._hyper_1_25_chunk metrics_int2_4 (actual rows=1.00 loops=1)
                                        Output: metrics_int2_4.ctid, metrics_int2_4."time", metrics_int2_4.tableoid
-(39 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int4 SET value = 0.1 WHERE time IN (SELECT time FROM metrics_int2 WHERE time < length(version()));
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int4 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_2_2_chunk metrics_int4_1
@@ -1325,13 +1208,11 @@ BEGIN;
                                  ->  Index Scan Backward using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk metrics_int2_4 (actual rows=1.00 loops=1)
                                        Output: metrics_int2_4.ctid, metrics_int2_4."time", metrics_int2_4.tableoid
                                        Index Cond: (metrics_int2_4."time" < length(version()))
-(39 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int4 SET value = 0.1 WHERE time IN (SELECT time FROM metrics_int2 WHERE time < length(version())) AND time < length(version());
-                                                                                       QUERY PLAN                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int4 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_2_2_chunk metrics_int4_1
@@ -1373,15 +1254,13 @@ BEGIN;
                                  ->  Index Scan Backward using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk metrics_int2_4 (actual rows=1.00 loops=1)
                                        Output: metrics_int2_4.ctid, metrics_int2_4."time", metrics_int2_4.tableoid
                                        Index Cond: (metrics_int2_4."time" < length(version()))
-(43 rows)
 
 ROLLBACK;
 -- join
 -- no chunk exclusion for subqueries joins atm
 BEGIN;
 :PREFIX DELETE FROM metrics_int4 m4 USING metrics_int2 m2;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int4 m4 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_2_2_chunk m4_1
@@ -1410,13 +1289,11 @@ BEGIN;
                                  Output: m4_3.tableoid, m4_3.ctid
                            ->  Seq Scan on _timescaledb_internal._hyper_2_26_chunk m4_4 (actual rows=1.00 loops=1)
                                  Output: m4_4.tableoid, m4_4.ctid
-(28 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX DELETE FROM metrics_int4 m4 USING metrics_int2 m2 WHERE m4.time = m2.time;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int4 m4 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_2_2_chunk m4_1
@@ -1448,13 +1325,11 @@ BEGIN;
                                  Output: m2_3.ctid, m2_3."time", m2_3.tableoid
                            ->  Index Scan Backward using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk m2_4 (actual rows=1.00 loops=1)
                                  Output: m2_4.ctid, m2_4."time", m2_4.tableoid
-(31 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX DELETE FROM metrics_int4 m4 USING metrics_int2 m2 WHERE m4.time = m2.time AND m4.time < length(version());
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_int4 m4 (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_2_2_chunk m4_1
@@ -1490,13 +1365,11 @@ BEGIN;
                                  Output: m2_3.ctid, m2_3."time", m2_3.tableoid
                            ->  Index Scan Backward using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk m2_4 (actual rows=1.00 loops=1)
                                  Output: m2_4.ctid, m2_4."time", m2_4.tableoid
-(35 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int4 m4 SET value = 0.15 FROM metrics_int2 m2;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int4 m4 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_2_2_chunk m4_1
@@ -1525,13 +1398,11 @@ BEGIN;
                                  Output: m4_3.tableoid, m4_3.ctid
                            ->  Seq Scan on _timescaledb_internal._hyper_2_26_chunk m4_4 (actual rows=1.00 loops=1)
                                  Output: m4_4.tableoid, m4_4.ctid
-(28 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int4 m4 SET value = 0.15 FROM metrics_int2 m2 WHERE m4.time = m2.time;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int4 m4 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_2_2_chunk m4_1
@@ -1563,13 +1434,11 @@ BEGIN;
                                  Output: m2_3.ctid, m2_3."time", m2_3.tableoid
                            ->  Index Scan Backward using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk m2_4 (actual rows=1.00 loops=1)
                                  Output: m2_4.ctid, m2_4."time", m2_4.tableoid
-(31 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX UPDATE metrics_int4 m4 SET value = 0.15 FROM metrics_int2 m2 WHERE m4.time = m2.time AND m4.time < length(version());
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_int4 m4 (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_2_2_chunk m4_1
@@ -1605,7 +1474,6 @@ BEGIN;
                                  Output: m2_3.ctid, m2_3."time", m2_3.tableoid
                            ->  Index Scan Backward using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk m2_4 (actual rows=1.00 loops=1)
                                  Output: m2_4.ctid, m2_4."time", m2_4.tableoid
-(35 rows)
 
 ROLLBACK;
 -- cte
@@ -1613,8 +1481,7 @@ ROLLBACK;
 BEGIN;
 :PREFIX WITH d AS (DELETE FROM metrics_int4 m4 WHERE m4.time < length(version()) RETURNING time)
 SELECT * FROM d;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  CTE Scan on d (actual rows=4.00 loops=1)
    Output: d."time"
    CTE d
@@ -1642,14 +1509,12 @@ SELECT * FROM d;
                        ->  Index Scan using _hyper_2_26_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_26_chunk m4_4 (actual rows=1.00 loops=1)
                              Output: m4_4.tableoid, m4_4.ctid
                              Index Cond: (m4_4."time" < length(version()))
-(27 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX WITH d AS (DELETE FROM metrics_int4 m4 WHERE m4.time < length(version()))
 DELETE FROM metrics_int2 m2 WHERE m2.time < length(version());
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    CTE d
      ->  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
@@ -1695,14 +1560,12 @@ DELETE FROM metrics_int2 m2 WHERE m2.time < length(version());
                ->  Index Scan using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk m2_4 (actual rows=1.00 loops=1)
                      Output: m2_4.tableoid, m2_4.ctid
                      Index Cond: (m2_4."time" < length(version()))
-(45 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX WITH u AS (UPDATE metrics_int4 m4 SET data = 'cte update' WHERE m4.time < length(version()) RETURNING time)
 SELECT * FROM u;
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  CTE Scan on u (actual rows=4.00 loops=1)
    Output: u."time"
    CTE u
@@ -1733,14 +1596,12 @@ SELECT * FROM u;
                              ->  Index Scan using _hyper_2_26_chunk_metrics_int4_time_idx on _timescaledb_internal._hyper_2_26_chunk m4_4 (actual rows=1.00 loops=1)
                                    Output: m4_4.tableoid, m4_4.ctid
                                    Index Cond: (m4_4."time" < length(version()))
-(30 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX WITH u AS (UPDATE metrics_int4 m4 SET data = 'cte update 1' WHERE m4.time < length(version()))
 UPDATE metrics_int2 m2 SET data = 'cte update 2' WHERE m2.time < length(version());
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    CTE u
      ->  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
@@ -1792,14 +1653,12 @@ UPDATE metrics_int2 m2 SET data = 'cte update 2' WHERE m2.time < length(version(
                      ->  Index Scan using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk m2_4 (actual rows=1.00 loops=1)
                            Output: m2_4.tableoid, m2_4.ctid
                            Index Cond: (m2_4."time" < length(version()))
-(51 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX WITH d AS (DELETE FROM metrics_int4 m4 WHERE m4.time < length(version()) RETURNING time)
 UPDATE metrics_int2 m2 SET data = 'cte update' WHERE m2.time < length(version());
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    CTE d
      ->  Custom Scan (ModifyHypertable) (actual rows=4.00 loops=1)
@@ -1850,14 +1709,12 @@ UPDATE metrics_int2 m2 SET data = 'cte update' WHERE m2.time < length(version())
                      ->  Index Scan using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk m2_4 (actual rows=1.00 loops=1)
                            Output: m2_4.tableoid, m2_4.ctid
                            Index Cond: (m2_4."time" < length(version()))
-(50 rows)
 
 ROLLBACK;
 BEGIN;
 :PREFIX WITH u AS (UPDATE metrics_int4 m4 SET data = 'cte update' WHERE m4.time < length(version()) RETURNING time)
 DELETE FROM metrics_int2 m2 WHERE m2.time < length(version());
-                                                                            QUERY PLAN                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    CTE u
      ->  Custom Scan (ModifyHypertable) (actual rows=4.00 loops=1)
@@ -1908,7 +1765,6 @@ DELETE FROM metrics_int2 m2 WHERE m2.time < length(version());
                ->  Index Scan using _hyper_1_25_chunk_metrics_int2_time_idx on _timescaledb_internal._hyper_1_25_chunk m2_4 (actual rows=1.00 loops=1)
                      Output: m2_4.tableoid, m2_4.ctid
                      Index Cond: (m2_4."time" < length(version()))
-(50 rows)
 
 ROLLBACK;
 -- test interaction with compression
@@ -1918,8 +1774,7 @@ ROLLBACK;
 -- delete from uncompressed chunks with non-immutable constraints
 BEGIN;
 :PREFIX DELETE FROM metrics_compressed WHERE time > '2005-01-01'::text::timestamptz;
-                                                                                QUERY PLAN                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Delete on public.metrics_compressed (actual rows=0.00 loops=1)
          Delete on _timescaledb_internal._hyper_8_33_chunk metrics_compressed
@@ -1939,14 +1794,12 @@ BEGIN;
                ->  Index Scan using _hyper_8_37_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_37_chunk metrics_compressed_3 (actual rows=1.00 loops=1)
                      Output: metrics_compressed_3.tableoid, metrics_compressed_3.ctid
                      Index Cond: (metrics_compressed_3."time" > ('2005-01-01'::cstring)::timestamp with time zone)
-(19 rows)
 
 ROLLBACK;
 -- update uncompressed chunks with non-immutable constraints
 BEGIN;
 :PREFIX UPDATE metrics_compressed SET value = 2 * value WHERE time > '2005-01-01'::text::timestamptz;
-                                                                                   QUERY PLAN                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    ->  Update on public.metrics_compressed (actual rows=0.00 loops=1)
          Update on _timescaledb_internal._hyper_8_33_chunk metrics_compressed
@@ -1969,6 +1822,5 @@ BEGIN;
                      ->  Index Scan using _hyper_8_37_chunk_metrics_compressed_time_idx on _timescaledb_internal._hyper_8_37_chunk metrics_compressed_3 (actual rows=1.00 loops=1)
                            Output: metrics_compressed_3.value, metrics_compressed_3.tableoid, metrics_compressed_3.ctid
                            Index Cond: (metrics_compressed_3."time" > ('2005-01-01'::cstring)::timestamp with time zone)
-(22 rows)
 
 ROLLBACK;

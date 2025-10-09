@@ -12,7 +12,6 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
  create_hypertable 
 -------------------
  (1,public,t,t)
-(1 row)
 
 insert into t select
     '2020-01-01'::timestamp
@@ -26,94 +25,77 @@ select count(compress_chunk(x, true)) from show_chunks('t') x;
  count 
 -------
      1
-(1 row)
 
 analyze t;
 explain (buffers off, costs off) select * from t order by ts;
-                      QUERY PLAN                      
-------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          ->  Seq Scan on compress_hyper_2_2_chunk
-(4 rows)
 
 explain (buffers off, costs off) select * from t where low_card = 1 order by ts;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
                Index Cond: (low_card = 1)
-(5 rows)
 
 explain (buffers off, costs off) select * from t where high_card = 1 order by ts;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
                Index Cond: (high_card = 1)
-(5 rows)
 
 explain (buffers off, costs off) select * from t where low_card = 1 and high_card = 1 order by ts;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
                Index Cond: ((low_card = 1) AND (high_card = 1))
-(5 rows)
 
 -- Test that batch sorted merge is not disabled by enable_sort. We have another
 -- GUC to disable it.
 set enable_sort to off;
 explain (buffers off, costs off) select * from t where high_card = 1 order by ts;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
                Index Cond: (high_card = 1)
-(5 rows)
 
 reset enable_sort;
 -- Test that inequality conditions in WHERE also influence the estimates.
 explain (buffers off, costs off) select * from t where high_card < 10 order by ts;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
                Index Cond: (high_card < 10)
-(5 rows)
 
 explain (buffers off, costs off) select * from t where high_card < 500 order by ts;
-                      QUERY PLAN                      
-------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          ->  Seq Scan on compress_hyper_2_2_chunk
                Filter: (high_card < 500)
-(5 rows)
 
 -- Test that batch sorted merge respects the working memory limit.
 set work_mem to 64;
 explain (buffers off, costs off) select * from t where high_card < 10 order by ts;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
                Index Cond: (high_card < 10)
-(5 rows)
 
 reset work_mem;
 -- Test for large values of memory limit bytes that don't fit into an int.
@@ -123,14 +105,12 @@ reset work_mem;
 select least(4194304, max_val::bigint) large_work_mem from pg_settings where name = 'work_mem' \gset
 set work_mem to :large_work_mem;
 explain (buffers off, costs off) select * from t where high_card < 10 order by ts;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
          ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_min_1__idx on compress_hyper_2_2_chunk
                Index Cond: (high_card < 10)
-(5 rows)
 
 reset work_mem;
 reset max_parallel_workers_per_gather;

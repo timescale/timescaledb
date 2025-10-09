@@ -6,11 +6,9 @@ SHOW timescaledb.license;
  timescaledb.license 
 ---------------------
  timescale
-(1 row)
 
 SELECT _timescaledb_functions.tsl_loaded();
  tsl_loaded 
 ------------
  t
-(1 row)
 

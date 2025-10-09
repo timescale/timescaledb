@@ -9,7 +9,6 @@ SELECT table_name FROM create_hypertable('comp_conflicts_1','time');
     table_name    
 ------------------
  comp_conflicts_1
-(1 row)
 
 ALTER TABLE comp_conflicts_1 SET (timescaledb.compress);
 -- implicitly create chunk
@@ -40,7 +39,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- repeat tests on an actual compressed chunk
 -- should fail due to multiple entries with same time value
@@ -60,7 +58,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- should succeed since there are no conflicts in the values
 BEGIN;
@@ -80,7 +77,6 @@ INFO:  Number of compressed rows fetched from table scan: 0. Number of compresse
  count 
 -------
      3
-(1 row)
 
 ROLLBACK;
 -- no data should be in uncompressed chunk since we did rollback
@@ -88,7 +84,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- should fail since it conflicts with existing row
 \set ON_ERROR_STOP 0
@@ -103,7 +98,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- test 2: multi-column unique without segmentby
 CREATE TABLE comp_conflicts_2(time timestamptz NOT NULL, device text, value float, UNIQUE(time, device));
@@ -111,7 +105,6 @@ SELECT table_name FROM create_hypertable('comp_conflicts_2','time');
     table_name    
 ------------------
  comp_conflicts_2
-(1 row)
 
 ALTER TABLE comp_conflicts_2 SET (timescaledb.compress, timescaledb.compress_segmentby='');
 -- implicitly create chunk
@@ -125,7 +118,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- should fail due to multiple entries with same time, device value
 \set ON_ERROR_STOP 0
@@ -147,7 +139,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- should succeed since there are no conflicts in the values
 BEGIN;
@@ -167,7 +158,6 @@ INFO:  Number of compressed rows fetched from table scan: 0. Number of compresse
  count 
 -------
      3
-(1 row)
 
 ROLLBACK;
 -- no data should be in uncompressed chunk since we did rollback
@@ -175,7 +165,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- should fail since it conflicts with existing row
 \set ON_ERROR_STOP 0
@@ -190,7 +179,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- test 3: multi-column primary key with segmentby
 CREATE TABLE comp_conflicts_3(time timestamptz NOT NULL, device text, label text DEFAULT 'label', value float, UNIQUE(time, device, label));
@@ -198,7 +186,6 @@ SELECT table_name FROM create_hypertable('comp_conflicts_3','time');
     table_name    
 ------------------
  comp_conflicts_3
-(1 row)
 
 ALTER TABLE comp_conflicts_3 SET (timescaledb.compress,timescaledb.compress_segmentby='device, label');
 -- implicitly create chunk
@@ -213,7 +200,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- should fail due to multiple entries with same time, device value
 \set ON_ERROR_STOP 0
@@ -311,7 +297,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- NULL is considered distinct from other NULL so even though the next INSERT looks
 -- like a conflict it is not a constraint violation (PG15 makes NULL behaviour configurable)
@@ -323,7 +308,6 @@ BEGIN;
  count 
 -------
      1
-(1 row)
 
 ROLLBACK;
 -- check if NULL handling works the same with the compressed index dropped
@@ -336,7 +320,6 @@ BEGIN;
  count 
 -------
      1
-(1 row)
 
 ROLLBACK;
 -- should succeed since there are no conflicts in the values
@@ -350,7 +333,6 @@ INFO:  Number of compressed rows fetched from index: 1. Number of compressed row
  count 
 -------
      1
-(1 row)
 
 ROLLBACK;
 -- same as above but no index
@@ -366,7 +348,6 @@ INFO:  Number of compressed rows fetched from table scan: 0. Number of compresse
  count 
 -------
      1
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -386,7 +367,6 @@ INFO:  Number of compressed rows fetched from index: 0. Number of compressed row
  count 
 -------
      3
-(1 row)
 
 ROLLBACK;
 -- same as above but no index
@@ -408,7 +388,6 @@ INFO:  Number of compressed rows fetched from table scan: 0. Number of compresse
  count 
 -------
      3
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -420,7 +399,6 @@ INFO:  Number of compressed rows fetched from index: 0. Number of compressed row
  count 
 -------
      1
-(1 row)
 
 ROLLBACK;
 -- no data should be in uncompressed chunk since we did rollback
@@ -428,7 +406,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- should fail since it conflicts with existing row
 \set ON_ERROR_STOP 0
@@ -443,7 +420,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- test 4: multi-column primary key with multi-column orderby compression
 CREATE TABLE comp_conflicts_4(time timestamptz NOT NULL, device text, value float, UNIQUE(time, device));
@@ -451,7 +427,6 @@ SELECT table_name FROM create_hypertable('comp_conflicts_4','time');
     table_name    
 ------------------
  comp_conflicts_4
-(1 row)
 
 ALTER TABLE comp_conflicts_4 SET (timescaledb.compress,timescaledb.compress_segmentby='',timescaledb.compress_orderby='time,device');
 -- implicitly create chunk
@@ -466,7 +441,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- NULL is considered distinct from other NULL so even though the next INSERT looks
 -- like a conflict it is not a constraint violation (PG15 makes NULL behaviour configurable)
@@ -478,7 +452,6 @@ BEGIN;
  count 
 -------
      1
-(1 row)
 
 ROLLBACK;
 -- should succeed since there are no conflicts in the values
@@ -492,7 +465,6 @@ INFO:  Number of compressed rows fetched from table scan: 0. Number of compresse
  count 
 -------
      1
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -512,7 +484,6 @@ INFO:  Number of compressed rows fetched from table scan: 0. Number of compresse
  count 
 -------
      3
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -524,7 +495,6 @@ INFO:  Number of compressed rows fetched from table scan: 0. Number of compresse
  count 
 -------
      1
-(1 row)
 
 ROLLBACK;
 -- no data should be in uncompressed chunk since we did rollback
@@ -532,7 +502,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 -- should fail since it conflicts with existing row
 \set ON_ERROR_STOP 0
@@ -545,7 +514,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:00:01','d1',0.1) ON CONFLICT DO NOTHING;
 INFO:  Using table scan with scan keys: index 0, heap 4, memory 2. 
@@ -557,7 +525,6 @@ SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
      0
-(1 row)
 
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
@@ -587,7 +554,6 @@ WARNING:  column type "character varying" used for "name" does not follow best p
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
              9 | public      | compressed_ht | t
-(1 row)
 
 -- create chunk 1
 INSERT INTO compressed_ht VALUES ('2017-12-28 01:10:28.192199+05:30', '1', 0.876, 4.123, 'chunk 1');
@@ -613,7 +579,6 @@ INFO:  using tuplesort to scan rows from "_hyper_9_11_chunk" for converting to c
  _timescaledb_internal._hyper_9_9_chunk
  _timescaledb_internal._hyper_9_10_chunk
  _timescaledb_internal._hyper_9_11_chunk
-(3 rows)
 
 -- check compression status
 SELECT chunk_status,
@@ -625,14 +590,12 @@ WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
             1 | _hyper_9_10_chunk
             1 | _hyper_9_11_chunk
             1 | _hyper_9_9_chunk
-(3 rows)
 
 -- should report 0 row
 SELECT COUNT(*) FROM compressed_ht WHERE name = 'ON CONFLICT DO UPDATE';
  count 
 -------
      0
-(1 row)
 
 INSERT INTO compressed_ht VALUES ('2017-12-28 01:10:28.192199+05:30', '1', 0.876, 4.123, 'new insert row')
   ON conflict(sensor_id, time)
@@ -644,7 +607,6 @@ SELECT COUNT(*) FROM compressed_ht WHERE name = 'ON CONFLICT DO UPDATE';
  count 
 -------
      1
-(1 row)
 
 -- check that chunk 1 compression status is set to partial
 SELECT chunk_status,
@@ -656,7 +618,6 @@ WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
             1 | _hyper_9_10_chunk
             1 | _hyper_9_11_chunk
             9 | _hyper_9_9_chunk
-(3 rows)
 
 INSERT INTO compressed_ht VALUES ('2022-01-24 01:10:28.192199+05:30', '6', 0.876, 4.123, 'new insert row')
   ON conflict(sensor_id, time)
@@ -666,7 +627,6 @@ INFO:  Number of compressed rows fetched from index: 1. Number of compressed row
                 time                 | sensor_id |  cpu  | temperature |         name          
 -------------------------------------+-----------+-------+-------------+-----------------------
  Sun Jan 23 11:40:28.192199 2022 PST |         6 | 0.876 |       4.123 | ON CONFLICT DO UPDATE
-(1 row)
 
 -- check that chunks 1 and 3 compression status is set to partial
 SELECT chunk_status,
@@ -678,14 +638,12 @@ WHERE hypertable_name = 'compressed_ht' ORDER BY chunk_name;
             1 | _hyper_9_10_chunk
             9 | _hyper_9_11_chunk
             9 | _hyper_9_9_chunk
-(3 rows)
 
 -- test for disabling DML decompression
 SHOW timescaledb.enable_dml_decompression;
  timescaledb.enable_dml_decompression 
 --------------------------------------
  on
-(1 row)
 
 SET timescaledb.enable_dml_decompression = false;
 \set ON_ERROR_STOP 0
@@ -714,7 +672,6 @@ SELECT create_hypertable('test_collation', 'time', chunk_time_interval => 241920
       create_hypertable       
 ------------------------------
  (11,public,test_collation,t)
-(1 row)
 
 ALTER TABLE test_collation
 SET (
@@ -733,7 +690,6 @@ INFO:  using tuplesort to scan rows from "_hyper_11_15_chunk" for converting to 
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_15_chunk
-(1 row)
 
 INSERT INTO "test_collation"
   ("device_id", "time", "name")
@@ -751,7 +707,6 @@ SELECT create_hypertable('test_i7672', 'time');
     create_hypertable     
 --------------------------
  (13,public,test_i7672,t)
-(1 row)
 
 ALTER TABLE test_i7672 SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device');
 INSERT INTO test_i7672 VALUES ('2025-01-01','d1');
@@ -759,7 +714,6 @@ SELECT count(*) FROM (SELECT compress_chunk(show_chunks('test_i7672'))) c;
  count 
 -------
      1
-(1 row)
 
 INSERT INTO test_i7672 VALUES
 ('2025-01-01','d1'),
@@ -770,5 +724,4 @@ SELECT * FROM test_i7672 t ORDER BY t;
 ------------------------------+--------
  Wed Jan 01 00:00:00 2025 PST | d1
  Wed Jan 01 00:00:00 2025 PST | d2
-(2 rows)
 

@@ -10,7 +10,6 @@ step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
 ---------------------
                 73728
-(1 row)
 
 step Sc: COMMIT;
 
@@ -24,7 +23,6 @@ step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
 ---------------------
                 73728
-(1 row)
 
 step Sc: COMMIT;
 
@@ -35,7 +33,6 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
 step Bc: ROLLBACK;
@@ -45,7 +42,6 @@ step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
 ---------------------
                 57344
-(1 row)
 
 step Ic: COMMIT;
 
@@ -55,7 +51,6 @@ step WPE: SELECT debug_waitpoint_enable('process_index_start_indexing_done');
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step CI: CREATE INDEX test_index ON ts_index_test(location) WITH (timescaledb.transaction_per_chunk, timescaledb.barrier_table='barrier'); <waiting ...>
 step DI: DROP INDEX test_index; <waiting ...>
@@ -65,7 +60,6 @@ step WPR: SELECT debug_waitpoint_release('process_index_start_indexing_done');
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step CI: <... completed>
 step P: SELECT * FROM hypertable_index_size('test_index');
@@ -83,7 +77,6 @@ step P: SELECT * FROM hypertable_index_size('test_index');
 hypertable_index_size
 ---------------------
                 57344
-(1 row)
 
 step Ic: COMMIT;
 step Sc: COMMIT;

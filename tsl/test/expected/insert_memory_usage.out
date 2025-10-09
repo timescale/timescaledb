@@ -11,7 +11,6 @@ select create_hypertable('uk_price_paid', 'date', chunk_time_interval => interva
      create_hypertable      
 ----------------------------
  (1,public,uk_price_paid,t)
-(1 row)
 
 -- This is where we log the memory usage.
 create table portal_memory_log(id serial, bytes bigint);
@@ -64,7 +63,6 @@ select * from portal_memory_log where (
 );
  id | bytes 
 ----+-------
-(0 rows)
 
 -- INSERT into a compressed table.
 truncate uk_price_paid;
@@ -74,7 +72,6 @@ select count(compress_chunk(chunk)) from show_chunks('uk_price_paid') chunk;
  count 
 -------
    111
-(1 row)
 
 truncate portal_memory_log;
 alter sequence portal_memory_log_id_seq restart with 1;
@@ -92,5 +89,4 @@ select * from portal_memory_log where (
 );
  id | bytes 
 ----+-------
-(0 rows)
 

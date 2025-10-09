@@ -4,7 +4,6 @@ starting permutation: s3_lock_decompression_locks s2_read_sensor_data s1_decompr
 compression_status
 ------------------
 Compressed        
-(1 row)
 
 step s3_lock_decompression_locks: 
    -- This waitpoint is defined before the decompressed chunk is re-indexed. Up to this 
@@ -18,12 +17,10 @@ step s3_lock_decompression_locks:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_read_sensor_data: 
    SELECT FROM sensor_data;
@@ -35,12 +32,10 @@ step s1_decompress:
 count
 -----
     1
-(1 row)
 
 compression_status
 ------------------
 Uncompressed      
-(1 row)
 
 step s2_read_sensor_data: 
    SELECT FROM sensor_data;
@@ -55,12 +50,10 @@ step s3_unlock_decompression_before_reindex_lock:
 
 locktype|mode|granted|objid
 --------+----+-------+-----
-(0 rows)
 
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_read_sensor_data: 
    SELECT FROM sensor_data;
@@ -75,12 +68,10 @@ step s3_unlock_decompression_after_reindex_lock:
 
 locktype|mode|granted|objid
 --------+----+-------+-----
-(0 rows)
 
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_read_sensor_data: 
    SELECT FROM sensor_data;

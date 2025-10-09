@@ -10,21 +10,18 @@ select table_name from create_hypertable('foo2', 'a', chunk_time_interval=> 10);
  table_name 
 ------------
  foo2
-(1 row)
 
 create table foo3 (a integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('foo3', 'a', chunk_time_interval=> 10);
  table_name 
 ------------
  foo3
-(1 row)
 
 create table non_compressed (a integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('non_compressed', 'a', chunk_time_interval=> 10);
    table_name   
 ----------------
  non_compressed
-(1 row)
 
 insert into non_compressed values( 3 , 16 , 20, 4);
 ALTER TABLE foo2 set (timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
@@ -42,7 +39,6 @@ select create_hypertable('default_skipped', 'a', chunk_time_interval=> 10);
       create_hypertable       
 ------------------------------
  (5,public,default_skipped,t)
-(1 row)
 
 alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
 alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
@@ -52,7 +48,6 @@ select table_name from create_hypertable('with_rls', 'a', chunk_time_interval=> 
  table_name 
 ------------
  with_rls
-(1 row)
 
 ALTER TABLE with_rls set (timescaledb.compress, timescaledb.compress_orderby='a');
 ERROR:  columnstore cannot be used on table with row security
@@ -62,7 +57,6 @@ SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text;
 -----------------+----------------+----------------+---------+--------------+--------------------+-------
  default_skipped |                | {c}            |         |              |                    | 
  foo2            |                | {"bacB toD",c} | {d,a}   | {f,t}        | {f,t}              | 
-(2 rows)
 
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d DeSc NullS lAsT');
 --shold allow alter since segment by was empty
@@ -78,7 +72,6 @@ select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_ti
        table_name       
 ------------------------
  reserved_column_prefix
-(1 row)
 
 ALTER TABLE reserved_column_prefix set (timescaledb.compress);
 ERROR:  cannot convert tables with reserved column prefix '_ts_meta_' to columnstore
@@ -89,7 +82,6 @@ select table_name from create_hypertable('foo', 'a', chunk_time_interval=> 10);
  table_name 
 ------------
  foo
-(1 row)
 
 insert into foo values( 3 , 16 , 20);
 insert into foo values( 10 , 10 , 20);
@@ -100,7 +92,6 @@ select attname, attnotnull from pg_attribute where attrelid = (select oid from p
  attname | attnotnull 
 ---------+------------
  b       | t
-(1 row)
 
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
 ERROR:  column "d" does not exist
@@ -198,35 +189,30 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::reg
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------
  foo   |                | {c}       | {a,b}   | {f,f}        | {f,f}              | 
-(1 row)
 
 ALTER TABLE foo RESET (timescaledb.compress_orderby);
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------
  foo   |                | {c}       |         |              |                    | 
-(1 row)
 
 ALTER TABLE foo RESET (timescaledb.compress_segmentby);
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------
  foo   |                |           |         |              |                    | 
-(1 row)
 
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_index = 'bloom(c)');
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                 index                                                                                  
 -------+----------------+-----------+---------+--------------+--------------------+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  foo   |                |           | {a,b}   | {f,f}        | {f,f}              | [{"type": "bloom", "column": "c", "source": "config"}, {"type": "minmax", "column": "a", "source": "orderby"}, {"type": "minmax", "column": "b", "source": "orderby"}]
-(1 row)
 
 ALTER TABLE foo RESET (timescaledb.compress_index);
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------
  foo   |                |           | {a,b}   | {f,f}        | {f,f}              | 
-(1 row)
 
 -- should fail
 ALTER TABLE foo RESET (timescaledb.compress);
@@ -242,7 +228,6 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::reg
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------
  foo   |                |           |         |              |                    | 
-(1 row)
 
 ALTER TABLE foo SET (timescaledb.compress, timescaledb.compress_orderby = 'a, b', timescaledb.compress_segmentby='');
 create table foo_fake (a integer, b integer, c integer, t text, p point);
@@ -253,7 +238,6 @@ select table_name from create_hypertable('foo_fake', 'a', chunk_time_interval=> 
  table_name 
 ------------
  foo_fake
-(1 row)
 
 ALTER TABLE foo_fake RESET (timescaledb.compress_segmentby);
 DROP TABLE foo_fake;
@@ -280,7 +264,6 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::reg
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------
  foo   |                | {}        | {a,b}   | {f,f}        | {f,f}              | 
-(1 row)
 
 SELECT decompress_chunk(ch, false) FROM show_chunks('foo') ch limit 1;
 ERROR:  chunk "_hyper_10_2_chunk" is not converted to columnstore
@@ -297,14 +280,12 @@ NOTICE:  chunk "_hyper_10_2_chunk" is not converted to columnstore
  decompress_chunk 
 ------------------
  
-(1 row)
 
 --should succeed
 select compress_chunk(:'CHUNK_NAME');
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_10_2_chunk
-(1 row)
 
 select compress_chunk(:'CHUNK_NAME', if_not_compressed=>false);
 ERROR:  chunk "_hyper_10_2_chunk" is already converted to columnstore
@@ -313,7 +294,6 @@ NOTICE:  chunk "_hyper_10_2_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_10_2_chunk
-(1 row)
 
 SELECT compress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
 ERROR:  columnstore not enabled on "non_compressed"
@@ -337,7 +317,6 @@ NOTICE:  chunk "_hyper_10_5_chunk" is not converted to columnstore
  
  
  
-(4 rows)
 
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
@@ -345,7 +324,6 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::reg
  relid | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst | index 
 -------+----------------+-----------+---------+--------------+--------------------+-------
  foo   |                | {b}       | {a}     | {f}          | {f}                | 
-(1 row)
 
 SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPER_NAME"
 FROM _timescaledb_catalog.hypertable comp_hyper
@@ -368,7 +346,6 @@ select table_name from create_hypertable('table_constr', 'timec', chunk_time_int
   table_name  
 --------------
  table_constr
-(1 row)
 
 BEGIN;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
@@ -420,7 +397,6 @@ SELECT create_hypertable('table_fk', 'time');
    create_hypertable    
 ------------------------
  (17,public,table_fk,t)
-(1 row)
 
 ALTER TABLE table_fk DROP COLUMN id1;
 ALTER TABLE table_fk SET (timescaledb.compress,timescaledb.compress_segmentby = 'id2');
@@ -438,14 +414,12 @@ select compress_chunk(:'CHUNK_NAME');
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_13_7_chunk
-(1 row)
 
 SELECT  total_chunks , number_compressed_chunks
 FROM hypertable_compression_stats('table_constr');
  total_chunks | number_compressed_chunks 
 --------------+--------------------------
             2 |                        1
-(1 row)
 
 --github issue 1661
 --disable compression after enabling it on a table that has fk constraints
@@ -459,7 +433,6 @@ SELECT table_name from create_hypertable('table_constr2', 'timec', chunk_time_in
   table_name   
 ---------------
  table_constr2
-(1 row)
 
 INSERT INTO fortable VALUES( 99 );
 INSERT INTO table_constr2 VALUES( 1000, 10, 5, 99);
@@ -473,7 +446,6 @@ SELECT compress_chunk(:'CHUNK_NAME');
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_19_10_chunk
-(1 row)
 
 ALTER TABLE table_constr2 set (timescaledb.compress=false);
 ERROR:  cannot disable columnstore on hypertable with columnstore chunks
@@ -482,7 +454,6 @@ SELECT decompress_chunk(:'CHUNK_NAME');
              decompress_chunk             
 ------------------------------------------
  _timescaledb_internal._hyper_19_10_chunk
-(1 row)
 
 ALTER TABLE table_constr2 SET (timescaledb.compress=false);
 -- TEST compression policy
@@ -492,14 +463,12 @@ SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 1);
       create_hypertable       
 ------------------------------
  (21,public,test_table_int,t)
-(1 row)
 
 CREATE OR REPLACE function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
 SELECT set_integer_now_func('test_table_int', 'dummy_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 INSERT INTO test_table_int SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_int set (timescaledb.compress);
@@ -513,7 +482,6 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
         config         
 -----------------------
  {"hypertable_id": 21}
-(1 row)
 
 --should fail
 CALL run_job(:compressjob_id);
@@ -523,7 +491,6 @@ SELECT remove_compression_policy('test_table_int');
  remove_compression_policy 
 ---------------------------
  t
-(1 row)
 
 --again add a new policy that we'll tamper with
 SELECT add_compression_policy('test_table_int', 2::int) AS compressjob_id
@@ -535,7 +502,6 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
         config         
 -----------------------
  {"compress_after": 2}
-(1 row)
 
 --should fail
 CALL run_job(:compressjob_id);
@@ -548,7 +514,6 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
  config 
 --------
  
-(1 row)
 
 --should fail
 CALL run_job(:compressjob_id);
@@ -560,7 +525,6 @@ SELECT create_hypertable('metric', 'time', 'dev_id', 10);
   create_hypertable   
 ----------------------
  (23,public,metric,t)
-(1 row)
 
 ALTER TABLE metric SET (
 timescaledb.compress,
@@ -575,7 +539,6 @@ SELECT compress_chunk(show_chunks('metric'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_23_17_chunk
-(1 row)
 
 -- column does not exist the first time
 ALTER TABLE metric ADD COLUMN IF NOT EXISTS "medium" VARCHAR ;
@@ -601,7 +564,6 @@ HINT:  Use datatype TIMESTAMPTZ instead.
  create_hypertable  
 --------------------
  (25,public,test,t)
-(1 row)
 
 INSERT INTO test VALUES ('2001-01-01 00:00', 'home'),
                         ('2001-01-01 01:00', 'school'),
@@ -618,20 +580,17 @@ SELECT 1 FROM test GROUP BY enum_col;
 ----------
         1
         1
-(2 rows)
 
 SELECT DISTINCT 1 FROM test;
  ?column? 
 ----------
         1
-(1 row)
 
 --compress chunks
 SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_25_19_chunk
-(1 row)
 
 ANALYZE test;
 --below query should pass after chunks are compressed
@@ -640,13 +599,11 @@ SELECT 1 FROM test GROUP BY enum_col;
 ----------
         1
         1
-(2 rows)
 
 SELECT DISTINCT 1 FROM test;
  ?column? 
 ----------
         1
-(1 row)
 
 --github issue 4398
 SELECT format('CREATE TABLE data_table AS SELECT now() AS tm, %s', array_to_string(array_agg(format('125 AS c%s',a)), ', ')) FROM generate_series(1,550)a \gexec
@@ -656,7 +613,6 @@ SELECT * FROM create_hypertable('ts_table', 'tm');
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             27 | public      | ts_table   | t
-(1 row)
 
 --should report a warning
 \set VERBOSITY terse
@@ -679,7 +635,6 @@ NOTICE:  migrating data to chunks
    create_hypertable    
 ------------------------
  (29,public,readings,t)
-(1 row)
 
 create unique index readings_uniq_idx on readings("time",battery_temperature);
 ALTER TABLE readings SET (timescaledb.compress,timescaledb.compress_segmentby = 'battery_temperature');
@@ -687,7 +642,6 @@ SELECT compress_chunk(show_chunks('readings'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_29_22_chunk
-(1 row)
 
 ALTER TABLE readings DROP COLUMN battery_status;
 INSERT INTO readings ("time", battery_temperature) VALUES ('2022-11-11 11:11:11', 0.2);
@@ -696,7 +650,6 @@ SELECT readings FROM readings;
 --------------------------------------
  ("Fri Nov 11 03:11:11 2022 PST",)
  ("Fri Nov 11 11:11:11 2022 PST",0.2)
-(2 rows)
 
 -- #5577 On-insert decompression after schema changes may not work properly
 SELECT decompress_chunk(show_chunks('readings'),true);
@@ -705,14 +658,12 @@ NOTICE:  chunk "_hyper_29_24_chunk" is not converted to columnstore
 ------------------------------------------
  _timescaledb_internal._hyper_29_22_chunk
  
-(2 rows)
 
 SELECT compress_chunk(show_chunks('readings'),true);
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_29_22_chunk
  _timescaledb_internal._hyper_29_24_chunk
-(2 rows)
 
 \set ON_ERROR_STOP 0
 INSERT INTO readings ("time", battery_temperature) VALUES
@@ -725,13 +676,11 @@ SELECT * from readings;
 ------------------------------+---------------------
  Fri Nov 11 03:11:11 2022 PST |                    
  Fri Nov 11 11:11:11 2022 PST |                 0.2
-(2 rows)
 
 SELECT assert_equal(count(1), 2::bigint) FROM readings;
  assert_equal 
 --------------
  
-(1 row)
 
 -- no unique check failure during decompression
 SELECT decompress_chunk(show_chunks('readings'),true);
@@ -739,7 +688,6 @@ SELECT decompress_chunk(show_chunks('readings'),true);
 ------------------------------------------
  _timescaledb_internal._hyper_29_22_chunk
  _timescaledb_internal._hyper_29_24_chunk
-(2 rows)
 
 -- #5553 Unique constraints are not always respected on compressed tables
 CREATE TABLE main_table AS
@@ -750,7 +698,6 @@ NOTICE:  migrating data to chunks
     create_hypertable     
 --------------------------
  (31,public,main_table,t)
-(1 row)
 
 ALTER TABLE main_table SET (
     timescaledb.compress,
@@ -759,7 +706,6 @@ SELECT compress_chunk(show_chunks('main_table'));
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_31_27_chunk
-(1 row)
 
 -- insert rejected
 \set ON_ERROR_STOP 0
@@ -776,14 +722,12 @@ SELECT assert_equal(count(1), 1::bigint) FROM main_table;
  assert_equal 
 --------------
  
-(1 row)
 
 -- no unique check failure during decompression
 SELECT decompress_chunk(show_chunks('main_table'), TRUE);
              decompress_chunk             
 ------------------------------------------
  _timescaledb_internal._hyper_31_27_chunk
-(1 row)
 
 DROP TABLE IF EXISTS readings;
 CREATE TABLE readings(
@@ -797,7 +741,6 @@ SELECT create_hypertable('readings', 'time', chunk_time_interval => interval '12
    create_hypertable    
 ------------------------
  (33,public,readings,t)
-(1 row)
 
 CREATE UNIQUE INDEX readings_uniq_idx ON readings("time", battery_temperature);
 ALTER TABLE readings SET (timescaledb.compress, timescaledb.compress_segmentby = 'battery_temperature');
@@ -809,7 +752,6 @@ SELECT compress_chunk(show_chunks('readings'), TRUE);
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_33_29_chunk
-(1 row)
 
 -- no error happens
 INSERT INTO readings("time", candy, battery_temperature)
@@ -830,7 +772,6 @@ SELECT table_name FROM create_hypertable('table_unique_index', 'time');
      table_name     
 --------------------
  table_unique_index
-(1 row)
 
 -- Will warn because the lack of segmentby/orderby compression options
 ALTER TABLE table_unique_index SET (timescaledb.compress);
@@ -857,7 +798,6 @@ SELECT table_name FROM create_hypertable('osm_table', 'time');
  table_name 
 ------------
  osm_table
-(1 row)
 
 ALTER TABLE osm_table SET (timescaledb.compress);
 INSERT INTO osm_table VALUES ('2022-11-11 11:11:11', 'foo', 1.0);
@@ -870,7 +810,6 @@ UPDATE _timescaledb_catalog.chunk ch SET osm_chunk = true FROM _timescaledb_cata
 SELECT show_chunks('osm_table');
  show_chunks 
 -------------
-(0 rows)
 
 SELECT compress_chunk(:'CHUNK_NAME');
 ERROR:  compress_chunk not permitted on tiered chunk "_hyper_44_31_chunk" 

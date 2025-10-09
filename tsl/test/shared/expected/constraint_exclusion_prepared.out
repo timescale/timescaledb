@@ -40,7 +40,7 @@ WHERE time < now()
 ORDER BY time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -51,10 +51,9 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < now()))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-(13 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -65,10 +64,9 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < now()))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-(13 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -79,10 +77,9 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < now()))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-(13 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -93,10 +90,9 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < now()))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-(13 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -107,7 +103,6 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < now()))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < now()))
-(13 rows)
 
 DEALLOCATE prep;
 -- executor startup exclusion with chunks excluded
@@ -119,7 +114,7 @@ WHERE time < '2000-01-10'::text::timestamptz
 ORDER BY time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -128,10 +123,9 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -140,10 +134,9 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -152,10 +145,9 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -164,10 +156,9 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -176,7 +167,6 @@ QUERY PLAN
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ((device_id = 1) AND ("time" < ('2000-01-10'::cstring)::timestamp with time zone))
-(10 rows)
 
 DEALLOCATE prep;
 -- runtime exclusion with LATERAL and 2 hypertables
@@ -194,7 +184,7 @@ WHERE device_id = 2
 ORDER BY m1.time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics m1 (actual rows=100.00 loops=1)
@@ -214,10 +204,9 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-(25 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics m1 (actual rows=100.00 loops=1)
@@ -237,10 +226,9 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-(25 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics m1 (actual rows=100.00 loops=1)
@@ -260,10 +248,9 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-(25 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics m1 (actual rows=100.00 loops=1)
@@ -283,10 +270,9 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-(25 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics m1 (actual rows=100.00 loops=1)
@@ -306,7 +292,6 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk m2_3 (never executed)
                            Index Cond: ("time" = m1."time")
-(25 rows)
 
 DEALLOCATE prep;
 RESET enable_seqscan;
@@ -320,7 +305,7 @@ FROM (
   ORDER BY time
   LIMIT 100) m;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -329,10 +314,9 @@ QUERY PLAN
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -341,10 +325,9 @@ QUERY PLAN
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -353,10 +336,9 @@ QUERY PLAN
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -365,10 +347,9 @@ QUERY PLAN
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=100.00 loops=1)
          Order: metrics."time"
@@ -377,7 +358,6 @@ QUERY PLAN
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(10 rows)
 
 DEALLOCATE prep;
 -- test constraint exclusion for subqueries with ConstraintAwareAppend
@@ -394,7 +374,7 @@ FROM (
     time
   LIMIT 100) m;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Sort (actual rows=100.00 loops=1)
          Sort Key: metrics.device_id, metrics."time"
@@ -407,10 +387,9 @@ QUERY PLAN
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600.00 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(12 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Sort (actual rows=100.00 loops=1)
          Sort Key: metrics.device_id, metrics."time"
@@ -423,10 +402,9 @@ QUERY PLAN
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600.00 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(12 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Sort (actual rows=100.00 loops=1)
          Sort Key: metrics.device_id, metrics."time"
@@ -439,10 +417,9 @@ QUERY PLAN
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600.00 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(12 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Sort (actual rows=100.00 loops=1)
          Sort Key: metrics.device_id, metrics."time"
@@ -455,10 +432,9 @@ QUERY PLAN
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600.00 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(12 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Sort (actual rows=100.00 loops=1)
          Sort Key: metrics.device_id, metrics."time"
@@ -471,7 +447,6 @@ QUERY PLAN
                            Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=15600.00 loops=1)
                            Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(12 rows)
 
 DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
@@ -479,7 +454,7 @@ RESET timescaledb.enable_chunk_append;
 SET plan_cache_mode TO force_generic_plan;
 PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1 ORDER BY device_id, time;
 :PREFIX EXECUTE prep('2000-01-01 23:42');
-QUERY PLAN
+--- QUERY PLAN ---
  Sort (actual rows=5.00 loops=1)
    Sort Key: metrics.device_id
    Sort Method: quicksort 
@@ -487,10 +462,9 @@ QUERY PLAN
          Chunks excluded during startup: 2
          ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=5.00 loops=1)
                Index Cond: ("time" = $1)
-(7 rows)
 
 :PREFIX EXECUTE prep('2000-01-10 23:42');
-QUERY PLAN
+--- QUERY PLAN ---
  Sort (actual rows=5.00 loops=1)
    Sort Key: metrics.device_id
    Sort Method: quicksort 
@@ -498,16 +472,14 @@ QUERY PLAN
          Chunks excluded during startup: 2
          ->  Index Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=5.00 loops=1)
                Index Cond: ("time" = $1)
-(7 rows)
 
 :PREFIX EXECUTE prep(now());
-QUERY PLAN
+--- QUERY PLAN ---
  Sort (actual rows=0.00 loops=1)
    Sort Key: metrics.device_id
    Sort Method: quicksort 
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=0.00 loops=1)
          Chunks excluded during startup: 3
-(5 rows)
 
 DEALLOCATE prep;
 RESET plan_cache_mode;
@@ -526,7 +498,7 @@ WHERE time < now()
 ORDER BY time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -540,10 +512,9 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < now())
                Filter: (device_id = 1)
-(13 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -557,10 +528,9 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < now())
                Filter: (device_id = 1)
-(13 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -574,10 +544,9 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < now())
                Filter: (device_id = 1)
-(13 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -591,10 +560,9 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < now())
                Filter: (device_id = 1)
-(13 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -608,7 +576,6 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < now())
                Filter: (device_id = 1)
-(13 rows)
 
 DEALLOCATE prep;
 -- executor startup exclusion with chunks excluded
@@ -620,7 +587,7 @@ WHERE time < '2000-01-10'::text::timestamptz
 ORDER BY time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -631,10 +598,9 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                Filter: (device_id = 1)
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -645,10 +611,9 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                Filter: (device_id = 1)
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -659,10 +624,9 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                Filter: (device_id = 1)
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -673,10 +637,9 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                Filter: (device_id = 1)
-(10 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -687,7 +650,6 @@ QUERY PLAN
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                Filter: (device_id = 1)
-(10 rows)
 
 DEALLOCATE prep;
 -- runtime exclusion with LATERAL and 2 hypertables
@@ -705,7 +667,7 @@ WHERE device_id = 2
 ORDER BY m1.time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space m1 (actual rows=100.00 loops=1)
@@ -737,10 +699,9 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-(43 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space m1 (actual rows=100.00 loops=1)
@@ -772,10 +733,9 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-(43 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space m1 (actual rows=100.00 loops=1)
@@ -807,10 +767,9 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-(43 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space m1 (actual rows=100.00 loops=1)
@@ -842,10 +801,9 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-(43 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space m1 (actual rows=100.00 loops=1)
@@ -877,7 +835,6 @@ QUERY PLAN
                            Index Cond: ("time" = m1."time")
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk m2_9 (never executed)
                            Index Cond: ("time" = m1."time")
-(43 rows)
 
 DEALLOCATE prep;
 RESET enable_seqscan;
@@ -891,7 +848,7 @@ FROM (
   ORDER BY time
   LIMIT 100) m;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -919,10 +876,9 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(36 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -950,10 +906,9 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(36 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -981,10 +936,9 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(36 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -1012,10 +966,9 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(36 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=100.00 loops=1)
          Order: metrics_space."time"
@@ -1043,7 +996,6 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(36 rows)
 
 DEALLOCATE prep;
 -- test constraint exclusion for subqueries with ConstraintAwareAppend
@@ -1060,7 +1012,7 @@ FROM (
     time
   LIMIT 100) m;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space
@@ -1079,10 +1031,9 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(24 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space
@@ -1101,10 +1052,9 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(24 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space
@@ -1123,10 +1073,9 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(24 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space
@@ -1145,10 +1094,9 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(24 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space
@@ -1167,7 +1115,6 @@ QUERY PLAN
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                      Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(24 rows)
 
 DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
@@ -1175,7 +1122,7 @@ RESET timescaledb.enable_chunk_append;
 SET plan_cache_mode TO force_generic_plan;
 PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1 ORDER BY device_id, time;
 :PREFIX EXECUTE prep('2000-01-01 23:42');
-QUERY PLAN
+--- QUERY PLAN ---
  Sort (actual rows=5.00 loops=1)
    Sort Key: metrics_space.device_id
    Sort Method: quicksort 
@@ -1187,10 +1134,9 @@ QUERY PLAN
                Index Cond: ("time" = $1)
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                Index Cond: ("time" = $1)
-(11 rows)
 
 :PREFIX EXECUTE prep('2000-01-10 23:42');
-QUERY PLAN
+--- QUERY PLAN ---
  Sort (actual rows=5.00 loops=1)
    Sort Key: metrics_space.device_id
    Sort Method: quicksort 
@@ -1202,16 +1148,14 @@ QUERY PLAN
                Index Cond: ("time" = $1)
          ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1.00 loops=1)
                Index Cond: ("time" = $1)
-(11 rows)
 
 :PREFIX EXECUTE prep(now());
-QUERY PLAN
+--- QUERY PLAN ---
  Sort (actual rows=0.00 loops=1)
    Sort Key: metrics_space.device_id
    Sort Method: quicksort 
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
          Chunks excluded during startup: 9
-(5 rows)
 
 DEALLOCATE prep;
 RESET plan_cache_mode;
@@ -1230,7 +1174,7 @@ WHERE time < now()
 ORDER BY time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1256,10 +1200,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(26 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1285,10 +1228,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(26 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1314,10 +1256,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(26 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1343,10 +1284,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(26 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1372,7 +1312,6 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(26 rows)
 
 DEALLOCATE prep;
 -- executor startup exclusion with chunks excluded
@@ -1384,7 +1323,7 @@ WHERE time < '2000-01-10'::text::timestamptz
 ORDER BY time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1406,10 +1345,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(22 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1431,10 +1369,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(22 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1456,10 +1393,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(22 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1481,10 +1417,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(22 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1506,7 +1441,6 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(22 rows)
 
 DEALLOCATE prep;
 -- runtime exclusion with LATERAL and 2 hypertables
@@ -1524,7 +1458,7 @@ WHERE device_id = 2
 ORDER BY m1.time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed m1 (actual rows=100.00 loops=1)
@@ -1561,10 +1495,9 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(38 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed m1 (actual rows=100.00 loops=1)
@@ -1601,10 +1534,9 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(38 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed m1 (actual rows=100.00 loops=1)
@@ -1641,10 +1573,9 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(38 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed m1 (actual rows=100.00 loops=1)
@@ -1681,10 +1612,9 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(38 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_compressed m1 (actual rows=100.00 loops=1)
@@ -1721,7 +1651,6 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(38 rows)
 
 DEALLOCATE prep;
 RESET enable_seqscan;
@@ -1735,7 +1664,7 @@ FROM (
   ORDER BY time
   LIMIT 100) m;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1757,10 +1686,9 @@ QUERY PLAN
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(22 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1782,10 +1710,9 @@ QUERY PLAN
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(22 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1807,10 +1734,9 @@ QUERY PLAN
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(22 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1832,10 +1758,9 @@ QUERY PLAN
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(22 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100.00 loops=1)
          Order: metrics_compressed."time"
@@ -1857,7 +1782,6 @@ QUERY PLAN
                      Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                            Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(22 rows)
 
 DEALLOCATE prep;
 -- test constraint exclusion for subqueries with ConstraintAwareAppend
@@ -1874,7 +1798,7 @@ FROM (
     time
   LIMIT 100) m;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_compressed
@@ -1898,10 +1822,9 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=25.00 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 5
-(24 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_compressed
@@ -1925,10 +1848,9 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=25.00 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 5
-(24 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_compressed
@@ -1952,10 +1874,9 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=25.00 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 5
-(24 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_compressed
@@ -1979,10 +1900,9 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=25.00 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 5
-(24 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_compressed
@@ -2006,7 +1926,6 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=25.00 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 5
-(24 rows)
 
 DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
@@ -2014,7 +1933,7 @@ RESET timescaledb.enable_chunk_append;
 SET plan_cache_mode TO force_generic_plan;
 PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1 ORDER BY device_id, time;
 :PREFIX EXECUTE prep('2000-01-01 23:42');
-QUERY PLAN
+--- QUERY PLAN ---
  Merge Append (actual rows=5.00 loops=1)
    Sort Key: metrics_compressed.device_id
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=4.00 loops=1)
@@ -2044,10 +1963,9 @@ QUERY PLAN
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
                      Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 30
-(30 rows)
 
 :PREFIX EXECUTE prep('2000-01-10 23:42');
-QUERY PLAN
+--- QUERY PLAN ---
  Merge Append (actual rows=5.00 loops=1)
    Sort Key: metrics_compressed.device_id
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=0.00 loops=1)
@@ -2077,10 +1995,9 @@ QUERY PLAN
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
                      Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 30
-(30 rows)
 
 :PREFIX EXECUTE prep(now());
-QUERY PLAN
+--- QUERY PLAN ---
  Merge Append (actual rows=0.00 loops=1)
    Sort Key: metrics_compressed.device_id
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=0.00 loops=1)
@@ -2109,7 +2026,6 @@ QUERY PLAN
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
                      Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 30
-(29 rows)
 
 DEALLOCATE prep;
 RESET plan_cache_mode;
@@ -2128,7 +2044,7 @@ WHERE time < now()
 ORDER BY time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2145,10 +2061,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(16 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2165,10 +2080,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(16 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2185,10 +2099,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(16 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2205,10 +2118,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(16 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2225,7 +2137,6 @@ QUERY PLAN
                Vectorized Filter: ("time" < now())
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < now()))
-(16 rows)
 
 DEALLOCATE prep;
 -- executor startup exclusion with chunks excluded
@@ -2237,7 +2148,7 @@ WHERE time < '2000-01-10'::text::timestamptz
 ORDER BY time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2250,10 +2161,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(12 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2266,10 +2176,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(12 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2282,10 +2191,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(12 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2298,10 +2206,9 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(12 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2314,7 +2221,6 @@ QUERY PLAN
                Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: ((device_id = 1) AND (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone))
-(12 rows)
 
 DEALLOCATE prep;
 -- runtime exclusion with LATERAL and 2 hypertables
@@ -2332,7 +2238,7 @@ WHERE device_id = 2
 ORDER BY m1.time
 LIMIT 100;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed m1 (actual rows=100.00 loops=1)
@@ -2386,10 +2292,9 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(53 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed m1 (actual rows=100.00 loops=1)
@@ -2443,10 +2348,9 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(53 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed m1 (actual rows=100.00 loops=1)
@@ -2500,10 +2404,9 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(53 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed m1 (actual rows=100.00 loops=1)
@@ -2557,10 +2460,9 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(53 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Nested Loop Left Join (actual rows=100.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed m1 (actual rows=100.00 loops=1)
@@ -2614,7 +2516,6 @@ QUERY PLAN
                            Filter: (m1."time" = "time")
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: ((_ts_meta_min_1 <= m1."time") AND (_ts_meta_max_1 >= m1."time"))
-(53 rows)
 
 DEALLOCATE prep;
 RESET enable_seqscan;
@@ -2628,7 +2529,7 @@ FROM (
   ORDER BY time
   LIMIT 100) m;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2695,10 +2596,9 @@ QUERY PLAN
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(66 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2765,10 +2665,9 @@ QUERY PLAN
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(66 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2835,10 +2734,9 @@ QUERY PLAN
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(66 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2905,10 +2803,9 @@ QUERY PLAN
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(66 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100.00 loops=1)
          Order: metrics_space_compressed."time"
@@ -2975,7 +2872,6 @@ QUERY PLAN
                            Vectorized Filter: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (never executed)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(66 rows)
 
 DEALLOCATE prep;
 -- test constraint exclusion for subqueries with ConstraintAwareAppend
@@ -2992,7 +2888,7 @@ FROM (
     time
   LIMIT 100) m;
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space_compressed
@@ -3041,10 +2937,9 @@ QUERY PLAN
                            Sort Method: quicksort 
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5.00 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(48 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space_compressed
@@ -3093,10 +2988,9 @@ QUERY PLAN
                            Sort Method: quicksort 
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5.00 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(48 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space_compressed
@@ -3145,10 +3039,9 @@ QUERY PLAN
                            Sort Method: quicksort 
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5.00 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(48 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space_compressed
@@ -3197,10 +3090,9 @@ QUERY PLAN
                            Sort Method: quicksort 
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5.00 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(48 rows)
 
 :PREFIX EXECUTE prep;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit (actual rows=100.00 loops=1)
    ->  Custom Scan (ConstraintAwareAppend) (actual rows=100.00 loops=1)
          Hypertable: metrics_space_compressed
@@ -3249,7 +3141,6 @@ QUERY PLAN
                            Sort Method: quicksort 
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk (actual rows=5.00 loops=1)
                                  Index Cond: (_ts_meta_min_1 < ('2000-01-10'::cstring)::timestamp with time zone)
-(48 rows)
 
 DEALLOCATE prep;
 RESET timescaledb.enable_chunk_append;
@@ -3257,7 +3148,7 @@ RESET timescaledb.enable_chunk_append;
 SET plan_cache_mode TO force_generic_plan;
 PREPARE prep(timestamptz) AS SELECT device_id, time FROM :TEST_TABLE WHERE time = $1 ORDER BY device_id, time;
 :PREFIX EXECUTE prep('2000-01-01 23:42');
-QUERY PLAN
+--- QUERY PLAN ---
  Merge Append (actual rows=5.00 loops=1)
    Sort Key: metrics_space_compressed.device_id
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=1.00 loops=1)
@@ -3335,10 +3226,9 @@ QUERY PLAN
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
                      Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 6
-(77 rows)
 
 :PREFIX EXECUTE prep('2000-01-10 23:42');
-QUERY PLAN
+--- QUERY PLAN ---
  Merge Append (actual rows=5.00 loops=1)
    Sort Key: metrics_space_compressed.device_id
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=0.00 loops=1)
@@ -3416,10 +3306,9 @@ QUERY PLAN
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
                      Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 6
-(77 rows)
 
 :PREFIX EXECUTE prep(now());
-QUERY PLAN
+--- QUERY PLAN ---
  Merge Append (actual rows=0.00 loops=1)
    Sort Key: metrics_space_compressed.device_id
    ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk (actual rows=0.00 loops=1)
@@ -3494,7 +3383,6 @@ QUERY PLAN
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0.00 loops=1)
                      Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 6
-(74 rows)
 
 DEALLOCATE prep;
 RESET plan_cache_mode;

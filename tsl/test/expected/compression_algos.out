@@ -21,7 +21,6 @@ SELECT ts_test_compression();
  ts_test_compression 
 ---------------------
  
-(1 row)
 
 ------------------------
 -- BIGINT Compression --
@@ -47,27 +46,22 @@ psql:include/compression_test.sql:7: NOTICE:  table "compressed" does not exist,
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | f         |            1720
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_ints;
 -- ascending order with nulls
@@ -81,33 +75,27 @@ INSERT INTO base_ints VALUES (0, NULL), (10, NULL), (10000, NULL);
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | t         |              93
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 SELECT c ints_text FROM compressed;
                                                         ints_text                                                         
 --------------------------------------------------------------------------------------------------------------------------
  BAEAAAAAAAAD6AAAAAAAAAABAAAD6AAAAAIAAAAAAAAA8gAAAAAAAAACAAA8gAAAAAAAAAPrAAAAAwAAAAAAAAHxAAAAAAAABAEAADqgAAAAAAAAAAAAAAAB
-(1 row)
 
 DROP TABLE base_ints;
 -- single element
@@ -120,27 +108,22 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, item::bigint FROM (S
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | f         |              45
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_ints;
 -- really big deltas
@@ -165,27 +148,22 @@ CREATE TABLE base_ints AS SELECT row_number() over () as rn, item FROM
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | f         |             184
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_ints;
 -- NULLs
@@ -198,27 +176,22 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 5) item FR
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | t         |              69
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_ints;
 CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 1) item FROM generate_series(1::BIGINT, 10) i;
@@ -230,27 +203,22 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 1) item FR
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | t         |              69
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_ints;
 CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 10) item FROM generate_series(1::BIGINT, 10) i;
@@ -262,27 +230,22 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(i, 10) item F
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | t         |              69
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_ints;
 CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8) item FROM generate_series(1::BIGINT, 10) i;
@@ -294,27 +257,22 @@ CREATE TABLE base_ints AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | t         |              69
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_ints;
 ------------------------
@@ -337,27 +295,22 @@ SELECT
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | f         |            1720
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_ints;
 -----------------------------
@@ -383,27 +336,22 @@ CREATE TABLE base_time AS SELECT row_number() OVER() as rn, item FROM
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DELTADELTA | f         |            5332
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_time;
 ------------------------
@@ -429,33 +377,27 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | f         |            1760
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 SELECT c gorilla_text FROM compressed;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                gorilla_text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  AwAAAAAARA4AAAAAA+gAAAABAAAAAAAAAA8AAD6AAAAAAQAAA+gAAAAEAAAAAAAA8fEAAAAAAAAeAQAAIDAAAAAAAAAAAAAAABkAABZQAAAAAAAAAAEwAACWmGWqmmEAAAAIAAAAAQAAAAAAAAAFAAAAamDTFJEAAADMGRGACGA5CxE1kwB1AJ8Ac4AyuXv2ugHVD0MFUc5gBQL3cBGRpAwQYYL0ITfOrOikQfX2jw3357GbZBXdK+Ret/e3F7lL8NGsccRMIDhPxYDBQkbmx8UHeD2DsNbIO304DX6EFsCq/jin8WhwAjXj8LoPLcuQkLmEzC7/Df/3RziqQAPIOu9JABCWc++kvJ3nR8L8t5n/I/JwKA89o+yMIqGeeOxKDcf2gddLQhOpA6h20EJ8g9Oe/BzghAN/W7qOFwNIDd6uiLvJB5aRlM6udWjwOJO71AUQzx6glALoo9v9cnq5DBByv64OgcSRxJ94V6R4WC0+nwOQBPSgrzld9ECj115WgngIYOOkQZDi2AHAsHyAphWvrnvgeg5bl2G4D8fmFVAYB1AVAzPIkPIKSMlxp95/V/Gv3w7XtPayaMAoQk97AX/IIWTKfqAFUGj2uiC+ubOj0nJPN4XoKCEj/Fg6BnBCPY32oBnGIDeBivD2CH2fBAAwa7mAdQCknitjdT+SgRPhYgwcHfD+J/aCH+k9ngrvZpB44oHwPj226RfC++eMvAXyD3IbL3Rz+HHBuAYYADpH0DyAroIX7ZBNGOsFhf/cnsfYPrzKDyJG6BdPYCrhn3awKRmXyH71/KhBeRAWgmwNEGl90AeHT/K/4gxAgeU5JQqBy8NDpiKADoOeeGOj3NfF3gj2b7AAM73yKe5/OPVXtWCUXgEi8IB9wDWF+qo1b0hTyWAbO/n+VwaHsgUHm4O94SxuFGD80MmAGAeOIQg5ptqAho0LmGJM9gd+Ag2T6lwi7v/B+ygdgBQNg8HenvmF/A96ATcIUPRYcCeHhjYgGI1QTq++AFg0GuDaePfCYBH3xrz+ggZftwVjOgJUOYFMBycY/IAYPzxoDHBcD0cFx/8g8+XACPZnGQwD7CpaHi/a+YDbeaAvu2UDXk8CMBuDmBG+RAgfOf8kEX6bwHw7B+Cm+Tfwf+Ir7nPuv6/8eBlBEN48URxX13y/JUDB2M6ofyMnB3PvHl4AOH/T14C+J/Of9eIAsAPT1ntIFyAqDmfU/y48ClneX3b/eiuq8CIfOQwyOZgAQv6X7YcIrsshdUuFEwtbISX2kCnZLo93VbCiDcWObGNjINq2ouAKyO4PACn8MXAKfpmicul8dCke2W4C8v3nk0MiCE/Rwl96/u/8fsAXAYj8MAc6MDMF7DEvHn+wfeBg80h6RwHN4VmiN+ALwc4AL8QHo8QA86xB1AdQKLgIcj8cdUJIUfef6APfvO/roaGQ1cgeCu/C/puRs0sNbq2ImFBcpAMhfwEHVLniET236f9w+FgJGUgeB1T72A0Il7GDZfrgpNzOdASMIX6azPhFEcAENlkauxf/H5p6kwL73FBdTwcvVetvk/5/356UDd84gzvAPVwNnerfEbw6N+mCsA8gXPcv9HjEEZ+5D0FGzcYygKgMvVYIGxIsc74kuAKfUt/BbxSHM72QZCdQx0JCGRPqH5DpVo5Id+7C60M3CBkDLAnzFPBDjhyUD+ft/QCvOModACHlIhoV88kgeNecUPMH9IFfeQPF/KBHEMBTdiRAHufkxIDV2EWCnBm+//MON3KrwQO4k1s3AiAR6NjPPa4Bn3UEMJ+Hv8MfXQsxJG8HeYCuALzkHCGzcbTu/P/z3mz7AIMEUGtDbBNgNhCQSHGAlJiryQAMFVdLg2gmgZXuL+l9AIBo5uI2EfJZkA5/8cmAE4Pb0iFeeysEDph+HvQGCBrvZ/cEydPPXfDN7RjDst3Wwl8K/ygWfCF9wXgJEEV6j0t/B/FihObom+y/TsHt4ZBiBJCQBcebHYwWPp31WAyBHMXCgAygIwcA/4YENICclEEO+j9DeioCu0/uP958eB19G8rbCi/w1TBBMrwyCDCdyH+AgLgsAxTigwQGB+i7LXXCSge/Q5ZoKQmD3kFg6xcm67dsNxGsbpQawFmBT2V6M85hqgSIIENgiwAh/4qwKw1b7fyMgzQNPEsJwMyQ5M8xLB8vMwUD7ADPYgTQLoCuPNZ4gEgYUET5wGIHDCz+EJSFROiP50P97gGT8HFbBfCmeDvA2lQih1n5+PSMkBwNqerg7Aaj/t6ISNwx1Mk2ADm0AeHMHx6F8ND7QHxdS9XgMwAoUK5HbnwN8T+C/3g5YBPdBdTTeDQAAAAAAenjSw==
-(1 row)
 
 DROP TABLE  base_floats;
 -- single element
@@ -468,27 +410,22 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, item::float4 FROM 
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | f         |             109
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_floats;
 --special values
@@ -512,27 +449,22 @@ CREATE TABLE base_floats AS SELECT row_number() over () as rn, item FROM
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | f         |             136
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE  base_floats;
 -- all 0s
@@ -545,27 +477,22 @@ CREATE TABLE base_floats AS SELECT row_number() over () as rn, 0::float4 as item
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | f         |             109
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE  base_floats;
 -- NULLs
@@ -578,27 +505,22 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::floa
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | t         |             136
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_floats;
 CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::float4 item FROM generate_series(1, 10) i;
@@ -610,27 +532,22 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::floa
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | t         |             136
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_floats;
 CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::float4 item FROM generate_series(1, 10) i;
@@ -642,27 +559,22 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::flo
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | t         |             136
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_floats;
 CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::float4 item FROM generate_series(1, 10) i;
@@ -674,27 +586,22 @@ CREATE TABLE base_floats AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULL
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | t         |             136
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_floats;
 ------------------------
@@ -720,33 +627,27 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | f         |            1752
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 SELECT c gorilla_text FROM compressed;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          gorilla_text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  AwBAgcAAAAAAAAAAA+gAAAABAAAAAAAAAA8AAD6AAAAAAQAAA+gAAAAEAAAAAAAA8fEAAAAAAAAR1QAAIDAAAAAAAAAAAAAAABkAABZQAAAAAAAAAAE8AgwEgwgwosEAAAAKAAAAAQAAAAAAAAAFAAGpm1LDoPQAAADLN/njQwHIWBE1b0qGg6vyfWc5zACgXuZXLzSBggwwSGCq+dWdFIguAjLhvvz2M36EJqV8i9b+/r7RKX4aNY4sgrsHCfiwGDbi99j4oO8HuImE2QdvpwGoSNzYFV/HFPB2GgBGvH4XT9CCchIXMJmeLQ6//ujnFUHluQdd6SACBd/h9JeTvOjoAHnzP+R+ThLOfbR9kYRUOF+WiUG4/tAlAedCdSB1DtPPHZB6c9+Dmulob+t3UcL6CE+71dEXeTwQgDKZ1c6tAGkBd3qAohng8tKAXRR7f74HEiGCDlf1w9QSkjiT7wruT1cFp9PgcgHQOBXnK76IFI8LytBPAQwAnpQyHFsAOBR66xTCtfXPfHSIy3LsNwH2D5CqAwDqArwPQRIeQUkZOPzCz+r+NfvgZnme1k0YBQ40+2Av+QQsgdr2AKoNHtdISe82dHpOSflP1AUEJH+LBBfXCEexvtQG8L0G8DFeHsdAzuCABg13IzjEFJPFbG6hD7MifCxBg5AOoMT+0EP9J/JQXezSDxxDvh/Htt0i+EezwZeAvkHuUD4Hjn8OODcffPEHSPoHkANl7v2yCaMdYMMA+5PY+wfV0ELkSN0C6eCwvzPu1gUjN5lB3r+VCC8sBVxNgaINL7L5D+n+V/xBggLQpyShUDl6APDEUAHQc8gQPHua+LvBGGh0AAZ3vkUvDHQeqvasEp7N9l4QD7gGvc/nRq3pCnkrwCR/P8rg0PC/VfNwd7wljANnH5oZMAMWQKAhBzTbUA3CjHMMSZ7A4PHEsn1LhF3Q0aFlA7ACga/AQdPfML+B//g/4Qoeiw4QeDvGxAMRqg9AJsALBoNcBPDw+EwCPvjJ1fdAy/bgrHtPHocwKYDk95/QAwfnjQGHQEro4Lj/5AMfkAEezOMhjguBS0PF+18+fLg0BfdsoGB9hUYDcHMCMBtvA+c/5IIryeAPh2D8FNfIgQ/8RX3Ob9N4/48DKCIfJv4jivrvl/3X9TsZ1Q/ke8eKfePLwAcEqBjwF8T+c+Tg7hYAenrPb/p6BUHM+p/+vEBLO8vu3+kC5F4EQ+chhceBAAhf0v2vRXXZZC6pcKZHM2QkvtIFMOEV7uq2FEGiYWuMbGQbVtsl0VkdweAFOLHNAU/TNE5UXAGFI9stwF+GLvJoZEEJ/S+O71/d/4/eX7wxH4YA51o4S72GJePP+ALgDB5pD0jmBmArNEb8AXYPvAX4gPR4gDm8iDqA6gUYOcBH446oSQAedQAe/7zv9wEONXIHgpR95/rkbNLDeuhoZBQXKQD78L+m1S54hFurYibcPhYCSF/AQdU+9gNPbfp/2X64KQZSB4EjCF+mgiXsYHABDZZ3M50Bx+aepPM+EUQXU8HLxq7F//+f9+eAvvcUIM7wD1V62+S3xG8OpQN3zgPIFz3XA2d6BGfuQ836YKyMoCoDC/0eMcSLHO+QUbNx1LfwW+9VggZkGQnUCS4Ap0T6h+QFIczvHfuwuvHQkIZAywJ8+lWjkoclA/nQzcIGzjKHQAU8EOOFfPJIO39AKzzB/SBIeUiGfygRxB415xQQB7n5F95A8RFgpwZwFN2Jjdyq8HEgNXbNwIgEb7/8w2uAZ91A7iTW7/DH13o2M8/B3mArgQwn4Qhs3G0CzEkb95s+wAAvOQfQ2wTYO78//BxgJSYgwRQaBVXS4M2EJBJ7i/pfavJAA7iNhHyaCaBl/HJgBMAgGjlXnsrBFmQDn70Bggag9vSIMnTz10OmH4cw7Ld1u9n9wcoFnwh8M3tGRBFeo/CXwr9YoTm6H3BeArB7eGQS38H8AXHmx2b7L9N9VgMgWIEkJAMoCMHjBY+nDSAnJQcxcKDQ3oqAgD/hgfefHgdQQ76Pwov8NW7T+48MggwnX0byti4LAMUMEEyvgfouy3If4CDv0OWaOKDBAZBYOsXdcJKBDcRrG4pCYPdgU9leibrt24EiCBDlBrAWf+KsCszzmGojIM0DWCLACDMkOTPDVvt/zMFA+w8SwnA0C6ArjEsHyxIGFBEAM9iBwws/hA81niAj+dD/fnAYgRxWwXwlIVE6NpUIofuAZPwjJAcDaZ4O8AGo/7eWfn49dTJNgCp6uDtzB8ehYhI3DB8XUvVObQB4FCuR27w0PtDgv94OeAzACnU03g0fA3xPAHp40tgE90E=
-(1 row)
 
 DROP TABLE  base_doubles;
 -- single element
@@ -759,27 +660,22 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, item::double prec
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | f         |             109
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_doubles;
 --special values
@@ -803,27 +699,22 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, item FROM
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | f         |             144
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE  base_doubles;
 -- all 0s
@@ -836,27 +727,22 @@ CREATE TABLE base_doubles AS SELECT row_number() over () as rn, 0::FLOAT(50) as 
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | f         |             109
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE  base_doubles;
 -- NULLs
@@ -869,27 +755,22 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::DOU
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | t         |             136
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_doubles;
 CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::DOUBLE PRECISION item FROM generate_series(1, 10) i;
@@ -901,27 +782,22 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::DOU
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | t         |             136
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_doubles;
 CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::DOUBLE PRECISION item FROM generate_series(1, 10) i;
@@ -933,27 +809,22 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::DO
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | t         |             136
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_doubles;
 CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::DOUBLE PRECISION item FROM generate_series(1, 10) i;
@@ -965,27 +836,22 @@ CREATE TABLE base_doubles AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NUL
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  GORILLA   | t         |             136
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_doubles;
 ------------------------
@@ -1012,33 +878,27 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | f         |            4305
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 SELECT c from compressed;
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     c                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  AQBwZ19jYXRhbG9nAHRleHQAAAEAAAPoAAAAAzgyMQAAAAMyMzYAAAADNDY4AAAAAzIzMAAAAAI4NAAAAAMzMDAAAAADNDU0AAAAAzY4MgAAAAM4OTUAAAADNzM1AAAAAzkxMQAAAAM4OTEAAAACMzIAAAADOTE3AAAAAzgwOAAAAAM4MDIAAAADMjQxAAAAAzQzOAAAAAIxOQAAAAI3NAAAAAIxOAAAAAMxMDgAAAADMzg2AAAAAzI0OQAAAAIyOQAAAAM5ODAAAAADMzc1AAAAAjg5AAAAAzgyOAAAAAMxNzIAAAADODQxAAAAAzQyNQAAAAM1NzAAAAADMTIwAAAAAzc5OQAAAAMyMjkAAAADNzAzAAAAAzUyOQAAAAMxNDYAAAADMzkyAAAAAzU0MQAAAAMxNzQAAAADNzQyAAAAAjQ1AAAAAzIxMgAAAAM0MDcAAAACMjUAAAADNDc2AAAAAzE1MwAAAAM0OTIAAAADNzE2AAAAAzEzMwAAAAMyOTcAAAADMjg0AAAAAzg4NgAAAAEzAAAAAzE1NQAAAAMyMzcAAAADNDA1AAAAAzc0OQAAAAM1ODMAAAADNzUzAAAAAzQyNAAAAAMyNzQAAAADNTM5AAAAAzc2OQAAAAM3MDUAAAADMzc0AAAAAjY4AAAAAzUwMgAAAAMxMjEAAAADNjA3AAAAAzY4NQAAAAMxOTAAAAADOTk2AAAAAzI2OQAAAAM3OTEAAAADNjA4AAAAAzYxMgAAAAMzNzkAAAADMjE0AAAAAzE3NQAAAAM5NTYAAAADMjEzAAAAAzk2OQAAAAMxODcAAAADNTM1AAAAAzgyNwAAAAMyNzAAAAADOTA5AAAAAzUwMQAAAAM2MzYAAAADOTU4AAAAAzY4MwAAAAMxMTMAAAADNzE5AAAAAzU3MgAAAAM2ODAAAAADNDQxAAAAAzM1NwAAAAE1AAAAAzgzOQAAAAMxODQAAAADMTE4AAAAAzgwMAAAAAM1NTMAAAADMTkzAAAAAzMzNQAAAAM2MTAAAAADMzgzAAAAAzk5MAAAAAM4NTgAAAADNTUxAAAAAzIxNgAAAAM1MjYAAAADNjA5AAAAAzc0MQAAAAMzNDEAAAADMTYxAAAAAzk4NQAAAAM3NzIAAAADNjcyAAAAAjEyAAAAAzcxOAAAAAE4AAAAAzY1MgAAAAM4NzMAAAADNzU5AAAAAzY3OAAAAAMyMTEAAAADMzg1AAAAAzc3MwAAAAI5NQAAAAM0OTkAAAADNDMwAAAAAzMxNAAAAAM0NjMAAAADNTg1AAAAAzg5OQAAAAM1MTMAAAACODcAAAADODExAAAAAzQxNQAAAAIxNgAAAAMzOTgAAAADNTExAAAAAzQ4MgAAAAM0NzUAAAADODA5AAAAAzU3NgAAAAMyOTkAAAADMzk5AAAAAzYwMgAAAAMxODkAAAADMjkyAAAAAzczMgAAAAM3MjgAAAADNjY3AAAAAzUxNwAAAAMxNzAAAAADOTg5AAAAAzkwOAAAAAM5MDcAAAADMjQ0AAAAAzE0NAAAAAM4NjYAAAADNDYxAAAAAzcxMAAAAAM5MjQAAAADOTc1AAAAAzU3MwAAAAM5NzEAAAADNjI3AAAAAzE3OAAAAAM0MzEAAAADNDY5AAAAAzM3OAAAAAMyMTUAAAADMjA3AAAAAzQ1OQAAAAIzOQAAAAMyODcAAAADMTcxAAAAAzIxMAAAAAM5NjEAAAADNjAwAAAAAzQwMgAAAAM3ODUAAAADMjkxAAAAAzY5MwAAAAMxODMAAAADMTYzAAAAAjY0AAAAAzg1NwAAAAM0NTMAAAADMjk2AAAAAzQxMAAAAAM4ODUAAAADODEwAAAAAzQ5NAAAAAMxMjcAAAADNjc3AAAAAzc3NAAAAAM5NDAAAAADMzkwAAAAAzg2MwAAAAMyNDMAAAACNzcAAAADODUwAAAAAzI2MwAAAAMzMjYAAAADNzc1AAAAAzU0OAAAAAM4NjkAAAADNTQzAAAAAzYyNAAAAAMzOTcAAAADOTg4AAAAAzcyNAAAAAM1MzgAAAACMTcAAAADOTM1AAAAAzk2NQAAAAM5MzgAAAADMjQyAAAAAzgzNgAAAAM3NDYAAAADNzQ4AAAAAzUwMAAAAAMxMjkAAAADODM4AAAAAjI4AAAAAzMwNQAAAAMyODAAAAADNDk4AAAAAzE1NwAAAAMzMTYAAAADODgzAAAAAzgyMwAAAAMyNjUAAAADNjQxAAAAAzkxMAAAAAMyOTgAAAADOTEyAAAAAzE1MgAAAAMxMTAAAAADNDM5AAAAAzkzMQAAAAM3ODEAAAADNDgxAAAAAzcxNAAAAAMyNTAAAAADNjA2AAAAAzk0MwAAAAM5NzkAAAADNDExAAAAAzUzNAAAAAMyNjYAAAADNTUwAAAAAzQyOQAAAAMzNjkAAAADMjE5AAAAAzkxNAAAAAM0NDUAAAADMzU2AAAAAzY0OAAAAAM0ODQAAAACNDAAAAADNjQwAAAAAjQzAAAAAzMyNQAAAAMyNjQAAAADNzEzAAAAAzk2MgAAAAMxMTEAAAADNjM5AAAAAzM0OAAAAAM2MDQAAAADODAzAAAAAzQwNAAAAAMzMDIAAAADMjAyAAAAAzkyOQAAAAI0NgAAAAM4NjAAAAADNTMyAAAAAzIzOAAAAAMzMjMAAAADMTM4AAAAAzY2NAAAAAM5MjUAAAADMjYwAAAAAzc2NQAAAAMzNTEAAAADOTg3AAAAAzc3NwAAAAM5ODQAAAADNzUwAAAAAzY5MgAAAAM4MjIAAAADMzYyAAAAAzgzMwAAAAM2NTgAAAADNjY5AAAAAzEzNgAAAAI1NAAAAAMyNTMAAAADODUxAAAAAzk3OAAAAAMyMDAAAAADMzIwAAAAAzExMgAAAAM5OTQAAAADNTc5AAAAAjM4AAAAAzczMQAAAAMxMzEAAAADNzg2AAAAAzM4OQAAAAMxMDcAAAADNjQ3AAAAAzY3MAAAAAMzMDMAAAADNjU5AAAAAzUxOQAAAAMyMzUAAAADNzYxAAAAAzMyNAAAAAM2MjMAAAADNjI5AAAAAzg5OAAAAAM0NTcAAAADMzQ0AAAAATkAAAADNjkwAAAAAzI3MwAAAAMyMjEAAAADNTQ1AAAAAzI4MwAAAAMzNzEAAAADNjg5AAAAAzQ0NwAAAAI1OQAAAAM4ODAAAAADNDMzAAAAAzM1MAAAAAM3MjIAAAADNjI2AAAAAjQ0AAAAAjExAAAAAzc1NAAAAAM3NzkAAAADNTg5AAAAAzYzNAAAAAI5OAAAAAMxMzcAAAADMjAzAAAAAzg2MQAAAAM2NjgAAAACNTUAAAADNDI2AAAAAjgzAAAAAzY4NAAAAAMyMjMAAAADODYyAAAAAzI2MgAAAAMyMTgAAAADODc2AAAAAzk1NQAAAAM5NDUAAAADOTY3AAAAAzMzNwAAAAM4NjcAAAADNzk2AAAAAzYxMQAAAAMyMjgAAAADNjMzAAAAAzkyMQAAAAM2MDMAAAADMzYwAAAAAjIwAAAAAzQxMgAAAAM5NTIAAAACOTkAAAACODIAAAADODk2AAAAAzQ2MAAAAAMxMDkAAAADOTA0AAAAAzU1MgAAAAM1NzQAAAADNDE3AAAAAzExNwAAAAM1ODcAAAADNTI0AAAAAjM2AAAAAzY5NQAAAAMzMDYAAAADNDE0AAAAAzU5NAAAAAM1NjcAAAADNDQzAAAAAzkwMQAAAAM4NjUAAAADNTU3AAAAAzk5MwAAAAM4ODQAAAACNDgAAAADNDQ4AAAAAzU0MgAAAAM2MzgAAAADNTAzAAAAAzUwNwAAAAM1MjcAAAADODk0AAAAAzUwNAAAAAI3MAAAAAMxMzAAAAADNjIwAAAAAzMzNgAAAAMzNDAAAAADOTAyAAAAAzUwOQAAAAM1OTEAAAADOTQxAAAAAjEwAAAAAzEwMgAAAAMxMDYAAAADNTY1AAAAAzg0MAAAAAM0MDAAAAADMzMxAAAAAzQ1NQAAAAMyODkAAAADMjc4AAAAAzMwOQAAAAM1NDkAAAADNjg3AAAAAzQzNQAAAAM3ODkAAAADOTE2AAAAAzM0NwAAAAMxMzkAAAADMTgwAAAAAzc0NwAAAAMzNzIAAAADODQ2AAAAAzIzNAAAAAMzOTUAAAADNzQzAAAAAzQwMwAAAAM1MTIAAAADNzg0AAAAAzk4NgAAAAMzNTQAAAADOTIzAAAAAzQ0MAAAAAM4MTUAAAADMzEzAAAAAzI1NAAAAAM5MzcAAAADNDI4AAAAAzY1NgAAAAMyNDAAAAADNTg4AAAAAzU1NgAAAAM2OTcAAAADNzAyAAAAAzM2OAAAAAM5MjAAAAADNTgwAAAAAzI2MQAAAAM4MTkAAAADMjcyAAAAAzU0NgAAAAI3NQAAAAM4MDcAAAADNDU4AAAAAzQzMgAAAAMyNTYAAAADNTQ0AAAAAzQ5MwAAAAM2NDkAAAADODM3AAAAAzg3OQAAAAM5ODIAAAADMjU4AAAAAzc0NQAAAAMxOTUAAAACMzQAAAADNzIwAAAAAzg1MwAAAAMzMTAAAAADNDQ2AAAAAjE1AAAAAzkxOQAAAAM0MTYAAAADNTIzAAAAAzc2OAAAAAE0AAAAAzU2OQAAAAMxMzIAAAADODM0AAAAAjI0AAAAAzI1MQAAAAMzMDgAAAADMzU5AAAAAzU0MAAAAAM4MjUAAAADMTI0AAAAAzQwMQAAAAMxMDMAAAADNTYyAAAAAzExNQAAAAM5MzMAAAACODAAAAADNTY2AAAAAjUxAAAABDEwMDAAAAADMjA0AAAAAzg3MgAAAAM4OTIAAAACNTIAAAADNjA1AAAAAzU5OQAAAAIxMwAAAAMyNDcAAAADNzUxAAAAAzU4NAAAAAI0NwAAAAE2AAAAAzM1MgAAAAM1MzcAAAADODQ5AAAAAzI5NAAAAAM5MjYAAAADNzk0AAAAAzY1MQAAAAMzNTUAAAADODkwAAAAAzQ1MgAAAAM2MTkAAAADNDg4AAAAAzgwNQAAAAMxOTIAAAADNjE2AAAAAzYyOAAAAAM1MDUAAAADMzE3AAAAAzM1MwAAAAM4MTgAAAADMzkxAAAAAzEzNQAAAAMzNzMAAAADMjc1AAAAAjIyAAAAAzM0OQAAAAI1MAAAAAM4MjQAAAADOTYzAAAAAzg4OAAAAAI4MQAAAAMxMjgAAAADNTU1AAAAAzk5OAAAAAM0ODMAAAADMjc5AAAAAzkzNAAAAAM5MzIAAAADODM1AAAAAzk5MgAAAAM3NzgAAAADNzM0AAAAAzIzOQAAAAMyMjQAAAACNDkAAAADMjkwAAAAAzk3MAAAAAM1MTQAAAABMQAAAAM4MjYAAAADOTcyAAAAAzU2MQAAAAM0MjAAAAACNzYAAAACNjcAAAADNjczAAAAAzgxNwAAAAMxNDMAAAADNDE5AAAAAjYxAAAAAzcxNQAAAAM0NTEAAAADNjUzAAAAAzc1MgAAAAMxNDkAAAADMzYzAAAAAzE4OAAAAAM5MzkAAAADNzAxAAAAAzE0NwAAAAM3OTgAAAADODMwAAAAAzU3NwAAAAM1MjAAAAADMjcxAAAAAzc2NwAAAAMzMDQAAAADNjk5AAAAAzY1NQAAAAM1MDYAAAACNDIAAAACMzcAAAADMjU3AAAAAzQyMQAAAAM3NDAAAAADODU0AAAAAzQ1NgAAAAMzMjEAAAADNTM2AAAAAzc4NwAAAAM1NjAAAAADMTgyAAAAAzc4OAAAAAI3MQAAAAI2OQAAAAIzMwAAAAM1OTcAAAADMjgxAAAAAzY2MgAAAAM0NjUAAAADNTk1AAAAAzI0NgAAAAM5NDYAAAADODU1AAAAAzEzNAAAAAMzMzMAAAADNjIxAAAAAzE1NAAAAAM5MTMAAAADMzQzAAAAAzczNwAAAAMyMjcAAAADNzI5AAAAAzM2NAAAAAMyNjcAAAADNjE1AAAAAzY5OAAAAAMyNTIAAAACOTYAAAADNzM4AAAAAzE5NAAAAAMyMTcAAAADNjkxAAAAAzUyMgAAAAM3NjAAAAADOTI4AAAAAzI1OQAAAAM0OTYAAAADNjAxAAAAAzcyNQAAAAMzNzAAAAADNzgwAAAAAzk3NAAAAAM5MjIAAAACNTMAAAADNzQ0AAAAAzk0MgAAAAMxNTEAAAACMjYAAAADODY4AAAAAzk5NwAAAAM0MjMAAAACOTQAAAADNzc2AAAAAzMwMQAAAAMyOTUAAAACMjcAAAACNjAAAAADNDQ5AAAAAzg0MgAAAAMyMjUAAAADMzk0AAAAAzY0NAAAAAM0OTAAAAACNTcAAAADMTk3AAAAAzg2NAAAAAM1MzMAAAADNDcxAAAAAjIxAAAAAzU1OAAAAAM0MzQAAAADMTk4AAAAAzEwNAAAAAI5MAAAAAM4NTIAAAADMTUwAAAAAzIzMwAAAAM4MTYAAAADMjA4AAAAAzg0OAAAAAM4ODkAAAADNjgxAAAAAzE3OQAAAAMzMTIAAAADOTc2AAAAAzgyOQAAAAM0NDIAAAACNjUAAAADMjg2AAAAAzYyMgAAAAM3NjYAAAADNDA2AAAAAzg0NAAAAAMxOTkAAAADMTE2AAAAAzQ3OQAAAAM0MDgAAAADNzYyAAAAAzc5MgAAAAMxOTEAAAADNjMxAAAAAzMyOAAAAAMxNjQAAAADNzkzAAAAAzk1OQAAAAM1NDcAAAADODc3AAAAAzYzNQAAAAI4OAAAAAMyODgAAAADNTkwAAAAAzE4NQAAAAM2NTAAAAADNDc3AAAAAzcwOQAAAAM2NDMAAAADNzExAAAAAzEyNgAAAAM0MzcAAAADNDUwAAAAAzg3OAAAAAM4ODcAAAADNDY0AAAAAzE2NwAAAAM5MDMAAAADMzY1AAAAAzcwNgAAAAM4MTMAAAADNTMwAAAAAzU5MwAAAAM1MTgAAAADMjQ4AAAAATIAAAADODA0AAAAAzg5MwAAAAMxOTYAAAADMzE1AAAAAzQ3NAAAAAM5NjYAAAADOTY0AAAAAzMzOAAAAAM3MTIAAAADNDI3AAAAAzYxNwAAAAM5NDgAAAADNjQyAAAAAzgyMAAAAAM2NjUAAAADNTMxAAAAAjQxAAAAAzE0MQAAAAM1OTYAAAADNzA4AAAAAzk3MwAAAAM1OTgAAAADMjIyAAAAAzQ4OQAAAAM0OTUAAAADOTE4AAAAAzM4MgAAAAM4MTQAAAADNDg2AAAAAzM4NwAAAAM0NjIAAAADOTc3AAAAAjMwAAAAAzcyMQAAAAI5MwAAAAMxMjUAAAACOTEAAAADMjY4AAAAAzk5MQAAAAM1MjgAAAACNTYAAAADOTMwAAAAAzQzNgAAAAMyNDUAAAADNzU4AAAAAzc5NQAAAAM4ODEAAAADOTQ0AAAAAzQxOAAAAAMxNzMAAAADMzkzAAAAAzkzNgAAAAMxNjUAAAADMzc2AAAAAzgxMgAAAAMxNzYAAAADNzkwAAAAAzE2MAAAAAI4NgAAAAM4NzQAAAADMzA3AAAAAzYzMAAAAAM1NTkAAAADNDg1AAAAAzcwNAAAAAMzNjEAAAADNjI1AAAAAzc2MwAAAAM2MTgAAAADNzI2AAAAAzgwMQAAAAMyNTUAAAADNDQ0AAAAAzc1NQAAAAM0MDkAAAADNDY2AAAAAzk1NwAAAAM4NDMAAAADMTU2AAAAAzk5OQAAAAMxNTkAAAADNjc2AAAAAzk4MQAAAAM3NTcAAAADNzAwAAAAAzUyNQAAAAM1NzUAAAADMzMwAAAAAzUyMQAAAAM2OTYAAAADODU5AAAAAzc5NwAAAAM5ODMAAAADNjYzAAAAATcAAAADNzcxAAAAAzkyNwAAAAM1NzEAAAADOTU0AAAAAzU4MQAAAAM2MTMAAAADMjIwAAAAAzYzNwAAAAM0MTMAAAADMjgyAAAAAzM2NwAAAAM5NjAAAAADMzE4AAAAAzY3MQAAAAMyMDYAAAADMzExAAAAAzExNAAAAAM2NjYAAAADMzU4AAAAAzkwNgAAAAM2ODgAAAADNTYzAAAAAzI3NwAAAAI5MgAAAAMxODYAAAADNTEwAAAAAzMzNAAAAAMzNDUAAAADOTQ3AAAAAzIwNQAAAAM2NzQAAAADMzg0AAAAAzQ4MAAAAAMxNzcAAAADMTIyAAAAAzI5MwAAAAM3MTcAAAADNjk0AAAAAzkxNQAAAAMxNDUAAAADODA2AAAAAzU4MgAAAAMzNDYAAAADMTgxAAAAAzY0NgAAAAI3MgAAAAM5NjgAAAADMTU4AAAAAzc4MgAAAAMxMDEAAAADNTE1AAAAAzU5MgAAAAM3MzkAAAADODQ3AAAAAzY0NQAAAAM1MTYAAAADNjYxAAAAAzgzMQAAAAM0MjIAAAACMTQAAAADNzM2AAAAAzM5NgAAAAMzODgAAAADMjAxAAAAAzE2MgAAAAM0NzgAAAADMTIzAAAAAzY3OQAAAAI2NgAAAAIyMwAAAAMzMjkAAAADMjMyAAAAAzE2NgAAAAM3MjMAAAADNDczAAAAAzM3NwAAAAM2NjAAAAADODcwAAAAAjYzAAAAAzEwNQAAAAMzMzIAAAACNzMAAAADODU2AAAAAzg3NQAAAAM5OTUAAAADNjE0AAAAAzU3OAAAAAI1OAAAAAMyODUAAAADNTU0AAAAAzg0NQAAAAM2NTQAAAADNTg2AAAAAzQ5MQAAAAMyNzYAAAADOTQ5AAAAAzE2OQAAAAI2MgAAAAMyMDkAAAADMTQyAAAAAzMyNwAAAAM5MDUAAAADODMyAAAAAzM4MAAAAAI4NQAAAAM3NjQAAAADMzgxAAAAAzc1NgAAAAMxMTkAAAACNzkAAAADMTQwAAAAAzQ5NwAAAAM3MzMAAAADMzIyAAAAAzg4MgAAAAM3MzAAAAADNzcwAAAAAzQ3MAAAAAM1MDgAAAADMTAwAAAAAzk1MwAAAAMyMjYAAAADNDg3AAAAAzM0MgAAAAM2NTcAAAADMTQ4AAAAAzE2OAAAAAI3OAAAAAM3MjcAAAADMjMxAAAAAzMxOQAAAAM2ODYAAAADNzgzAAAAAjMxAAAAAzcwNwAAAAM4OTcAAAADOTAwAAAAAzk1MQAAAAM2MzIAAAADNDY3AAAAAzY3NQAAAAM0NzIAAAADOTUwAAAAAzg3MQAAAAI5NwAAAAMzNjYAAAADNTY0AAAAAjM1AAAAAzMzOQAAAAM1Njg=
-(1 row)
 
 DROP TABLE base_texts;
 -- low cardinality
@@ -1052,27 +912,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DICTIONARY | f         |             605
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 -- single element
@@ -1085,27 +940,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | f         |              39
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 -- high cardinality with toasted values
@@ -1118,7 +968,6 @@ SELECT pg_total_relation_size(reltoastrelid)
  pg_total_relation_size 
 ------------------------
                   24576
-(1 row)
 
 \ir include/compression_test.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -1128,27 +977,22 @@ SELECT pg_total_relation_size(reltoastrelid)
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | f         |         1100092
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 -- NULLs
@@ -1161,27 +1005,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DICTIONARY | t         |             187
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT item FROM generate_series(1, 10) i, generate_series(1, 100) j;
@@ -1193,27 +1032,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DICTIONARY | t         |             179
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT item FROM generate_series(1, 10) i, generate_series(1, 100) j;
@@ -1225,27 +1059,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DICTIONARY | t         |             178
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::TEXT item FROM generate_series(1, 10) i, generate_series(1, 100) j;
@@ -1257,27 +1086,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DICTIONARY | t         |             189
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 -----------------------
@@ -1304,33 +1128,27 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | f         |             356
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 SELECT c from compressed;
                                                                                                                                                                                                                                                                                                                                                                                                                             c                                                                                                                                                                                                                                                                                                                                                                                                                             
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  AQBwZ19jYXRhbG9nAHRleHQAAAEAAABkAAAAAjg0AAAAAjMyAAAAAjE5AAAAAjc0AAAAAjE4AAAAAjI5AAAAAjg5AAAAAjQ1AAAAAjI1AAAAATMAAAACNjgAAAABNQAAAAIxMgAAAAE4AAAAAjk1AAAAAjg3AAAAAjE2AAAAAjM5AAAAAjY0AAAAAjc3AAAAAjE3AAAAAjI4AAAAAjQwAAAAAjQzAAAAAjQ2AAAAAjU0AAAAAjM4AAAAATkAAAACNTkAAAACNDQAAAACMTEAAAACOTgAAAACNTUAAAACODMAAAACMjAAAAACOTkAAAACODIAAAACMzYAAAACNDgAAAACNzAAAAACMTAAAAACNzUAAAACMzQAAAACMTUAAAABNAAAAAIyNAAAAAI4MAAAAAI1MQAAAAI1MgAAAAIxMwAAAAI0NwAAAAE2AAAAAjIyAAAAAjUwAAAAAjgxAAAAAjQ5AAAAATEAAAACNzYAAAACNjcAAAACNjEAAAACNDIAAAACMzcAAAACNzEAAAACNjkAAAACMzMAAAACOTYAAAACNTMAAAACMjYAAAACOTQAAAACMjcAAAACNjAAAAACNTcAAAACMjEAAAACOTAAAAACNjUAAAACODgAAAABMgAAAAI0MQAAAAIzMAAAAAI5MwAAAAI5MQAAAAI1NgAAAAI4NgAAAAE3AAAAAjkyAAAAAjcyAAAAAjE0AAAAAjY2AAAAAjIzAAAAAjYzAAAAAjczAAAAAjU4AAAAAjYyAAAAAjg1AAAAAjc5AAAAAzEwMAAAAAI3OAAAAAIzMQAAAAI5NwAAAAIzNQ==
-(1 row)
 
 DROP TABLE base_texts;
 -- single element
@@ -1343,27 +1161,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, item::text FROM (SE
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | f         |              39
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 -- toasted values
@@ -1376,7 +1189,6 @@ SELECT pg_total_relation_size(reltoastrelid)
  pg_total_relation_size 
 ------------------------
                   24576
-(1 row)
 
 \ir include/compression_test.sql
 -- This file and its contents are licensed under the Timescale License.
@@ -1386,27 +1198,22 @@ SELECT pg_total_relation_size(reltoastrelid)
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | f         |         1100092
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 -- NULLs
@@ -1419,27 +1226,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 5)::TEXT 
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | t         |              80
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT item FROM generate_series(1, 10) i;
@@ -1451,27 +1253,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 1)::TEXT 
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | t         |              80
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT item FROM generate_series(1, 10) i;
@@ -1483,27 +1280,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(i, 10)::TEXT
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | t         |              79
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLIF(NULLIF(i, 2), 4), 5), 8)::TEXT item FROM generate_series(1, 10) i;
@@ -1515,27 +1307,22 @@ CREATE TABLE base_texts AS SELECT row_number() OVER() as rn, NULLIF(NULLIF(NULLI
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | t         |              74
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_texts;
 ----------------------
@@ -1561,27 +1348,22 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, (item%2=0)::boolean
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  BOOL      | f         |             152
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_bools;
 -- bool test, all true values, no nulls
@@ -1594,27 +1376,22 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, true as item FROM (
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  BOOL      | f         |              29
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_bools;
 -- bool test, all false, no nulls
@@ -1627,27 +1404,22 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, false as item FROM 
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  BOOL      | f         |              29
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_bools;
 -- a single true element
@@ -1660,27 +1432,22 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, true as item FROM (
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  BOOL      | f         |              29
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_bools;
 -- all true, except every 43rd value is null
@@ -1693,27 +1460,22 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, ((NULLIF(i, (CASE W
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  BOOL      | t         |             176
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_bools;
 -- all false, except every 29th value is null
@@ -1726,27 +1488,22 @@ CREATE TABLE base_bools AS SELECT row_number() OVER() as rn, ((NULLIF(i, (CASE W
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  BOOL      | t         |             176
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_bools;
 ----------------------
@@ -1803,27 +1560,22 @@ UPDATE base_uuids SET item = (SELECT u FROM uuid_set WHERE i = rn % 97) WHERE rn
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DICTIONARY | t         |            6124
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_uuids;
 -- all NULLs and a single UUID v7
@@ -1837,27 +1589,22 @@ UPDATE base_uuids SET item = '0197a7a9-b48b-7c74-a2a4-dcdbce635d11' WHERE rn = 1
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  ARRAY     | t         |              85
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_uuids;
 -- no NULLs
@@ -1871,27 +1618,22 @@ UPDATE base_uuids SET item = (SELECT u FROM uuid_set WHERE i = rn % 100);
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DICTIONARY | t         |            2092
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_uuids;
 -- flipping values between two UUID v7s and NULLs
@@ -1906,27 +1648,22 @@ UPDATE base_uuids SET item = '0197a7a9-b48b-7c74-a2a4-dcdbce635d12' WHERE rn % 3
  algorithm  | has_nulls | compressed size 
 ------------+-----------+-----------------
  DICTIONARY | t         |             320
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_uuids;
 -- test with a set of UUID v7s
@@ -1939,27 +1676,22 @@ CREATE TABLE base_uuids AS SELECT row_number() OVER() as rn, u as item FROM uuid
  algorithm | has_nulls | compressed size 
 -----------+-----------+-----------------
  UUID      | f         |             944
-(1 row)
 
                                    ?column?                                    | count 
 -------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed forward (expect 0) |     0
-(1 row)
 
                                     ?column?                                    | count 
 --------------------------------------------------------------------------------+-------
  Number of rows different between original and decompressed reversed (expect 0) |     0
-(1 row)
 
                                               ?column?                                              | count 
 ----------------------------------------------------------------------------------------------------+-------
  Number of rows different between original, decompressed, and decompressed deserializeed (expect 0) |     0
-(1 row)
 
                                               ?column?                                               | ?column? 
 -----------------------------------------------------------------------------------------------------+----------
  Test that deserialization, decompression, recompression, and serialization results in the same text | t
-(1 row)
 
 DROP TABLE base_uuids;
 RESET timescaledb.enable_uuid_compression;
@@ -1995,7 +1727,6 @@ group by 2, 3 order by 1 desc
     82 | XX001       | XX001
     54 | true        | true
     23 | 08P01       | 08P01
-(4 rows)
 
 \set algo deltadelta
 \set type int8
@@ -2012,7 +1743,6 @@ group by 2, 3 order by 1 desc
     62 | XX001       | true
     13 | 08P01       | 08P01
      1 | false       | false
-(5 rows)
 
 \set algo array
 \set type text
@@ -2030,7 +1760,6 @@ group by 2, 3 order by 1 desc
      2 | 3F000       | 3F000
      2 | false       | false
      1 | 22021       | 22021
-(6 rows)
 
 \set algo dictionary
 \set type text
@@ -2049,7 +1778,6 @@ group by 2, 3 order by 1 desc
      3 | 22021       | 22021
      1 | 3F000       | 3F000
      1 | false       | false
-(7 rows)
 
 \set algo bool
 \set type bool
@@ -2064,7 +1792,6 @@ group by 2, 3 order by 1 desc
     18 | XX001       | XX001
      3 | true        | true
      2 | 08P01       | 08P01
-(3 rows)
 
 \set algo uuid
 \set type uuid
@@ -2077,5 +1804,4 @@ group by 2, 3 order by 1 desc
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
      1 | true        | true
-(1 row)
 

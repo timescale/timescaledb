@@ -6,19 +6,16 @@ SHOW timescaledb.cagg_processing_wal_batch_size;
  timescaledb.cagg_processing_wal_batch_size 
 --------------------------------------------
  10000
-(1 row)
 
 SHOW timescaledb.cagg_processing_low_work_mem;
  timescaledb.cagg_processing_low_work_mem 
 ------------------------------------------
  39321kB
-(1 row)
 
 SHOW timescaledb.cagg_processing_high_work_mem;
  timescaledb.cagg_processing_high_work_mem 
 -------------------------------------------
  52428kB
-(1 row)
 
 \set VERBOSITY default
 \set ON_ERROR_STOP 0

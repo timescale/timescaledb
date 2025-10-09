@@ -9,7 +9,6 @@ step s3_compress_and_insert:
 count
 -----
     1
-(1 row)
 
 step s1_begin: 
   BEGIN;
@@ -39,7 +38,6 @@ step s3_compress_and_insert:
 count
 -----
     1
-(1 row)
 
 step s1_begin: 
   BEGIN;
@@ -65,7 +63,6 @@ step s3_wp_on: SELECT debug_waitpoint_enable('insert_create_compressed');
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s3_count: 
     SELECT count(*) FROM metrics;
@@ -73,7 +70,6 @@ step s3_count:
 count
 -----
     1
-(1 row)
 
 step s3_show_compressed: 
     SELECT is_compressed FROM timescaledb_information.chunks WHERE hypertable_name='metrics';
@@ -81,7 +77,6 @@ step s3_show_compressed:
 is_compressed
 -------------
 f            
-(1 row)
 
 step s1_copy: 
 COPY metrics FROM PROGRAM 'seq 10 | xargs -II echo 2025-01-01 0:00:00,d1,0.5' WITH (FORMAT CSV);
@@ -93,7 +88,6 @@ step s3_wp_off: SELECT debug_waitpoint_release('insert_create_compressed');
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_copy: <... completed>
 step s2_copy: <... completed>
@@ -104,7 +98,6 @@ step s3_show_compressed:
 is_compressed
 -------------
 t            
-(1 row)
 
 step s3_count: 
     SELECT count(*) FROM metrics;
@@ -112,5 +105,4 @@ step s3_count:
 count
 -----
    21
-(1 row)
 

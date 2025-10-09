@@ -49,8 +49,8 @@ FROM
 WHERE
     view_name = 'metrics_compressed_summary';
  set_chunk_time_interval 
+-------------------------
  
-(1 row)
 
 ALTER MATERIALIZED VIEW metrics_compressed_summary SET (timescaledb.compress);
 psql:include/cagg_compression_setup.sql:42: NOTICE:  defaulting compress_segmentby to device_id
@@ -62,9 +62,9 @@ SELECT CASE WHEN res is NULL THEN NULL
 FROM
 ( SELECT compress_chunk(show_chunks('metrics_compressed_summary')) res ) q;
     comp    
+------------
  compressed
  compressed
-(2 rows)
 
 -- Check for realtime caggs
 SELECT
@@ -83,8 +83,8 @@ WHERE
         )
     );
  count 
+-------
      5
-(1 row)
 
 -- Compressed CAgg + Uncompressed Hypertable
 CREATE MATERIALIZED VIEW metrics_summary
@@ -111,8 +111,8 @@ FROM
 WHERE
     view_name = 'metrics_summary';
  set_chunk_time_interval 
+-------------------------
  
-(1 row)
 
 ALTER MATERIALIZED VIEW metrics_summary SET (timescaledb.compress);
 psql:include/cagg_compression_setup.sql:94: NOTICE:  defaulting compress_segmentby to device_id
@@ -124,9 +124,9 @@ SELECT CASE WHEN res is NULL THEN NULL
 FROM
 ( SELECT compress_chunk(show_chunks('metrics_summary')) res ) q;
     comp    
+------------
  compressed
  compressed
-(2 rows)
 
 -- Check for realtime caggs
 SELECT
@@ -145,8 +145,8 @@ WHERE
         )
     );
  count 
+-------
      5
-(1 row)
 
 \o :TEST_RESULTS_SOURCE
 \set TEST_TABLE1 'metrics_compressed_summary'
@@ -270,8 +270,8 @@ SELECT CASE WHEN res is NULL THEN NULL
        END as dec
 FROM ( SELECT decompress_chunk(ch) res FROM show_chunks('metrics_compressed_summary') ch ORDER BY ch LIMIT 1) q;
     dec     
+------------
  decompress
-(1 row)
 
 -- Run tests and compare results
 \o :TEST_RESULTS_SOURCE
@@ -343,8 +343,8 @@ DROP TABLE extra_devices;
 CREATE TABLE comp_rename(time timestamptz);
 SELECT table_name FROM create_hypertable('comp_rename', 'time');
  table_name  
+-------------
  comp_rename
-(1 row)
 
 CREATE MATERIALIZED VIEW comp_rename_cagg WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1 week', time) AS bucket FROM comp_rename GROUP BY 1;
