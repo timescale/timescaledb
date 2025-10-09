@@ -10,7 +10,6 @@ SELECT create_hypertable('cluster_test', 'time', chunk_time_interval => 5);
      create_hypertable     
 ---------------------------
  (1,public,cluster_test,t)
-(1 row)
 
 CREATE INDEX on cluster_test (location);
 CREATE OR REPLACE FUNCTION ensure_scans_work(table_name TEXT, should_output REGCLASS=NULL, seqscan BOOLEAN=FALSE, indexscan BOOLEAN=FALSE, bitmapscan BOOLEAN=FALSE) RETURNS TABLE (a TEXT, b TEXT)
@@ -55,7 +54,6 @@ SELECT * FROM test.show_indexes('cluster_test');
 ---------------------------+------------+------+--------+---------+-----------+------------
  cluster_test_location_idx | {location} |      | f      | f       | f         | 
  cluster_test_time_idx     | {time}     |      | f      | f       | f         | 
-(2 rows)
 
 -- Show clustered indexes
 SELECT indexrelid::regclass, indisclustered
@@ -63,7 +61,6 @@ FROM pg_index
 WHERE indisclustered = true ORDER BY 1;
  indexrelid | indisclustered 
 ------------+----------------
-(0 rows)
 
 -- Create two chunks
 INSERT INTO cluster_test VALUES
@@ -88,7 +85,6 @@ FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY ctid;
  (0,3) |    4 | 18.3 |        2 | f         |      1
  (0,4) |    2 | 12.4 |        8 | g         |      1
  (0,5) |    1 | 23.4 |        5 | i         |      1
-(5 rows)
 
 SELECT ctid, time, temp, location, substring(value for 30), length(value)
 FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
@@ -99,7 +95,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
  (0,3) |    5 | 25.4 |        1 | e                              |      1
  (0,4) |    7 | 20.3 |        4 | xyzzyxyzzyxyzzyxyzzyxyzzyxyzzy | 500000
  (0,5) |    9 | 11.4 |        1 | h                              |      1
-(5 rows)
 
 BEGIN;
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -109,11 +104,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -126,7 +119,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -135,11 +127,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -152,7 +142,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -161,13 +150,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -180,7 +167,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 -- Show chunk indexes
@@ -189,14 +175,12 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_1_chunk');
 ------------------------------------------------------------------+------------+------+--------+---------+-----------+------------
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_1_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | 
-(2 rows)
 
 SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_1_2_chunk');
                               Index                               |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
 ------------------------------------------------------------------+------------+------+--------+---------+-----------+------------
  _timescaledb_internal._hyper_1_2_chunk_cluster_test_location_idx | {location} |      | f      | f       | f         | 
  _timescaledb_internal._hyper_1_2_chunk_cluster_test_time_idx     | {time}     |      | f      | f       | f         | 
-(2 rows)
 
 \set ON_ERROR_STOP 0
 -- cannot reorder a if with no index of the first call
@@ -211,11 +195,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -228,7 +210,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -237,11 +218,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -254,7 +233,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -263,13 +241,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -282,7 +258,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 -- reorder a chunk directly with an chunk index
@@ -291,7 +266,6 @@ INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan
  reorder_chunk 
 ---------------
  
-(1 row)
 
 BEGIN;
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -301,11 +275,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -318,7 +290,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -327,11 +298,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -344,7 +313,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -353,13 +321,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -372,7 +338,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 -- reorder a chunk without an index
@@ -381,7 +346,6 @@ INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan
  reorder_chunk 
 ---------------
  
-(1 row)
 
 BEGIN;
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -391,11 +355,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -408,7 +370,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -417,11 +378,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -434,7 +393,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -443,13 +401,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -462,7 +418,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 -- reorder a chunk directly with a hypertable index
@@ -471,7 +426,6 @@ INFO:  reordering "_timescaledb_internal._hyper_1_2_chunk" using sequential scan
  reorder_chunk 
 ---------------
  
-(1 row)
 
 BEGIN;
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -481,11 +435,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -498,7 +450,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -507,11 +458,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -524,7 +473,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -533,13 +481,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -552,7 +498,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 \set ON_ERROR_STOP 0
@@ -582,11 +527,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -599,7 +542,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -608,11 +550,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -625,7 +565,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -634,13 +573,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -653,7 +590,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 -- reorder puts things in the correct order
@@ -666,7 +602,6 @@ FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY ctid;
  (0,3) |    4 | 18.3 |        2 | f         |      1
  (0,4) |    2 | 12.4 |        8 | g         |      1
  (0,5) |    1 | 23.4 |        5 | i         |      1
-(5 rows)
 
 SELECT ctid, time, temp, location, substring(value for 30), length(value)
 FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
@@ -677,7 +612,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
  (0,3) |    7 | 20.3 |        4 | xyzzyxyzzyxyzzyxyzzyxyzzyxyzzy | 500000
  (0,4) |    6 | 27.3 |        9 | d                              |      1
  (0,5) |    5 | 25.4 |        1 | e                              |      1
-(5 rows)
 
 -- can perform first reorder using a hypertable index (also test non-toast)
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_1_chunk', 'cluster_test_time_idx', verbose => TRUE);
@@ -685,7 +619,6 @@ INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan
  reorder_chunk 
 ---------------
  
-(1 row)
 
 BEGIN;
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -695,11 +628,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -712,7 +643,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -721,11 +651,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -738,7 +666,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -747,13 +674,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -766,7 +691,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 -- and this sets the clustered index correctly
@@ -775,7 +699,6 @@ INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan
  reorder_chunk 
 ---------------
  
-(1 row)
 
 BEGIN;
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -785,11 +708,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -802,7 +723,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', seq
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -811,11 +731,9 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 7)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -828,7 +746,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', ind
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -837,13 +754,11 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=7
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 7)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 7)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -856,7 +771,6 @@ SELECT * FROM ensure_scans_work('cluster_test', should_output => 'expected', bit
         
  time | time | temp | temp | location | location | substring | substring | length | length 
 ------+------+------+------+----------+----------+-----------+-----------+--------+--------
-(0 rows)
 
 COMMIT;
 -- reorder puts things in the correct order
@@ -869,7 +783,6 @@ FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY ctid;
  (0,3) |    2 | 12.4 |        8 | g         |      1
  (0,4) |    1 | 23.4 |        5 | i         |      1
  (0,5) |    0 | 18.9 |        3 | a         |      1
-(5 rows)
 
 SELECT ctid, time, temp, location, substring(value for 30), length(value)
 FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
@@ -880,7 +793,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
  (0,3) |    7 | 20.3 |        4 | xyzzyxyzzyxyzzyxyzzyxyzzyxyzzy | 500000
  (0,4) |    6 | 27.3 |        9 | d                              |      1
  (0,5) |    5 | 25.4 |        1 | e                              |      1
-(5 rows)
 
 -- can still use other index
 BEGIN;
@@ -888,14 +800,12 @@ SET LOCAL enable_seqscan=false;
 SET LOCAL enable_indexscan=true;
 SET LOCAL enable_bitmapscan=false;
 EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE location < 6;
-                                      QUERY PLAN                                       
----------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append
    ->  Index Scan using _hyper_1_1_chunk_cluster_test_location_idx on _hyper_1_1_chunk
          Index Cond: (location < 6)
    ->  Index Scan using _hyper_1_2_chunk_cluster_test_location_idx on _hyper_1_2_chunk
          Index Cond: (location < 6)
-(5 rows)
 
 SELECT time, temp, location, substring(value for 30), length(value)
     FROM cluster_test
@@ -910,7 +820,6 @@ SELECT time, temp, location, substring(value for 30), length(value)
     5 | 25.4 |        1 | e                              |      1
     7 | 20.3 |        4 | xyzzyxyzzyxyzzyxyzzyxyzzyxyzzy | 500000
     9 | 11.4 |        1 | h                              |      1
-(7 rows)
 
 COMMIT;
 -- drop toast column
@@ -924,11 +833,9 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 6)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -939,7 +846,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
         
  time | time | temp | temp | location | location 
 ------+------+------+------+----------+----------
-(0 rows)
 
 SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -948,11 +854,9 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 6)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -963,7 +867,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
         
  time | time | temp | temp | location | location 
 ------+------+------+------+----------+----------
-(0 rows)
 
 SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -972,13 +875,11 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 6)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 6)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -989,7 +890,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
         
  time | time | temp | temp | location | location 
 ------+------+------+------+----------+----------
-(0 rows)
 
 COMMIT;
 SELECT reorder_chunk('_timescaledb_internal._hyper_1_1_chunk', verbose => TRUE);
@@ -997,7 +897,6 @@ INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan
  reorder_chunk 
 ---------------
  
-(1 row)
 
 BEGIN;
 SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -1007,11 +906,9 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 6)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -1022,7 +919,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
         
  time | time | temp | temp | location | location 
 ------+------+------+------+----------+----------
-(0 rows)
 
 SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -1031,11 +927,9 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 6)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -1046,7 +940,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
         
  time | time | temp | temp | location | location 
 ------+------+------+------+----------+----------
-(0 rows)
 
 SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -1055,13 +948,11 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 6)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 6)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -1072,7 +963,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
         
  time | time | temp | temp | location | location 
 ------+------+------+------+----------+----------
-(0 rows)
 
 COMMIT;
 -- reorder puts things in the correct order
@@ -1085,7 +975,6 @@ FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY ctid;
  (0,3) |    2 | 12.4 |        8
  (0,4) |    1 | 23.4 |        5
  (0,5) |    0 | 18.9 |        3
-(5 rows)
 
 SELECT ctid, time, temp, location
 FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
@@ -1096,7 +985,6 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY ctid;
  (0,3) |    7 | 20.3 |        4
  (0,4) |    6 | 27.3 |        9
  (0,5) |    5 | 25.4 |        1
-(5 rows)
 
 -- force an indexscan
 SET enable_seqscan=false;
@@ -1107,7 +995,6 @@ INFO:  reordering "_timescaledb_internal._hyper_1_1_chunk" using sequential scan
  reorder_chunk 
 ---------------
  
-(1 row)
 
 BEGIN;
 SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expected', seqscan => true) \gexec
@@ -1117,11 +1004,9 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_2_chunk
    Filter: ("time" = 6)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -1132,7 +1017,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
         
  time | time | temp | temp | location | location 
 ------+------+------+------+----------+----------
-(0 rows)
 
 SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expected', indexscan => true) \gexec
 
@@ -1141,11 +1025,9 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_bitmapscan=f;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using _hyper_1_2_chunk_cluster_test_time_idx on _hyper_1_2_chunk
    Index Cond: ("time" = 6)
-(2 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -1156,7 +1038,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
         
  time | time | temp | temp | location | location 
 ------+------+------+------+----------+----------
-(0 rows)
 
 SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expected', bitmapscan => true) \gexec
 
@@ -1165,13 +1046,11 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
             SET LOCAL enable_bitmapscan=t;
             EXPLAIN (buffers off, costs off) SELECT * FROM cluster_test WHERE time=6
         
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Bitmap Heap Scan on _hyper_1_2_chunk
    Recheck Cond: ("time" = 6)
    ->  Bitmap Index Scan on _hyper_1_2_chunk_cluster_test_time_idx
          Index Cond: ("time" = 6)
-(4 rows)
 
 
             WITH T1 as (SELECT * FROM cluster_test WHERE time=7),
@@ -1182,7 +1061,6 @@ SELECT * FROM ensure_scans_work_no_val('cluster_test', should_output => 'expecte
         
  time | time | temp | temp | location | location 
 ------+------+------+------+----------+----------
-(0 rows)
 
 COMMIT;
 SET enable_seqscan=Default;
@@ -1198,7 +1076,6 @@ FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY time;
  (0,3) |    2 | 12.4 |        8
  (0,2) |    3 | 19.4 |        3
  (0,1) |    4 | 18.3 |        2
-(5 rows)
 
 SELECT ctid, time, temp, location
 FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY time;
@@ -1209,14 +1086,12 @@ FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY time;
  (0,3) |    7 | 20.3 |        4
  (0,2) |    8 | 13.3 |        7
  (0,1) |    9 | 11.4 |        1
-(5 rows)
 
 CREATE TABLE ct2(time INTEGER, val BIGINT);
 SELECT create_hypertable('ct2', 'time', chunk_time_interval => 5);
  create_hypertable 
 -------------------
  (2,public,ct2,t)
-(1 row)
 
 INSERT INTO ct2 VALUES
     (10,  0),
@@ -1234,7 +1109,6 @@ select show_chunks('ct2');
 ----------------------------------------
  _timescaledb_internal._hyper_2_3_chunk
  _timescaledb_internal._hyper_2_4_chunk
-(2 rows)
 
 -- if we use someone elses index error
 \set ON_ERROR_STOP 0
@@ -1250,7 +1124,6 @@ INFO:  reordering "_timescaledb_internal._hyper_2_3_chunk" using sequential scan
  reorder_chunk 
 ---------------
  
-(1 row)
 
 -- if we drop a CLUSTERed index we still fail correctly
 DROP INDEX ct2_time_idx;
@@ -1269,7 +1142,6 @@ INFO:  reordering "_timescaledb_internal._hyper_2_3_chunk" using sequential scan
  reorder_chunk 
 ---------------
  
-(1 row)
 
 SELECT ctid, time, val FROM _timescaledb_internal._hyper_2_3_chunk ORDER BY time;
  ctid  | time | val 
@@ -1277,7 +1149,6 @@ SELECT ctid, time, val FROM _timescaledb_internal._hyper_2_3_chunk ORDER BY time
  (0,3) |   12 |   2
  (0,2) |   13 |  13
  (0,1) |   14 |   4
-(3 rows)
 
 SELECT ctid, time, val FROM _timescaledb_internal._hyper_2_4_chunk ORDER BY time;
  ctid  | time | val 
@@ -1285,7 +1156,6 @@ SELECT ctid, time, val FROM _timescaledb_internal._hyper_2_4_chunk ORDER BY time
  (0,3) |    2 |  12
  (0,2) |    3 |  13
  (0,1) |    4 |  14
-(3 rows)
 
 -- There's a special case when a tuple is deleted, but that deletion isn't committed
 -- But we disallow reorder within transactions for now, if we enable it, we should
@@ -1316,7 +1186,6 @@ WHERE indisclustered = true ORDER BY 1;
  ct2_time_idx                                                 | t
  _timescaledb_internal._hyper_2_3_chunk_ct2_time_idx          | t
  _timescaledb_internal._hyper_2_4_chunk_ct2_time_idx          | t
-(5 rows)
 
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 \set ON_ERROR_STOP 0
@@ -1329,7 +1198,6 @@ SELECT table_name FROM create_hypertable('i3651','c1');
  table_name 
 ------------
  i3651
-(1 row)
 
 ALTER TABLE i3651 drop column c2;
 CREATE UNIQUE INDEX i3651_attmap ON i3651(c1,c4);
@@ -1338,7 +1206,6 @@ SELECT reorder_chunk(chunk,'i3651_attmap') from show_chunks('i3651') chunk;
  reorder_chunk 
 ---------------
  
-(1 row)
 
 -- test error handling when trying to create on internal hypertable
 CREATE TABLE comp_ht_test(time timestamptz NOT NULL);
@@ -1346,7 +1213,6 @@ SELECT table_name FROM create_hypertable('comp_ht_test','time');
   table_name  
 --------------
  comp_ht_test
-(1 row)
 
 ALTER TABLE comp_ht_test SET (timescaledb.compress);
 SELECT

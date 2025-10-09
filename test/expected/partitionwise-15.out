@@ -8,7 +8,6 @@ SELECT * FROM create_hypertable('hyper', 'time', 'device', 2);
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | hyper      | t
-(1 row)
 
 -- Create a similar PostgreSQL partitioned table
 CREATE TABLE pg2dim (time timestamptz, device int, temp float) PARTITION BY HASH (device);
@@ -44,31 +43,26 @@ SELECT * FROM test.show_subtables('hyper');
  _timescaledb_internal._hyper_1_2_chunk | 
  _timescaledb_internal._hyper_1_3_chunk | 
  _timescaledb_internal._hyper_1_4_chunk | 
-(4 rows)
 
 SELECT * FROM pg2dim_h1_t1;
              time             | device | temp 
 ------------------------------+--------+------
  Mon Feb 19 13:01:00 2018 PST |      1 |  2.3
-(1 row)
 
 SELECT * FROM pg2dim_h1_t2;
              time             | device | temp 
 ------------------------------+--------+------
  Fri Oct 19 13:01:00 2018 PDT |      1 |  7.6
-(1 row)
 
 SELECT * FROM pg2dim_h2_t1;
              time             | device | temp 
 ------------------------------+--------+------
  Mon Feb 19 13:02:00 2018 PST |      3 |  3.1
-(1 row)
 
 SELECT * FROM pg2dim_h2_t2;
              time             | device | temp 
 ------------------------------+--------+------
  Fri Oct 19 13:02:00 2018 PDT |      3 |    9
-(1 row)
 
 -- Compare partitionwise aggreate enabled/disabled. First run queries
 -- on PG partitioned tables for reference.
@@ -79,8 +73,7 @@ SELECT device, avg(temp)
 FROM pg1dim
 GROUP BY 1
 ORDER BY 1;
-                         QUERY PLAN                         
-------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: pg1dim.device, (avg(pg1dim.temp))
    Sort Key: pg1dim.device
@@ -92,7 +85,6 @@ ORDER BY 1;
                      Output: pg1dim_1.device, pg1dim_1.temp
                ->  Seq Scan on public.pg1dim_h2 pg1dim_2
                      Output: pg1dim_2.device, pg1dim_2.temp
-(11 rows)
 
 SET enable_partitionwise_aggregate = 'on';
 :PREFIX
@@ -100,8 +92,7 @@ SELECT device, avg(temp)
 FROM pg1dim
 GROUP BY 1
 ORDER BY 1;
-                         QUERY PLAN                         
-------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: pg1dim.device, (avg(pg1dim.temp))
    Sort Key: pg1dim.device
@@ -116,7 +107,6 @@ ORDER BY 1;
                Group Key: pg1dim_1.device
                ->  Seq Scan on public.pg1dim_h2 pg1dim_1
                      Output: pg1dim_1.device, pg1dim_1.temp
-(14 rows)
 
 -- All partition keys not covered by GROUP BY (partial partitionwise)
 SET enable_partitionwise_aggregate = 'off';
@@ -125,8 +115,7 @@ SELECT device, avg(temp)
 FROM pg2dim
 GROUP BY 1
 ORDER BY 1;
-                         QUERY PLAN                         
-------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: pg2dim.device, (avg(pg2dim.temp))
    Sort Key: pg2dim.device
@@ -142,7 +131,6 @@ ORDER BY 1;
                      Output: pg2dim_3.device, pg2dim_3.temp
                ->  Seq Scan on public.pg2dim_h2_t2 pg2dim_4
                      Output: pg2dim_4.device, pg2dim_4.temp
-(15 rows)
 
 SET enable_partitionwise_aggregate = 'on';
 :PREFIX
@@ -150,8 +138,7 @@ SELECT device, avg(temp)
 FROM pg2dim
 GROUP BY 1
 ORDER BY 1;
-                               QUERY PLAN                                
--------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: pg2dim.device, (avg(pg2dim.temp))
    Sort Key: pg2dim.device
@@ -179,7 +166,6 @@ ORDER BY 1;
                      Group Key: pg2dim_3.device
                      ->  Seq Scan on public.pg2dim_h2_t2 pg2dim_3
                            Output: pg2dim_3.device, pg2dim_3.temp
-(27 rows)
 
 -- All partition keys covered by GROUP BY (full partitionwise)
 SET enable_partitionwise_aggregate = 'off';
@@ -188,8 +174,7 @@ SELECT time, device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: pg2dim."time", pg2dim.device, (avg(pg2dim.temp))
    Sort Key: pg2dim."time", pg2dim.device
@@ -205,7 +190,6 @@ ORDER BY 1, 2;
                      Output: pg2dim_3."time", pg2dim_3.device, pg2dim_3.temp
                ->  Seq Scan on public.pg2dim_h2_t2 pg2dim_4
                      Output: pg2dim_4."time", pg2dim_4.device, pg2dim_4.temp
-(15 rows)
 
 SET enable_partitionwise_aggregate = 'on';
 :PREFIX
@@ -213,8 +197,7 @@ SELECT time, device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: pg2dim."time", pg2dim.device, (avg(pg2dim.temp))
    Sort Key: pg2dim."time", pg2dim.device
@@ -239,7 +222,6 @@ ORDER BY 1, 2;
                Group Key: pg2dim_3."time", pg2dim_3.device
                ->  Seq Scan on public.pg2dim_h2_t2 pg2dim_3
                      Output: pg2dim_3."time", pg2dim_3.device, pg2dim_3.temp
-(24 rows)
 
 -- All partition keys not covered by GROUP BY because of date_trunc
 -- expression on time (partial partitionwise)
@@ -249,8 +231,7 @@ SELECT date_trunc('month', time), device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: (date_trunc('month'::text, pg2dim."time")), pg2dim.device, (avg(pg2dim.temp))
    Sort Key: (date_trunc('month'::text, pg2dim."time")), pg2dim.device
@@ -266,7 +247,6 @@ ORDER BY 1, 2;
                      Output: date_trunc('month'::text, pg2dim_3."time"), pg2dim_3.device, pg2dim_3.temp
                ->  Seq Scan on public.pg2dim_h2_t2 pg2dim_4
                      Output: date_trunc('month'::text, pg2dim_4."time"), pg2dim_4.device, pg2dim_4.temp
-(15 rows)
 
 SET enable_partitionwise_aggregate = 'on';
 :PREFIX
@@ -274,8 +254,7 @@ SELECT date_trunc('month', time), device, avg(temp)
 FROM pg2dim
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: (date_trunc('month'::text, pg2dim."time")), pg2dim.device, (avg(pg2dim.temp))
    Sort Key: (date_trunc('month'::text, pg2dim."time")), pg2dim.device
@@ -303,7 +282,6 @@ ORDER BY 1, 2;
                      Group Key: date_trunc('month'::text, pg2dim_3."time"), pg2dim_3.device
                      ->  Seq Scan on public.pg2dim_h2_t2 pg2dim_3
                            Output: date_trunc('month'::text, pg2dim_3."time"), pg2dim_3.device, pg2dim_3.temp
-(27 rows)
 
 -- Now run on hypertable
 -- All partition keys not covered by GROUP BY (partial partitionwise)
@@ -313,8 +291,7 @@ SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
 ORDER BY 1;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: hyper.device, (avg(hyper.temp))
    Sort Key: hyper.device
@@ -330,7 +307,6 @@ ORDER BY 1;
                      Output: _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
                      Output: _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(15 rows)
 
 SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
@@ -338,8 +314,7 @@ SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
 ORDER BY 1;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: hyper.device, (avg(hyper.temp))
    Sort Key: hyper.device
@@ -355,7 +330,6 @@ ORDER BY 1;
                      Output: _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
                      Output: _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(15 rows)
 
 -- All partition keys covered (full partitionwise)
 SET timescaledb.enable_chunkwise_aggregation = 'off';
@@ -364,8 +338,7 @@ SELECT time, device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: hyper."time", hyper.device, (avg(hyper.temp))
    Sort Key: hyper."time", hyper.device
@@ -381,7 +354,6 @@ ORDER BY 1, 2;
                      Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
                      Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(15 rows)
 
 SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
@@ -389,8 +361,7 @@ SELECT time, device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                             QUERY PLAN                                              
------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: hyper."time", hyper.device, (avg(hyper.temp))
    Sort Key: hyper."time", hyper.device
@@ -406,7 +377,6 @@ ORDER BY 1, 2;
                      Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
                      Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(15 rows)
 
 -- Partial aggregation since date_trunc(time) is not a partition key
 SET enable_partitionwise_aggregate = 'off';
@@ -415,8 +385,7 @@ SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
    Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
@@ -434,7 +403,6 @@ ORDER BY 1, 2;
                            Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
                            Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(17 rows)
 
 -- Partial aggregation pushdown is currently not supported for this query by
 -- the TSDB pushdown code since a projection is used in the path.
@@ -444,8 +412,7 @@ SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: (date_trunc('month'::text, hyper."time")), hyper.device, (avg(hyper.temp))
    Sort Key: (date_trunc('month'::text, hyper."time")), hyper.device
@@ -463,7 +430,6 @@ ORDER BY 1, 2;
                            Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
                            Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(17 rows)
 
 -- Also test time_bucket
 SET timescaledb.enable_chunkwise_aggregation = 'off';
@@ -472,8 +438,7 @@ SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: (time_bucket('@ 1 mon'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
    Sort Key: (time_bucket('@ 1 mon'::interval, hyper."time")), hyper.device
@@ -491,7 +456,6 @@ ORDER BY 1, 2;
                            Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
                            Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(17 rows)
 
 SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
@@ -499,8 +463,7 @@ SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: (time_bucket('@ 1 mon'::interval, hyper."time")), hyper.device, (avg(hyper.temp))
    Sort Key: (time_bucket('@ 1 mon'::interval, hyper."time")), hyper.device
@@ -518,7 +481,6 @@ ORDER BY 1, 2;
                            Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
                            Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(17 rows)
 
 -- Test partitionwise joins, mostly to see that we do not break
 -- anything
@@ -527,7 +489,6 @@ SELECT * FROM create_hypertable('hyper_meta', 'time', 'device', 2);
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | public      | hyper_meta | t
-(1 row)
 
 INSERT INTO hyper_meta VALUES
        ('2018-02-19 13:01', 1, 'device_1'),
@@ -537,8 +498,7 @@ SET enable_partitionwise_join = 'off';
 SELECT h.time, h.device, h.temp, hm.info
 FROM hyper h, hyper_meta hm
 WHERE h.device = hm.device;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Merge Join
    Output: h."time", h.device, h.temp, hm.info
    Merge Cond: (hm.device = h.device)
@@ -560,14 +520,12 @@ WHERE h.device = hm.device;
                      Output: h_3."time", h_3.device, h_3.temp
                ->  Index Scan using _hyper_1_4_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_4_chunk h_4
                      Output: h_4."time", h_4.device, h_4.temp
-(21 rows)
 
 :PREFIX
 SELECT pg2.time, pg2.device, pg2.temp, pg1.temp
 FROM pg2dim pg2, pg1dim pg1
 WHERE pg2.device = pg1.device;
-                             QUERY PLAN                             
---------------------------------------------------------------------
+--- QUERY PLAN ---
  Merge Join
    Output: pg2."time", pg2.device, pg2.temp, pg1.temp
    Merge Cond: (pg1.device = pg2.device)
@@ -591,15 +549,13 @@ WHERE pg2.device = pg1.device;
                      Output: pg2_3."time", pg2_3.device, pg2_3.temp
                ->  Seq Scan on public.pg2dim_h2_t2 pg2_4
                      Output: pg2_4."time", pg2_4.device, pg2_4.temp
-(23 rows)
 
 SET enable_partitionwise_join = 'on';
 :PREFIX
 SELECT h.time, h.device, h.temp, hm.info
 FROM hyper h, hyper_meta hm
 WHERE h.device = hm.device;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Merge Join
    Output: h."time", h.device, h.temp, hm.info
    Merge Cond: (hm.device = h.device)
@@ -621,14 +577,12 @@ WHERE h.device = hm.device;
                      Output: h_3."time", h_3.device, h_3.temp
                ->  Index Scan using _hyper_1_4_chunk_hyper_device_time_idx on _timescaledb_internal._hyper_1_4_chunk h_4
                      Output: h_4."time", h_4.device, h_4.temp
-(21 rows)
 
 :PREFIX
 SELECT pg2.time, pg2.device, pg2.temp, pg1.temp
 FROM pg2dim pg2, pg1dim pg1
 WHERE pg2.device = pg1.device;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append
    ->  Merge Join
          Output: pg2_2."time", pg2_2.device, pg2_2.temp, pg1_1.temp
@@ -662,7 +616,6 @@ WHERE pg2.device = pg1.device;
                            Output: pg2_5."time", pg2_5.device, pg2_5.temp
                      ->  Seq Scan on public.pg2dim_h2_t2 pg2_6
                            Output: pg2_6."time", pg2_6.device, pg2_6.temp
-(33 rows)
 
 -- Test hypertable with time partitioning function
 CREATE OR REPLACE FUNCTION time_func(unixtime float8)
@@ -680,7 +633,6 @@ SELECT * FROM create_hypertable('hyper_timepart', 'time', 'device', 2, time_part
  hypertable_id | schema_name |   table_name   | created 
 ---------------+-------------+----------------+---------
              3 | public      | hyper_timepart | t
-(1 row)
 
 -- Planner won't pick push-down aggs on table with time function
 -- unless a certain amount of data
@@ -688,7 +640,6 @@ SELECT setseed(1);
  setseed 
 ---------
  
-(1 row)
 
 INSERT INTO hyper_timepart
 SELECT x, ceil(random() * 8), random() * 20
@@ -701,8 +652,7 @@ FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit
    Output: hyper_timepart."time", hyper_timepart.device, (avg(hyper_timepart.temp))
    ->  Sort
@@ -716,7 +666,6 @@ LIMIT 10;
                            Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk
                            Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
-(13 rows)
 
 :PREFIX
 SELECT time_func(time), device, avg(temp)
@@ -724,8 +673,7 @@ FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit
    Output: (time_func(hyper_timepart."time")), hyper_timepart.device, (avg(hyper_timepart.temp))
    ->  GroupAggregate
@@ -743,7 +691,6 @@ LIMIT 10;
                                  Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp, time_func(_hyper_3_7_chunk."time")
                            ->  Index Scan Backward using _hyper_3_8_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_8_chunk
                                  Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp, time_func(_hyper_3_8_chunk."time")
-(17 rows)
 
 -- Grouping on original time column should be pushed-down
 SET timescaledb.enable_chunkwise_aggregation = 'on';
@@ -753,8 +700,7 @@ FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit
    Output: hyper_timepart."time", hyper_timepart.device, (avg(hyper_timepart.temp))
    ->  Sort
@@ -768,7 +714,6 @@ LIMIT 10;
                            Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk
                            Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
-(13 rows)
 
 -- Applying the time partitioning function should also allow push-down
 -- on open dimensions
@@ -778,8 +723,7 @@ FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit
    Output: (time_func(hyper_timepart."time")), hyper_timepart.device, (avg(hyper_timepart.temp))
    ->  GroupAggregate
@@ -797,7 +741,6 @@ LIMIT 10;
                                  Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp, time_func(_hyper_3_7_chunk."time")
                            ->  Index Scan Backward using _hyper_3_8_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_8_chunk
                                  Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp, time_func(_hyper_3_8_chunk."time")
-(17 rows)
 
 -- Partial aggregation pushdown is currently not supported for this query by
 -- the TSDB pushdown code since a projection is used in the path.
@@ -807,8 +750,7 @@ FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit
    Output: (time_func(hyper_timepart."time")), (_timescaledb_functions.get_partition_hash(hyper_timepart.device)), (avg(hyper_timepart.temp))
    ->  GroupAggregate
@@ -826,7 +768,6 @@ LIMIT 10;
                                  Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp, time_func(_hyper_3_7_chunk."time")
                            ->  Index Scan Backward using _hyper_3_8_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_8_chunk
                                  Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp, time_func(_hyper_3_8_chunk."time")
-(17 rows)
 
 -- Test removal of redundant group key optimization in PG16
 -- All lower versions include the redundant key on device column
@@ -836,8 +777,7 @@ FROM hyper_timepart
 WHERE device = 1
 GROUP BY 1
 LIMIT 10;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit
    Output: _hyper_3_8_chunk.device, (avg(_hyper_3_8_chunk.temp))
    ->  GroupAggregate
@@ -846,5 +786,4 @@ LIMIT 10;
          ->  Index Scan using _hyper_3_8_chunk_hyper_timepart_device_expr_idx on _timescaledb_internal._hyper_3_8_chunk
                Output: _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
                Index Cond: (_hyper_3_8_chunk.device = 1)
-(8 rows)
 

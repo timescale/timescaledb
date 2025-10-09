@@ -18,7 +18,6 @@ select table_name from create_hypertable( 'conditions', 'timec');
  table_name 
 ------------
  conditions
-(1 row)
 
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.myfill = 1)
 as
@@ -237,14 +236,12 @@ select table_name from create_hypertable( 'rowsec_tab', 'a', chunk_time_interval
  table_name 
 ------------
  rowsec_tab
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0)::bigint FROM rowsec_tab $$;
 SELECT set_integer_now_func('rowsec_tab', 'integer_now_test');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 alter table rowsec_tab ENABLE ROW LEVEL SECURITY;
 create policy rowsec_tab_allview ON rowsec_tab FOR SELECT USING(true);
@@ -269,7 +266,6 @@ select table_name from create_hypertable( 'conditions', 'timec');
  table_name 
 ------------
  conditions
-(1 row)
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -318,14 +314,12 @@ select table_name from create_hypertable( 'conditions', 'timec', chunk_time_inte
  table_name 
 ------------
  conditions
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test_s() returns smallint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0)::smallint FROM conditions $$;
 SELECT set_integer_now_func('conditions', 'integer_now_test_s');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 create materialized view mat_with_test( timec, minl, sumt , sumh)
@@ -365,14 +359,12 @@ select table_name from create_hypertable( 'conditions', 'timec', chunk_time_inte
  table_name 
 ------------
  conditions
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test_b() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0)::bigint FROM conditions $$;
 SELECT set_integer_now_func('conditions', 'integer_now_test_b');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -389,7 +381,6 @@ CREATE TABLE text_time(time TEXT);
    create_hypertable    
 ------------------------
  (9,public,text_time,t)
-(1 row)
 
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
@@ -418,7 +409,6 @@ SELECT create_hypertable('measurements', 'time');
      create_hypertable      
 ----------------------------
  (10,public,measurements,t)
-(1 row)
 
 INSERT INTO measurements VALUES ('2019-03-04 13:30', 1, 1.3);
 -- Add a continuous aggregate on the measurements table and a policy
@@ -501,7 +491,6 @@ select create_hypertable('i2980','time');
   create_hypertable  
 ---------------------
  (12,public,i2980,t)
-(1 row)
 
 create materialized view i2980_cagg with (timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
 NOTICE:  continuous aggregate "i2980_cagg" is already up-to-date
@@ -533,7 +522,6 @@ SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_14_3_chunk
-(1 row)
 
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
 ERROR:  cannot disable columnstore on hypertable with columnstore chunks
@@ -547,7 +535,6 @@ select add_continuous_aggregate_policy('i2980_cagg2', interval '10 day', interva
  job_id 
 --------
    1002
-(1 row)
 
 SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
 ERROR:  columnstore not enabled on continuous aggregate "i2980_cagg"
@@ -570,7 +557,6 @@ SELECT count(*) FROM (select decompress_chunk(ch) FROM show_chunks('i2980_cagg2'
  count 
 -------
      1
-(1 row)
 
 ALTER MATERIALIZED VIEW i2980_cagg2 SET (timescaledb.compress = 'false');
 SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
@@ -581,7 +567,6 @@ SELECT table_name FROM create_hypertable('comp_ht_test','time');
   table_name  
 --------------
  comp_ht_test
-(1 row)
 
 ALTER TABLE comp_ht_test SET (timescaledb.compress);
 SELECT

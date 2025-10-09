@@ -23,7 +23,6 @@ SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCust
  hypertable_id | schema_name |   table_name   | created 
 ---------------+-------------+----------------+---------
              1 | public      | two_Partitions | t
-(1 row)
 
 \set QUIET off
 BEGIN;
@@ -72,7 +71,6 @@ ORDER BY 1,2;
  Schema |      Name      | Type  |       Owner       
 --------+----------------+-------+-------------------
  public | two_Partitions | table | default_perm_user
-(1 row)
 
 \echo 'List of hypertables'
 List of hypertables
@@ -80,7 +78,6 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name |   table_name   | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+----------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   1 | public      | two_Partitions | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(1 row)
 
 \echo 'List of chunk indexes'
 List of chunk indexes
@@ -119,7 +116,6 @@ ORDER BY h.id, ch.id, ci.indrelid::regclass::text;
         4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_1_idx"    |             1
         4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_0_idx"    |             1
         4 | _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_device_id_timeCustom_idx"   |             1
-(28 rows)
 
 \echo 'Size of hypertables'
 Size of hypertables
@@ -152,7 +148,6 @@ SELECT hypertable,
     hypertable    | table_bytes | index_bytes | toast_bytes | total_bytes 
 ------------------+-------------+-------------+-------------+-------------
  "two_Partitions" |       32768 |      417792 |       32768 |      483328
-(1 row)
 
 \echo 'Chunk sizes:'
 Chunk sizes:
@@ -207,7 +202,6 @@ SELECT *,
         2 | "_timescaledb_internal"."_hyper_1_2_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_functions.get_partition_hash} | {"['1257897600000000000','1257900192000000000')","[1073741823,)"} |        8192 |      106496 |        8192 |      122880
         3 | "_timescaledb_internal"."_hyper_1_3_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_functions.get_partition_hash} | {"['1257985728000000000','1257988320000000000')","[1073741823,)"} |        8192 |       98304 |        8192 |      114688
         4 | "_timescaledb_internal"."_hyper_1_4_chunk" | {timeCustom,device_id} | {bigint,text}             | {NULL,_timescaledb_functions.get_partition_hash} | {"['1257892416000000000','1257895008000000000')","[,1073741823)"} |        8192 |       98304 |        8192 |      114688
-(4 rows)
 
 \echo 'Hypertable index sizes'
 Hypertable index sizes
@@ -228,6 +222,5 @@ ORDER BY i.indrelid::regclass::text, i.indexrelid::regclass::text;
  public."two_Partitions" | public."two_Partitions_timeCustom_series_1_idx"    |       73728
  public."two_Partitions" | public."two_Partitions_timeCustom_series_2_idx"    |       49152
  public."two_Partitions" | public."two_Partitions_timeCustom_series_bool_idx" |       57344
-(7 rows)
 
 RESET search_path;

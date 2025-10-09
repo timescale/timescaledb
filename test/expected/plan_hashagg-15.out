@@ -15,7 +15,6 @@ psql:include/plan_hashagg_load.sql:9: WARNING:  column type "timestamp without t
  create_hypertable  
 --------------------
  (1,public,hyper,t)
-(1 row)
 
 ALTER TABLE hyper
 DROP COLUMN time_broken,
@@ -30,8 +29,7 @@ FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time")) DESC
    ->  HashAggregate
@@ -39,15 +37,13 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 EXPLAIN (buffers off, costs off) SELECT date_trunc('minute', time) AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time")) DESC
    ->  HashAggregate
@@ -55,7 +51,6 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 -- Test partitioning function on an open (time) dimension
 CREATE OR REPLACE FUNCTION unix_to_timestamp(unixtime float8)
@@ -68,7 +63,6 @@ SELECT create_hypertable('hyper_timefunc', 'time', chunk_time_interval => interv
       create_hypertable      
 -----------------------------
  (2,public,hyper_timefunc,t)
-(1 row)
 
 INSERT INTO hyper_timefunc SELECT time_int, metricid, VALUE, time_date FROM hyper;
 ANALYZE metric;
@@ -84,8 +78,7 @@ FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time"))
    ->  Sort
@@ -93,15 +86,13 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 :PREFIX SELECT time_bucket('1 hour', time) AS MetricMinuteTs, metricid, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs, metricid
 ORDER BY MetricMinuteTs DESC, metricid;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (time_bucket('@ 1 hour'::interval, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.metricid
    ->  Sort
@@ -109,7 +100,6 @@ ORDER BY MetricMinuteTs DESC, metricid;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 --should be too many groups will not hashaggregate
 :PREFIX SELECT time_bucket('1 second', time) AS MetricMinuteTs, metricid, AVG(value) as avg
@@ -117,8 +107,7 @@ FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs, metricid
 ORDER BY MetricMinuteTs DESC, metricid;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (time_bucket('@ 1 sec'::interval, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.metricid
    ->  Sort
@@ -126,15 +115,13 @@ ORDER BY MetricMinuteTs DESC, metricid;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 :PREFIX SELECT time_bucket('1 minute', time, INTERVAL '30 seconds') AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (time_bucket('@ 1 min'::interval, _hyper_1_1_chunk."time", '@ 30 secs'::interval))
    ->  Sort
@@ -142,15 +129,13 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 :PREFIX SELECT time_bucket(60, time_int) AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (time_bucket('60'::bigint, _hyper_1_1_chunk.time_int))
    ->  Sort
@@ -158,15 +143,13 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 :PREFIX SELECT time_bucket(60, time_int, 10) AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (time_bucket('60'::bigint, _hyper_1_1_chunk.time_int, '10'::bigint))
    ->  Sort
@@ -174,15 +157,13 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 :PREFIX SELECT time_bucket('1 day', time_date) AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.time_date)) DESC
    ->  HashAggregate
@@ -190,15 +171,13 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 :PREFIX SELECT date_trunc('minute', time) AS MetricMinuteTs, AVG(value) as avg
 FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (date_trunc('minute'::text, _hyper_1_1_chunk."time"))
    ->  Sort
@@ -206,7 +185,6 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 \set ON_ERROR_STOP 0
 --can't optimize invalid time unit
@@ -215,8 +193,7 @@ FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (date_trunc('invalid'::text, _hyper_1_1_chunk."time"))
    ->  Sort
@@ -224,7 +201,6 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 \set ON_ERROR_STOP 1
 :PREFIX SELECT date_trunc('day', time_date) AS MetricMinuteTs, AVG(value) as avg
@@ -232,8 +208,7 @@ FROM hyper
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: (date_trunc('day'::text, (_hyper_1_1_chunk.time_date)::timestamp with time zone)) DESC
    ->  HashAggregate
@@ -241,7 +216,6 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_1_1_chunk
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
-(7 rows)
 
 --joins
 --with hypertable, optimize
@@ -251,8 +225,7 @@ JOIN metric ON (hyper.metricid = metric.id)
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs, metric.id
 ORDER BY MetricMinuteTs DESC, metric.id;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (time_bucket('3600'::bigint, _hyper_1_1_chunk.time_int, '10'::bigint)), metric.id
    ->  Sort
@@ -263,7 +236,6 @@ ORDER BY MetricMinuteTs DESC, metric.id;
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
                ->  Hash
                      ->  Seq Scan on metric
-(10 rows)
 
 --no hypertable involved, no optimization
 :PREFIX SELECT time_bucket(3600, time_int, 10) AS MetricMinuteTs, metric.value, AVG(regular.value) as avg
@@ -272,8 +244,7 @@ JOIN metric ON (regular.metricid = metric.id)
 WHERE time >= '2001-01-04T00:00:00' AND time <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs, metric.id
 ORDER BY MetricMinuteTs DESC, metric.id;
-                                                                                QUERY PLAN                                                                                 
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (time_bucket('3600'::bigint, regular.time_int, '10'::bigint)), metric.id
    ->  Sort
@@ -283,7 +254,6 @@ ORDER BY MetricMinuteTs DESC, metric.id;
                ->  Seq Scan on regular
                      Filter: (("time" >= 'Thu Jan 04 00:00:00 2001'::timestamp without time zone) AND ("time" <= 'Fri Jan 05 01:00:00 2001'::timestamp without time zone))
                ->  Seq Scan on metric
-(9 rows)
 
 -- Try with time partitioning function. Currently not optimized for hash aggregates
 :PREFIX SELECT time_bucket('1 minute', unix_to_timestamp(time)) AS MetricMinuteTs, AVG(value) as avg
@@ -291,8 +261,7 @@ FROM hyper_timefunc
 WHERE unix_to_timestamp(time) >= '2001-01-04T00:00:00' AND unix_to_timestamp(time) <= '2001-01-05T01:00:00'
 GROUP BY MetricMinuteTs
 ORDER BY MetricMinuteTs DESC;
-                                                                                               QUERY PLAN                                                                                                
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate
    Group Key: (time_bucket('@ 1 min'::interval, to_timestamp(_hyper_2_2_chunk."time")))
    ->  Sort
@@ -300,7 +269,6 @@ ORDER BY MetricMinuteTs DESC;
          ->  Result
                ->  Seq Scan on _hyper_2_2_chunk
                      Filter: ((to_timestamp("time") >= 'Thu Jan 04 00:00:00 2001 PST'::timestamp with time zone) AND (to_timestamp("time") <= 'Fri Jan 05 01:00:00 2001 PST'::timestamp with time zone))
-(7 rows)
 
 \set ECHO none
 psql:include/plan_hashagg_query.sql:60: ERROR:  unit "invalid" not recognized for type timestamp without time zone

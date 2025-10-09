@@ -16,7 +16,6 @@ SELECT create_hypertable(
   create_hypertable  
 ---------------------
  (1,public,target,t)
-(1 row)
 
 INSERT INTO target
 SELECT time, location, 14 as temperature
@@ -46,7 +45,6 @@ SELECT create_hypertable(
   create_hypertable  
 ---------------------
  (2,public,source,t)
-(1 row)
 
 -- Generate data that overlaps with target table
 INSERT INTO source
@@ -69,7 +67,6 @@ select * from target order by time, location asc;
  Fri Jan 01 00:00:05 2021 PST |        2 |          14 | string -
  Fri Jan 01 00:00:05 2021 PST |        3 |          14 | string -
  Fri Jan 01 00:00:05 2021 PST |        4 |          14 | string -
-(8 rows)
 
 select * from source order by time, location asc;
              time             | location | temperature 
@@ -82,7 +79,6 @@ select * from source order by time, location asc;
  Fri Jan 01 00:00:10 2021 PST |        2 |          80
  Fri Jan 01 00:00:10 2021 PST |        3 |          80
  Fri Jan 01 00:00:10 2021 PST |        4 |          80
-(8 rows)
 
 -- CREATE normal PostgreSQL tables
 CREATE TABLE target_pg AS SELECT * FROM target;
@@ -108,7 +104,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge DELETE matched rows for normal PG tables
 MERGE INTO target_pg t
@@ -131,7 +126,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- clean up tables
 DELETE FROM target_pg;
@@ -181,7 +175,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge INSERT with constant literals for normal PG tables
 MERGE INTO target_pg t
@@ -204,7 +197,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge with INSERT/DELETE/UPDATE on PG tables
 MERGE INTO target_pg t
@@ -235,7 +227,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge with Subqueries on PG tables
 MERGE INTO target_pg t
@@ -266,7 +257,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- clean up tables
 DELETE FROM target_pg;
@@ -313,7 +303,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge DELETE matched rows for normal PG tables
 MERGE INTO target_pg t
@@ -336,7 +325,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge INSERT with constant literals for normal PG tables
 MERGE INTO target_pg t
@@ -359,7 +347,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge with INSERT/DELETE/UPDATE on PG tables
 MERGE INTO target_pg t
@@ -390,7 +377,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 DROP TABLE target_pg CASCADE;
 DROP TABLE target CASCADE;
@@ -419,7 +405,6 @@ SELECT create_hypertable(
   create_hypertable  
 ---------------------
  (3,public,target,t)
-(1 row)
 
 insert into target values ('2023-01-12 00:00:05'::timestamp with time zone, 1,2);
 insert into target values ('2023-01-12 00:00:10'::timestamp with time zone, 2,2);
@@ -451,7 +436,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge DELETE matched rows for normal PG tables
 MERGE INTO target_pg t
@@ -474,7 +458,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- clean up tables
 DROP TABLE target_pg CASCADE;
@@ -497,19 +480,16 @@ SELECT create_hypertable ('target', 'time', 'device_id', 5);
   create_hypertable  
 ---------------------
  (4,public,target,t)
-(1 row)
 
 SELECT add_dimension('target', 'device_id_peer', 5);
            add_dimension            
 ------------------------------------
  (6,public,target,device_id_peer,t)
-(1 row)
 
 SELECT add_dimension('target', 'v2', 5);
      add_dimension      
 ------------------------
  (7,public,target,v2,t)
-(1 row)
 
 INSERT INTO target (time, device_id, device_id_peer, v0, v1, v2, v3)
   SELECT time,
@@ -532,7 +512,6 @@ SELECT create_hypertable ('source', 'time', 'device_id', 3);
   create_hypertable  
 ---------------------
  (5,public,source,t)
-(1 row)
 
 INSERT INTO source (time, device_id, filler_2, filler_3, filler_1)
   SELECT time,
@@ -565,7 +544,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge DELETE matched rows for normal PG tables
 MERGE INTO target_pg t
@@ -587,7 +565,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge INSERT matched rows for normal PG tables
 MERGE INTO target_pg t
@@ -611,7 +588,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- Merge with INSERT/DELETE/UPDATE on PG tables
 MERGE INTO target_pg t
@@ -643,7 +619,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 -- clean up tables
 DROP TABLE target_pg CASCADE;
@@ -668,7 +643,6 @@ SELECT create_hypertable ('target', 'partition_column');
   create_hypertable  
 ---------------------
  (6,public,target,t)
-(1 row)
 
 INSERT INTO target (time, device_id, device_id_peer, v0, v1, v2, v3, partition_column)
   SELECT time,
@@ -692,7 +666,6 @@ SELECT create_hypertable ('source', 'time', 'device_id', 3);
   create_hypertable  
 ---------------------
  (7,public,source,t)
-(1 row)
 
 INSERT INTO source (time, device_id, filler_2, filler_3, filler_1)
   SELECT time,
@@ -724,7 +697,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 MERGE INTO target_pg t
 USING source s
@@ -744,7 +716,6 @@ SELECT CASE WHEN EXISTS (TABLE target EXCEPT TABLE target_pg)
  result 
 --------
  same
-(1 row)
 
 MERGE INTO target_pg t
               USING source s
@@ -779,7 +750,6 @@ SELECT create_hypertable(
   create_hypertable  
 ---------------------
  (8,public,target,t)
-(1 row)
 
 INSERT INTO target
 SELECT time, location, 14 as temperature
@@ -905,7 +875,6 @@ SELECT table_name FROM create_hypertable(
  table_name 
 ------------
  target
-(1 row)
 
 SELECT '2022-10-10 14:33:44.1234+05:30' as start_date \gset
 INSERT INTO target (value, time)
@@ -922,7 +891,6 @@ SELECT table_name FROM create_hypertable(
  table_name 
 ------------
  source
-(1 row)
 
 ALTER TABLE target OWNER TO priv_user;
 ALTER TABLE source OWNER TO priv_user;

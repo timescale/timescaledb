@@ -11,7 +11,6 @@ SELECT create_hypertable('corrupt_float8','time');
       create_hypertable      
 -----------------------------
  (1,public,corrupt_float8,t)
-(1 row)
 
 ALTER TABLE corrupt_float8 SET (timescaledb.compress);
 -- insert these 1000 values
@@ -222,27 +221,23 @@ SELECT avg(value) FROM corrupt_float8;
     avg     
 ------------
  11735.8166
-(1 row)
 
 -- compress the chunk
 SELECT compress_chunk(x) FROM show_chunks('corrupt_float8') x;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 -- should work as well when the data is compressed
 SELECT avg(value) FROM corrupt_float8;
     avg     
 ------------
  11735.8166
-(1 row)
 
 SELECT extract(day from time) AS day, avg(value) FROM corrupt_float8 GROUP BY 1 ORDER BY 2;
  day |       avg        
 -----+------------------
   20 | 11580.3964968153
   21 | 11806.9564139942
-(2 rows)
 
 DROP TABLE corrupt_float8;

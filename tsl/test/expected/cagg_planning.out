@@ -14,7 +14,6 @@ SELECT create_hypertable('metrics', 'time');
   create_hypertable   
 ----------------------
  (1,public,metrics,t)
-(1 row)
 
 -- insert initial data to be in materialized part of cagg
 INSERT INTO metrics SELECT '2020-01-01'::timestamptz + format('%s day', i::text)::interval, 'device 1', 'metric 1', i  FROM generate_series(0, 9, 1) g(i);
@@ -46,11 +45,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  timescaledb.enable_cagg_sort_pushdown 
 ---------------------------------------
  on
-(1 row)
 
 :PREFIX SELECT 'query 01' AS label, * FROM cagg1 ORDER BY time_bucket;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Custom Scan (ChunkAppend) on _materialized_hypertable_2 (actual rows=4.00 loops=1)
@@ -71,11 +68,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
                            ->  Index Scan Backward using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                  Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(20 rows)
 
 :PREFIX SELECT 'query 02' AS label, * FROM cagg1 ORDER BY time_bucket DESC;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Finalize GroupAggregate (actual rows=2.00 loops=1)
@@ -96,11 +91,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Index Scan using _hyper_2_4_chunk__materialized_hypertable_2_time_bucket_idx on _hyper_2_4_chunk (actual rows=3.00 loops=1)
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(20 rows)
 
 :PREFIX SELECT 'query 03' AS label, * FROM cagg1_ordered_asc ORDER BY time_bucket;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Custom Scan (ChunkAppend) on _materialized_hypertable_3 (actual rows=4.00 loops=1)
@@ -121,11 +114,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
                            ->  Index Scan Backward using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                  Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(20 rows)
 
 :PREFIX SELECT 'query 04' AS label, * FROM cagg1_ordered_asc ORDER BY time_bucket DESC;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Finalize GroupAggregate (actual rows=2.00 loops=1)
@@ -146,11 +137,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Index Scan using _hyper_3_6_chunk__materialized_hypertable_3_time_bucket_idx on _hyper_3_6_chunk (actual rows=3.00 loops=1)
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(20 rows)
 
 :PREFIX SELECT 'query 05' AS label, * FROM cagg1_ordered_desc ORDER BY time_bucket;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Custom Scan (ChunkAppend) on _materialized_hypertable_4 (actual rows=4.00 loops=1)
@@ -171,11 +160,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
                            ->  Index Scan Backward using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                  Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(20 rows)
 
 :PREFIX SELECT 'query 06' AS label, * FROM cagg1_ordered_desc ORDER BY time_bucket DESC;
-                                                                 QUERY PLAN                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Finalize GroupAggregate (actual rows=2.00 loops=1)
@@ -196,11 +183,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Index Scan using _hyper_4_9_chunk__materialized_hypertable_4_time_bucket_idx on _hyper_4_9_chunk (actual rows=3.00 loops=1)
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(20 rows)
 
 :PREFIX SELECT 'query 07' AS label, * FROM cagg2 ORDER BY time_bucket;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Custom Scan (ChunkAppend) on _materialized_hypertable_5 (actual rows=4.00 loops=1)
@@ -223,11 +208,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"), _hyper_1_14_chunk.device
                                  ->  Index Scan using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(25 rows)
 
 :PREFIX SELECT 'query 08' AS label, * FROM cagg2 ORDER BY time_bucket DESC;
-                                                                  QUERY PLAN                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=2.00 loops=1)
@@ -250,11 +233,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Index Scan using _hyper_5_10_chunk__materialized_hypertable_5_time_bucket_idx on _hyper_5_10_chunk (actual rows=3.00 loops=1)
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(25 rows)
 
 :PREFIX SELECT 'query 07' AS label, * FROM cagg3 ORDER BY time_bucket;
-                                                                      QUERY PLAN                                                                       
--------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Custom Scan (ChunkAppend) on _materialized_hypertable_6 (actual rows=4.00 loops=1)
@@ -275,11 +256,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                              Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        ->  Index Scan using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                              Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(20 rows)
 
 :PREFIX SELECT 'query 08' AS label, * FROM cagg3 ORDER BY time_bucket DESC;
-                                                                  QUERY PLAN                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Subquery Scan on "*SELECT* 2" (actual rows=2.00 loops=1)
@@ -300,12 +279,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                ->  Index Scan using _hyper_6_12_chunk__materialized_hypertable_6_time_bucket_idx on _hyper_6_12_chunk (actual rows=3.00 loops=1)
                      Index Cond: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(20 rows)
 
 -- not optimized atm
 :PREFIX SELECT 'query 101' AS label, * FROM cagg2 ORDER BY time_bucket::date;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=6.00 loops=1)
    Sort Key: ((_materialized_hypertable_5.time_bucket)::date)
    Sort Method: quicksort 
@@ -327,11 +304,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                  Group Key: _hyper_1_14_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
                                  ->  Index Scan using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(24 rows)
 
 :PREFIX SELECT 'query 102' AS label, * FROM cagg2 ORDER BY time_bucket::date DESC;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=6.00 loops=1)
    Sort Key: ((_materialized_hypertable_5.time_bucket)::date) DESC
    Sort Method: quicksort 
@@ -353,7 +328,6 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                  Group Key: _hyper_1_14_chunk.device, time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
                                  ->  Index Scan using _hyper_1_14_chunk_metrics_time_idx on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                        Index Cond: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(24 rows)
 
 \set ECHO none
 -- diff baseline and optimized results
@@ -365,7 +339,6 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  ---------------------------------------
 - off
 + on
- (1 row)
  
    label   |         time_bucket          | avg 
 --dump & restore
@@ -379,20 +352,17 @@ SELECT timescaledb_pre_restore();
  timescaledb_pre_restore 
 -------------------------
  t
-(1 row)
 
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
 SELECT timescaledb_post_restore();
  timescaledb_post_restore 
 --------------------------
  t
-(1 row)
 
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 -- Repeat tests after restore
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -412,11 +382,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  timescaledb.enable_cagg_sort_pushdown 
 ---------------------------------------
  on
-(1 row)
 
 :PREFIX SELECT 'query 01' AS label, * FROM cagg1 ORDER BY time_bucket;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=4.00 loops=1)
@@ -442,11 +410,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(28 rows)
 
 :PREFIX SELECT 'query 02' AS label, * FROM cagg1 ORDER BY time_bucket DESC;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=2.00 loops=1)
@@ -472,11 +438,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                      ->  Seq Scan on _hyper_2_4_chunk (actual rows=3.00 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(28 rows)
 
 :PREFIX SELECT 'query 03' AS label, * FROM cagg1_ordered_asc ORDER BY time_bucket;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=4.00 loops=1)
@@ -502,11 +466,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(28 rows)
 
 :PREFIX SELECT 'query 04' AS label, * FROM cagg1_ordered_asc ORDER BY time_bucket DESC;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=2.00 loops=1)
@@ -532,11 +494,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                      ->  Seq Scan on _hyper_3_6_chunk (actual rows=3.00 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(28 rows)
 
 :PREFIX SELECT 'query 05' AS label, * FROM cagg1_ordered_desc ORDER BY time_bucket;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=4.00 loops=1)
@@ -562,11 +522,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time")
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(28 rows)
 
 :PREFIX SELECT 'query 06' AS label, * FROM cagg1_ordered_desc ORDER BY time_bucket DESC;
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=2.00 loops=1)
@@ -592,11 +550,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                      ->  Seq Scan on _hyper_4_9_chunk (actual rows=3.00 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(28 rows)
 
 :PREFIX SELECT 'query 07' AS label, * FROM cagg2 ORDER BY time_bucket;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=4.00 loops=1)
@@ -622,11 +578,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                  Group Key: time_bucket('@ 3 days'::interval, _hyper_1_14_chunk."time"), _hyper_1_14_chunk.device
                                  ->  Seq Scan on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(28 rows)
 
 :PREFIX SELECT 'query 08' AS label, * FROM cagg2 ORDER BY time_bucket DESC;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=2.00 loops=1)
@@ -652,11 +606,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                      ->  Seq Scan on _hyper_5_10_chunk (actual rows=3.00 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(28 rows)
 
 :PREFIX SELECT 'query 07' AS label, * FROM cagg3 ORDER BY time_bucket;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Sort (actual rows=4.00 loops=1)
@@ -680,11 +632,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                              Rows Removed by Filter: 3
                                        ->  Seq Scan on _hyper_1_14_chunk (actual rows=2.00 loops=1)
                                              Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(23 rows)
 
 :PREFIX SELECT 'query 08' AS label, * FROM cagg3 ORDER BY time_bucket DESC;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=6.00 loops=1)
    ->  Append (actual rows=6.00 loops=1)
          ->  Subquery Scan on "*SELECT* 2" (actual rows=2.00 loops=1)
@@ -708,12 +658,10 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                      ->  Seq Scan on _hyper_6_12_chunk (actual rows=3.00 loops=1)
                            Filter: (time_bucket < 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
-(23 rows)
 
 -- not optimized atm
 :PREFIX SELECT 'query 101' AS label, * FROM cagg2 ORDER BY time_bucket::date;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=6.00 loops=1)
    Sort Key: ((_materialized_hypertable_5.time_bucket)::date)
    Sort Method: quicksort 
@@ -736,11 +684,9 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4.00 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
-(25 rows)
 
 :PREFIX SELECT 'query 102' AS label, * FROM cagg2 ORDER BY time_bucket::date DESC;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=6.00 loops=1)
    Sort Key: ((_materialized_hypertable_5.time_bucket)::date) DESC
    Sort Method: quicksort 
@@ -763,7 +709,6 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
                                  ->  Seq Scan on _hyper_1_3_chunk (actual rows=4.00 loops=1)
                                        Filter: ("time" >= 'Sat Jan 11 16:00:00 2020 PST'::timestamp with time zone)
                                        Rows Removed by Filter: 3
-(25 rows)
 
 \set ECHO none
 -- diff baseline and optimized results
@@ -775,7 +720,6 @@ SHOW timescaledb.enable_cagg_sort_pushdown;
  ---------------------------------------
 - off
 + on
- (1 row)
  
    label   |         time_bucket          | avg 
 -- diff baseline before and after restore

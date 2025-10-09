@@ -15,7 +15,6 @@ SELECT create_hypertable('attachment_hypertable', 'time');
          create_hypertable          
 ------------------------------------
  (1,public,attachment_hypertable,t)
-(1 row)
 
 ALTER TABLE partitioned_attachment_vanilla ATTACH PARTITION attachment_hypertable FOR VALUES FROM ('2016-07-01') TO ('2016-08-01');
 ERROR:  hypertables do not support native postgres partitioning

@@ -7,13 +7,11 @@ SHOW timescaledb.license;
  timescaledb.license 
 ---------------------
  apache
-(1 row)
 
 SELECT _timescaledb_functions.tsl_loaded();
  tsl_loaded 
 ------------
  f
-(1 row)
 
 SET timescaledb.license='apache';
 ERROR:  invalid value for parameter "timescaledb.license": "apache"
@@ -50,7 +48,6 @@ SELECT create_hypertable('metrics', 'time');
   create_hypertable   
 ----------------------
  (1,public,metrics,t)
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress);
 ERROR:  functionality not supported under the current "apache" license. Learn more at https://tsdb.co/pdbir1r3

@@ -7,7 +7,6 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
   create_hypertable   
 ----------------------
  (1,public,metrics,t)
-(1 row)
 
 insert into metrics values ('2022-02-02 02:02:02', 2, 2.),
     ('2023-03-03 03:03:03', 3, 3.);
@@ -16,8 +15,7 @@ analyze metrics;
 explain (analyze, buffers off, costs off, summary off, timing off)
 select * from metrics
 where ts >= (select max(ts) from metrics);
-                                                                    QUERY PLAN                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics (actual rows=1.00 loops=1)
    Chunks excluded during runtime: 1
    InitPlan 2 (returns $1)
@@ -34,15 +32,13 @@ where ts >= (select max(ts) from metrics);
          Filter: (ts >= $1)
    ->  Seq Scan on _hyper_1_2_chunk (actual rows=1.00 loops=1)
          Filter: (ts >= $1)
-(18 rows)
 
 -- two non-const conditions
 explain (analyze, buffers off, costs off, summary off, timing off)
 select * from metrics
 where ts >= (select max(ts) from metrics)
     and id = 1;
-                                                                    QUERY PLAN                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics (actual rows=0.00 loops=1)
    Chunks excluded during runtime: 1
    InitPlan 2 (returns $1)
@@ -60,14 +56,12 @@ where ts >= (select max(ts) from metrics)
    ->  Seq Scan on _hyper_1_2_chunk (actual rows=0.00 loops=1)
          Filter: ((ts >= $1) AND (id = 1))
          Rows Removed by Filter: 1
-(19 rows)
 
 -- condition that becomes const null after evaluating the param
 explain (analyze, buffers off, costs off, summary off, timing off)
 select * from metrics
 where ts >= (select max(ts) from metrics where id = -1);
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics (actual rows=0.00 loops=1)
    Chunks excluded during runtime: 2
    InitPlan 2 (returns $1)
@@ -88,15 +82,13 @@ where ts >= (select max(ts) from metrics where id = -1);
          Filter: (ts >= $1)
    ->  Seq Scan on _hyper_1_2_chunk (never executed)
          Filter: (ts >= $1)
-(20 rows)
 
 -- const null condition and some other condition
 explain (analyze, buffers off, costs off, summary off, timing off)
 select * from metrics
 where ts >= (select max(ts) from metrics where id = -1)
     and id = 1;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics (actual rows=0.00 loops=1)
    Chunks excluded during runtime: 2
    InitPlan 2 (returns $1)
@@ -117,5 +109,4 @@ where ts >= (select max(ts) from metrics where id = -1)
          Filter: ((ts >= $1) AND (id = 1))
    ->  Seq Scan on _hyper_1_2_chunk (never executed)
          Filter: ((ts >= $1) AND (id = 1))
-(20 rows)
 

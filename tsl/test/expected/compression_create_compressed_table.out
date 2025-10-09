@@ -12,7 +12,6 @@ SELECT create_hypertable('public.metrics', 'time');
   create_hypertable   
 ----------------------
  (1,public,metrics,t)
-(1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id');
 -- insert uncompressed row into hypertable
@@ -22,14 +21,12 @@ SELECT count(*) FROM _timescaledb_internal._hyper_1_1_chunk;
  count 
 -------
      1
-(1 row)
 
 -- compress these rows, we do this to get compressed row data for the test
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 -- create custom compressed chunk table
 CREATE TABLE _timescaledb_internal.custom_compressed_chunk( LIKE _timescaledb_internal.compress_hyper_2_2_chunk);
@@ -40,7 +37,6 @@ SELECT decompress_chunk('"_timescaledb_internal"."_hyper_1_1_chunk"');
             decompress_chunk            
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 -- attach compressed chunk to parent chunk
 SELECT _timescaledb_functions.create_compressed_chunk(
@@ -58,12 +54,10 @@ SELECT _timescaledb_functions.create_compressed_chunk(
         create_compressed_chunk         
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 -- select total rows in chunk (should be 2)
 SELECT count(*) FROM "_timescaledb_internal"."_hyper_1_1_chunk";
  count 
 -------
      2
-(1 row)
 

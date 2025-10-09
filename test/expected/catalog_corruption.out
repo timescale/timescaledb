@@ -8,7 +8,6 @@ SELECT create_hypertable('dim_test', 'time', chunk_time_interval => INTERVAL '1 
    create_hypertable   
 -----------------------
  (1,public,dim_test,t)
-(1 row)
 
 -- Create two chunks
 INSERT INTO dim_test values('2000-01-01 00:00:00', 1);

@@ -10,8 +10,8 @@ CREATE TABLE nulls_not_distinct(time timestamptz not null, device text, label te
 CREATE UNIQUE INDEX ON nulls_not_distinct (time, device, label) NULLS NOT DISTINCT;
 SELECT table_name FROM create_hypertable('nulls_not_distinct', 'time');
      table_name     
+--------------------
  nulls_not_distinct
-(1 row)
 
 ALTER TABLE nulls_not_distinct SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
 INSERT INTO nulls_not_distinct SELECT '2024-01-01'::timestamptz + format('%s',i)::interval, 'd1', 'l1', i FROM generate_series(1,6000) g(i);
@@ -21,8 +21,8 @@ INSERT INTO nulls_not_distinct VALUES ('2024-01-01 0:00:00.10', 'd2', 'l1', 1);
 SELECT count(compress_chunk(c)) FROM show_chunks('nulls_not_distinct') c;
 INFO:  using tuplesort to scan rows from "_hyper_X_X_chunk" for converting to columnstore
  count 
+-------
      1
-(1 row)
 
 -- shouldn't succeed because nulls are not distinct
 \set ON_ERROR_STOP 0

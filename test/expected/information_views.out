@@ -4,7 +4,6 @@
 SELECT * FROM timescaledb_information.hypertables;
  hypertable_schema | hypertable_name | owner | num_dimensions | num_chunks | compression_enabled | tablespaces | primary_dimension | primary_dimension_type 
 -------------------+-----------------+-------+----------------+------------+---------------------+-------------+-------------------+------------------------
-(0 rows)
 
 -- create simple hypertable with 1 chunk
 CREATE TABLE ht1(time TIMESTAMPTZ NOT NULL);
@@ -12,7 +11,6 @@ SELECT create_hypertable('ht1','time');
  create_hypertable 
 -------------------
  (1,public,ht1,t)
-(1 row)
 
 INSERT INTO ht1 SELECT '2000-01-01'::TIMESTAMPTZ;
 -- create simple hypertable with 1 chunk and toasted data
@@ -21,7 +19,6 @@ SELECT create_hypertable('ht2','time');
  create_hypertable 
 -------------------
  (2,public,ht2,t)
-(1 row)
 
 INSERT INTO ht2 SELECT '2000-01-01'::TIMESTAMPTZ, repeat('8k',4096);
 SELECT * FROM timescaledb_information.hypertables
@@ -30,7 +27,6 @@ ORDER BY hypertable_schema, hypertable_name;
 -------------------+-----------------+-------------------+----------------+------------+---------------------+-------------+-------------------+--------------------------
  public            | ht1             | default_perm_user |              1 |          1 | f                   |             | time              | timestamp with time zone
  public            | ht2             | default_perm_user |              1 |          1 | f                   |             | time              | timestamp with time zone
-(2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- create schema open and hypertable with 3 chunks
@@ -41,7 +37,6 @@ SELECT create_hypertable('open.open_ht','time');
  create_hypertable  
 --------------------
  (3,open,open_ht,t)
-(1 row)
 
 INSERT INTO open.open_ht SELECT '2000-01-01'::TIMESTAMPTZ;
 INSERT INTO open.open_ht SELECT '2001-01-01'::TIMESTAMPTZ;
@@ -53,7 +48,6 @@ SELECT create_hypertable('closed.closed_ht','time');
    create_hypertable    
 ------------------------
  (4,closed,closed_ht,t)
-(1 row)
 
 INSERT INTO closed.closed_ht SELECT '2000-01-01'::TIMESTAMPTZ;
 SELECT * FROM timescaledb_information.hypertables
@@ -64,7 +58,6 @@ ORDER BY hypertable_schema, hypertable_name;
  open              | open_ht         | super_user        |              1 |          3 | f                   |             | time              | timestamp with time zone
  public            | ht1             | default_perm_user |              1 |          1 | f                   |             | time              | timestamp with time zone
  public            | ht2             | default_perm_user |              1 |          1 | f                   |             | time              | timestamp with time zone
-(4 rows)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 \set ON_ERROR_STOP 0
@@ -174,14 +167,12 @@ SELECT create_hypertable('test_table_int', 'time', chunk_time_interval => 10);
       create_hypertable      
 -----------------------------
  (5,public,test_table_int,t)
-(1 row)
 
 CREATE OR REPLACE function table_int_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
 SELECT set_integer_now_func('test_table_int', 'table_int_now');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 INSERT into test_table_int SELECT generate_series( 1, 20), 100;
 \d timescaledb_information.chunks
