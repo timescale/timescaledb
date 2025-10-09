@@ -698,7 +698,18 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
 	}
 
 	ReleaseVariableStats(vardata);
-	return mcv_sum + hist_sum;
+
+	const double final_result = mcv_sum + hist_sum;
+	if (final_result == 0)
+	{
+		/*
+		 * For tables with few rows, the statistics tuple will contain all zero
+		 * values. We shouldn't return zero in this case to avoid weird behavior.
+		 */
+		return TARGET_COMPRESSED_BATCH_SIZE;
+	}
+
+	return final_result;
 }
 
 /*

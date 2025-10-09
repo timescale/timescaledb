@@ -111,6 +111,20 @@ vacuum analyze estimate_count;
 
 explain (analyze, timing off, summary off) select * from estimate_count;
 
+
+-- single row. Postgres generates all-zero entry in pg_statistics in this case,
+-- but we want to avoid zero row counts.
+truncate estimate_count;
+insert into estimate_count
+select '2025-01-01', 1, 2
+;
+
+select count(compress_chunk(c)) from show_chunks('estimate_count') c;
+vacuum analyze estimate_count;
+
+explain (analyze, timing off, summary off) select * from estimate_count;
+
+
 -- no statistics
 truncate estimate_count;
 vacuum analyze estimate_count;
