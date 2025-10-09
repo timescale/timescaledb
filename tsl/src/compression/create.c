@@ -411,7 +411,8 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 				/*
 				 * Add bloom filter sparse index for this column.
 				 */
-				ColumnDef *bloom_column_def = create_sparse_index_column_def(attr, BLOOM1_COLUMN_PREFIX) ;
+				ColumnDef *bloom_column_def =
+					create_sparse_index_column_def(attr, BLOOM1_COLUMN_PREFIX);
 
 				compressed_column_defs = lappend(compressed_column_defs, bloom_column_def);
 			}
