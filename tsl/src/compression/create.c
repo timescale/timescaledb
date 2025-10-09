@@ -59,7 +59,7 @@
 
 #include "bgw_policy/compression_api.h"
 
-static const char *sparse_index_types[] = { "min", "max", "bloom1" };
+static const char *sparse_index_types[] = { "min", "max", BLOOM1_COLUMN_PREFIX };
 
 #ifdef USE_ASSERT_CHECKING
 static bool
@@ -242,7 +242,7 @@ create_sparse_index_column_def(Form_pg_attribute attr, const char *metadata_type
 	Assert(strlen(metadata_type) <= 6);
 	ColumnDef *column_def = NULL;
 
-	const bool is_bloom = strcmp(metadata_type, "bloom1") == 0;
+	const bool is_bloom = strcmp(metadata_type, BLOOM1_COLUMN_PREFIX) == 0;
 
 	if (is_bloom)
 	{
@@ -411,7 +411,7 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 				/*
 				 * Add bloom filter sparse index for this column.
 				 */
-				ColumnDef *bloom_column_def = create_sparse_index_column_def(attr, "bloom1");
+				ColumnDef *bloom_column_def = create_sparse_index_column_def(attr, BLOOM1_COLUMN_PREFIX) ;
 
 				compressed_column_defs = lappend(compressed_column_defs, bloom_column_def);
 			}

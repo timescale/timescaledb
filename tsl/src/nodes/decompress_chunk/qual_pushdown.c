@@ -14,6 +14,7 @@
 #include <utils/typcache.h>
 
 #include "compression/create.h"
+#include "compression/sparse_index_bloom1.h"
 #include "custom_type_cache.h"
 #include "decompress_chunk.h"
 #include "guc.h"
@@ -372,7 +373,7 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 													 context->chunk_rte->relid,
 													 var->varattno,
 													 context->compressed_rte->relid,
-													 "bloom1");
+													 BLOOM1_COLUMN_PREFIX);
 }
 
 static void *
