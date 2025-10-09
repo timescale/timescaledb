@@ -262,3 +262,55 @@ RESET enable_hashjoin ;
 RESET enable_mergejoin;
 
 -- end github bug 2917
+
+-- When we cannot use compression sort as query keys do not match,
+-- and have useful and cheap IndexScans due to selective index conditions,
+-- we should be able to use ChunkAppend after sorting IndexScans to desired query keys.
+-- Before, we would only try to sort SeqScans in such scenarios.
+SET enable_seqscan = false;
+
+-- IndexScan keys (device_id, device_id_peer, time) do not match query keys, can't push sort into compressed index.
+-- Cannot use batch sort either as have to order on (time, device_id_peer).
+-- IndexScan can be cheap because of (device_id>2),
+-- should allow ChunkAppend with LIMIT after sorting decompressed IndexScans on query keys.
+:PREFIX select * from metrics_ordered_idx where device_id > 2 order by "time" desc, device_id_peer limit 10;
+
+-- Make sure we can use ChunkAppend over sorted decompressed parametrized IndexScans and SeqScans
+
+-- Parametrized IndexScans
+:PREFIX SELECT nd.node,
+    mt.*
+FROM metrics_ordered_idx mt,
+    nodetime nd
+WHERE mt.time > nd.start_time
+    AND mt.device_id = nd.node
+    AND mt.time < nd.stop_time
+ORDER BY "time", mt.device_id limit 5;
+
+-- Parametrized SeqScans
+RESET enable_seqscan;
+SET enable_indexscan = false;
+
+:PREFIX SELECT nd.node,
+    mt.*
+FROM metrics_ordered_idx mt,
+    nodetime nd
+WHERE mt.time > nd.start_time
+    AND mt.device_id = nd.node
+    AND mt.time < nd.stop_time
+ORDER BY "time", mt.device_id limit 5;
+
+SET enable_seqscan = false;
+RESET enable_indexscan;
+
+-- When we decompress top chunk, uncompressed IndexScan is sorted on (time DESC),
+-- should allow ChunkAppend with LIMIT
+-- over (Sort(time, device_id_peer) <- IndexScan + Sort(time, device_id_peer) <- DecompressChunk ...)
+select show_chunks as chunk_to_decompress_1 from show_chunks('metrics_ordered_idx') order by 1 desc limit 1 \gset
+select decompress_chunk(:'chunk_to_decompress_1');
+
+:PREFIX select * from metrics_ordered_idx where device_id > 2 order by "time" desc, device_id_peer limit 10;
+
+select compress_chunk(:'chunk_to_decompress_1');
+
+RESET enable_seqscan;

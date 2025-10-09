@@ -176,7 +176,7 @@ VALUES
 (
     3,
     'Job History Log Retention Policy [3]',
-    INTERVAL '1 day',
+    INTERVAL '6 hours',
     INTERVAL '1 hour',
     -1,
     INTERVAL '1h',

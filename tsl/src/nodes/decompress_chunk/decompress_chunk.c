@@ -938,6 +938,12 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
  * node at the high level in the query plan and the missing ChunkAppend node (see (1)), all chunks
  * are decompressed (instead of only the actually needed ones).
  *
+ * If existing index pathkeys do not match query pathkeys and sort cannot be pushed down
+ * into compressed index, for example "SELECT * FROM ... ORDER BY (segcol, time DESC, some_col)" if
+ * compressed index is (segcol, time DESC), we should  allow SortPath over (DecompressChunk
+ * <- IndexScan) for such cases, i.e. should consider IndexScan compressed paths along with SeqScan
+ * compressed paths. IndexScans with useful index conditions can be cheaper than SeqScans.
+ *
  * The logic is inspired by PostgreSQL's add_paths_with_pathkeys_for_rel() function.
  *
  * Note: This function adds only non-partial paths. In parallel plans PostgreSQL prefers sorting
@@ -952,12 +958,6 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 	 * Don't have a useful sorting after decompression.
 	 */
 	if (sort_info->decompressed_sort_pathkeys == NIL)
-	{
-		return NULL;
-	}
-
-	/* We are only interested in regular (i.e., non index) paths */
-	if (!IsA(compressed_path, Path))
 	{
 		return NULL;
 	}
@@ -984,6 +984,10 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Path *path, Pat
 												  (Path *) path_copy,
 												  sort_info->decompressed_sort_pathkeys,
 												  root->limit_tuples);
+
+	/* Set in "create_sort_path" in PG18GE, have to set separately for PG17LE.
+	 * Need to preserve info for sort over parametrized index paths. */
+	sorted_path->param_info = path->param_info;
 
 	/*
 	 * Now, we need another dumb workaround for Postgres problems. When creating
