@@ -376,6 +376,59 @@ FROM
     EXCEPT
     (SELECT * FROM conditions_by_day ORDER BY 1, 2)) AS diff;
 
+
+-- Tests with Variable sized bucket
+SELECT delete_job(:job_id);
+TRUNCATE conditions;
+
+INSERT INTO conditions
+SELECT
+    t, d, 10
+FROM
+    generate_series(
+        '2025-01-01 00:00:00+00',
+        '2025-10-08 00:00:00+00',
+        '1 hour'::interval) AS t,
+    generate_series(1,5) AS d;
+
+CREATE MATERIALIZED VIEW conditions_by_month
+WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+SELECT
+    time_bucket('1 month', time),
+    device_id,
+    count(*),
+    min(temperature),
+    max(temperature),
+    avg(temperature),
+    sum(temperature)
+FROM
+    conditions
+GROUP BY
+    1, 2
+WITH NO DATA;
+
+SELECT
+    add_continuous_aggregate_policy(
+        'conditions_by_month',
+        start_offset => INTERVAL '600 days',
+        end_offset => INTERVAL '7 days',
+        schedule_interval => INTERVAL '1 day',
+        refresh_newest_first => false
+    ) AS job_id \gset
+
+SELECT
+    config
+FROM
+    timescaledb_information.jobs
+WHERE
+    job_id = :'job_id';
+
+TRUNCATE bgw_log, conditions_by_day;
+
+SELECT ts_bgw_params_reset_time(0, true);
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT * FROM sorted_bgw_log;
+
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_CLUSTER_SUPERUSER;
 REVOKE ALL ON SCHEMA public FROM test_cagg_refresh_policy_user;
