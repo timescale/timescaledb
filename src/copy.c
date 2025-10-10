@@ -139,6 +139,7 @@ typedef struct TSCopyMultiInsertInfo
 	CommandId mycid;		  /* Command Id used for COPY */
 	int ti_options;			  /* table insert options */
 	Hypertable *ht;			  /* The hypertable for the inserts */
+	bool has_continuous_aggregate;
 } TSCopyMultiInsertInfo;
 
 /*
@@ -354,6 +355,8 @@ TSCopyMultiInsertInfoInit(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 	miinfo->mycid = mycid;
 	miinfo->ti_options = ti_options;
 	miinfo->ht = ht;
+	miinfo->has_continuous_aggregate =
+		ts_continuous_aggs_find_by_raw_table_id(miinfo->ht->fd.id) != NIL;
 }
 
 /*
@@ -479,6 +482,19 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 								 slots[i],
 								 NIL,
 								 NULL /* transition capture */);
+		}
+
+		if (miinfo->has_continuous_aggregate)
+		{
+			bool should_free;
+			HeapTuple tuple = ExecFetchSlotHeapTuple(slots[i], false, &should_free);
+			ts_cm_functions->continuous_agg_dml_invalidate(miinfo->ht->fd.id,
+														   resultRelInfo->ri_RelationDesc,
+														   tuple,
+														   NULL,
+														   false);
+			if (should_free)
+				heap_freetuple(tuple);
 		}
 
 		ExecClearTuple(slots[i]);
