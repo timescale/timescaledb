@@ -447,7 +447,7 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 		.funcname =
 			list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(CAGG_INVALIDATION_TRIGGER)),
 		.args = NIL, /* to be filled in later */
-		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
+		.events = TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
 	};
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
