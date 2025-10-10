@@ -60,7 +60,7 @@ ssl_ctx_create(void)
 }
 
 static int
-ssl_setup(SSLConnection *conn)
+ssl_setup(SSLConnection *conn, const char *host)
 {
 	int ret;
 
@@ -91,6 +91,15 @@ ssl_setup(SSLConnection *conn)
 		ssl_set_error(conn, -1);
 		return -1;
 	}
+	/*
+	 * Tell the server during the handshake which hostname we are attempting
+	 * to connect to in case the server supports multiple hosts.
+	 */
+	if (!SSL_set_tlsext_host_name(conn->ssl, host))
+	{
+		ssl_set_error(conn, -1);
+		return -1;
+	}
 
 	ret = SSL_connect(conn->ssl);
 
@@ -114,7 +123,7 @@ ssl_connect(Connection *conn, const char *host, const char *servname, int port)
 	if (ret < 0)
 		return -1;
 
-	return ssl_setup((SSLConnection *) conn);
+	return ssl_setup((SSLConnection *) conn, host);
 }
 
 static ssize_t
