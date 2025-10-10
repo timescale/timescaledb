@@ -73,7 +73,7 @@ jobs:
           vector_agg_text
           vector_agg_uuid
           vectorized_aggregation
-          ${{ matrix.pg < 16 && 'columnar_scan_costs' || '' }}
+          ${{ matrix.pg < 16 && 'columnar_scan_cost' || '' }}
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
