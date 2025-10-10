@@ -38,7 +38,7 @@ ts_test_chunk_stats_insert(PG_FUNCTION_ARGS)
 
 typedef int (*chunk_insert_check_hook_type)(Oid, int64, int64);
 typedef void (*hypertable_drop_hook_type)(const char *, const char *);
-typedef List *(*hypertable_drop_chunks_hook_type)(Oid, const char *, const char *, int64, int64);
+typedef void (*hypertable_drop_chunks_hook_type)(Oid, const char *, const char *, int64, int64);
 
 static int
 osm_insert_hook_mock(Oid ht_oid, int64 range_start, int64 range_end)
@@ -54,19 +54,11 @@ osm_ht_drop_hook_mock(const char *schema_name, const char *table_name)
 	elog(NOTICE, "hypertable_drop_hook");
 }
 
-static List *
+static void
 osm_ht_drop_chunks_hook_mock(Oid osm_chunk_oid, const char *schema_name, const char *table_name,
 							 int64 range_start, int64 range_end)
 {
-	List *ret = NIL;
 	elog(NOTICE, "hypertable_drop_chunks_hook ");
-	for (int i = 0; i < 2; i++)
-	{
-		char *chunk_name;
-		chunk_name = psprintf("%s%d", "_timescaledb_internal.dummy", i);
-		ret = lappend(ret, chunk_name);
-	}
-	return ret;
 }
 
 OsmCallbacks_Versioned fake_osm_callbacks = {

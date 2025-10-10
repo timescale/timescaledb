@@ -1,0 +1,1 @@
+Fixes: #8752 Fix undefined behavior in OSM drop_chunks callback

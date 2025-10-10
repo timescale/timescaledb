@@ -4197,20 +4197,16 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 
 		if (osm_drop_chunks_hook)
 		{
-			ListCell *lc;
 			Dimension *dim = &ht->space->dimensions[0];
 			/* convert to PG timestamp from timescaledb internal format */
 			int64 range_start = ts_internal_to_time_int64(newer_than, dim->fd.column_type);
 			int64 range_end = ts_internal_to_time_int64(older_than, dim->fd.column_type);
-			List *osm_dropped_names = osm_drop_chunks_hook(osm_chunk->table_id,
-														   NameStr(ht->fd.schema_name),
-														   NameStr(ht->fd.table_name),
-														   range_start,
-														   range_end);
-			foreach (lc, osm_dropped_names)
-			{
-				dropped_chunk_names = lappend(dropped_chunk_names, lfirst(lc));
-			}
+
+			osm_drop_chunks_hook(osm_chunk->table_id,
+								 NameStr(ht->fd.schema_name),
+								 NameStr(ht->fd.table_name),
+								 range_start,
+								 range_end);
 		}
 	}
 
