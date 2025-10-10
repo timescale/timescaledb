@@ -16,6 +16,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/memnodes.h>
 #include <parser/parse_func.h>
+#include <replication/slot.h>
 #include <scan_iterator.h>
 #include <scanner.h>
 #include <storage/lockdefs.h>
@@ -24,12 +25,14 @@
 #include <utils.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
+#include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
 
 #include "cache.h"
+#include "continuous_aggs/create.h"
 #include "continuous_aggs/invalidation_multi.h"
 #include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
@@ -166,6 +169,12 @@ static void cagg_invalidation_state_init(ContinuousAggInvalidationState *state,
 static void cagg_invalidation_state_cleanup(const ContinuousAggInvalidationState *state);
 static void continuous_agg_process_hypertable_invalidations_single(Oid hypertable_relid);
 static void continuous_agg_process_hypertable_invalidations_multi(ArrayType *hypertable_array);
+
+static const char *invalidate_using_info[] = {
+	[ContinuousAggInvalidateUsingDefault] = "default",
+	[ContinuousAggInvalidateUsingTrigger] = "trigger",
+	[ContinuousAggInvalidateUsingWal] = "wal",
+};
 
 static Relation
 open_cagg_table(ContinuousAggTableType type, LOCKMODE lockmode)
@@ -1143,7 +1152,7 @@ invalidation_store_free(InvalidationStore *store)
  * It accepts NAME, REGCLASS, or REGCLASS[]. We need the NAME overload since
  * we do not want the user to have to write "'my_table'::regclass" when
  * calling it with a simple table name and the "fallback" case for implicit
- * conversions is any type int he "String" type category.
+ * conversions is any type in the "String" type category.
  *
  * See https://www.postgresql.org/docs/current/typeconv-func.html#TYPECONV-FUNC
  */
@@ -1317,4 +1326,136 @@ continuous_agg_process_hypertable_invalidations_multi(ArrayType *hypertable_arra
 	}
 
 	multi_invalidation_process_hypertable_log(hypertables);
+}
+
+ContinuousAggInvalidateUsing
+invalidation_parse_using(const char *using)
+{
+	StringInfoData alts;
+
+	for (size_t i = 0; i < lengthof(invalidate_using_info); ++i)
+		if (strcmp(invalidate_using_info[i], using) == 0)
+			return i;
+
+	initStringInfo(&alts);
+
+	for (size_t i = 0; i < lengthof(invalidate_using_info); ++i)
+		appendStringInfo(&alts,
+						 "%s%s\"%s\"",
+						 (i == 0 ? "" : ", "),
+						 (i == lengthof(invalidate_using_info) - 1 ? "or " : ""),
+						 invalidate_using_info[i]);
+
+	ereport(ERROR,
+			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+			errmsg("incorrect invalidation collection method given"),
+			errdetail("Expected one of %s but got \"%s\"", NameStr(alts), using));
+
+	return -1; /* To keep linter happy */
+}
+
+/*
+ * This method is used to migrate to or from using WAL-based invalidation
+ * collection. The procedure is roughly the same in both cases:
+ *
+ * 1. Lock the materialization invalidation log to prevent other refreshes
+ *    from running concurrently. This should take a very heavy lock.
+ *
+ * 2. Move all invalidation from the WAL or the hypertable invalidation log to
+ *    the materialization invalidation log.
+ *
+ * 3. Add or remove the trigger and add or remove the slot, as necessary.
+ *
+ * 4. Unlock the materialization invalidation log.
+ *
+ * When moving from WAL-based invalidation collection it is necessary to
+ * process invalidations for *all* hypertables with continuous aggregates, not
+ * just *this* hypertable. When going in the other direction it is sufficient
+ * to process the invalidations for the hypertable in question (since you just
+ * change one hypertable at a time).
+ *
+ * Once the lock is released on the materialization invalidation log, all
+ * waiting processes will attempt to move invalidations, but since there are
+ * none, it will be a no-op.
+ */
+Datum
+continuous_agg_set_invalidation_method(PG_FUNCTION_ARGS)
+{
+	Name new_method = PG_GETARG_NAME(0);
+	Oid table_relid = PG_GETARG_OID(1);
+	bool has_trigger;
+	Cache *hcache;
+	Hypertable *hypertable;
+	Relation logrel;
+	Oid relid;
+	const ContinuousAggInvalidateUsing new_using = invalidation_parse_using(NameStr(*new_method));
+	const Catalog *const catalog = ts_catalog_get();
+	char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
+	bool slot_prepared = false;
+
+	/*
+	 * The slot name is needed both for moving to and from WAL-based
+	 * invalidation collection, so we fetch the name here
+	 */
+	ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
+
+	/*
+	 * It is necessary to prepare the slot before doing anything that starts a
+	 * transaction, so we speculatively prepare the slot here if it *might* be
+	 * necessary and throw it away later if it is not needed.
+	 */
+	if (new_using == ContinuousAggInvalidateUsingWal &&
+		SearchNamedReplicationSlot(slot_name, true) == NULL)
+	{
+		ts_cagg_add_logical_decoding_slot_prepare(slot_name);
+		slot_prepared = true;
+	}
+
+	hypertable = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+	has_trigger = has_invalidation_trigger(table_relid);
+
+	if (new_using == ContinuousAggInvalidateUsingWal && !has_trigger)
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("hypertable is already using WAL-based invalidation collection"));
+
+	if (new_using == ContinuousAggInvalidateUsingTrigger && has_trigger)
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("hypertable is already using trigger-based invalidation collection"));
+
+	if (ts_number_of_continuous_aggs_attached(hypertable->fd.id) == 0)
+		ereport(ERROR,
+				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				errmsg("hypertable does not have any continuous aggregates attached"));
+
+	relid = catalog_get_table_id(catalog, CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG);
+	logrel = table_open(relid, AccessExclusiveLock);
+
+	if (new_using == ContinuousAggInvalidateUsingWal)
+	{
+		const Dimension *const dim = hyperspace_get_open_dimension(hypertable->space, 0);
+		const Oid dimtype = ts_dimension_get_partition_type(dim);
+
+		invalidation_process_hypertable_log(hypertable->fd.id, dimtype);
+		ts_hypertable_drop_trigger(table_relid, CAGGINVAL_TRIGGER_NAME);
+
+		if (slot_prepared)
+			ts_cagg_add_logical_decoding_slot_finalize();
+	}
+	else if (new_using == ContinuousAggInvalidateUsingTrigger)
+	{
+		multi_invalidation_process_hypertable_log(get_all_wal_using_hypertables());
+		cagg_add_trigger_hypertable(table_relid, hypertable->fd.id);
+
+		if (!ts_hypertable_invalidation_slot_used() &&
+			SearchNamedReplicationSlot(slot_name, true) != NULL)
+			ts_hypertable_drop_invalidation_replication_slot(slot_name);
+	}
+
+	table_close(logrel, NoLock);
+
+	ts_cache_release(&hcache);
+
+	PG_RETURN_VOID();
 }

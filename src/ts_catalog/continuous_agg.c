@@ -155,8 +155,8 @@ init_materialization_invalidation_log_scan_by_materialization_id(ScanIterator *i
 		Int32GetDatum(materialization_id));
 }
 
-static int32
-number_of_continuous_aggs_attached(int32 raw_hypertable_id)
+int32
+ts_number_of_continuous_aggs_attached(int32 raw_hypertable_id)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
@@ -537,8 +537,8 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
  * A hypertable is using the WAL-based invalidation collection if it has a
  * attached continuous aggregate but does not have an invalidation trigger.
  */
-static bool
-hypertable_invalidation_slot_used(void)
+bool
+ts_hypertable_invalidation_slot_used(void)
 {
 	ScanIterator iterator =
 		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
@@ -910,7 +910,7 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 
 	raw_hypertable_has_other_caggs =
 		OidIsValid(raw_hypertable.objectId) &&
-		number_of_continuous_aggs_attached(cadata->raw_hypertable_id) > 1;
+		ts_number_of_continuous_aggs_attached(cadata->raw_hypertable_id) > 1;
 
 	if (!raw_hypertable_has_other_caggs)
 	{
@@ -992,7 +992,8 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	 */
 	char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
 	ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
-	if (!hypertable_invalidation_slot_used() && SearchNamedReplicationSlot(slot_name, true) != NULL)
+	if (!ts_hypertable_invalidation_slot_used() &&
+		SearchNamedReplicationSlot(slot_name, true) != NULL)
 		ts_hypertable_drop_invalidation_replication_slot(slot_name);
 
 	if (OidIsValid(mat_hypertable.objectId))

@@ -42,7 +42,7 @@ DECLARE
 BEGIN
    SELECT ht.id AS hypertable_id,
           di.column_type::regtype,
-          EXISTS(SELECT FROM _timescaledb_catalog.continuous_agg where raw_hypertable_id = ht.id) AS has_cagg
+          EXISTS(SELECT FROM _timescaledb_catalog.continuous_agg WHERE raw_hypertable_id = ht.id) AS has_cagg
      INTO info
      FROM _timescaledb_catalog.hypertable ht
      JOIN _timescaledb_catalog.dimension di ON ht.id = di.hypertable_id

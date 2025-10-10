@@ -177,6 +177,7 @@ extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char
 																	  ContinuousAggViewType type);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_relid(Oid relid);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_rv(const RangeVar *rv);
+extern TSDLLEXPORT bool ts_hypertable_invalidation_slot_used(void);
 
 extern bool ts_continuous_agg_drop(const char *view_schema, const char *view_name);
 extern void ts_continuous_agg_drop_hypertable_callback(int32 hypertable_id);
@@ -214,3 +215,4 @@ ts_continuous_agg_fixed_bucket_width(const ContinuousAggBucketFunction *bucket_f
 extern TSDLLEXPORT int64
 ts_continuous_agg_bucket_width(const ContinuousAggBucketFunction *bucket_function);
 extern TSDLLEXPORT void ts_get_invalidation_replication_slot_name(char *slotname, Size szslot);
+extern TSDLLEXPORT int32 ts_number_of_continuous_aggs_attached(int32 raw_hypertable_id);

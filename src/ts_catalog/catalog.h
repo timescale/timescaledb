@@ -1333,7 +1333,7 @@ extern bool ts_is_catalog_table(Oid relid);
 
 /* Functions should operate on a passed-in Catalog struct */
 static inline Oid
-catalog_get_table_id(Catalog *catalog, CatalogTable tableid)
+catalog_get_table_id(const Catalog *catalog, CatalogTable tableid)
 {
 	return catalog->tables[tableid].id;
 }

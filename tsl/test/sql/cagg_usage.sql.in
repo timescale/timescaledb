@@ -390,10 +390,13 @@ SELECT count(*) FROM invalidation_slots WHERE database = current_database();
 CREATE TABLE magic1(time timestamptz not null, device int, value float);
 CREATE TABLE magic2(time timestamptz not null, device int, value float);
 CREATE TABLE magic3(time timestamptz not null, device int, value float);
+CREATE TABLE no_caggs(time timestamptz not null, device int, value float);
+CREATE TABLE not_hypertable(time timestamptz not null, device int, value float);
 
 SELECT table_name FROM create_hypertable('magic1','time');
 SELECT table_name FROM create_hypertable('magic2','time');
 SELECT table_name FROM create_hypertable('magic3','time');
+SELECT table_name FROM create_hypertable('no_caggs','time');
 
 INSERT INTO magic1
 SELECT generate_series('1999-12-20'::timestamptz, '2000-02-01'::timestamptz, '12 day'::interval),
@@ -569,3 +572,38 @@ ALTER MATERIALIZED VIEW magic3_day_summary_trigger
       SET (timescaledb.invalidate_using = 'wal');
 
 \set ON_ERROR_STOP 1
+
+-- Test functions to migrate between invalidation collection methods.
+
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+-- Wrong method used
+CALL _timescaledb_functions.set_invalidation_method('wrong', 'magic1');
+-- Already using WAL
+CALL _timescaledb_functions.set_invalidation_method('wal', 'magic1');
+-- Already using trigger
+CALL _timescaledb_functions.set_invalidation_method('trigger', 'magic3');
+-- Hypertable without continuous aggregates, which will not have a
+-- trigger, hence look like it is WAL-based.
+CALL _timescaledb_functions.set_invalidation_method('trigger', 'no_caggs');
+-- Normal table, which definitely do not have any triggers and might
+-- look like it is WAL-based.
+CALL _timescaledb_functions.set_invalidation_method('trigger', 'not_hypertable');
+\set ON_ERROR_STOP 1
+
+SELECT hypertable_name, view_name, invalidate_using
+  FROM timescaledb_information.continuous_aggregates
+ WHERE hypertable_name = 'magic3';
+
+CALL _timescaledb_functions.set_invalidation_method('wal', 'magic3');
+
+SELECT hypertable_name, view_name, invalidate_using
+  FROM timescaledb_information.continuous_aggregates
+ WHERE hypertable_name = 'magic3';
+
+CALL _timescaledb_functions.set_invalidation_method('trigger', 'magic3');
+
+SELECT hypertable_name, view_name, invalidate_using
+  FROM timescaledb_information.continuous_aggregates
+ WHERE hypertable_name = 'magic3';
+

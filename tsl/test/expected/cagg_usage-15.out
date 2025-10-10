@@ -615,6 +615,8 @@ SELECT count(*) FROM invalidation_slots WHERE database = current_database();
 CREATE TABLE magic1(time timestamptz not null, device int, value float);
 CREATE TABLE magic2(time timestamptz not null, device int, value float);
 CREATE TABLE magic3(time timestamptz not null, device int, value float);
+CREATE TABLE no_caggs(time timestamptz not null, device int, value float);
+CREATE TABLE not_hypertable(time timestamptz not null, device int, value float);
 SELECT table_name FROM create_hypertable('magic1','time');
  table_name 
 ------------
@@ -631,6 +633,12 @@ SELECT table_name FROM create_hypertable('magic3','time');
  table_name 
 ------------
  magic3
+(1 row)
+
+SELECT table_name FROM create_hypertable('no_caggs','time');
+ table_name 
+------------
+ no_caggs
 (1 row)
 
 INSERT INTO magic1
@@ -668,7 +676,7 @@ select currval('_timescaledb_catalog.hypertable_id_seq') - 1 as prev_htid \gset
 select setval('_timescaledb_catalog.hypertable_id_seq', :prev_htid, false);
  setval 
 --------
-     19
+     20
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -754,7 +762,7 @@ CREATE MATERIALIZED VIEW magic_summary1_magic
     AS SELECT time_bucket('1 day', time), device, avg(value)
          FROM magic1
      GROUP BY 1,2;
-ERROR:  unrecognized value "magic" for invalidate_using
+ERROR:  incorrect invalidation collection method given
 -- This should error out since we cannot add the trigger to the
 -- hypertable when there are multiple caggs connected. Changing
 -- invalidation collection method is more complicated than this.
@@ -782,7 +790,7 @@ SELECT count(*) FROM pg_replication_slots
 (1 row)
 
 DROP MATERIALIZED VIEW magic2_summary1_wal;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_23_40_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_24_40_chunk
 -- Slot should be there. We have another hypertable using WAL-based
 -- invalidation collection.
 SELECT count(*) FROM pg_replication_slots
@@ -794,7 +802,7 @@ SELECT count(*) FROM pg_replication_slots
 (1 row)
 
 DROP MATERIALIZED VIEW magic1_summary1_wal;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_21_38_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_38_chunk
 -- Slot should be there. We have yet another continuous aggregate for
 -- the hypertable using WAL-based invalidation collection.
 SELECT count(*) FROM pg_replication_slots
@@ -806,7 +814,7 @@ SELECT count(*) FROM pg_replication_slots
 (1 row)
 
 DROP MATERIALIZED VIEW magic1_summary2_wal;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_22_39_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_23_39_chunk
 -- Now slot should be gone and we should not have any continuous
 -- aggregates using WAL-based invalidation collection.
 SELECT count(*) FROM pg_replication_slots
@@ -854,3 +862,54 @@ ALTER MATERIALIZED VIEW magic3_day_summary_trigger
       SET (timescaledb.invalidate_using = 'wal');
 ERROR:  cannot change invalidation method for continuous aggregate
 \set ON_ERROR_STOP 1
+-- Test functions to migrate between invalidation collection methods.
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+-- Wrong method used
+CALL _timescaledb_functions.set_invalidation_method('wrong', 'magic1');
+ERROR:  incorrect invalidation collection method given
+DETAIL:  Expected one of "default", "trigger", or "wal" but got "wrong"
+-- Already using WAL
+CALL _timescaledb_functions.set_invalidation_method('wal', 'magic1');
+ERROR:  hypertable is already using WAL-based invalidation collection
+-- Already using trigger
+CALL _timescaledb_functions.set_invalidation_method('trigger', 'magic3');
+ERROR:  hypertable is already using trigger-based invalidation collection
+-- Hypertable without continuous aggregates, which will not have a
+-- trigger, hence look like it is WAL-based.
+CALL _timescaledb_functions.set_invalidation_method('trigger', 'no_caggs');
+ERROR:  hypertable does not have any continuous aggregates attached
+-- Normal table, which definitely do not have any triggers and might
+-- look like it is WAL-based.
+CALL _timescaledb_functions.set_invalidation_method('trigger', 'not_hypertable');
+ERROR:  table "not_hypertable" is not a hypertable
+\set ON_ERROR_STOP 1
+SELECT hypertable_name, view_name, invalidate_using
+  FROM timescaledb_information.continuous_aggregates
+ WHERE hypertable_name = 'magic3';
+ hypertable_name |          view_name          | invalidate_using 
+-----------------+-----------------------------+------------------
+ magic3          | magic3_day_summary_trigger  | trigger
+ magic3          | magic3_week_summary_trigger | trigger
+(2 rows)
+
+CALL _timescaledb_functions.set_invalidation_method('wal', 'magic3');
+SELECT hypertable_name, view_name, invalidate_using
+  FROM timescaledb_information.continuous_aggregates
+ WHERE hypertable_name = 'magic3';
+ hypertable_name |          view_name          | invalidate_using 
+-----------------+-----------------------------+------------------
+ magic3          | magic3_day_summary_trigger  | wal
+ magic3          | magic3_week_summary_trigger | wal
+(2 rows)
+
+CALL _timescaledb_functions.set_invalidation_method('trigger', 'magic3');
+SELECT hypertable_name, view_name, invalidate_using
+  FROM timescaledb_information.continuous_aggregates
+ WHERE hypertable_name = 'magic3';
+ hypertable_name |          view_name          | invalidate_using 
+-----------------+-----------------------------+------------------
+ magic3          | magic3_day_summary_trigger  | trigger
+ magic3          | magic3_week_summary_trigger | trigger
+(2 rows)
+
