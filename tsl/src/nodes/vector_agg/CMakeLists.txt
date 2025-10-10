@@ -5,5 +5,5 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/grouping_policy_batch.c
     ${CMAKE_CURRENT_SOURCE_DIR}/grouping_policy_hash.c
     ${CMAKE_CURRENT_SOURCE_DIR}/plan.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/plan_decompress_chunk.c)
+    ${CMAKE_CURRENT_SOURCE_DIR}/plan_columnar_scan.c)
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})

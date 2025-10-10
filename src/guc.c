@@ -1329,7 +1329,7 @@ _guc_init(void)
 							/* show_hook= */ NULL);
 
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
-							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
+							 /* short_desc= */ "require batch sorted merge in ColumnarScan node",
 							 /* long_desc= */ "this is for debugging purposes",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_batch_sorted_merge,
 							 /* bootValue= */ DRO_Allow,
@@ -1407,7 +1407,7 @@ _guc_init(void)
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_vector_qual"),
 							 /* short_desc= */
 							 "ensure that non-vectorized or vectorized filters are used in "
-							 "DecompressChunk node",
+							 "ColumnarScan node",
 							 /* long_desc= */
 							 "this is for debugging purposes, to let us check if the vectorized "
 							 "quals are used or not. EXPLAIN differs after PG15 for custom nodes, "

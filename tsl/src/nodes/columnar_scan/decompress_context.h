@@ -31,7 +31,7 @@ typedef struct CompressionColumnDescription
 	bool by_value;
 
 	/*
-	 * Attno of the decompressed column in the scan tuple of DecompressChunk node.
+	 * Attno of the decompressed column in the scan tuple of ColumnarScan node.
 	 * Negative values are special columns that do not have a representation in
 	 * the decompressed chunk, but are still used for decompression. The `type`
 	 * field is set accordingly for these columns.
