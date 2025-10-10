@@ -16,7 +16,6 @@ typedef struct ModifyHypertableState ModifyHypertableState;
 typedef struct ChunkTupleRouting
 {
 	Hypertable *hypertable;
-	bool has_continuous_aggregate;
 	/*
 	 * When single_chunk_insert is true, root_rel and root_rri point to the
 	 * chunk being inserted into. Otherwise, they point to the hypertable.
