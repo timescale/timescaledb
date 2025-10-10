@@ -1,3 +1,5 @@
+DROP FUNCTION _timescaledb_functions.bloom1_contains_any(_timescaledb_internal.bloom1, anyarray);
+
 DO $$
 BEGIN
     UPDATE _timescaledb_config.bgw_job
