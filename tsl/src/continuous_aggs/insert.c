@@ -216,6 +216,13 @@ update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 		cache_entry->greatest_modified_value = timeval;
 }
 
+void
+continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
+							  HeapTuple chunk_newtuple, bool update)
+{
+	execute_cagg_trigger(hypertable_id, chunk_rel, chunk_tuple, chunk_newtuple, update);
+}
+
 /*
  * Trigger to store what the max/min updated values are for a function.
  * This is used by continuous aggregates to ensure that the aggregated values
