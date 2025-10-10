@@ -15,3 +15,7 @@ extern pg_uuid_t *ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool bou
 extern TSDLLEXPORT pg_uuid_t *ts_create_uuid_v7_from_timestamptz(TimestampTz ts, bool boundary);
 extern bool ts_uuid_v7_extract_unixtime(const pg_uuid_t *uuid, uint64 *unixtime_ms,
 										uint16 *extra_us);
+extern bool ts_uuid_v7_extract_timestamptz(const pg_uuid_t *uuid, TimestampTz *timestamp,
+										   bool with_micros);
+
+extern TSDLLEXPORT Datum ts_timestamptz_from_uuid_v7(PG_FUNCTION_ARGS);

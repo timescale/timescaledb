@@ -138,6 +138,38 @@ SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 ORDER BY id DESC;
 
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
+GROUP BY id ORDER BY id DESC;
+
+SELECT time_bucket('1 day', uuid_timestamp(id)) AS day, avg(temp)
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
+GROUP BY id ORDER BY id DESC;
+
+-- Bucket with offset
+SELECT time_bucket('1 day', id, "offset" => '1 week') AS day, avg(temp)
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
+GROUP BY id ORDER BY id DESC;
+
+-- Bucket with origin
+SELECT time_bucket('1 day', id, timestamptz '2000-01-01 00:00') AS day, avg(temp)
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
+GROUP BY id ORDER BY id DESC;
+
+-- Bucket with time zone
+SELECT time_bucket('1 day', id, 'Europe/Stockholm') at time zone 'Europe/Stockholm' as day, avg(temp)
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
+GROUP BY id ORDER BY id DESC;
+
+-- Test NULL arguments
+SELECT time_bucket('1 day', id, 'Europe/Stockholm'::text, NULL::timestamptz) AS day, avg(temp)
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
+GROUP BY id ORDER BY id DESC;
+
+SELECT time_bucket('1 day', id, 'Europe/Stockholm'::text, '2000-01-01 00:00'::timestamptz, NULL::interval) AS day, avg(temp)
+FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
+GROUP BY id ORDER BY id DESC;
+
 CREATE VIEW chunk_ranges AS
 SELECT
   chunk_name,
