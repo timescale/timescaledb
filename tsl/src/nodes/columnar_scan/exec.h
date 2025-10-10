@@ -11,10 +11,10 @@
 #include "decompress_context.h"
 #include <nodes/extensible.h>
 
-#define DECOMPRESS_CHUNK_COUNT_ID -9
-#define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10
+#define COLUMNAR_SCAN_COUNT_ID -9
+#define COLUMNAR_SCAN_SEQUENCE_NUM_ID -10
 
-typedef struct DecompressChunkState
+typedef struct ColumnarScanState
 {
 	CustomScanState csstate;
 	List *decompression_map;
@@ -42,9 +42,6 @@ typedef struct DecompressChunkState
 	 * evaluate to constant false, hence the flag.
 	 */
 	List *vectorized_quals_original;
-} DecompressChunkState;
+} ColumnarScanState;
 
-extern Node *decompress_chunk_state_create(CustomScan *cscan);
-
-TupleTableSlot *decompress_chunk_exec_vector_agg_impl(CustomScanState *vector_agg_state,
-													  DecompressChunkState *decompress_state);
+extern Node *columnar_scan_state_create(CustomScan *cscan);

@@ -17,10 +17,10 @@
 #include "compression/compression.h"
 #include "debug_assert.h"
 #include "guc.h"
-#include "nodes/decompress_chunk/compressed_batch.h"
-#include "nodes/decompress_chunk/vector_dict.h"
-#include "nodes/decompress_chunk/vector_predicates.h"
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/compressed_batch.h"
+#include "nodes/columnar_scan/vector_dict.h"
+#include "nodes/columnar_scan/vector_predicates.h"
+#include "nodes/columnar_scan/vector_quals.h"
 
 /*
  * Create a single-value ArrowArray of an arithmetic type. This is a specialized
@@ -315,7 +315,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 /*
  * Get the arrow array for the compressed batch via the VectorQualState.
  *
- * This is a DecompressChunk-specific implementation of the
+ * This is a ColumnarScan-specific implementation of the
  * VectorQualState->get_arrow_array() function used to interface with the
  * vector qual code across different scan nodes.
  */
@@ -884,7 +884,7 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 	memset(slot->tts_isnull, true, slot->tts_tupleDescriptor->natts * sizeof(bool));
 
 	/*
-	 * DecompressChunk produces virtual tuple slots.
+	 * ColumnarScan produces virtual tuple slots.
 	 */
 	*((const TupleTableSlotOps **) &slot->tts_ops) = &TTSOpsVirtual;
 	slot->tts_ops->init(slot);

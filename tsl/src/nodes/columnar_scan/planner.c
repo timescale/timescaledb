@@ -31,31 +31,31 @@
 #include "import/list.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/transform.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/decompress_chunk/exec.h"
-#include "nodes/decompress_chunk/planner.h"
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/columnar_scan/exec.h"
+#include "nodes/columnar_scan/planner.h"
+#include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg/exec.h"
 #include "ts_catalog/array_utils.h"
 #include "vector_predicates.h"
 
-static CustomScanMethods decompress_chunk_plan_methods = {
+static CustomScanMethods columnar_scan_plan_methods = {
 	.CustomName = "ColumnarScan",
-	.CreateCustomScanState = decompress_chunk_state_create,
+	.CreateCustomScanState = columnar_scan_state_create,
 };
 
-/* Check if the provided plan is a DecompressChunkPlan */
+/* Check if the provided plan is a ColumnarScanPlan */
 bool
-ts_is_decompress_chunk_plan(Plan *plan)
+ts_is_columnar_scan_plan(Plan *plan)
 {
 	return IsA(plan, CustomScan) &&
-		   castNode(CustomScan, plan)->methods == &decompress_chunk_plan_methods;
+		   castNode(CustomScan, plan)->methods == &columnar_scan_plan_methods;
 }
 
 void
-_decompress_chunk_init(void)
+_columnar_scan_init(void)
 {
-	TryRegisterCustomScanMethods(&decompress_chunk_plan_methods);
+	TryRegisterCustomScanMethods(&columnar_scan_plan_methods);
 }
 
 static void
@@ -96,7 +96,7 @@ typedef struct
 {
 	PlannerInfo *root;
 
-	DecompressChunkPath *decompress_path;
+	ColumnarScanPath *decompress_path;
 
 	Bitmapset *uncompressed_attrs_needed;
 
@@ -120,7 +120,7 @@ typedef struct
 	CompressedColumnInfo *compressed_attno_info;
 
 	/*
-	 * We might use a custom scan targetlist for DecompressChunk node if it
+	 * We might use a custom scan targetlist for ColumnarScan node if it
 	 * allows us to avoid projection.
 	 */
 	List *custom_scan_targetlist;
@@ -259,7 +259,7 @@ follow_uncompressed_output_tlist(const DecompressionMapContext *context)
 static void
 build_decompression_map(DecompressionMapContext *context, List *compressed_output_tlist)
 {
-	DecompressChunkPath *path = context->decompress_path;
+	ColumnarScanPath *path = context->decompress_path;
 	const CompressionInfo *info = path->info;
 	/*
 	 * Track which normal and metadata columns we were able to find in the
@@ -329,7 +329,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 		{
 			/*
 			 * We shouldn't have whole-row vars in the compressed scan tlist,
-			 * they are going to be built by final projection of DecompressChunk
+			 * they are going to be built by final projection of ColumnarScan
 			 * custom scan.
 			 * See compressed_rel_setup_reltarget().
 			 */
@@ -386,7 +386,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_outpu
 
 			if (strcmp(column_name, COMPRESSION_COLUMN_METADATA_COUNT_NAME) == 0)
 			{
-				destination_attno = DECOMPRESS_CHUNK_COUNT_ID;
+				destination_attno = COLUMNAR_SCAN_COUNT_ID;
 				missing_count = false;
 			}
 		}
@@ -660,7 +660,7 @@ is_not_runtime_constant_walker(Node *node, void *context)
  * expressions like `time > now() - interval '1 hour'`.
  * Note that we do the same evaluation when doing run time chunk exclusion, but
  * there is no good way to pass the evaluated clauses to the underlying nodes
- * like this DecompressChunk node.
+ * like this ColumnarScan node.
  *
  * Similar checks are performed for sparse index pushdown.
  */
@@ -958,7 +958,7 @@ vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
  * list.
  */
 static void
-find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *path, List *qual_list,
+find_vectorized_quals(DecompressionMapContext *context, ColumnarScanPath *path, List *qual_list,
 					  List **vectorized, List **nonvectorized)
 {
 	VectorQualInfo vqi = {
@@ -1062,10 +1062,10 @@ find_var_subexpression(void *expr, Index varno)
 }
 
 Plan *
-decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
-							 List *output_targetlist, List *clauses, List *custom_plans)
+columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
+						  List *output_targetlist, List *clauses, List *custom_plans)
 {
-	DecompressChunkPath *dcpath = (DecompressChunkPath *) path;
+	ColumnarScanPath *dcpath = (ColumnarScanPath *) path;
 	CustomScan *decompress_plan = makeNode(CustomScan);
 	Scan *compressed_scan = linitial(custom_plans);
 	Path *compressed_path = linitial(path->custom_paths);
@@ -1076,7 +1076,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	Assert(list_length(path->custom_paths) == 1);
 
 	decompress_plan->flags = path->flags;
-	decompress_plan->methods = &decompress_chunk_plan_methods;
+	decompress_plan->methods = &columnar_scan_plan_methods;
 	decompress_plan->scan.scanrelid = dcpath->info->chunk_rel->relid;
 
 	if (IsA(compressed_path, IndexPath))
@@ -1136,7 +1136,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/*
 	 * Try to use a physical tlist if possible. There's no reason to do the
 	 * extra work of projecting the result of compressed chunk scan, because
-	 * DecompressChunk can choose only the needed columns itself.
+	 * ColumnarScan can choose only the needed columns itself.
 	 * Note that Postgres uses the CP_EXACT_TLIST option when planning the child
 	 * paths of the Custom path, so we won't automatically get a physical tlist
 	 * here.
@@ -1160,7 +1160,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/*
 	 * Determine which columns we have to decompress.
 	 * output_targetlist is sometimes empty, e.g. for a direct select from
-	 * chunk. We have a ProjectionPath above DecompressChunk in this case, and
+	 * chunk. We have a ProjectionPath above ColumnarScan in this case, and
 	 * the targetlist for this path is not built by the planner
 	 * (CP_IGNORE_TLIST). This is why we have to examine rel pathtarget.
 	 * Looking at the targetlist is not enough, we also have to decompress the

@@ -46,7 +46,7 @@ typedef struct CompressionInfo
 	Relids parent_relids; /* relids of the parent hypertable and UNION */
 } CompressionInfo;
 
-typedef struct DecompressChunkPath
+typedef struct ColumnarScanPath
 {
 	CustomPath custom_path;
 	const CompressionInfo *info;
@@ -55,12 +55,12 @@ typedef struct DecompressChunkPath
 	bool needs_sequence_num;
 	bool reverse;
 	bool batch_sorted_merge;
-} DecompressChunkPath;
+} ColumnarScanPath;
 
-void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,
-										const Chunk *chunk);
+void ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *rel, const Hypertable *ht,
+									 const Chunk *chunk);
 
-extern bool ts_is_decompress_chunk_path(Path *path);
-extern bool ts_is_decompress_chunk_plan(Plan *plan);
+extern bool ts_is_columnar_scan_path(Path *path);
+extern bool ts_is_columnar_scan_plan(Plan *plan);
 
-DecompressChunkPath *copy_decompress_chunk_path(DecompressChunkPath *src);
+ColumnarScanPath *copy_columnar_scan_path(ColumnarScanPath *src);

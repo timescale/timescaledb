@@ -13,9 +13,9 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "columnar_scan.h"
 #include "compression/create.h"
 #include "custom_type_cache.h"
-#include "decompress_chunk.h"
 #include "guc.h"
 #include "ts_catalog/array_utils.h"
 

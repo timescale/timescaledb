@@ -7,7 +7,7 @@
 #include <nodes/pathnodes.h>
 #include <nodes/plannodes.h>
 
-#include "nodes/decompress_chunk/planner.h"
+#include "nodes/columnar_scan/planner.h"
 #include "plan.h"
 
 /*
@@ -22,7 +22,7 @@ is_vector_compressed_column(const CustomScan *custom, int compressed_column_inde
 		list_nth_int(bulk_decompression_column, compressed_column_index);
 
 	/*
-	 * Bulk decompression can be disabled for all columns in the DecompressChunk
+	 * Bulk decompression can be disabled for all columns in the ColumnarScan
 	 * node settings, we can't do vectorized aggregation for compressed columns
 	 * in that case. For segmentby columns it's still possible.
 	 */
@@ -75,7 +75,7 @@ custom_scan_to_uncompressed_chunk_attno(List *custom_scan_tlist, int custom_scan
 }
 
 void
-vectoragg_plan_decompress_chunk(Plan *childplan, VectorQualInfo *vqi)
+vectoragg_plan_columnar_scan(Plan *childplan, VectorQualInfo *vqi)
 {
 	const CustomScan *custom = castNode(CustomScan, childplan);
 

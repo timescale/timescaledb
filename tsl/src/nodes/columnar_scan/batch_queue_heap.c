@@ -8,9 +8,9 @@
 #include <nodes/bitmapset.h>
 
 #include "compression/compression.h"
-#include "nodes/decompress_chunk/batch_array.h"
-#include "nodes/decompress_chunk/batch_queue.h"
-#include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/columnar_scan/batch_array.h"
+#include "nodes/columnar_scan/batch_queue.h"
+#include "nodes/columnar_scan/compressed_batch.h"
 
 typedef struct
 {

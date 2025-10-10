@@ -95,8 +95,8 @@
 #include <utils/datum.h>
 
 #include "guc.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/decompress_chunk/exec.h"
+#include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/columnar_scan/exec.h"
 #include "nodes/skip_scan/skip_scan.h"
 
 typedef enum SkipScanStage
@@ -187,7 +187,7 @@ skip_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	else if (IsA(child_state, CustomScanState))
 	{
-		Assert(ts_is_decompress_chunk_plan(state->child_plan));
+		Assert(ts_is_columnar_scan_plan(state->child_plan));
 		state->idx = linitial(castNode(CustomScanState, child_state)->custom_ps);
 	}
 	else
@@ -277,9 +277,9 @@ skip_scan_rescan_index(SkipScanState *state)
 		/* Discard current compressed index tuple as we are ready to move to the next compressed
 		 * tuple via SkipScan */
 		ScanState *child = linitial(state->cscan_state.custom_ps);
-		if (ts_is_decompress_chunk_plan(state->child_plan))
+		if (ts_is_columnar_scan_plan(state->child_plan))
 		{
-			DecompressChunkState *ds = (DecompressChunkState *) child;
+			ColumnarScanState *ds = (ColumnarScanState *) child;
 			TupleTableSlot *slot = ds->batch_queue->funcs->top_tuple(ds->batch_queue);
 			if (slot)
 			{
@@ -552,7 +552,7 @@ tsl_skip_scan_state_create(CustomScan *cscan)
 	SkipScanState *state = (SkipScanState *) newNode(sizeof(SkipScanState), T_CustomScanState);
 
 	state->child_plan = linitial(cscan->custom_plans);
-	if (ts_is_decompress_chunk_plan(state->child_plan))
+	if (ts_is_columnar_scan_plan(state->child_plan))
 	{
 		CustomScan *csplan = castNode(CustomScan, state->child_plan);
 		state->idx_scan = linitial(csplan->custom_plans);
