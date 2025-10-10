@@ -9,3 +9,9 @@ DROP PROCEDURE IF EXISTS @extschema@.merge_chunks_concurrently(REGCLASS[]);
 DROP PROCEDURE IF EXISTS @extschema@.merge_chunks(REGCLASS, REGCLASS, BOOLEAN);
 DROP TABLE IF EXISTS _timescaledb_catalog.chunk_rewrite;
 
+-- Remove UUID time_bucket functions
+DROP FUNCTION IF EXISTS @extschema@.time_bucket(INTERVAL, UUID);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket(INTERVAL, UUID, TIMESTAMPTZ);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket(INTERVAL, UUID, INTERVAL);
+DROP FUNCTION IF EXISTS @extschema@.time_bucket(INTERVAL, UUID, TEXT, TIMESTAMPTZ, INTERVAL);
+
