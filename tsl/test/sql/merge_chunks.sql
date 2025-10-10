@@ -353,6 +353,7 @@ set timescaledb.enable_merge_multidim_chunks = true;
 -- Merge all chunks until only 1 remains.  Also check that metadata is
 -- merged.
 ---
+begin;
 select * from compression_size_fraction;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
@@ -375,3 +376,40 @@ select * from compression_size_fraction;
 select count(*), sum(device), round(sum(temp)::numeric, 4) from mergeme;
 select * from partitions;
 select * from chunk_info;
+rollback;
+
+----------------------------
+-- Test concurrent merges --
+----------------------------
+
+create view chunks_being_merged as
+select
+    chunk_relid,
+    n as new_chunk_id,
+    (select count(indexrelid::regclass) from pg_index where indrelid=new_relid) as num_new_indexes
+from (select *, dense_rank() over (order by new_relid) as n from _timescaledb_catalog.chunk_rewrite) cr;
+
+-- Concurrent merge cannot run in a transaction block
+\set ON_ERROR_STOP 0
+begin;
+call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+rollback;
+
+select debug_waitpoint_enable('merge_chunks_fail');
+call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+\set ON_ERROR_STOP 1
+
+select debug_waitpoint_release('merge_chunks_fail');
+select * from chunks_being_merged;
+create table pre_cleaned_chunks as select * from _timescaledb_catalog.chunk_rewrite;
+call _timescaledb_functions.chunk_rewrite_cleanup();
+select * from chunks_being_merged;
+
+-- None of the pre-cleaned chunks should remain after cleanup. Check by joining
+-- the pre-cleaned relids with pg_class. The count should be zero if the
+-- relations no longer exist in pg_class.
+select count(*) from pre_cleaned_chunks;
+select count(*) from pre_cleaned_chunks cc join pg_class c on (c.oid = cc.new_relid);
+
+drop table pre_cleaned_chunks;
+drop view chunks_being_merged;
