@@ -88,6 +88,7 @@
 typedef struct ModifyTableContext
 {
 	/* Operation state */
+	ModifyHypertableState *ht_state;
 	ModifyTableState *mtstate;
 	EPQState *epqstate;
 	EState *estate;
@@ -879,6 +880,15 @@ ExecInsert(ModifyTableContext *context,
 															 NIL,
 															 false);
 		}
+	}
+
+	if (context->ht_state->has_continuous_aggregate)
+	{
+		bool should_free;
+		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
+		ts_cm_functions->continuous_agg_dml_invalidate(context->ht_state->ht->fd.id, resultRelationDesc, tuple, NULL, false);
+		if (should_free)
+			heap_freetuple(tuple);
 	}
 
 	if (canSetTag)
@@ -2208,9 +2218,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	subplanstate = outerPlanState(node);
 
 	/* Set global context */
+	context.ht_state = ht_state;
 	context.mtstate = node;
 	context.epqstate = &node->mt_epqstate;
 	context.estate = estate;
+
 	/*
 	 * For UPDATE/DELETE on compressed hypertable, decompress chunks and
 	 * move rows to uncompressed chunks.
