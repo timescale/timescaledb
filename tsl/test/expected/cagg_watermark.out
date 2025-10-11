@@ -33,27 +33,17 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
 ---------------+-----------------------+-------------------------
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE TABLE continuous_agg_test_mat(time int);
-SELECT create_hypertable('continuous_agg_test_mat', 'time', chunk_time_interval=> 10);
-          create_hypertable           
---------------------------------------
- (2,public,continuous_agg_test_mat,t)
-
-INSERT INTO _timescaledb_catalog.continuous_agg VALUES (2, 1, NULL, '', '', '', '', '', '');
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
--- create the trigger
-CREATE TRIGGER continuous_agg_insert_trigger
-    AFTER INSERT ON continuous_agg_test
-    FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger(1);
+CREATE MATERIALIZED VIEW cagg1 WITH (tsdb.continuous, tsdb.materialized_only=false)
+  AS SELECT time_bucket('5', time) FROM continuous_agg_test GROUP BY 1 WITH NO DATA;
 -- inserting into the table still doesn't change the watermark since there's no
 -- continuous_aggs_invalidation_threshold. We treat that case as a invalidation_watermark of
 -- BIG_INT_MIN, since the first run of the aggregation will need to scan the
 -- entire table anyway.
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
- hypertable_id | watermark 
----------------+-----------
+ hypertable_id |  watermark  
+---------------+-------------
+             1 | -2147483648
 
 SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
  hypertable_id | lowest_modified_value | greatest_modified_value 
@@ -61,7 +51,7 @@ SELECT * from _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 
 -- set the continuous_aggs_invalidation_threshold to 15, any insertions below that value need an invalidation
 \c :TEST_DBNAME :ROLE_SUPERUSER
-INSERT INTO _timescaledb_catalog.continuous_aggs_invalidation_threshold VALUES (1, 15);
+UPDATE _timescaledb_catalog.continuous_aggs_invalidation_threshold SET watermark = 15 WHERE hypertable_id = 1;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 INSERT INTO continuous_agg_test VALUES (10, 1), (11, 2), (21, 3), (22, 4);
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold;
@@ -180,6 +170,7 @@ DELETE FROM _timescaledb_catalog.continuous_agg where mat_hypertable_id =  2;
 DELETE FROM _timescaledb_config.bgw_job WHERE id = 2;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 DROP TABLE continuous_agg_test CASCADE;
+NOTICE:  drop cascades to 3 other objects
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
