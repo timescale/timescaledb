@@ -1383,6 +1383,18 @@ ldelete:
 		 */
 	}
 
+	if (context->ht_state->has_continuous_aggregate)
+	{
+		bool should_free;
+		TupleTableSlot *cagg_slot = table_slot_create(resultRelationDesc, NULL);
+		table_tuple_fetch_row_version(resultRelationDesc, tupleid, SnapshotAny, cagg_slot);
+		HeapTuple tuple = ExecFetchSlotHeapTuple(cagg_slot, false, &should_free);
+		ts_cm_functions->continuous_agg_dml_invalidate(context->ht_state->ht->fd.id, resultRelationDesc, tuple, NULL, false);
+		if (should_free)
+			heap_freetuple(tuple);
+		ExecDropSingleTupleTableSlot(cagg_slot);
+	}
+
 	if (canSetTag)
 		(estate->es_processed)++;
 
@@ -1910,6 +1922,26 @@ redo_act:
 
 	ExecUpdateEpilogue(context, &updateCxt, resultRelInfo, tupleid, oldtuple,
 					   slot);
+
+	if (context->ht_state->has_continuous_aggregate)
+	{
+		TupleTableSlot *invalidation_slot = NULL;
+		bool should_free_old = false, should_free_new = false;
+		if (!oldtuple)
+		{
+			invalidation_slot = table_slot_create(resultRelationDesc, NULL);
+			table_tuple_fetch_row_version(resultRelationDesc, tupleid, SnapshotAny, invalidation_slot);
+			oldtuple = ExecFetchSlotHeapTuple(invalidation_slot, false, &should_free_old);
+		}
+		HeapTuple newtuple = ExecFetchSlotHeapTuple(slot, false, &should_free_new);
+		ts_cm_functions->continuous_agg_dml_invalidate(context->ht_state->ht->fd.id, resultRelInfo->ri_RelationDesc, oldtuple, newtuple, true);
+		if (should_free_old)
+			heap_freetuple(oldtuple);
+		if (should_free_new)
+			heap_freetuple(newtuple);
+		if (invalidation_slot)
+			ExecDropSingleTupleTableSlot(invalidation_slot);
+	}
 
 	/* Process RETURNING if present */
 	if (resultRelInfo->ri_projectReturning)
