@@ -94,12 +94,12 @@ typedef struct SegmentInfo
 } SegmentInfo;
 
 /* this struct holds information about a segmentby column,
- * and additionally stores the mapping for this column in
- * the uncompressed chunk. */
+ * and additionally stores the offset for this column in
+ * the chunk. */
 typedef struct CompressedSegmentInfo
 {
 	SegmentInfo *segment_info;
-	int16 decompressed_chunk_offset;
+	int16 chunk_offset;
 } CompressedSegmentInfo;
 
 typedef struct PerCompressedColumn

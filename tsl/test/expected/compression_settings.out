@@ -293,7 +293,6 @@ SELECT compress_chunk(:'CHUNK', recompress:=true);
 (1 row)
 
 SELECT compress_chunk(:'CHUNK', recompress:=true);
-NOTICE:  chunk "_hyper_3_8_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_8_chunk
@@ -312,7 +311,7 @@ SELECT * FROM settings;
 ----------------------------------------+-------------------------------------------------+-----------+---------+--------------+--------------------+-----------------------------------------------------------------------------------
  metrics                                |                                                 | {d2}      | {time}  | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_7_chunk  | {d1}      | {time}  | {t}          | {t}                | [{"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_8_chunk | _timescaledb_internal.compress_hyper_4_11_chunk | {d2}      | {time}  | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_8_chunk | _timescaledb_internal.compress_hyper_4_12_chunk | {d2}      | {time}  | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 (3 rows)
 
 SELECT * FROM ht_settings;
@@ -386,8 +385,8 @@ SELECT * FROM settings;
 ----------------------------------------+-------------------------------------------------+-----------+--------------------+--------------+--------------------+-----------------------------------------------------------------------------------
  metrics                                |                                                 | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
  metrics2                               |                                                 |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | 
- _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_12_chunk | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
- _timescaledb_internal._hyper_3_8_chunk | _timescaledb_internal.compress_hyper_4_13_chunk | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_6_chunk | _timescaledb_internal.compress_hyper_4_13_chunk | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_8_chunk | _timescaledb_internal.compress_hyper_4_14_chunk | {}        | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 (4 rows)
 
 -- Check that TRUNCATE <hypertable> also cleans up compression
@@ -410,8 +409,8 @@ INSERT INTO metrics VALUES ('2000-01-01'), ('2001-01-01');
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_3_14_chunk
  _timescaledb_internal._hyper_3_15_chunk
+ _timescaledb_internal._hyper_3_16_chunk
 (2 rows)
 
 SELECT * FROM settings;
@@ -419,8 +418,8 @@ SELECT * FROM settings;
 -----------------------------------------+-------------------------------------------------+-----------+--------------------+--------------+--------------------+-----------------------------------------------------------------------------------
  metrics                                 |                                                 | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
  metrics2                                |                                                 |           | {d1,d2,value,time} | {t,f,t,f}    | {f,t,t,t}          | 
- _timescaledb_internal._hyper_3_14_chunk | _timescaledb_internal.compress_hyper_4_16_chunk | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
  _timescaledb_internal._hyper_3_15_chunk | _timescaledb_internal.compress_hyper_4_17_chunk | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
+ _timescaledb_internal._hyper_3_16_chunk | _timescaledb_internal.compress_hyper_4_18_chunk | {d1,d2}   | {time}             | {t}          | {t}                | [{"source": "config"}, {"type": "minmax", "column": "time", "source": "orderby"}]
 (4 rows)
 
 -- DROP TABLE with CASCADE uses a different code path for dropping
