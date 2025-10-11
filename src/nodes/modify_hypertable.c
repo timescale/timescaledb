@@ -124,6 +124,27 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	if (estate->es_auxmodifytables && linitial(estate->es_auxmodifytables) == mtstate)
 		linitial(estate->es_auxmodifytables) = node;
 
+	state->ht =
+		ts_hypertable_cache_get_cache_and_entry(RelationGetRelid(
+													mtstate->resultRelInfo->ri_RelationDesc),
+												CACHE_FLAG_MISSING_OK,
+												&state->ht_cache);
+
+	/*
+	 * If we are inserting into a chunk directly, rri will point to the chunk
+	 * itself, so we need to get the hypertable from the chunk.
+	 */
+	if (!state->ht)
+	{
+		Chunk *chunk =
+			ts_chunk_get_by_relid(RelationGetRelid(mtstate->resultRelInfo->ri_RelationDesc), true);
+		state->ht = ts_hypertable_cache_get_entry(state->ht_cache,
+												  chunk->hypertable_relid,
+												  CACHE_FLAG_NONE);
+	}
+	state->has_continuous_aggregate =
+		ts_continuous_aggs_find_by_raw_table_id(state->ht->fd.id) != NIL;
+
 	if (mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE)
 	{
 		/* setup chunk tuple routing state for INSERT/MERGE */
@@ -167,6 +188,8 @@ modify_hypertable_end(CustomScanState *node)
 	ExecEndNode(linitial(node->custom_ps));
 	if (state->ctr)
 		ts_chunk_tuple_routing_destroy(state->ctr);
+
+	ts_cache_release(&state->ht_cache);
 }
 
 static void

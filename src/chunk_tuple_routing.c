@@ -15,6 +15,7 @@
 #include "guc.h"
 #include "hypercube.h"
 #include "subspace_store.h"
+#include "ts_catalog/continuous_agg.h"
 
 ChunkTupleRouting *
 ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)

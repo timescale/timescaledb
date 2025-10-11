@@ -12,3 +12,6 @@ $$;
 
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
 
+-- FIXME remove from all hypertables with caggs
+DROP FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger();
+
