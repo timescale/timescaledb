@@ -122,6 +122,11 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 	Oid dimtype;
 
 	datum = heap_getattr(tuple, col, tupdesc, &isnull);
+	/*
+	 * Since this is the value of the primary partitioning column and we require
+	 * partitioning columns to be NOT NULL we should never see a NULL here.
+	 */
+	Ensure(!isnull, "primary partition column cannot be NULL");
 
 	if (NULL != d->partitioning)
 	{
@@ -132,13 +137,6 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 	Assert(d->type == DIMENSION_TYPE_OPEN);
 
 	dimtype = ts_dimension_get_partition_type(d);
-
-	if (isnull)
-		ereport(ERROR,
-				(errcode(ERRCODE_NOT_NULL_VIOLATION),
-				 errmsg("NULL value in column \"%s\" violates not-null constraint",
-						NameStr(d->fd.column_name)),
-				 errhint("Columns used for time partitioning cannot be NULL")));
 
 	return ts_time_value_to_internal(datum, dimtype);
 }
