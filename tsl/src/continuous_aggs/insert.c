@@ -30,6 +30,7 @@
 #include "debug_point.h"
 #include "dimension.h"
 #include "export.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "invalidation.h"
@@ -223,15 +224,33 @@ update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 Datum
 continuous_agg_trigfn(PG_FUNCTION_ARGS)
 {
+	if (!CALLED_AS_TRIGGER(fcinfo))
+		ereport(ERROR,
+				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				errmsg("function \"%s\" was not called by trigger manager",
+					   get_func_name(fcinfo->flinfo->fn_oid)));
 	/*
 	 * Use TriggerData to determine which row to return/work with, in the case
 	 * of updates, we'll need to call the functions twice, once with the old
 	 * rows (which act like deletes) and once with the new rows.
 	 */
-	TriggerData *trigdata = (TriggerData *) fcinfo->context;
+	TriggerData *trigdata = castNode(TriggerData, fcinfo->context);
+
+	if (ts_guc_enable_cagg_wal_based_invalidation)
+	{
+		if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
+			return PointerGetDatum(trigdata->tg_trigtuple);
+		else
+			return PointerGetDatum(trigdata->tg_newtuple);
+	}
+
+	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event) || !TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
+		ereport(ERROR,
+				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
+				errmsg("continuous agg trigger function must be called in per row after trigger"));
+
 	char *hypertable_id_str;
 	int32 hypertable_id;
-
 	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
 		ereport(ERROR,
 				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -240,20 +259,12 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
 	hypertable_id = atol(hypertable_id_str);
 
-	if (!CALLED_AS_TRIGGER(fcinfo))
-		ereport(ERROR,
-				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
-				errmsg("function \"%s\" was not called by trigger manager",
-					   get_func_name(fcinfo->flinfo->fn_oid)));
-	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event) || !TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
-		ereport(ERROR,
-				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
-				errmsg("continuous agg trigger function must be called in per row after trigger"));
 	execute_cagg_trigger(hypertable_id,
 						 trigdata->tg_relation,
 						 trigdata->tg_trigtuple,
 						 trigdata->tg_newtuple,
 						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event));
+
 	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
 		return PointerGetDatum(trigdata->tg_trigtuple);
 	else

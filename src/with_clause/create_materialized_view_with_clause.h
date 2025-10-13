@@ -20,7 +20,6 @@ typedef enum CreateMaterializedViewFlags
 	CreateMaterializedViewFlagSegmentBy,
 	CreateMaterializedViewFlagOrderBy,
 	CreateMaterializedViewFlagCompressChunkTimeInterval,
-	CreateMaterializedViewFlagInvalidateUsing,
 } CreateMaterializedViewFlags;
 
 extern TSDLLEXPORT WithClauseResult *

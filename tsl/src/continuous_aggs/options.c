@@ -194,20 +194,6 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		ts_cache_release(&hcache);
 	}
 
-	/*
-	 * We do not support changing the invalidation method on a continuous
-	 * aggregate. We will add support for this using a dedicated function
-	 * since it needs to be changed for the hypertable.
-	 */
-	if (!with_clause_options[CreateMaterializedViewFlagInvalidateUsing].is_default)
-	{
-		ereport(ERROR,
-				errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				errmsg("cannot change invalidation method for continuous aggregate"),
-				errdetail("All continuous aggregates for a hypertable need to use the same "
-						  "invalidation collection method."));
-	}
-
 	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);
 
 	if (list_length(compression_options) > 0)

@@ -8,7 +8,6 @@ SELECT create_hypertable('conditions', 'time');
 -- Test refresh on a cagg built on an empty table
 CREATE MATERIALIZED VIEW daily_temp
 WITH (timescaledb.continuous,
-      timescaledb.invalidate_using = :'invalidate_using',
       timescaledb.materialized_only=true)
 AS
 SELECT time_bucket('1 day', time) AS day, device, avg(temp) AS avg_temp

@@ -25,7 +25,7 @@ select location , min(temperature)
 from conditions
 group by time_bucket('1d', timec), location WITH NO DATA;
 ERROR:  unrecognized parameter "timescaledb.myfill"
-HINT:  Valid timescaledb parameters are: continuous, create_group_indexes, materialized_only, columnstore, finalized, chunk_interval, segmentby, orderby, compress_chunk_interval, invalidate_using
+HINT:  Valid timescaledb parameters are: continuous, create_group_indexes, materialized_only, columnstore, finalized, chunk_interval, segmentby, orderby, compress_chunk_interval
 --valid PG option
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false, check_option = LOCAL )
 as

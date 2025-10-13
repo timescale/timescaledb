@@ -530,37 +530,6 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 	return all_caggs_info;
 }
 
-/*
- * Return true if there is any continuous aggregate that is using WAL-based
- * invalidation collection.
- *
- * A hypertable is using the WAL-based invalidation collection if it has a
- * attached continuous aggregate but does not have an invalidation trigger.
- */
-static bool
-hypertable_invalidation_slot_used(void)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	ts_scanner_foreach(&iterator)
-	{
-		bool isnull;
-		Datum datum = slot_getattr(ts_scan_iterator_slot(&iterator),
-								   Anum_continuous_agg_raw_hypertable_id,
-								   &isnull);
-
-		Assert(!isnull);
-		Oid relid = ts_hypertable_id_to_relid(DatumGetInt32(datum), true);
-		if (!has_invalidation_trigger(relid))
-		{
-			ts_scan_iterator_close(&iterator);
-			return true;
-		}
-	}
-	ts_scan_iterator_close(&iterator);
-	return false;
-}
-
 TSDLLEXPORT ContinuousAggHypertableStatus
 ts_continuous_agg_hypertable_status(int32 hypertable_id)
 {
@@ -990,10 +959,14 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	 * This is important since there is no actor that reads the slot, which
 	 * means that the WAL cannot be pruned.
 	 */
-	char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
-	ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
-	if (!hypertable_invalidation_slot_used() && SearchNamedReplicationSlot(slot_name, true) != NULL)
-		ts_hypertable_drop_invalidation_replication_slot(slot_name);
+	if (ts_guc_enable_cagg_wal_based_invalidation)
+	{
+		char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
+		ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
+		if (ts_guc_enable_cagg_wal_based_invalidation &&
+			SearchNamedReplicationSlot(slot_name, true) != NULL)
+			ts_hypertable_drop_invalidation_replication_slot(slot_name);
+	}
 
 	if (OidIsValid(mat_hypertable.objectId))
 	{
