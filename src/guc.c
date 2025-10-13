@@ -93,6 +93,7 @@ TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
 #endif
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
+TSDLLEXPORT bool ts_guc_enable_cagg_wal_based_invalidation = false;
 TSDLLEXPORT int ts_guc_cagg_wal_batch_size = 10000;
 TSDLLEXPORT int ts_guc_cagg_low_work_mem = GUC_CAGG_LOW_WORK_MEM_VALUE;
 TSDLLEXPORT int ts_guc_cagg_high_work_mem = GUC_CAGG_HIGH_WORK_MEM_VALUE;
@@ -961,6 +962,19 @@ _guc_init(void)
 							 "Enable warnings for poor compression ratio",
 							 &ts_guc_enable_compression_ratio_warnings,
 							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_wal_based_invalidation"),
+							 "Enable experimental invalidations for continuous aggregates using "
+							 "WAL",
+							 "Use WAL to track changes to hypertables for continuous aggregates. "
+							 "This is not meant for production use.",
+							 &ts_guc_enable_cagg_wal_based_invalidation,
+							 false,
 							 PGC_USERSET,
 							 0,
 							 NULL,

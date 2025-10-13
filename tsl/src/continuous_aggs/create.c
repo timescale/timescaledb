@@ -109,30 +109,6 @@ static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Qu
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
 
-static bool
-has_continuous_aggs_attached(int32 raw_hypertable_id)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-
-	iterator.ctx.index =
-		catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX);
-
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_continuous_agg_raw_hypertable_id_idx_raw_hypertable_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(raw_hypertable_id));
-
-	ts_scanner_foreach(&iterator)
-	{
-		ts_scan_iterator_close(&iterator);
-		return true;
-	}
-	ts_scan_iterator_close(&iterator);
-	return false;
-}
-
 static void
 makeMaterializedTableName(char *buf, const char *prefix, int hypertable_id)
 {
@@ -720,41 +696,6 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
 	}
 }
 
-static const char *invalidate_using_info[] = {
-	[ContinuousAggInvalidateUsingDefault] = "default",
-	[ContinuousAggInvalidateUsingTrigger] = "trigger",
-	[ContinuousAggInvalidateUsingWal] = "wal",
-};
-
-static ContinuousAggInvalidateUsing
-get_invalidate_using(WithClauseResult *with_clause_options)
-{
-	if (with_clause_options[CreateMaterializedViewFlagInvalidateUsing].is_default)
-		return ContinuousAggInvalidateUsingDefault;
-
-	const char *invalidate_using = text_to_cstring(
-		DatumGetTextP(with_clause_options[CreateMaterializedViewFlagInvalidateUsing].parsed));
-
-	for (size_t i = 0; i < sizeof(invalidate_using_info) / sizeof(*invalidate_using_info); ++i)
-		if (strcmp(invalidate_using_info[i], invalidate_using) == 0)
-			return i;
-	ereport(ERROR,
-			errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-			errmsg("unrecognized value \"%s\" for invalidate_using", invalidate_using));
-	return -1; /* To keep linter happy */
-}
-
-static void
-error_not_in_prerequisite_state(const char *wanted, const char *used)
-{
-	ereport(ERROR,
-			errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-			errmsg("cannot use %s-based invalidation collection with hypertable that is using "
-				   "%s-based invalidation collection",
-				   wanted,
-				   used));
-}
-
 /*
  * Modifies the passed in ViewStmt to do the following
  * a) Create a hypertable for the continuous agg materialization.
@@ -830,9 +771,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	bool materialized_only =
 		DatumGetBool(with_clause_options[CreateMaterializedViewFlagMaterializedOnly].parsed);
 	bool finalized = DatumGetBool(with_clause_options[CreateMaterializedViewFlagFinalized].parsed);
-	ContinuousAggInvalidateUsing invalidate_using = get_invalidate_using(with_clause_options);
-	bool trigger_exists = has_invalidation_trigger(bucket_info->htoid);
-	bool caggs_exists = has_continuous_aggs_attached(bucket_info->htid);
 	bool slot_prepared = false;
 
 	int64 matpartcol_interval = 0;
@@ -867,46 +805,18 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	stmt->options = NULL;
 
 	/*
-	 * If we want to create a continuous aggregate using WAL-based
-	 * invalidation collection, it should not have an invalidation trigger
-	 * already.
-	 */
-	if (invalidate_using == ContinuousAggInvalidateUsingWal && trigger_exists)
-		error_not_in_prerequisite_state("wal", "trigger");
-
-	/*
-	 * If we want to create a continuous aggregate with a trigger, the
-	 * hypertable should either have a trigger already, or if there is no
-	 * trigger, no hypertables should be attached to it.
-	 */
-	if (invalidate_using == ContinuousAggInvalidateUsingTrigger && !trigger_exists && caggs_exists)
-		error_not_in_prerequisite_state("trigger", "wal");
-
-	/*
-	 * If we didn't specify which collection method to use, we pick whatever
-	 * is used, or the default if there are no continuous aggregates attached.
-	 */
-	if (invalidate_using == ContinuousAggInvalidateUsingDefault)
-	{
-		if (!caggs_exists)
-			invalidate_using = ContinuousAggInvalidateUsingTrigger; /* default case */
-		else if (trigger_exists)
-			invalidate_using = ContinuousAggInvalidateUsingTrigger;
-		else
-			invalidate_using = ContinuousAggInvalidateUsingWal;
-	}
-
-	/*
 	 * Step 0: Create logical replication slot if used. This needs to be first
 	 * since we cannot do this in a transaction that has performed any writes.
 	 */
-	char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
-	ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
-	if (invalidate_using == ContinuousAggInvalidateUsingWal &&
-		SearchNamedReplicationSlot(slot_name, true) == NULL)
+	if (ts_guc_enable_cagg_wal_based_invalidation)
 	{
-		cagg_add_logical_decoding_slot_prepare(slot_name);
-		slot_prepared = true;
+		char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
+		ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
+		if (SearchNamedReplicationSlot(slot_name, true) == NULL)
+		{
+			cagg_add_logical_decoding_slot_prepare(slot_name);
+			slot_prepared = true;
+		}
 	}
 
 	/*
@@ -1042,9 +952,9 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	/* Step 5: Create trigger on raw hypertable, if needed, and finalize slot
 	 * creation if that needs to be done. */
-	if (invalidate_using == ContinuousAggInvalidateUsingTrigger)
+	if (!slot_prepared)
 		cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
-	else if (slot_prepared)
+	else
 		cagg_add_logical_decoding_slot_finalize();
 }
 
