@@ -1483,6 +1483,14 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 			continue;
 		}
 
+		if (!bms_is_empty(chunk_rel->lateral_relids) || !bms_is_empty(req_outer))
+		{
+			/*
+			 * Parametrized MergeAppend paths are not supported.
+			 */
+			continue;
+		}
+
 		if (IsA(decompression_path, SortPath))
 		{
 			/*
