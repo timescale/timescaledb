@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 15, 16, 17 ]
+        pg: [ 15, 16, 17, 18 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
     steps:

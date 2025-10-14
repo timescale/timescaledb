@@ -29,6 +29,8 @@ set enable_seqscan = 'off';
 -- make some tweaks to avoid flakiness
 analyze test;
 analyze test_copy;
+set enable_hashagg = off;
+set enable_sort to off;
 set jit = off;
 set max_parallel_workers_per_gather = 0;
 

@@ -305,7 +305,7 @@ SELECT chunk_schema, chunk_name FROM compressed_chunk_info_view WHERE hypertable
 SELECT format('%I.%I', :'chunk_schema', :'chunk_name') AS "RECOMPRESS_CHUNK_NAME"; \gset
 
 -- get size of the chunk that needs recompression
-VACUUM ANALYZE metrics2;
+VACUUM ANALYZE :RECOMPRESS_CHUNK_NAME;
 
 SELECT pg_indexes_size(:'RECOMPRESS_CHUNK_NAME') AS "SIZE_BEFORE_REINDEX"; \gset
 
@@ -315,7 +315,7 @@ CALL run_job(:JOB_COMPRESS);
 SELECT chunk_status FROM compressed_chunk_info_view WHERE chunk_schema = :'chunk_schema' AND chunk_name = :'chunk_name';
 
 -- index size should not have decreased
-VACUUM ANALYZE metrics2;
+VACUUM ANALYZE :RECOMPRESS_CHUNK_NAME;
 SELECT
 pg_size_pretty(pg_table_size(:'RECOMPRESS_CHUNK_NAME')) AS table_only,
 pg_size_pretty(pg_indexes_size(:'RECOMPRESS_CHUNK_NAME')) AS indexes,

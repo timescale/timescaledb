@@ -49,9 +49,8 @@ SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Bad bounds value
-SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
-ERROR:  date/time field value out of range: "1514419200000000"
-HINT:  Perhaps you need a different "datestyle" setting.
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["-1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+ERROR:  time zone displacement out of range: "-1514419200000000"
 -- Bad bounds value
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["badtimestamp", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 ERROR:  invalid input syntax for type timestamp with time zone: "badtimestamp"

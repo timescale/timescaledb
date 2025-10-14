@@ -897,19 +897,11 @@ SELECT FROM _timescaledb_catalog.dimension_slice WHERE id = :osm_dimension_slice
 --
 
 -- foreign chunk no longer appears in the inheritance hierarchy
-\d+ ht_try
-                                           Table "public.ht_try"
- Column |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
---------+--------------------------+-----------+----------+---------+---------+--------------+-------------
- timec  | timestamp with time zone |           | not null |         | plain   |              | 
- acq_id | bigint                   |           |          |         | plain   |              | 
- value  | bigint                   |           |          |         | plain   |              | 
-Indexes:
-    "ht_try_timec_idx" btree (timec DESC)
-Triggers:
-    ts_insert_blocker BEFORE INSERT ON ht_try FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
-Child tables: _timescaledb_internal._hyper_5_10_chunk,
-              _timescaledb_internal._hyper_5_18_chunk
+SELECT * FROM test.show_subtables('ht_try');
+                  Child                  | Tablespace 
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_5_10_chunk | 
+ _timescaledb_internal._hyper_5_18_chunk | 
 
 -- verify that still can read from the table after catalog manipulations
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
@@ -1009,11 +1001,10 @@ SELECT * FROM hyper_constr order by time;
  10 |  200 |   22 |   1 | 111 |     44
 
 --verify the check constraint exists on the OSM chunk
-SELECT conname FROM pg_constraint
-where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
-         conname         
--------------------------
- hyper_constr_temp_check
+SELECT * FROM test.show_constraints('child_hyper_constr');
+       Constraint        | Type | Columns | Index |              Expr               | Deferrable | Deferred | Validated 
+-------------------------+------+---------+-------+---------------------------------+------------+----------+-----------
+ hyper_constr_temp_check | c    | {temp}  | -     | (temp > (10)::double precision) | f          | f        | t
 
 -- TEST foreign key trigger: deleting data from foreign table measure
 -- does not error out due to data in osm chunk
@@ -1502,17 +1493,10 @@ ALTER TABLE test_chunkapp_fdw_child ADD CHECK (time > '1600-01-01'::timestamptz)
 psql:include/chunk_utils_internal_orderedappend.sql:128: ERROR:  operation not supported on OSM chunk tables
 -- but on hypertable, it is allowed
 ALTER TABLE test_chunkapp ADD CHECK (a > 0);
-\d+ test_chunkapp_fdw_child
-                                     Foreign table "public.test_chunkapp_fdw_child"
- Column |           Type           | Collation | Nullable | Default | FDW options | Storage | Stats target | Description 
---------+--------------------------+-----------+----------+---------+-------------+---------+--------------+-------------
- time   | timestamp with time zone |           | not null |         |             | plain   |              | 
- a      | integer                  |           |          |         |             | plain   |              | 
-Check constraints:
-    "test_chunkapp_a_check" CHECK (a > 0)
-Server: s3_server
-FDW options: (schema_name 'public', table_name 'test_chunkapp_fdw')
-Inherits: test_chunkapp
+SELECT * FROM test.show_constraints('test_chunkapp_fdw_child');
+      Constraint       | Type | Columns | Index |  Expr   | Deferrable | Deferred | Validated 
+-----------------------+------+---------+-------+---------+------------+----------+-----------
+ test_chunkapp_a_check | c    | {a}     | -     | (a > 0) | f          | f        | t
 
 \set ON_ERROR_STOP 1
 -- test error is triggered when time dimension not found
