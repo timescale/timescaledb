@@ -18,6 +18,8 @@ sed  -E -e '/<exclude_from_test>/,/<\/exclude_from_test>/d' \
      -e '/Heap Fetches: [0-9]+/d' \
      -e '/Buckets: [0-9]\+/d' \
      -e '/Index Searches: [0-9]+/d' \
+     -e '/Storage: Memory  Maximum Storage: [0-9]+kB/d' \
+     -e '/Window: /d' \
      -e '/Batches: [0-9]+/d' \
      -e '/found [0-9]+ removable, [0-9]+ nonremovable row versions in [0-9]+ pages/d' | \
 grep -av 'DEBUG:  rehashing catalog cache id' | \

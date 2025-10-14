@@ -29,6 +29,7 @@ jobs:
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
       pg17_latest: ${{ steps.config.outputs.pg17_latest }}
+      pg18_latest: ${{ steps.config.outputs.pg18_latest }}
 
     steps:
     - name: Checkout source code
@@ -64,6 +65,8 @@ jobs:
             pg_version: ${{ needs.config.outputs.pg16_latest }}
           - pg: 17
             pg_version: ${{ needs.config.outputs.pg17_latest }}
+          - pg: 18
+            pg_version: ${{ needs.config.outputs.pg18_latest }}
     env:
       # PostgreSQL configuration
       PGPORT: 55432

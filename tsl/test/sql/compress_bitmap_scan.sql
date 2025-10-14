@@ -31,6 +31,10 @@ select ts,
     (mix(ts % 1483) * 1483)::int payload
 from generate_series(1, 1000000) ts;
 
+-- tweak dataset to get whole number actual row results
+update bscan set payload = -537, s = 1 where id in (1,2);
+delete from bscan where payload = -537 and id not in (1,2);
+
 create index on bscan(payload);
 
 select count(compress_chunk(x)) from show_chunks('bscan') x;

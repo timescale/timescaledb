@@ -553,7 +553,7 @@ SELECT FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :osm_chunk_id
 SELECT FROM _timescaledb_catalog.dimension_slice WHERE id = :osm_dimension_slice;
 
 -- foreign chunk no longer appears in the inheritance hierarchy
-\d+ ht_try
+SELECT * FROM test.show_subtables('ht_try');
 
 -- verify that still can read from the table after catalog manipulations
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM ht_try;
@@ -632,8 +632,7 @@ ORDER BY table_name;
 SELECT * FROM hyper_constr order by time;
 
 --verify the check constraint exists on the OSM chunk
-SELECT conname FROM pg_constraint
-where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
+SELECT * FROM test.show_constraints('child_hyper_constr');
 
 -- TEST foreign key trigger: deleting data from foreign table measure
 -- does not error out due to data in osm chunk

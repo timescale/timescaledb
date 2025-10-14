@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        pg: [15, 16, 17]
+        pg: [15, 16, 17, 18]
       fail-fast: false
 
     steps:
