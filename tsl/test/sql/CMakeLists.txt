@@ -8,6 +8,7 @@ set(TEST_FILES
     bgw_policy.sql
     bgw_security.sql
     cagg_deprecated_bucket_ng.sql
+    cagg_direct_compress.sql
     cagg_errors.sql
     cagg_invalidation.sql
     cagg_policy.sql

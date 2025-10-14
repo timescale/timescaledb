@@ -67,9 +67,10 @@ bool ts_guc_enable_direct_compress_copy = false;
 bool ts_guc_enable_direct_compress_copy_sort_batches = true;
 bool ts_guc_enable_direct_compress_copy_client_sorted = false;
 int ts_guc_direct_compress_copy_tuple_sort_limit = 100000;
-bool ts_guc_enable_direct_compress_insert = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_insert = false;
 bool ts_guc_enable_direct_compress_insert_sort_batches = true;
-bool ts_guc_enable_direct_compress_insert_client_sorted = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_insert_client_sorted = false;
+TSDLLEXPORT bool ts_guc_enable_direct_compress_on_cagg_refresh = false;
 int ts_guc_direct_compress_insert_tuple_sort_limit = 10000;
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
@@ -482,6 +483,18 @@ _guc_init(void)
 							 "Correct handling of data sorting by the user is required for this "
 							 "option.",
 							 &ts_guc_enable_direct_compress_insert_client_sorted,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_direct_compress_on_cagg_refresh"),
+							 "Enable direct compress on Continuous Aggregate refresh",
+							 "Enable experimental support for direct compression during Continuous "
+							 "Aggregate refresh",
+							 &ts_guc_enable_direct_compress_on_cagg_refresh,
 							 false,
 							 PGC_USERSET,
 							 0,
