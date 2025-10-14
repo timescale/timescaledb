@@ -644,6 +644,15 @@ cost_columnar_scan(PlannerInfo *root, Path *path, Path *compressed_path)
 	/* total_cost is cost for fetching all tuples */
 	path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
+
+#if PG18_GE
+	/* PG18 changes the way we handle disabled nodes so we
+	 * need to take those into account as well.
+	 *
+	 * https://github.com/postgres/postgres/commit/e2225346
+	 */
+	path->disabled_nodes = compressed_path->disabled_nodes;
+#endif
 }
 
 /* Smoothstep function S1 (the h01 cubic Hermite spline). */
@@ -840,6 +849,15 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 	dcpath->custom_path.path.total_cost = dcpath->custom_path.path.startup_cost +
 										  sort_path_cost_rest +
 										  dcpath->custom_path.path.rows * uncompressed_row_cost;
+
+#if PG18_GE
+	/* PG18 changes the way we handle disabled nodes so we
+	 * need to take those into account as well.
+	 *
+	 * https://github.com/postgres/postgres/commit/e2225346
+	 */
+	dcpath->custom_path.path.disabled_nodes = sort_path.disabled_nodes;
+#endif
 }
 
 /*
