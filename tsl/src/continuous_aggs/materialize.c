@@ -24,6 +24,8 @@
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "time_utils.h"
+#include "ts_catalog/array_utils.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 
@@ -80,6 +82,7 @@ typedef struct MaterializationPlan
 	const char *progress_message;
 } MaterializationPlan;
 
+static char *build_order_by_clause(MaterializationContext *context);
 static char *create_materialization_insert_statement(MaterializationContext *context);
 static char *create_materialization_delete_statement(MaterializationContext *context);
 static char *create_materialization_exists_statement(MaterializationContext *context);
@@ -387,21 +390,83 @@ build_merge_update_clause(List *column_names)
 	return ret.data;
 }
 
+static char *
+build_order_by_clause(MaterializationContext *context)
+{
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht))
+		return ""; /* No ORDER BY if no compression */
+
+	CompressionSettings *settings = ts_compression_settings_get(context->mat_ht->main_table_relid);
+
+	int num_segmentby = ts_array_length(settings->fd.segmentby);
+	int num_orderby = ts_array_length(settings->fd.orderby);
+	int n_keys = num_segmentby + num_orderby;
+
+	StringInfo ret = makeStringInfo();
+	appendStringInfoString(ret, "ORDER BY ");
+
+	for (int i = 0; i < n_keys; i++)
+	{
+		const char *attname;
+		int16 position;
+		bool is_orderby_desc = false;
+		bool is_null_first = false;
+
+		if (i < ts_array_length(settings->fd.segmentby))
+		{
+			position = i + 1;
+			attname = ts_array_get_element_text(settings->fd.segmentby, position);
+		}
+		else
+		{
+			position = i - ts_array_length(settings->fd.segmentby) + 1;
+			attname = ts_array_get_element_text(settings->fd.orderby, position);
+			is_orderby_desc = ts_array_get_element_bool(settings->fd.orderby_desc, position);
+			is_null_first = ts_array_get_element_bool(settings->fd.orderby_nullsfirst, position);
+		}
+		if (i > 0)
+			appendStringInfoString(ret, ", ");
+		appendStringInfoString(ret, quote_identifier(attname));
+		if (is_orderby_desc)
+			appendStringInfoString(ret, " DESC");
+		else
+			appendStringInfoString(ret, " ASC");
+		if (is_null_first)
+			appendStringInfoString(ret, " NULLS FIRST");
+		else
+			appendStringInfoString(ret, " NULLS LAST");
+	}
+
+	elog(DEBUG2, "%s: %s", __func__, ret->data);
+	return ret->data;
+}
+
+static inline bool
+has_direct_compress_on_cagg_refresh_enabled(MaterializationContext *context)
+{
+	return ts_guc_enable_direct_compress_on_cagg_refresh &&
+		   TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(context->mat_ht);
+}
+
 /* Create INSERT statement */
 static char *
 create_materialization_insert_statement(MaterializationContext *context)
 {
+	char *orderby =
+		has_direct_compress_on_cagg_refresh_enabled(context) ? build_order_by_clause(context) : "";
+
 	StringInfoData query;
 	initStringInfo(&query);
 	appendStringInfo(&query,
 					 "INSERT INTO %s.%s SELECT * FROM %s.%s AS I "
-					 "WHERE I.%s >= $1 AND I.%s < $2;",
+					 "WHERE I.%s >= $1 AND I.%s < $2 %s;",
 					 quote_identifier(NameStr(*context->materialization_table.schema)),
 					 quote_identifier(NameStr(*context->materialization_table.name)),
 					 quote_identifier(NameStr(*context->partial_view.schema)),
 					 quote_identifier(NameStr(*context->partial_view.name)),
 					 quote_identifier(NameStr(*context->time_column_name)),
-					 quote_identifier(NameStr(*context->time_column_name)));
+					 quote_identifier(NameStr(*context->time_column_name)),
+					 orderby);
 	return query.data;
 }
 
@@ -855,6 +920,23 @@ static void
 execute_materializations(MaterializationContext *context)
 {
 	volatile uint64 rows_processed = 0;
+	bool prev_enable_direct_compress_insert = ts_guc_enable_direct_compress_insert;
+	bool prev_enable_direct_compress_insert_client_sorted =
+		ts_guc_enable_direct_compress_insert_client_sorted;
+
+	if (has_direct_compress_on_cagg_refresh_enabled(context))
+	{
+		/* Force the direct compress on INSERT */
+		SetConfigOption("timescaledb.enable_direct_compress_insert",
+						"on",
+						PGC_USERSET,
+						PGC_S_SESSION);
+
+		SetConfigOption("timescaledb.enable_direct_compress_insert_client_sorted",
+						"on",
+						PGC_USERSET,
+						PGC_S_SESSION);
+	}
 
 	PG_TRY();
 	{
@@ -906,4 +988,14 @@ execute_materializations(MaterializationContext *context)
 	{
 		update_watermark(context);
 	}
+
+	/* Restore previous GUC values */
+	SetConfigOption("timescaledb.enable_direct_compress_insert",
+					prev_enable_direct_compress_insert ? "on" : "off",
+					PGC_USERSET,
+					PGC_S_SESSION);
+	SetConfigOption("timescaledb.enable_direct_compress_insert_client_sorted",
+					prev_enable_direct_compress_insert_client_sorted ? "on" : "off",
+					PGC_USERSET,
+					PGC_S_SESSION);
 }
