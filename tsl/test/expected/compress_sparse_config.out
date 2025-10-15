@@ -107,6 +107,19 @@ alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'bloom("u"), minmax("u")');
 ERROR:  duplicate column name "u"
+-- multiple columns
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom("u,ts")');
+ERROR:  column "u,ts" does not exist
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,ts)');
+ERROR:  sparse index "bloom" can only have one column
+alter table test_settings set (timescaledb.compress,
+    timescaledb.compress_orderby = 'x',
+    timescaledb.compress_index = 'bloom(u,abc)');
+ERROR:  sparse index "bloom" can only have one column
 -- duplicate column
 alter table test_settings set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
