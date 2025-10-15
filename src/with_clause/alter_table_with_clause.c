@@ -420,6 +420,15 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 											sparse_index_with_clause_def,
 											TS_ARRAY_LEN(sparse_index_with_clause_def));
 	config.base.source = _SparseIndexSourceEnumConfig;
+
+	if (list_length(sparse_index_details->args) != 1)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_SYNTAX_ERROR),
+				 errmsg("sparse index \"%s\" can only have one column",
+						ts_sparse_index_type_names[config.base.type])));
+	}
+
 	/* validate and extract column */
 	Node *arg = list_nth(sparse_index_details->args, 0);
 
