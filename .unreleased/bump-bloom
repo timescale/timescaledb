@@ -1,0 +1,1 @@
+Backward-Incompatible Change: #8761 Bump the bloom filter version to 2 and make it depend on the actual hashing functions used.
