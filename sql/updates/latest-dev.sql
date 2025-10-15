@@ -1,5 +1,6 @@
 DROP FUNCTION IF EXISTS _timescaledb_functions.policy_job_stat_history_retention;
 DROP VIEW IF EXISTS timescaledb_information.chunks;
+DROP VIEW IF EXISTS timescaledb_information.dimensions;
 
 -- Add support for concurrent merge_chunks()
 CREATE TABLE _timescaledb_catalog.chunk_rewrite (
@@ -27,3 +28,4 @@ BEGIN
     END IF;
 END
 $$;
+
