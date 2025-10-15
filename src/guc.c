@@ -198,6 +198,14 @@ DebugRequireOption ts_guc_debug_require_vector_agg = DRO_Allow;
 
 DebugRequireOption ts_guc_debug_require_batch_sorted_merge = false;
 
+bool ts_guc_debug_umash_hashing_used =
+#ifdef TS_USE_UMASH
+true
+#else
+false
+#endif
+;
+
 bool ts_guc_debug_compression_path_info = false;
 bool ts_guc_enable_rowlevel_compression_locking = false;
 
@@ -1335,6 +1343,21 @@ _guc_init(void)
 							 /* bootValue= */ DRO_Allow,
 							 /* options = */ debug_require_options,
 							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
+	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_umash_hashing_used"),
+							 /* short_desc= */ "whether the umash hashing library is being used",
+							 /* long_desc= */ "this is for debugging purposes",
+							 /* valueAddr= */ &ts_guc_debug_umash_hashing_used,
+#ifdef TS_USE_UMASH
+							 /* bootValue= */ true,
+#else
+							 /* bootValue= */ false,
+#endif
+							 /* context= */ PGC_INTERNAL,
 							 /* flags= */ 0,
 							 /* check_hook= */ NULL,
 							 /* assign_hook= */ NULL,

@@ -1,0 +1,46 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+create table hashes(ts int,
+    x text,
+    u uuid,
+    d date,
+    i4 int4,
+    i8 int8)
+with (tsdb.hypertable, tsdb.partition_column = 'ts',
+    tsdb.compress, tsdb.orderby = 'ts',
+    tsdb.sparse_index = 'bloom(x), bloom(u), bloom(d), bloom(i4), bloom(i8)'
+)
+;
+insert into hashes
+select 1,
+    'test text',
+    '90ec9e8e-4501-4232-9d03-6d7cf6132815',
+    '2021-01-01',
+    '1435',
+    '30064771065'
+;
+select count(compress_chunk(x)) from show_chunks('hashes') x;
+ count 
+-------
+     1
+(1 row)
+
+vacuum full analyze hashes;
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'hashes') limit 1)
+\gset
+select * from :chunk;
+ _ts_meta_count | _ts_meta_min_1 | _ts_meta_max_1 |                            ts                            | _ts_meta_v2_bl2p_x |                          x                           | _ts_meta_v2_bl2p_u |                              u                               | _ts_meta_v2_bl2p_d |                            d                             | _ts_meta_v2_bl2p_i4 |                            i4                            | _ts_meta_v2_bl2p_i8 |                            i8                            
+----------------+----------------+----------------+----------------------------------------------------------+--------------------+------------------------------------------------------+--------------------+--------------------------------------------------------------+--------------------+----------------------------------------------------------+---------------------+----------------------------------------------------------+---------------------+----------------------------------------------------------
+              1 |              1 |              1 | BAAAAAAAAAAAAQAAAAAAAAABAAAAAQAAAAEAAAAAAAAAAgAAAAAAAAAC | \x0004004808000840 | AQBwZ19jYXRhbG9nAHRleHQAAAEAAAABAAAACXRlc3QgdGV4dA== | \x004c080400000000 | AQBwZ19jYXRhbG9nAHV1aWQAAAEAAAABAAAAEJDsno5FAUIynQNtfPYTKBU= | \x4500000005100000 | BAAAAAAAAAAd9wAAAAAAAB33AAAAAQAAAAEAAAAAAAAACwAAAAAAADvu | \x0000080280002880  | BAAAAAAAAAAFmwAAAAAAAAWbAAAAAQAAAAEAAAAAAAAACgAAAAAAAAs2 | \x0100140040000110  | BAAAAAAG////+QAAAAb////5AAAAAQAAAAEAAAAAAAAADwAAAB3////y
+(1 row)
+
+select setting from pg_settings where name = 'timescaledb.debug_umash_hashing_used';
+ setting 
+---------
+ off
+(1 row)
+

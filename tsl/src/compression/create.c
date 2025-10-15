@@ -239,7 +239,6 @@ static ColumnDef *
 create_sparse_index_column_def(Form_pg_attribute attr, const char *metadata_type)
 {
 	Assert(is_sparse_index_type(metadata_type));
-	Assert(strlen(metadata_type) <= 6);
 	ColumnDef *column_def = NULL;
 
 	const bool is_bloom = strcmp(metadata_type, BLOOM1_COLUMN_PREFIX) == 0;
