@@ -33,5 +33,3 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
 \gset
 
 select * from :chunk;
-
-select setting from pg_settings where name = 'timescaledb.debug_umash_hashing_used';
