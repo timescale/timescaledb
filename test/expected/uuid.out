@@ -239,8 +239,8 @@ ORDER BY id DESC;
 CREATE VIEW chunk_ranges AS
 SELECT
   chunk_name,
-  _timescaledb_functions.to_timestamp(range_start_integer) AS range_start,
-  _timescaledb_functions.to_timestamp(range_end_integer) AS range_end
+  range_start,
+  range_end
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'uuid_events';
 SELECT * FROM chunk_ranges;
