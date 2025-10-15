@@ -1,3 +1,4 @@
+DROP VIEW IF EXISTS timescaledb_information.dimensions;
 -- Block update if CAggs in old format are found
 DO
 $$
