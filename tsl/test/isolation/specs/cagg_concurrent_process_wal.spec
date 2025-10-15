@@ -12,6 +12,7 @@
 setup
 {
   SET timezone TO PST8PDT;
+  SET timescaledb.enable_cagg_wal_based_invalidation TO true;
 
   CREATE TABLE temperature (
     time timestamptz NOT NULL,
@@ -39,7 +40,7 @@ setup
 # All the below need to be in separate transactions.
 setup {
   CREATE MATERIALIZED VIEW cagg_1
-    WITH (timescaledb.continuous, timescaledb.invalidate_using = 'wal') AS
+    WITH (timescaledb.continuous) AS
     SELECT time_bucket('4 hour', time), avg(value)
       FROM temperature
       GROUP BY 1 ORDER BY 1
@@ -48,7 +49,7 @@ setup {
 
 setup {
   CREATE MATERIALIZED VIEW cagg_2
-    WITH (timescaledb.continuous, timescaledb.invalidate_using = 'wal') AS
+    WITH (timescaledb.continuous) AS
     SELECT time_bucket('4 hour', time), avg(value)
       FROM temperature
       GROUP BY 1 ORDER BY 1

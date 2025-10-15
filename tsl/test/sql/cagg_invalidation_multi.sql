@@ -7,6 +7,7 @@
 SELECT _timescaledb_functions.stop_background_workers();
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';
+SET timescaledb.enable_cagg_wal_based_invalidation TO true;
 
 SELECT _timescaledb_functions.invalidation_plugin_name() AS plugin_name \gset
 
@@ -70,8 +71,7 @@ SELECT * FROM invalidation_slots;
 -- set client_min_messages to debug2;
 CREATE MATERIALIZED VIEW cond_10
 WITH (timescaledb.continuous,
-      timescaledb.materialized_only = true,
-      timescaledb.invalidate_using = 'wal')
+      timescaledb.materialized_only = true)
 AS
     SELECT time_bucket(BIGINT '10', time) AS bucket,
            device, avg(temp) AS avg_temp
@@ -80,8 +80,7 @@ AS
 
 CREATE MATERIALIZED VIEW cond_20
 WITH (timescaledb.continuous,
-      timescaledb.materialized_only = true,
-      timescaledb.invalidate_using = 'wal')
+      timescaledb.materialized_only = true)
 AS
 SELECT time_bucket(BIGINT '20', time) AS bucket,
        device, avg(temp) AS avg_temp
@@ -90,19 +89,13 @@ GROUP BY 1,2;
 
 CREATE MATERIALIZED VIEW measure_10
 WITH (timescaledb.continuous,
-      timescaledb.materialized_only=true,
-      timescaledb.invalidate_using = 'wal')
+      timescaledb.materialized_only=true)
 AS
 SELECT time_bucket(10, time) AS bucket,
        device,
        avg(temp) AS avg_temp
 FROM measurements
 GROUP BY 1,2;
-
--- There should be three continuous aggregates, two on one hypertable
--- and one on the other. All using the WAL.
-SELECT hypertable_name, view_name, materialization_hypertable_name, invalidate_using
-  FROM timescaledb_information.continuous_aggregates;
 
 -- We need to refresh to move the invalidation threshold, or
 -- invalidations will not be generated. Check initial value of

@@ -7,19 +7,16 @@ NOTICE:  using column "time" as partitioning column
 BEGIN;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' hour')::interval, 'd1', i::float FROM generate_series(0,100) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                         QUERY PLAN                          
--------------------------------------------------------------
+--- QUERY PLAN ---
  Append (actual rows=101.00 loops=1)
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=16.00 loops=1)
    ->  Seq Scan on _hyper_1_2_chunk (actual rows=85.00 loops=1)
-(3 rows)
 
 -- should have no status aka normal uncompressed chunk
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
  chunk_status_text 
 -------------------
  {}
-(1 row)
 
 ROLLBACK;
 SET timescaledb.enable_direct_compress_insert = true;
@@ -28,76 +25,64 @@ SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 -- EXPLAIN with too small batch
 EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) INSERT INTO metrics SELECT '2025-01-01'::timestamptz, 'd1', i::float FROM generate_series(0,5) i;
 WARNING:  disabling direct compress because of too small batch size
-                   QUERY PLAN                   
-------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    Direct Compress: false
    ->  Insert on metrics
          ->  Function Scan on generate_series i
-(4 rows)
 
 -- EXPLAIN with large enough batch
 EXPLAIN (BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) INSERT INTO metrics SELECT '2025-01-01'::timestamptz, 'd1', i::float FROM generate_series(0,500) i;
-                   QUERY PLAN                   
-------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    Direct Compress: true
    ->  Insert on metrics
          ->  Function Scan on generate_series i
-(4 rows)
 
 -- simple test with compressed insert enabled
 BEGIN;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append (actual rows=3001.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk (actual rows=960.00 loops=1)
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=1.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk (actual rows=2041.00 loops=1)
          ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3.00 loops=1)
-(5 rows)
 
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
             first             |             last             
 ------------------------------+------------------------------
  Wed Jan 01 00:00:00 2025 PST | Fri Jan 03 02:00:00 2025 PST
-(1 row)
 
 -- since the chunks are new status should be COMPRESSED, UNORDERED
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
    chunk_status_text    
 ------------------------
  {COMPRESSED,UNORDERED}
-(1 row)
 
 ROLLBACK;
 -- simple test with compressed insert enabled and reversed order
 BEGIN;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append (actual rows=3001.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_7_chunk (actual rows=960.00 loops=1)
          ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_9_chunk (actual rows=2041.00 loops=1)
          ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=3.00 loops=1)
-(5 rows)
 
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
             first             |             last             
 ------------------------------+------------------------------
  Wed Jan 01 00:00:00 2025 PST | Fri Jan 03 02:00:00 2025 PST
-(1 row)
 
 -- since the chunks are new status should be COMPRESSED, UNORDERED
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
    chunk_status_text    
 ------------------------
  {COMPRESSED,UNORDERED}
-(1 row)
 
 ROLLBACK;
 SET timescaledb.enable_direct_compress_insert_sort_batches = false;
@@ -105,51 +90,43 @@ SET timescaledb.enable_direct_compress_insert_sort_batches = false;
 BEGIN;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append (actual rows=3001.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_11_chunk (actual rows=960.00 loops=1)
          ->  Seq Scan on compress_hyper_2_12_chunk (actual rows=1.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_13_chunk (actual rows=2041.00 loops=1)
          ->  Seq Scan on compress_hyper_2_14_chunk (actual rows=3.00 loops=1)
-(5 rows)
 
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
             first             |             last             
 ------------------------------+------------------------------
  Wed Jan 01 00:00:00 2025 PST | Fri Jan 03 02:00:00 2025 PST
-(1 row)
 
 -- since the chunks are new status should be COMPRESSED, UNORDERED
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
    chunk_status_text    
 ------------------------
  {COMPRESSED,UNORDERED}
-(1 row)
 
 ROLLBACK;
 -- simple test with compressed insert enabled and reversed order and no batch sorting
 BEGIN;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_15_chunk (actual rows=3001.00 loops=1)
    ->  Seq Scan on compress_hyper_2_16_chunk (actual rows=4.00 loops=1)
-(2 rows)
 
 SELECT first(time,rn), last(time,rn) FROM (SELECT ROW_NUMBER() OVER () as rn, time FROM metrics) sub;
             first             |             last             
 ------------------------------+------------------------------
  Wed Jan 01 00:00:00 2025 PST | Sun Dec 29 22:00:00 2024 PST
-(1 row)
 
 -- since the chunks are new status should be COMPRESSED, UNORDERED
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
    chunk_status_text    
 ------------------------
  {COMPRESSED,UNORDERED}
-(1 row)
 
 ROLLBACK;
 -- test compressing into uncompressed chunk
@@ -162,8 +139,7 @@ SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append (actual rows=6002.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_17_chunk (actual rows=960.00 loops=1)
          ->  Seq Scan on compress_hyper_2_19_chunk (actual rows=1.00 loops=1)
@@ -171,14 +147,12 @@ EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM
    ->  Custom Scan (ColumnarScan) on _hyper_1_18_chunk (actual rows=2041.00 loops=1)
          ->  Seq Scan on compress_hyper_2_20_chunk (actual rows=3.00 loops=1)
    ->  Seq Scan on _hyper_1_18_chunk (actual rows=2041.00 loops=1)
-(7 rows)
 
 -- since the chunks are new status should be COMPRESSED, PARTIAL
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
   chunk_status_text   
 ----------------------
  {COMPRESSED,PARTIAL}
-(1 row)
 
 ROLLBACK;
 -- simple test with compressed insert enabled and reversed order
@@ -187,18 +161,15 @@ SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_21_chunk (actual rows=3001.00 loops=1)
    ->  Seq Scan on compress_hyper_2_22_chunk (actual rows=4.00 loops=1)
-(2 rows)
 
 -- since the chunks are new status should be COMPRESSED
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
  chunk_status_text 
 -------------------
  {COMPRESSED}
-(1 row)
 
 ROLLBACK;
 -- simple test with compressed insert enabled and no presorted
@@ -207,18 +178,15 @@ SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = false;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_23_chunk (actual rows=3001.00 loops=1)
    ->  Seq Scan on compress_hyper_2_24_chunk (actual rows=4.00 loops=1)
-(2 rows)
 
 -- since the chunks are new status should be COMPRESSED, UNORDERED
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
    chunk_status_text    
 ------------------------
  {COMPRESSED,UNORDERED}
-(1 row)
 
 ROLLBACK;
 -- simple test with compressed insert enabled and no presorted and with uncompressed data
@@ -229,20 +197,17 @@ INSERT INTO metrics SELECT '2025-01-01'::timestamptz, 'd1', 0;
 WARNING:  disabling direct compress because of too small batch size
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,3000) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append (actual rows=3002.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_25_chunk (actual rows=3001.00 loops=1)
          ->  Seq Scan on compress_hyper_2_26_chunk (actual rows=4.00 loops=1)
    ->  Seq Scan on _hyper_1_25_chunk (actual rows=1.00 loops=1)
-(4 rows)
 
 -- since the chunks are new status should be COMPRESSED, UNORDERED, PARTIAL
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
        chunk_status_text        
 --------------------------------
  {COMPRESSED,UNORDERED,PARTIAL}
-(1 row)
 
 ROLLBACK;
 -- test with segmentby
@@ -252,11 +217,9 @@ SET timescaledb.enable_direct_compress_insert = true;
 SET timescaledb.enable_direct_compress_insert_client_sorted = true;
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz - (i || ' minute')::interval, floor(i), i::float FROM generate_series(0.0,9.8,0.2) i;
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_27_chunk (actual rows=50.00 loops=1)
    ->  Seq Scan on compress_hyper_2_28_chunk (actual rows=10.00 loops=1)
-(2 rows)
 
 SELECT format('%I.%I',schema_name,table_name) AS "COMPRESSED_CHUNK" FROM _timescaledb_catalog.chunk where compressed_chunk_id IS NULL \gset
 -- should have 10 batches
@@ -264,14 +227,12 @@ SELECT count(*) FROM :COMPRESSED_CHUNK;
  count 
 -------
     10
-(1 row)
 
 -- since the chunks are new status should be COMPRESSED
 SELECT DISTINCT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics') chunk;
  chunk_status_text 
 -------------------
  {COMPRESSED}
-(1 row)
 
 ROLLBACK;
 -- test unique constraints prevent direct compress
@@ -281,15 +242,12 @@ ALTER TABLE metrics ADD CONSTRAINT unique_time_device UNIQUE (time, device);
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
 WARNING:  disabling direct compress because the destination table has unique constraints
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                       QUERY PLAN                        
----------------------------------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_29_chunk (actual rows=101.00 loops=1)
-(1 row)
 
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
  status 
 --------
-(0 rows)
 
 ROLLBACK;
 -- test triggers prevent direct compress
@@ -300,15 +258,12 @@ CREATE TRIGGER metrics_trigger BEFORE INSERT OR UPDATE ON metrics FOR EACH ROW E
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
 WARNING:  disabling direct compress because the destination table has triggers
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                       QUERY PLAN                        
----------------------------------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_30_chunk (actual rows=101.00 loops=1)
-(1 row)
 
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
  status 
 --------
-(0 rows)
 
 ROLLBACK;
 -- test caggs prevent direct compress
@@ -318,15 +273,12 @@ CREATE MATERIALIZED VIEW metrics_cagg WITH (tsdb.continuous) AS SELECT time_buck
 INSERT INTO metrics SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval, 'd1', i::float FROM generate_series(0,100) i;
 WARNING:  disabling direct compress because the destination table has triggers
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
-                       QUERY PLAN                        
----------------------------------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_31_chunk (actual rows=101.00 loops=1)
-(1 row)
 
 SELECT DISTINCT status FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL;
  status 
 --------
-(0 rows)
 
 ROLLBACK;
 -- test chunk status handling
@@ -337,7 +289,6 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
  chunk_status_text 
 -------------------
  {}
-(1 row)
 
 SET timescaledb.enable_direct_compress_insert = true;
 BEGIN;
@@ -348,7 +299,6 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
  chunk_status_text 
 -------------------
  {}
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -358,7 +308,6 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
        chunk_status_text        
 --------------------------------
  {COMPRESSED,UNORDERED,PARTIAL}
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -371,7 +320,6 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
   chunk_status_text   
 ----------------------
  {COMPRESSED,PARTIAL}
-(1 row)
 
 ROLLBACK;
 TRUNCATE metrics_status;
@@ -385,7 +333,6 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
    chunk_status_text    
 ------------------------
  {COMPRESSED,UNORDERED}
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -398,7 +345,6 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
  chunk_status_text 
 -------------------
  {COMPRESSED}
-(1 row)
 
 ROLLBACK;
 SET timescaledb.enable_direct_compress_insert = false;
@@ -409,20 +355,17 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
  chunk_status_text 
 -------------------
  {}
-(1 row)
 
 SELECT compress_chunk(show_chunks('metrics_status'));
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_4_39_chunk
-(1 row)
 
 -- status should be COMPRESSED
 SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics_status') chunk;
  chunk_status_text 
 -------------------
  {COMPRESSED}
-(1 row)
 
 BEGIN;
 -- compressed insert into fully compressed chunk should result in chunk status 3 (compressed,unordered)
@@ -434,7 +377,6 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
    chunk_status_text    
 ------------------------
  {COMPRESSED,UNORDERED}
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -447,7 +389,6 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
  chunk_status_text 
 -------------------
  {COMPRESSED}
-(1 row)
 
 ROLLBACK;
 -- test direct compress into chunk directly
@@ -461,17 +402,14 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
  chunk_status_text 
 -------------------
  {}
-(1 row)
 
 SELECT show_chunks('metrics_chunk') AS "CHUNK" \gset
 EXPLAIN (costs off,summary off,timing off) INSERT INTO :CHUNK SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(0,100) i;
-                   QUERY PLAN                   
-------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    Direct Compress: true
    ->  Insert on _hyper_6_41_chunk
          ->  Function Scan on generate_series i
-(4 rows)
 
 BEGIN;
 INSERT INTO :CHUNK SELECT '2025-01-01'::timestamptz + (i || ' minute')::interval FROM generate_series(0,100) i;
@@ -480,31 +418,26 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
        chunk_status_text        
 --------------------------------
  {COMPRESSED,UNORDERED,PARTIAL}
-(1 row)
 
 -- delete should propagate to compressed chunk
 SELECT count(*) FROM :CHUNK;
  count 
 -------
    102
-(1 row)
 
 EXPLAIN (analyze,buffers off,costs off,summary off,timing off) DELETE FROM :CHUNK WHERE time > '2025-01-01'::timestamptz;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
    Batches decompressed: 1
    Tuples decompressed: 101
    ->  Delete on _hyper_6_41_chunk (actual rows=0.00 loops=1)
          ->  Index Scan using _hyper_6_41_chunk_metrics_chunk_time_idx on _hyper_6_41_chunk (actual rows=100.00 loops=1)
                Index Cond: ("time" > 'Wed Jan 01 00:00:00 2025 PST'::timestamp with time zone)
-(6 rows)
 
 SELECT count(*) FROM :CHUNK;
  count 
 -------
      2
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -515,6 +448,5 @@ SELECT _timescaledb_functions.chunk_status_text(chunk) FROM show_chunks('metrics
   chunk_status_text   
 ----------------------
  {COMPRESSED,PARTIAL}
-(1 row)
 
 ROLLBACK;

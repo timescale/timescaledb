@@ -7,7 +7,6 @@ SELECT create_hypertable('reloptions_test', 'time', chunk_time_interval => 3);
       create_hypertable       
 ------------------------------
  (1,public,reloptions_test,t)
-(1 row)
 
 INSERT INTO reloptions_test VALUES (4, 24.3, 1), (9, 13.3, 2);
 -- Show that reloptions are inherited by chunks
@@ -17,7 +16,6 @@ WHERE relname ~ '^_hyper.*' AND relkind = 'r';
 ------------------+-------------------------------------------------
  _hyper_1_1_chunk | {fillfactor=75,autovacuum_vacuum_threshold=100}
  _hyper_1_2_chunk | {fillfactor=75,autovacuum_vacuum_threshold=100}
-(2 rows)
 
 -- Alter reloptions. We support multiple options for the ALTER TABLE
 ALTER TABLE reloptions_test SET (fillfactor=80, parallel_workers=8);
@@ -28,7 +26,6 @@ WHERE relname ~ '^_hyper.*' AND relkind = 'r';
 ------------------+--------------------------------------------------------------------
  _hyper_1_1_chunk | {autovacuum_vacuum_threshold=100,fillfactor=80,parallel_workers=8}
  _hyper_1_2_chunk | {autovacuum_vacuum_threshold=100,fillfactor=80,parallel_workers=8}
-(2 rows)
 
 ALTER TABLE reloptions_test RESET (fillfactor);
 SELECT relname, reloptions FROM pg_class
@@ -37,7 +34,6 @@ WHERE relname ~ '^_hyper.*' AND relkind = 'r';
 ------------------+------------------------------------------------------
  _hyper_1_1_chunk | {autovacuum_vacuum_threshold=100,parallel_workers=8}
  _hyper_1_2_chunk | {autovacuum_vacuum_threshold=100,parallel_workers=8}
-(2 rows)
 
 -- Test reloptions on a regular table
 CREATE TABLE reloptions_test2(time integer, temp float8, color integer);

@@ -15,7 +15,6 @@ SELECT rolsuper FROM pg_roles WHERE rolname=user;
  rolsuper 
 ----------
  f
-(1 row)
 
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
@@ -25,7 +24,6 @@ SELECT create_hypertable('t','time');
  create_hypertable 
 -------------------
  (1,public,t,t)
-(1 row)
 
 INSERT INTO t VALUES ('2000-01-01'), ('2001-01-01');
 SELECT * FROM t ORDER BY 1;
@@ -33,20 +31,17 @@ SELECT * FROM t ORDER BY 1;
 ------------------------------
  Sat Jan 01 00:00:00 2000 PST
  Mon Jan 01 00:00:00 2001 PST
-(2 rows)
 
 SELECT * FROM timescaledb_information.hypertables;
  hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | tablespaces | primary_dimension |  primary_dimension_type  
 -------------------+-----------------+-------------+----------------+------------+---------------------+-------------+-------------------+--------------------------
  public            | t               | test_role_1 |              1 |          2 | f                   |             | time              | timestamp with time zone
-(1 row)
 
 SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE '\_hyper%';
         schema         |       name       | type  |    owner    
 -----------------------+------------------+-------+-------------
  _timescaledb_internal | _hyper_1_1_chunk | table | test_role_1
  _timescaledb_internal | _hyper_1_2_chunk | table | test_role_1
-(2 rows)
 
 DROP EXTENSION timescaledb CASCADE;
 NOTICE:  drop cascades to 3 other objects

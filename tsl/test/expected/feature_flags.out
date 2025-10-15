@@ -8,7 +8,6 @@ SHOW timescaledb.enable_hypertable_create;
  timescaledb.enable_hypertable_create 
 --------------------------------------
  on
-(1 row)
 
 SET timescaledb.enable_hypertable_create TO off;
 CREATE TABLE test(time timestamptz, device int);
@@ -21,14 +20,12 @@ SELECT * FROM create_hypertable('test', 'time');
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | test       | t
-(1 row)
 
 -- hypertable compression
 SHOW timescaledb.enable_hypertable_compression;
  timescaledb.enable_hypertable_compression 
 -------------------------------------------
  on
-(1 row)
 
 SET timescaledb.enable_hypertable_compression TO off;
 INSERT INTO test SELECT t, 0
@@ -37,7 +34,6 @@ SELECT * FROM show_chunks('test');
               show_chunks               
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 -- compress_chunk
 \set ON_ERROR_STOP 0
@@ -61,7 +57,6 @@ SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 SET timescaledb.enable_hypertable_compression TO off;
 -- cannot alter compressed table
@@ -81,7 +76,6 @@ SHOW timescaledb.enable_cagg_create;
  timescaledb.enable_cagg_create 
 --------------------------------
  on
-(1 row)
 
 SET timescaledb.enable_cagg_create TO off;
 \set ON_ERROR_STOP 0
@@ -116,7 +110,6 @@ SHOW timescaledb.enable_policy_create;
  timescaledb.enable_policy_create 
 ----------------------------------
  on
-(1 row)
 
 SET timescaledb.enable_policy_create TO off;
 \set ON_ERROR_STOP 0

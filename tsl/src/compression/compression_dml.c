@@ -28,8 +28,8 @@
 #include <compression/wal_utils.h>
 #include <expression_utils.h>
 #include <indexing.h>
-#include <nodes/decompress_chunk/vector_dict.h>
-#include <nodes/decompress_chunk/vector_predicates.h>
+#include <nodes/columnar_scan/vector_dict.h>
+#include <nodes/columnar_scan/vector_predicates.h>
 #include <nodes/modify_hypertable.h>
 #include <ts_catalog/array_utils.h>
 

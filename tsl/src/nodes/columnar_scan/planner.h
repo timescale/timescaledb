@@ -16,7 +16,7 @@ typedef enum
 	DCS_EnableBulkDecompression = 4,
 	DCS_HasRowMarks = 5,
 	DCS_Count
-} DecompressChunkSettingsIndex;
+} ColumnarScanSettingsIndex;
 
 typedef enum
 {
@@ -26,10 +26,9 @@ typedef enum
 	DCP_BulkDecompressionColumn = 3,
 	DCP_SortInfo = 4,
 	DCP_Count
-} DecompressChunkPrivateIndex;
+} ColumnarScanPrivateIndex;
 
-extern Plan *decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
-										  List *output_targetlist, List *clauses,
-										  List *custom_plans);
+extern Plan *columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
+									   List *output_targetlist, List *clauses, List *custom_plans);
 
-extern void _decompress_chunk_init(void);
+extern void _columnar_scan_init(void);

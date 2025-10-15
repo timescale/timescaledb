@@ -10,7 +10,6 @@ SELECT create_hypertable('testtable', 'time');
    create_hypertable    
 ------------------------
  (1,public,testtable,t)
-(1 row)
 
 ALTER TABLE testtable SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 INSERT INTO testtable(time,device_id,v0,v1,v2,v3)
@@ -21,7 +20,6 @@ SELECT compress_chunk(c) FROM show_chunks('testtable') c;
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
-(2 rows)
 
 ANALYZE testtable;
 -- Pushdown aggregation to the chunk level
@@ -29,12 +27,10 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
  count | sum | sum | sum | sum 
 -------+-----+-----+-----+-----
     50 | 200 | 250 | 175 |    
-(1 row)
 
 :PREFIX
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0' AND time <= '2000-02-01 00:00:00+0';
-                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
    ->  Append (actual rows=2.00 loops=1)
@@ -58,7 +54,6 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_4_chunk (actual rows=5.00 loops=1)
                            Output: compress_hyper_2_4_chunk._ts_meta_count, compress_hyper_2_4_chunk.device_id, compress_hyper_2_4_chunk.filter_1, compress_hyper_2_4_chunk.filler_2, compress_hyper_2_4_chunk.filler_3, compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1, compress_hyper_2_4_chunk."time", compress_hyper_2_4_chunk.v0, compress_hyper_2_4_chunk.v1, compress_hyper_2_4_chunk.v2, compress_hyper_2_4_chunk.v3
                            Filter: ((compress_hyper_2_4_chunk._ts_meta_max_1 >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (compress_hyper_2_4_chunk._ts_meta_min_1 <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
-(23 rows)
 
 -- Create partially compressed chunk
 INSERT INTO testtable(time,device_id,v0,v1,v2,v3)
@@ -70,12 +65,10 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
  count | sum | sum | sum | sum 
 -------+-----+-----+-----+-----
    100 | 400 | 500 | 350 |    
-(1 row)
 
 :PREFIX
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0' AND time <= '2000-02-01 00:00:00+0';
-                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
    ->  Append (actual rows=4.00 loops=1)
@@ -109,19 +102,16 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=25.00 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Filter: ((_hyper_1_2_chunk."time" >= 'Fri Dec 31 16:00:00 1999 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone))
-(33 rows)
 
 -- Same query using chunk append
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0';
  count | sum | sum | sum | sum 
 -------+-----+-----+-----+-----
    100 | 400 | 500 | 350 |    
-(1 row)
 
 :PREFIX
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0';
-                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
    ->  Custom Scan (ChunkAppend) on public.testtable (actual rows=4.00 loops=1)
@@ -159,13 +149,11 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=25.00 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
-(37 rows)
 
 -- Perform chunk append startup chunk exclusion - issue 6282
 :PREFIX
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-09 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0'::text::timestamptz;
-                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
    ->  Custom Scan (ChunkAppend) on public.testtable (actual rows=2.00 loops=1)
@@ -190,7 +178,6 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Filter: ((_hyper_1_2_chunk."time" >= ('2000-01-09 00:00:00+0'::cstring)::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= ('2000-02-01 00:00:00+0'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 15
-(24 rows)
 
 -- Force plain / sorted aggregation
 SET enable_hashagg = OFF;
@@ -198,12 +185,10 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
  count | sum | sum | sum | sum 
 -------+-----+-----+-----+-----
    100 | 400 | 500 | 350 |    
-(1 row)
 
 :PREFIX
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0';
-                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
    ->  Custom Scan (ChunkAppend) on public.testtable (actual rows=4.00 loops=1)
@@ -241,7 +226,6 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=25.00 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Filter: ((_hyper_1_2_chunk."time" <= 'Mon Jan 31 16:00:00 2000 PST'::timestamp with time zone) AND (_hyper_1_2_chunk."time" >= ('2000-01-01 00:00:00+0'::cstring)::timestamp with time zone))
-(37 rows)
 
 RESET enable_hashagg;
 -- Check chunk exclusion for index scans
@@ -250,12 +234,10 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
  count | sum | sum | sum | sum 
 -------+-----+-----+-----+-----
     20 |  80 | 100 |  70 |    
-(1 row)
 
 :PREFIX
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-09 00:00:00+0'::text::timestamptz AND time <= '2000-02-01 00:00:00+0'::text::timestamptz;
-                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate (actual rows=1.00 loops=1)
    Output: count(*), sum(testtable.v0), sum(testtable.v1), sum(testtable.v2), sum(testtable.v3)
    ->  Custom Scan (ChunkAppend) on public.testtable (actual rows=2.00 loops=1)
@@ -279,7 +261,6 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
                ->  Index Scan using _hyper_1_2_chunk_testtable_time_idx on _timescaledb_internal._hyper_1_2_chunk (actual rows=10.00 loops=1)
                      Output: _hyper_1_2_chunk.v0, _hyper_1_2_chunk.v1, _hyper_1_2_chunk.v2, _hyper_1_2_chunk.v3
                      Index Cond: ((_hyper_1_2_chunk."time" >= ('2000-01-09 00:00:00+0'::cstring)::timestamp with time zone) AND (_hyper_1_2_chunk."time" <= ('2000-02-01 00:00:00+0'::cstring)::timestamp with time zone))
-(23 rows)
 
 RESET enable_seqscan;
 -- Check Append Node under ChunkAppend
@@ -298,7 +279,6 @@ SELECT * FROM create_hypertable('testtable2', 'timecustom', 'device_id', number_
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              3 | public      | testtable2 | t
-(1 row)
 
 INSERT INTO testtable2 VALUES
 (1257894000000000000, 'dev1', 1.5, 1, 2, true),
@@ -318,12 +298,10 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
 ---------------------+-----
  1257987600000000000 | 1.5
  1257897600000000000 | 4.5
-(2 rows)
 
 :PREFIX
 SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-                                                                              QUERY PLAN                                                                               
------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=2.00 loops=1)
    Output: testtable2.timecustom, (min(testtable2.series_0))
    ->  Finalize GroupAggregate (actual rows=2.00 loops=1)
@@ -356,14 +334,12 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
                            Group Key: _hyper_3_5_chunk.timecustom
                            ->  Index Scan using _hyper_3_5_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_5_chunk (actual rows=4.00 loops=1)
                                  Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
-(32 rows)
 
 -- Force parallel query
 SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
  set_config 
 ------------
  on
-(1 row)
 
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
@@ -372,12 +348,10 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
 ---------------------+-----
  1257987600000000000 | 1.5
  1257897600000000000 | 4.5
-(2 rows)
 
 :PREFIX
 SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-                                                                                 QUERY PLAN                                                                                  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Gather (actual rows=2.00 loops=1)
    Output: testtable2.timecustom, (min(testtable2.series_0))
    Workers Planned: 1
@@ -427,13 +401,11 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
                                  ->  Index Scan using _hyper_3_5_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_5_chunk (actual rows=4.00 loops=1)
                                        Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
                                        Worker 0:  actual rows=4.00 loops=1
-(49 rows)
 
 -- Test that we don't process groupingSets
 :PREFIX
 SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY ROLLUP(t);
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Gather (actual rows=7.00 loops=1)
    Output: testtable2.timecustom, (min(testtable2.series_0))
    Workers Planned: 1
@@ -458,7 +430,6 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY ROLLUP(t);
                ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk (actual rows=1.00 loops=1)
                      Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
                      Worker 0:  actual rows=1.00 loops=1
-(25 rows)
 
 -- Check parallel fallback into a non-partial aggregation
 SET timescaledb.enable_chunkwise_aggregation = OFF;
@@ -468,12 +439,10 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
 ---------------------+-----
  1257987600000000000 | 1.5
  1257897600000000000 | 4.5
-(2 rows)
 
 :PREFIX
 SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
-                                                                              QUERY PLAN                                                                               
------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Gather (actual rows=2.00 loops=1)
    Output: testtable2.timecustom, (min(testtable2.series_0))
    Workers Planned: 1
@@ -507,7 +476,6 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
                            ->  Index Scan using _hyper_3_5_chunk_testtable2_timecustom_device_id_idx on _timescaledb_internal._hyper_3_5_chunk (actual rows=1.00 loops=1)
                                  Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
                                  Worker 0:  actual rows=1.00 loops=1
-(33 rows)
 
 RESET timescaledb.enable_chunkwise_aggregation;
 RESET enable_hashagg;
@@ -518,7 +486,6 @@ WARNING:  column type "character varying" used for "cluster" does not follow bes
  hypertable_id | schema_name |    table_name     | created 
 ---------------+-------------+-------------------+---------
              4 | public      | merge_append_test | t
-(1 row)
 
 CREATE INDEX merge_append_test_sensorid ON merge_append_test USING btree (start_time, sensor_id);
 INSERT INTO merge_append_test
@@ -549,7 +516,6 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
  set_config 
 ------------
  off
-(1 row)
 
 :PREFIX
 SELECT
@@ -564,8 +530,7 @@ WHERE
     AND CLUSTER = 'production-2'
 GROUP BY
     1, 2;
-                                                                                                                             QUERY PLAN                                                                                                                             
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize GroupAggregate (actual rows=873.00 loops=1)
    Output: merge_append_test.start_time, merge_append_test.sensor_id, sum(merge_append_test.cost_recommendation_memory)
    Group Key: merge_append_test.start_time, merge_append_test.sensor_id
@@ -587,7 +552,6 @@ GROUP BY
                      Index Cond: ((_hyper_4_18_chunk.start_time >= 'Sun Nov 26 16:00:00 2023 PST'::timestamp with time zone) AND (_hyper_4_18_chunk.start_time <= 'Thu Nov 30 16:00:00 2023 PST'::timestamp with time zone) AND (_hyper_4_18_chunk.sensor_id < 10))
                      Filter: ((_hyper_4_18_chunk.cluster)::text = 'production-2'::text)
                      Rows Removed by Filter: 25
-(21 rows)
 
 RESET enable_seqscan;
 RESET random_page_cost;

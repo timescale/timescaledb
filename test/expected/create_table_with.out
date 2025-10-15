@@ -71,7 +71,6 @@ SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  t5
  t6
  t7
-(5 rows)
 
 ROLLBACK;
 -- IF NOT EXISTS
@@ -85,7 +84,6 @@ SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  hypertable_name 
 -----------------
  t7
-(1 row)
 
 ROLLBACK;
 -- table won't be converted to hypertable unless it is in the initial CREATE TABLE
@@ -98,7 +96,6 @@ NOTICE:  relation "t8" already exists, skipping
 SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  hypertable_name 
 -----------------
-(0 rows)
 
 ROLLBACK;
 -- chunk_interval
@@ -108,7 +105,6 @@ SELECT hypertable_name, column_name, column_type, time_interval FROM timescaledb
  hypertable_name | column_name |       column_type        | time_interval 
 -----------------+-------------+--------------------------+---------------
  t9              | time        | timestamp with time zone | @ 56 days
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -117,7 +113,6 @@ SELECT hypertable_name, column_name, column_type, time_interval FROM timescaledb
  hypertable_name | column_name |         column_type         | time_interval 
 -----------------+-------------+-----------------------------+---------------
  t9              | time        | timestamp without time zone | @ 23 days
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -126,7 +121,6 @@ SELECT hypertable_name, column_name, column_type, time_interval FROM timescaledb
  hypertable_name | column_name | column_type | time_interval 
 -----------------+-------------+-------------+---------------
  t9              | time        | date        | @ 90 days
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -135,7 +129,6 @@ SELECT hypertable_name, column_name, column_type, integer_interval FROM timescal
  hypertable_name | column_name | column_type | integer_interval 
 -----------------+-------------+-------------+------------------
  t9              | time        | smallint    |               12
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -144,7 +137,6 @@ SELECT hypertable_name, column_name, column_type, integer_interval FROM timescal
  hypertable_name | column_name | column_type | integer_interval 
 -----------------+-------------+-------------+------------------
  t9              | time        | integer     |             3453
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -153,7 +145,6 @@ SELECT hypertable_name, column_name, column_type, integer_interval FROM timescal
  hypertable_name | column_name | column_type | integer_interval 
 -----------------+-------------+-------------+------------------
  t9              | time        | bigint      |            32768
-(1 row)
 
 ROLLBACK;
 -- create_default_indexes
@@ -163,7 +154,6 @@ SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER B
   indexrelid  
 --------------
  t10_time_idx
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -172,7 +162,6 @@ SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER B
  indexrelid 
 ------------
  t10_pkey
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -181,7 +170,6 @@ SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER B
   indexrelid  
 --------------
  t10_time_key
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -190,7 +178,6 @@ SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER B
   indexrelid  
 --------------
  t10_time_idx
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -198,7 +185,6 @@ CREATE TABLE t10(time timestamptz NOT NULL, device text, value float) WITH (tsdb
 SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER BY indexrelid::regclass::text;
  indexrelid 
 ------------
-(0 rows)
 
 ROLLBACK;
 -- associated_schema
@@ -208,7 +194,6 @@ SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_n
  associated_schema_name 
 ------------------------
  _timescaledb_internal
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -217,7 +202,6 @@ SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_n
  associated_schema_name 
 ------------------------
  abc
-(1 row)
 
 INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
@@ -225,7 +209,6 @@ SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1
 --------------------------------
  _hyper_21_1_chunk
  _hyper_21_1_chunk_t11_time_idx
-(2 rows)
 
 ROLLBACK;
 BEGIN;
@@ -235,7 +218,6 @@ SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_n
  associated_schema_name 
 ------------------------
  abc2
-(1 row)
 
 INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc2'::regnamespace ORDER BY 1;
@@ -243,7 +225,6 @@ SELECT relname from pg_class where relnamespace = 'abc2'::regnamespace ORDER BY 
 --------------------------------
  _hyper_22_2_chunk
  _hyper_22_2_chunk_t11_time_idx
-(2 rows)
 
 ROLLBACK;
 -- associated_table_prefix
@@ -253,7 +234,6 @@ SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_
  associated_table_prefix 
 -------------------------
  _hyper_23
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -262,7 +242,6 @@ SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_
  associated_table_prefix 
 -------------------------
  tbl_prefix
-(1 row)
 
 INSERT INTO t12 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
@@ -270,7 +249,6 @@ SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1
 ---------------------------------
  tbl_prefix_3_chunk
  tbl_prefix_3_chunk_t12_time_idx
-(2 rows)
 
 ROLLBACK;
 -- default partition column
@@ -284,6 +262,5 @@ SELECT hypertable_name, column_name FROM timescaledb_information.dimensions WHER
 -----------------+-------------
  t13             | time
  t14             | TiMe
-(2 rows)
 
 ROLLBACK;

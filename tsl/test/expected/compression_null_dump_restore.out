@@ -22,7 +22,6 @@ select create_hypertable('null_dump', 'ts');
    create_hypertable    
 ------------------------
  (1,public,null_dump,t)
-(1 row)
 
 insert into null_dump values (1), (2), (3), (4);
 alter table null_dump set (timescaledb.compress, timescaledb.compress_orderby = 'ts');
@@ -30,7 +29,6 @@ select compress_chunk(show_chunks('null_dump'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 -- Dump the content of the source database
 \setenv TEST_DBNAME :TEST_DBNAME_2
@@ -58,14 +56,12 @@ select public.timescaledb_pre_restore();
  timescaledb_pre_restore 
 -------------------------
  t
-(1 row)
 
 \set ECHO none
 select public.timescaledb_post_restore();
  timescaledb_post_restore 
 --------------------------
  t
-(1 row)
 
 select * from public.null_dump order by 1;
  ts | n 
@@ -74,7 +70,6 @@ select * from public.null_dump order by 1;
   2 |  
   3 |  
   4 |  
-(4 rows)
 
 drop database db_compression_null_dump_restore_2 WITH (FORCE);
 drop database db_compression_null_dump_restore_3 WITH (FORCE);

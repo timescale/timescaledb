@@ -12,7 +12,6 @@ SELECT create_hypertable('test_table_1', by_range('time', '1 day'::interval));
  create_hypertable 
 -------------------
  (1,t)
-(1 row)
 
 INSERT INTO test_table_1(time,temp)
 SELECT time, 100 * random()
@@ -26,7 +25,6 @@ SELECT create_hypertable('test_table_2', by_range('time', '1 day'::interval));
  create_hypertable 
 -------------------
  (2,t)
-(1 row)
 
 INSERT INTO test_table_2(time,temp)
 SELECT time, 100 * random()
@@ -68,7 +66,6 @@ GROUP BY rhs.oid;
  _timescaledb_internal._hyper_2_8_chunk
  _timescaledb_internal._hyper_2_9_chunk
  _timescaledb_internal._hyper_2_10_chunk
-(12 rows)
 
 DROP TABLE saved;
 DROP TABLE test_table_1;

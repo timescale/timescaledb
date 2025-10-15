@@ -3,6 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SET timezone TO PST8PDT;
+SET timescaledb.enable_cagg_wal_based_invalidation TO true;
 
-\set invalidate_using wal
 \ir include/cagg_refresh_common.sql

@@ -98,6 +98,25 @@ is_valid_now_expr(OpExpr *op, List *rtable)
 		var = castNode(Var, tle->expr);
 		if (var->varlevelsup != 0)
 			return false;
+#if PG18_GE
+		/* PG18 introduced RTEs for group clauses so
+		 * we can use rtable to look up GROUP BY expressions.
+		 *
+		 * https://github.com/postgres/postgres/commit/247dea89
+		 */
+		RangeTblEntry *group_rte = list_nth(rte->subquery->rtable, var->varno - 1);
+		if (group_rte->rtekind == RTE_GROUP)
+		{
+			Assert(var->varattno > 0);
+			Expr *node = list_nth(group_rte->groupexprs, var->varattno - 1);
+			if (!IsA(node, Var))
+				return false;
+			var = castNode(Var, node);
+			Assert(var->varno > 0);
+			if (var->varlevelsup != 0)
+				return false;
+		}
+#endif
 		rte = list_nth(rte->subquery->rtable, var->varno - 1);
 	}
 

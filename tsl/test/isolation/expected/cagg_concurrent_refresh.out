@@ -25,18 +25,15 @@ bucket|        avg_temp
     40|16.0909090909091
     50|            26.9
     60|            18.9
-(7 rows)
 
 cagg_bucket_count
 -----------------
                 7
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |         70
 conditions2|-2147483648
-(2 rows)
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
@@ -65,18 +62,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(10 rows)
 
 cagg_bucket_count
 -----------------
                10
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
@@ -124,18 +118,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(6 rows)
 
 cagg_bucket_count
 -----------------
                 6
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -187,18 +178,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(10 rows)
 
 cagg_bucket_count
 -----------------
                10
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -250,18 +238,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(10 rows)
 
 cagg_bucket_count
 -----------------
                10
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -282,7 +267,6 @@ step L3_lock_cagg_table:
 lock_cagg
 ---------
          
-(1 row)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -312,18 +296,15 @@ bucket|        avg_temp
     40|16.0909090909091
     50|            26.9
     60|            18.9
-(7 rows)
 
 cagg_bucket_count
 -----------------
                 7
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |         70
 conditions2|-2147483648
-(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -344,7 +325,6 @@ step L3_lock_cagg_table:
 lock_cagg
 ---------
          
-(1 row)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -378,18 +358,15 @@ bucket|        avg_temp
     40|16.0909090909091
     50|            26.9
     60|            18.9
-(7 rows)
 
 cagg_bucket_count
 -----------------
                 7
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |         70
 conditions2|-2147483648
-(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -410,7 +387,6 @@ step L3_lock_cagg_table:
 lock_cagg
 ---------
          
-(1 row)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -447,18 +423,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(10 rows)
 
 cagg_bucket_count
 -----------------
                10
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -479,7 +452,6 @@ step L3_lock_cagg_table:
 lock_cagg
 ---------
          
-(1 row)
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
@@ -511,18 +483,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(6 rows)
 
 cagg_bucket_count
 -----------------
                 6
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -559,7 +528,6 @@ step WP_after_enable:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -570,7 +538,6 @@ step R6_pending_materialization_ranges:
 user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
 cond_10       |                   30|                     70
-(1 row)
 
 R5: LOG:  statement: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
@@ -585,7 +552,6 @@ user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
 cond_10       |                   30|                     70
 cond_10       |                   70|                    100
-(2 rows)
 
 step WP_after_release: 
     SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
@@ -593,7 +559,6 @@ step WP_after_release:
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step R1_refresh: <... completed>
 R5: DEBUG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 70, 100 ]
@@ -605,7 +570,6 @@ step R6_pending_materialization_ranges:
 
 user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
-(0 rows)
 
 step S1_select: 
     SELECT bucket, avg_temp
@@ -631,18 +595,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(10 rows)
 
 cagg_bucket_count
 -----------------
                10
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 
 starting permutation: WP_after_enable R6_pending_materialization_ranges R1_refresh R3_refresh K1_cancelpid R6_pending_materialization_ranges WP_after_release R13_refresh R6_pending_materialization_ranges
@@ -660,14 +621,12 @@ step WP_after_enable:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step R6_pending_materialization_ranges: 
     SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
 
 user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
-(0 rows)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -687,7 +646,6 @@ user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
 cond_10       |                   30|                     70
 cond_10       |                   70|                    100
-(2 rows)
 
 step K1_cancelpid: <... completed>
 step WP_after_release: 
@@ -696,7 +654,6 @@ step WP_after_release:
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step R3_refresh: <... completed>
 step R13_refresh: 
@@ -707,7 +664,6 @@ step R6_pending_materialization_ranges:
 
 user_view_name|lowest_modified_value|greatest_modified_value
 --------------+---------------------+-----------------------
-(0 rows)
 
 
 starting permutation: WP_before_enable R1_refresh R3_refresh WP_before_release
@@ -725,7 +681,6 @@ step WP_before_enable:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -739,7 +694,6 @@ step WP_before_release:
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step R1_refresh: <... completed>
 step R3_refresh: <... completed>
@@ -759,7 +713,6 @@ step WP_after_materialization_enable:
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -770,7 +723,6 @@ step WP_after_materialization_release:
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step R1_refresh: <... completed>
 step R3_refresh: 

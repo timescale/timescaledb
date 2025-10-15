@@ -24,7 +24,6 @@ select count(compress_chunk(x)) from show_chunks('hashes') x;
  count 
 -------
      1
-(1 row)
 
 vacuum full analyze hashes;
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
@@ -36,5 +35,4 @@ select * from :chunk;
  _ts_meta_count | _ts_meta_min_1 | _ts_meta_max_1 |                            ts                            | _ts_meta_v2_bl2u_x |                          x                           | _ts_meta_v2_bl2u_u |                              u                               | _ts_meta_v2_bl2u_d |                            d                             | _ts_meta_v2_bl2u_i4 |                            i4                            | _ts_meta_v2_bl2u_i8 |                            i8                            
 ----------------+----------------+----------------+----------------------------------------------------------+--------------------+------------------------------------------------------+--------------------+--------------------------------------------------------------+--------------------+----------------------------------------------------------+---------------------+----------------------------------------------------------+---------------------+----------------------------------------------------------
               1 |              1 |              1 | BAAAAAAAAAAAAQAAAAAAAAABAAAAAQAAAAEAAAAAAAAAAgAAAAAAAAAC | \x0110010004004400 | AQBwZ19jYXRhbG9nAHRleHQAAAEAAAABAAAACXRlc3QgdGV4dA== | \x0004400104004010 | AQBwZ19jYXRhbG9nAHV1aWQAAAEAAAABAAAAEJDsno5FAUIynQNtfPYTKBU= | \x4500000005100000 | BAAAAAAAAAAd9wAAAAAAAB33AAAAAQAAAAEAAAAAAAAACwAAAAAAADvu | \x0000080280002880  | BAAAAAAAAAAFmwAAAAAAAAWbAAAAAQAAAAEAAAAAAAAACgAAAAAAAAs2 | \x0100140040000110  | BAAAAAAG////+QAAAAb////5AAAAAQAAAAEAAAAAAAAADwAAAB3////y
-(1 row)
 

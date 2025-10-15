@@ -7,7 +7,6 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step Rc: COMMIT;
 
@@ -17,7 +16,6 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step Ic: COMMIT;
 step Rc: COMMIT;
@@ -28,7 +26,6 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step Rc: COMMIT;
 step Ic: COMMIT;
@@ -38,7 +35,6 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step I1: INSERT INTO ts_reorder_test VALUES (11, 19.5, 3);
 step Ic: COMMIT;
@@ -49,7 +45,6 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step I1: INSERT INTO ts_reorder_test VALUES (11, 19.5, 3);
 step Rc: COMMIT;
@@ -60,7 +55,6 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step Rc: COMMIT;
 step I1: INSERT INTO ts_reorder_test VALUES (11, 19.5, 3);
