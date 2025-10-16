@@ -15,6 +15,7 @@
 
 #include "columnar_scan.h"
 #include "compression/create.h"
+#include "compression/sparse_index_bloom1.h"
 #include "custom_type_cache.h"
 #include "guc.h"
 #include "ts_catalog/array_utils.h"
@@ -372,7 +373,7 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 													 context->chunk_rte->relid,
 													 var->varattno,
 													 context->compressed_rte->relid,
-													 "bloom1");
+													 BLOOM1_COLUMN_PREFIX);
 }
 
 static void *

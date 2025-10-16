@@ -35,6 +35,7 @@
 #include "batch_metadata_builder.h"
 #include "chunk_insert_state.h"
 #include "compression.h"
+#include "compression/sparse_index_bloom1.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
@@ -837,7 +838,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 												 settings->fd.relid,
 												 attr->attnum,
 												 settings->fd.compress_relid,
-												 "bloom1");
+												 BLOOM1_COLUMN_PREFIX);
 			if (AttributeNumberIsValid(bloom_attr_number))
 			{
 				const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);
