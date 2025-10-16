@@ -266,7 +266,7 @@ create_sparse_index_column_def(Form_pg_attribute attr, const char *metadata_type
 		 * We have our custom compression for bloom filters, and the
 		 * result is almost incompressible with lz4 (~2%), so disable it.
 		 */
-		column_def->storage = TYPSTORAGE_EXTERNAL;
+		column_def->storage = TYPSTORAGE_MAIN;
 	}
 	else /* either min or max */
 	{
