@@ -14,6 +14,7 @@ endif()
 list(
   APPEND
   TEST_FILES
+  cagg_drop_table_refresh_deadlock.spec
   compression_ddl_iso.spec
   compression_conflicts_iso.spec
   cagg_insert.spec
