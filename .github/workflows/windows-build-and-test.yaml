@@ -48,7 +48,7 @@ jobs:
 
   build:
     # Change the JOB_NAME variable below when changing the name.
-    name: PG${{ matrix.pg }} ${{ matrix.build_type }}
+    name: PG${{ matrix.pg }} ${{ matrix.build_type }} windows
     runs-on: windows-2025
     needs: config
     strategy:
@@ -78,9 +78,9 @@ jobs:
         compress_bloom_sparse_compat
         compress_bloom_sparse_debug
         compress_qualpushdown_saop
-        compressed_copy
         compression_algos
         compression_uuid
+        direct_compress_copy
         merge_append_partially_compressed
         metadata
         telemetry
