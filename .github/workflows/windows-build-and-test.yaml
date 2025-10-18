@@ -48,14 +48,13 @@ jobs:
 
   build:
     # Change the JOB_NAME variable below when changing the name.
-    name: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: PG${{ matrix.pg }} ${{ matrix.build_type }}
+    runs-on: windows-2025
     needs: config
     strategy:
       fail-fast: false
       matrix:
         pg: [ 15, 16, 17 ]
-        os: [ windows-2025 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
