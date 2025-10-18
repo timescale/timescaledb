@@ -585,7 +585,6 @@ SELECT compress_chunk(show_chunks('daily_temp_decompress_limit'));
 INSERT INTO conditions_decompress_limit SELECT '2020-01-01','d' || i::text, 2.0 FROM generate_series(1,100) g(i);
 SET timescaledb.max_tuples_decompressed_per_dml_transaction TO 1;
 CALL refresh_continuous_aggregate('daily_temp_decompress_limit', NULL, NULL);
-psql:include/cagg_refresh_common.sql:418: NOTICE:  continuous aggregate "daily_temp_decompress_limit" is already up-to-date
 SHOW timescaledb.max_tuples_decompressed_per_dml_transaction;
  timescaledb.max_tuples_decompressed_per_dml_transaction 
 ---------------------------------------------------------

@@ -2687,3 +2687,26 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	PG_RETURN_BOOL(overlap);
 }
+
+TSDLLEXPORT bool
+ts_hypertable_has_continuous_aggregates(int32 hypertable_id)
+{
+  int cagg_count = 0;
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_agg_raw_hypertable_id_idx_raw_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(hypertable_id));
+	ts_scanner_foreach(&iterator)
+	{
+    cagg_count++;
+	}
+
+	return cagg_count > 0;
+}
+

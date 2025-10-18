@@ -13,3 +13,20 @@ $$;
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
 
+-- remove cagg trigger from all hypertables
+DO $$
+DECLARE
+  hypertable regclass;
+BEGIN
+  FOR hypertable IN SELECT format('%I.%I', schema_name, table_name)::regclass AS hypertable
+  FROM _timescaledb_catalog.hypertable ht WHERE compression_state <> 2
+    AND EXISTS (SELECT FROM _timescaledb_catalog.continuous_agg agg WHERE agg.raw_hypertable_id = ht.id);
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS ts_cagg_invalidation_trigger ON %s;', hypertable);
+  END LOOP;
+END
+$$;
+
+DROP FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger();
+DROP FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger();
+DROP FUNCTION _timescaledb_functions.has_invalidation_trigger(regclass);
