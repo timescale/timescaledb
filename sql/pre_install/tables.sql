@@ -539,6 +539,14 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.continuous_agg_migrate_plan_step', 'step_id'), '');
 
+CREATE TABLE _timescaledb_catalog.chunk_rewrite (
+  chunk_relid REGCLASS NOT NULL,
+  new_relid REGCLASS NOT NULL,
+  CONSTRAINT chunk_rewrite_key UNIQUE (chunk_relid)
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_rewrite', '');
+
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all
