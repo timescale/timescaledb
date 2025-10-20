@@ -338,19 +338,6 @@ skip_scan_switch_stage(SkipScanState *state, SkipScanStage new_stage)
 					state->skip_keys[i].skip_key->sk_strategy = BTEqualStrategyNumber;
 				}
 			}
-#if PG18_GE
-			/* PG18+ skip arrays are not used for "=",..,"=",">" multikey index quals,
-			 * but so->skipScan is never reset to false in PG18
-			 * when we change from ">",...,">" quals to "=",..,"=",">",
-			 * so we reset it here.
-			 * https://github.com/postgres/postgres/commit/8a51027
-			 */
-			if (*state->scan_desc && state->num_skip_keys > 1)
-			{
-				BTScanOpaque so = (BTScanOpaque) (*state->scan_desc)->opaque;
-				so->skipScan = false;
-			}
-#endif
 			state->current_key = state->num_skip_keys - 1;
 			state->needs_rescan = true;
 			break;
