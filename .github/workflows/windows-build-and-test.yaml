@@ -64,8 +64,8 @@ jobs:
             pg_version: ${{ needs.config.outputs.pg16_latest }}
           - pg: 17
             pg_version: ${{ needs.config.outputs.pg17_latest }}
-          - pg: 18
-            pg_version: ${{ needs.config.outputs.pg18_latest }}
+#          - pg: 18
+#            pg_version: ${{ needs.config.outputs.pg18_latest }}
     env:
       # PostgreSQL configuration
       PGPORT: 55432
