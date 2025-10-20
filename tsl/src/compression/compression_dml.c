@@ -1736,6 +1736,9 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 	if (ht_state->mt->returningLists)
 		return false;
 
+	if (ts_hypertable_has_continuous_aggregates(ht_state->ht->fd.id))
+		return false;
+
 	/*
 	 * If there are any DELETE row triggers on the hypertable we skip the optimization
 	 * to delete compressed batches directly.

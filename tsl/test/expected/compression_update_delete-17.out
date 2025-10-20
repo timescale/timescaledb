@@ -3537,3 +3537,56 @@ BEGIN; DELETE FROM delete_counter WHERE random() < 1; ROLLBACK;
 BEGIN
 DELETE 615
 ROLLBACK
+-- test invalidation with direct batch delete optimizations
+CREATE TABLE cagg_inval(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+CREATE TABLE
+INSERT INTO cagg_inval SELECT '2020-01-01'::timestamptz, 'd1', 1.0;
+INSERT 0 1
+INSERT INTO cagg_inval SELECT '2021-01-01'::timestamptz, 'd1', 1.0;
+INSERT 0 1
+SELECT count(compress_chunk(ch)) FROM show_chunks('cagg_inval') ch;
+ count 
+-------
+     2
+
+SET timescaledb.enable_compressed_direct_batch_delete TO on;
+SET
+-- delete without cagg should use optimization
+BEGIN;
+BEGIN
+EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cagg_inval;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches deleted: 2
+   ->  Delete on cagg_inval (actual rows=0.00 loops=1)
+         Delete on _hyper_45_86_chunk cagg_inval_1
+         Delete on _hyper_45_87_chunk cagg_inval_2
+         ->  Append (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_45_86_chunk cagg_inval_1 (actual rows=0.00 loops=1)
+               ->  Seq Scan on _hyper_45_87_chunk cagg_inval_2 (actual rows=0.00 loops=1)
+
+ROLLBACK;
+ROLLBACK
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1 day', time) FROM cagg_inval GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg1"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+CREATE MATERIALIZED VIEW
+-- should not use direct batch delete
+EXPLAIN (analyze,costs off, timing off,summary off, buffers off) DELETE FROM cagg_inval;
+--- QUERY PLAN ---
+ Custom Scan (ModifyHypertable) (actual rows=0.00 loops=1)
+   Batches decompressed: 2
+   Tuples decompressed: 2
+   ->  Delete on cagg_inval (actual rows=0.00 loops=1)
+         Delete on _hyper_45_86_chunk cagg_inval_1
+         Delete on _hyper_45_87_chunk cagg_inval_2
+         ->  Append (actual rows=2.00 loops=1)
+               ->  Seq Scan on _hyper_45_86_chunk cagg_inval_1 (actual rows=1.00 loops=1)
+               ->  Seq Scan on _hyper_45_87_chunk cagg_inval_2 (actual rows=1.00 loops=1)
+
+-- should have invalidation entry
+SELECT * FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
+ hypertable_id | lowest_modified_value | greatest_modified_value 
+---------------+-----------------------+-------------------------
+            45 |      1577865600000000 |        1609488000000000
+
