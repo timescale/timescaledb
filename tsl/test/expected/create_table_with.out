@@ -371,19 +371,21 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 -----------------+---------------------
  t25_policy      | t
 
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy' AND proc_name = 'policy_compression';
- hypertable_name | schedule_interval |                       config                        
------------------+-------------------+-----------------------------------------------------
- t25_policy      | @ 1 day           | {"hypertable_id": 70, "compress_after": "@ 7 days"}
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy' AND proc_name = 'policy_compression';
+ hypertable_name | schedule_interval |           next_start           |                       config                        
+-----------------+-------------------+--------------------------------+-----------------------------------------------------
+ t25_policy      | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 70, "compress_after": "@ 7 days"}
 
 ROLLBACK;
 -- test compression policy creation with custom chunk interval
 BEGIN;
 CREATE TABLE t25_policy_custom(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='3 days',tsdb.columnstore=true);
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_custom' AND proc_name = 'policy_compression';
-  hypertable_name  | schedule_interval |                       config                        
--------------------+-------------------+-----------------------------------------------------
- t25_policy_custom | @ 1 day           | {"hypertable_id": 72, "compress_after": "@ 3 days"}
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_custom' AND proc_name = 'policy_compression';
+  hypertable_name  | schedule_interval |           next_start           |                       config                        
+-------------------+-------------------+--------------------------------+-----------------------------------------------------
+ t25_policy_custom | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 72, "compress_after": "@ 3 days"}
 
 ROLLBACK;
 -- test compression policy creation with integer partition column (int2)
@@ -394,10 +396,11 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 -----------------+---------------------
  t25_policy_int2 | t
 
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int2' AND proc_name = 'policy_compression';
- hypertable_name | schedule_interval |                    config                    
------------------+-------------------+----------------------------------------------
- t25_policy_int2 | @ 1 day           | {"hypertable_id": 74, "compress_after": 100}
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int2' AND proc_name = 'policy_compression';
+ hypertable_name | schedule_interval |           next_start           |                    config                    
+-----------------+-------------------+--------------------------------+----------------------------------------------
+ t25_policy_int2 | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 74, "compress_after": 100}
 
 ROLLBACK;
 -- test compression policy creation with integer partition column (int4)
@@ -408,10 +411,11 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 -----------------+---------------------
  t25_policy_int4 | t
 
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int4' AND proc_name = 'policy_compression';
- hypertable_name | schedule_interval |                    config                     
------------------+-------------------+-----------------------------------------------
- t25_policy_int4 | @ 1 day           | {"hypertable_id": 76, "compress_after": 1000}
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int4' AND proc_name = 'policy_compression';
+ hypertable_name | schedule_interval |           next_start           |                    config                     
+-----------------+-------------------+--------------------------------+-----------------------------------------------
+ t25_policy_int4 | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 76, "compress_after": 1000}
 
 ROLLBACK;
 -- test compression policy creation with integer partition column (int8)
@@ -422,10 +426,11 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 -----------------+---------------------
  t25_policy_int8 | t
 
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int8' AND proc_name = 'policy_compression';
- hypertable_name | schedule_interval |                     config                     
------------------+-------------------+------------------------------------------------
- t25_policy_int8 | @ 1 day           | {"hypertable_id": 78, "compress_after": 10000}
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int8' AND proc_name = 'policy_compression';
+ hypertable_name | schedule_interval |           next_start           |                     config                     
+-----------------+-------------------+--------------------------------+------------------------------------------------
+ t25_policy_int8 | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 78, "compress_after": 10000}
 
 ROLLBACK;
 BEGIN;
@@ -546,9 +551,10 @@ SELECT hypertable_name, compression_enabled FROM timescaledb_information.hyperta
 -----------------+---------------------
  events          | t
 
-SELECT hypertable_name, schedule_interval, config FROM timescaledb_information.jobs WHERE hypertable_name = 'events' AND proc_name = 'policy_compression';
- hypertable_name | schedule_interval |                        config                         
------------------+-------------------+-------------------------------------------------------
- events          | @ 1 day           | {"hypertable_id": 100, "compress_after": "@ 2 hours"}
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 'events' AND proc_name = 'policy_compression';
+ hypertable_name | schedule_interval |           next_start           |                        config                         
+-----------------+-------------------+--------------------------------+-------------------------------------------------------
+ events          | @ 1 day           | in 01 days 00 hours 00 minutes | {"hypertable_id": 100, "compress_after": "@ 2 hours"}
 
 ROLLBACK;
