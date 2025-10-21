@@ -449,7 +449,9 @@ parse_sparse_index_config(JsonbParseState *parse_state, FuncCall *sparse_index_d
 				ereport(ERROR,
 						(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 						 errmsg("Creating bloom sparse index is disabled"),
-						 errhint("Set \"enable_sparse_index_bloom\" to true.")));
+						 errhint("Either set \"enable_sparse_index_bloom\" to true or remove the "
+								 "bloom filter indexes from \"sparse_index\" configuration of the "
+								 "hypertable.")));
 			}
 			/*
 			 * The column type must be hashable. For some types we use our own hash functions
