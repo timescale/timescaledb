@@ -1,0 +1,53 @@
+diff --git a/src/backend/utils/misc/stack_depth.c b/src/backend/utils/misc/stack_depth.c
+index 8f7cf531fbc..2f7b1cebbe6 100644
+--- a/src/backend/utils/misc/stack_depth.c
++++ b/src/backend/utils/misc/stack_depth.c
+@@ -108,6 +108,12 @@ check_stack_depth(void)
+ bool
+ stack_is_too_deep(void)
+ {
++       /*
++        * Pointer arithmetics to determine stack depth doesn't work under
++        * AddressSanitizer.
++        */
++       return false;
++
+        char            stack_top_loc;
+        ssize_t         stack_depth;
+
+diff --git a/src/include/utils/memdebug.h b/src/include/utils/memdebug.h
+index e88b4c6e8e..4ccbbf0146 100644
+--- a/src/include/utils/memdebug.h
++++ b/src/include/utils/memdebug.h
+@@ -19,6 +19,31 @@
+ 
+ #ifdef USE_VALGRIND
+ #include <valgrind/memcheck.h>
++
++#elif __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
++
++#include <sanitizer/asan_interface.h>
++
++#define VALGRIND_MAKE_MEM_DEFINED(addr, size) \
++ ASAN_UNPOISON_MEMORY_REGION(addr, size)
++
++#define VALGRIND_MAKE_MEM_NOACCESS(addr, size) \
++ ASAN_POISON_MEMORY_REGION(addr, size)
++
++#define VALGRIND_MAKE_MEM_UNDEFINED(addr, size) \
++ ASAN_UNPOISON_MEMORY_REGION(addr, size)
++
++#define VALGRIND_MEMPOOL_ALLOC(context, addr, size) \
++ ASAN_UNPOISON_MEMORY_REGION(addr, size)
++
++#define VALGRIND_MEMPOOL_FREE(context, addr) \
++ ASAN_POISON_MEMORY_REGION(addr, 1 /* Length unknown, poison first byte. */)
++
++#define VALGRIND_CHECK_MEM_IS_DEFINED(addr, size) do {} while (0)
++#define VALGRIND_CREATE_MEMPOOL(context, redzones, zeroed) do {} while (0)
++#define VALGRIND_DESTROY_MEMPOOL(context) do {} while (0)
++#define VALGRIND_MEMPOOL_CHANGE(context, optr, nptr, size) do {} while (0)
++
+ #else
+ #define VALGRIND_CHECK_MEM_IS_DEFINED(addr, size)			do {} while (0)
+ #define VALGRIND_CREATE_MEMPOOL(context, redzones, zeroed)	do {} while (0)

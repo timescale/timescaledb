@@ -90,12 +90,6 @@ FROM sensor_data
 GROUP BY 1
 WITH DATA;
 
-DROP TRIGGER ts_cagg_invalidation_trigger ON sensor_data;
-
-CREATE TRIGGER ts_cagg_invalidation_trigger
-    AFTER INSERT OR DELETE OR UPDATE ON sensor_data
-    FOR EACH ROW EXECUTE FUNCTION _timescaledb_internal.continuous_agg_invalidation_trigger(:'hypertable_id');
-
 INSERT INTO sensor_data values('1980-01-01 00:00:00-00', 1);
 CALL refresh_continuous_aggregate('sensor_data_hourly', NULL, NULL);
 -- should not return rows because there's old invalid regions

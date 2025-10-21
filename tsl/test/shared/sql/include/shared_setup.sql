@@ -145,3 +145,37 @@ BEGIN
   END LOOP;
 END$$;
 
+CREATE MATERIALIZED VIEW hourly_device_metrics WITH (tsdb.continuous) AS
+SELECT
+    time_bucket('1 hour', time) AS hour,
+    d.device_id,
+    d.name AS device_name,
+    AVG(v0) AS avg_v0,
+    MAX(v1) AS max_v1,
+    MIN(v2) AS min_v2
+FROM metrics
+JOIN devices d ON metrics.device_id = d.device_id
+GROUP BY 1,2,3;
+
+CREATE MATERIALIZED VIEW daily_device_metrics WITH (tsdb.continuous) AS
+SELECT
+    time_bucket('1 day', hour) AS day,
+    device_id,
+    device_name,
+    AVG(avg_v0) AS avg_v0,
+    MAX(max_v1) AS max_v1,
+    MIN(min_v2) AS min_v2
+FROM hourly_device_metrics
+GROUP BY 1,2,3;
+
+CREATE MATERIALIZED VIEW weekly_device_metrics WITH (tsdb.continuous) AS
+SELECT
+    time_bucket('7 day', day) AS week,
+    device_id,
+    device_name,
+    AVG(avg_v0) AS avg_v0,
+    MAX(max_v1) AS max_v1,
+    MIN(min_v2) AS min_v2
+FROM daily_device_metrics
+GROUP BY 1,2,3;
+

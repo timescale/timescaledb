@@ -194,7 +194,7 @@ BEGIN;
 SET timescaledb.enable_direct_compress_copy = true;
 CREATE MATERIALIZED VIEW metrics_cagg WITH (tsdb.continuous) AS SELECT time_bucket('1 hour', time) AS bucket, device, avg(value) AS avg_value FROM metrics GROUP BY bucket, device WITH NO DATA;
 COPY metrics FROM STDIN WITH (FORMAT CSV);
-WARNING:  disabling direct compress because the destination table has triggers
+WARNING:  disabling direct compress because the destination table has continuous aggregates
 EXPLAIN (ANALYZE, BUFFERS OFF, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT * FROM metrics;
 --- QUERY PLAN ---
  Seq Scan on _hyper_1_27_chunk (actual rows=1.00 loops=1)

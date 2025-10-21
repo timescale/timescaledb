@@ -1,5 +1,6 @@
 # This section has to be equivalent to test/postgresql.conf
 
+jit=off
 autovacuum=true
 datestyle='Postgres, MDY'
 hba_file='@TEST_PG_HBA_FILE@'
