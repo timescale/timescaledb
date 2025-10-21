@@ -55,3 +55,25 @@ jobs:
             exit 1
           fi
         fi
+  check_milestone:
+    name: Enforce milestone set on pull request
+    runs-on: timescaledb-runner-arm64
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+    - name: Check number of commits
+      shell: bash --norc --noprofile {0}
+      env:
+        MILESTONE: ${{ github.event.pull_request.milestone }}
+      run: |
+        if [[ -z $MILESTONE ]]
+        then
+          echo "A maintainer needs to set the milestone for this pull request."
+          exit 1
+        else 
+          echo "This pull request has a milestone set: $MILESTONE"
+          exit 0
+        fi
