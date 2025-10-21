@@ -35,7 +35,7 @@ set(TEST_FILES
     compress_sort_transform.sql
     compressed_collation.sql
     compressed_detoaster.sql
-    compressed_insert.sql
+    direct_compress_insert.sql
     compression.sql
     compression_allocation.sql
     compression_conflicts.sql
@@ -93,7 +93,7 @@ if(USE_TELEMETRY)
 endif()
 
 if(NOT APPLE)
-  list(APPEND TEST_FILES compressed_copy.sql)
+  list(APPEND TEST_FILES direct_compress_copy.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)

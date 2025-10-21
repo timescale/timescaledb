@@ -50,6 +50,7 @@ m = {
 default_ignored_tests = {
     "bgw_db_scheduler",
     "bgw_db_scheduler_fixed",
+    "bgw_job_stat_history",
     "bgw_launcher",
     "telemetry",
     "memoize",

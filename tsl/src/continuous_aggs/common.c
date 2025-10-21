@@ -6,6 +6,7 @@
 
 #include "common.h"
 
+#include <utils/acl.h>
 #include <utils/date.h>
 #include <utils/timestamp.h>
 
@@ -836,6 +837,23 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		/* Get the querydef for the source cagg. */
 		is_hierarchical = true;
 		prev_query = ts_continuous_agg_get_query(cagg_parent);
+	}
+
+	/*
+	 * Check if user can refresh continuous aggregate
+	 * We only check for SELECT on the hypertable here but there
+	 * could be other permissions needed depending on the query.
+	 * For WITH DATA this is not a problem since we try a refresh
+	 * immediately but for WITH NO DATA the refresh might still
+	 * fail due to other permissions being needed.
+	 */
+	AclResult aclresult = pg_class_aclcheck(ht->main_table_relid, GetUserId(), ACL_SELECT);
+	if (aclresult != ACLCHECK_OK)
+	{
+		/* User doesn't have permission */
+		aclcheck_error(aclresult,
+					   get_relkind_objtype(get_rel_relkind(ht->main_table_relid)),
+					   get_rel_name(ht->main_table_relid));
 	}
 
 	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))

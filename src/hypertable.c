@@ -2687,3 +2687,27 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	PG_RETURN_BOOL(overlap);
 }
+
+TSDLLEXPORT bool
+ts_hypertable_has_continuous_aggregates(int32 hypertable_id)
+{
+	bool found = false;
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+
+	iterator.ctx.limit = 1; /* we only need to know if there is at least one */
+	iterator.ctx.index =
+		catalog_get_index(ts_catalog_get(), CONTINUOUS_AGG, CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_continuous_agg_raw_hypertable_id_idx_raw_hypertable_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(hypertable_id));
+
+	ts_scan_iterator_start_scan(&iterator);
+	if (ts_scan_iterator_next(&iterator))
+		found = true;
+	ts_scan_iterator_close(&iterator);
+
+	return found;
+}
