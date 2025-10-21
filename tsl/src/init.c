@@ -223,7 +223,21 @@ ts_module_init(PG_FUNCTION_ARGS)
 
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
+	{
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);
+
+	bloom1_column_prefix = default_bloom1_column_prefix;
+	mybt();
+#ifndef NDEBUG
+	DefineCustomStringVariable(MAKE_EXTOPTION("debug_bloom_filter_column_prefix"),
+							   "bloom filter column prefix",
+							   NULL,
+							   (char **) &bloom1_column_prefix,
+							   default_bloom1_column_prefix,
+							   PGC_USERSET, 0,
+							   NULL, NULL, NULL);
+#endif
+}
 
 	PG_RETURN_BOOL(true);
 }

@@ -42,7 +42,7 @@ explain (buffers off) select * from costtab where ti = '200';
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.38..31.12 rows=3000 width=108)
    Vectorized Filter: (ti = '200'::text)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=3 width=142)
-         Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bl2u_ti, '200'::text)
+         Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloomXXX_ti, '200'::text)
 
 explain (buffers off) select * from costtab where fi = 200;
 --- QUERY PLAN ---

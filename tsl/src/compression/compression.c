@@ -838,7 +838,7 @@ build_column_map(const CompressionSettings *settings, const TupleDesc in_desc,
 												 settings->fd.relid,
 												 attr->attnum,
 												 settings->fd.compress_relid,
-												 BLOOM1_COLUMN_PREFIX);
+												 bloom1_column_prefix);
 			if (AttributeNumberIsValid(bloom_attr_number))
 			{
 				const int bloom_attr_offset = AttrNumberGetAttrOffset(bloom_attr_number);

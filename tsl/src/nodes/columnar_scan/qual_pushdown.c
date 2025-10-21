@@ -373,7 +373,7 @@ expr_fetch_bloom1_metadata(QualPushdownContext *context, Expr *expr, AttrNumber 
 													 context->chunk_rte->relid,
 													 var->varattno,
 													 context->compressed_rte->relid,
-													 BLOOM1_COLUMN_PREFIX);
+													 bloom1_column_prefix);
 }
 
 static void *

@@ -11,6 +11,8 @@ Datum bloom1_contains(PG_FUNCTION_ARGS);
 
 PGFunction bloom1_get_hash_function(Oid type, FmgrInfo **finfo);
 
+extern char const *bloom1_column_prefix;
+
 /*
  * Confusingly, the column name prefix is now "bl2". We had two possible
  * hashes depending on the build configuration, which were incompatible with
@@ -19,7 +21,7 @@ PGFunction bloom1_get_hash_function(Oid type, FmgrInfo **finfo);
  * The bloom filter is still constructed according to the "bloom1" rules.
  */
 #ifdef TS_USE_UMASH
-#define BLOOM1_COLUMN_PREFIX "bl2u"
+#define default_bloom1_column_prefix "bl2u"
 #else
-#define BLOOM1_COLUMN_PREFIX "bl2p"
+#define default_bloom1_column_prefix "bl2p"
 #endif
