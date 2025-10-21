@@ -161,19 +161,13 @@ bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 	 */
 	switch (entry->hash_extended_proc)
 	{
+#ifdef TS_USE_UMASH
 		case F_HASHTEXTEXTENDED:
-#ifdef TS_USE_UMASH
 			return bloom1_hash_varlena;
-#else
-			return NULL;
-#endif
-		case F_UUID_HASH_EXTENDED:
-#ifdef TS_USE_UMASH
-			return bloom1_hash_16;
-#else
-			return NULL;
-#endif
 
+		case F_UUID_HASH_EXTENDED:
+			return bloom1_hash_16;
+#endif
 		case F_HASHINT8EXTENDED:
 			return bloom1_hash_8;
 
