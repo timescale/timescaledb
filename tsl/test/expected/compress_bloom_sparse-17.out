@@ -54,7 +54,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
  _ts_meta_v2_bloomXXX_value | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
  value                  | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
  _ts_meta_v2_bloomXXX_u     | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- u                      | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ u                      | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  _ts_meta_v2_min_ts     | timestamp without time zone           |           |          |         | plain    | 1000         | 
  _ts_meta_v2_max_ts     | timestamp without time zone           |           |          |         | plain    | 1000         | 
  ts                     | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
