@@ -72,7 +72,7 @@ should_use_direct_compress(ModifyHypertableState *state)
 		return false;
 	}
 
-	if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->numtriggers > 1)
+	if (resultRelInfo->ri_TrigDesc)
 	{
 		ereport(WARNING,
 				(errmsg("disabling direct compress because the destination table has triggers")));

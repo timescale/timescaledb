@@ -44,6 +44,6 @@ SELECT * FROM test.relation WHERE schema = '_timescaledb_internal' AND name LIKE
  _timescaledb_internal | _hyper_1_2_chunk | table | test_role_1
 
 DROP EXTENSION timescaledb CASCADE;
-NOTICE:  drop cascades to 3 other objects
+NOTICE:  drop cascades to 2 other objects
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE trusted_test WITH (FORCE);

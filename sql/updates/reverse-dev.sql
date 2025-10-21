@@ -36,3 +36,18 @@ BEGIN
 END
 $$;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.insert_blocker() RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C;
+
+-- add ts_insert_blocker trigger to hypertables
+DO $$
+DECLARE
+  v_hypertable regclass;
+BEGIN
+  FOR v_hypertable IN SELECT format('%I.%I', schema_name, table_name)::regclass
+  FROM _timescaledb_catalog.hypertable ht
+  LOOP
+    EXECUTE format('CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON %s FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker();', v_hypertable);
+  END LOOP;
+END
+$$;
+

@@ -1192,8 +1192,6 @@ WHERE uc_hypertable.table_name like 'metric' \gset
 Table "_timescaledb_internal._compressed_hypertable_24"
  Column | Type | Collation | Nullable | Default 
 --------+------+-----------+----------+---------
-Triggers:
-    ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._compressed_hypertable_24 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
 
 -- #5290 Compression can't be enabled on caggs
 CREATE TABLE "tEst2" (
