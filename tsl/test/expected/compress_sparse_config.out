@@ -234,20 +234,20 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 \d+ :chunk
-                                       Table "_timescaledb_internal.compress_hyper_4_3_chunk"
-       Column       |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
---------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count     | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_min_1     | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_max_1     | integer                               |           |          |         | plain    | 1000         | 
- x                  | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- value              | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- _ts_meta_v2_bl2u_u | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- u                  | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- _ts_meta_v2_min_ts | timestamp without time zone           |           |          |         | plain    | 1000         | 
- _ts_meta_v2_max_ts | timestamp without time zone           |           |          |         | plain    | 1000         | 
- ts                 | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- data               | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+                                        Table "_timescaledb_internal.compress_hyper_4_3_chunk"
+        Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+----------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count       | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_min_1       | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_max_1       | integer                               |           |          |         | plain    | 1000         | 
+ x                    | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ value                | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_bloom2_u | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
+ u                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_min_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ _ts_meta_v2_max_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ ts                   | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ data                 | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
 Indexes:
     "compress_hyper_4_3_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
 Options: toast_tuple_target=128
@@ -263,8 +263,8 @@ select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6
          Rows Removed by Filter: 999
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_3_chunk (actual rows=1.00 loops=1)
-               Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk._ts_meta_v2_bl2u_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
-               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_4_3_chunk._ts_meta_v2_bl2u_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+               Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk._ts_meta_v2_bloom2_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
+               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_4_3_chunk._ts_meta_v2_bloom2_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
                Rows Removed by Filter: 9
 
 -- Timestamp uses minmax
@@ -278,7 +278,7 @@ select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-0
          Rows Removed by Filter: 831
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_3_chunk (actual rows=1.00 loops=1)
-               Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk._ts_meta_v2_bl2u_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
+               Output: compress_hyper_4_3_chunk._ts_meta_count, compress_hyper_4_3_chunk._ts_meta_min_1, compress_hyper_4_3_chunk._ts_meta_max_1, compress_hyper_4_3_chunk.x, compress_hyper_4_3_chunk.value, compress_hyper_4_3_chunk._ts_meta_v2_bloom2_u, compress_hyper_4_3_chunk.u, compress_hyper_4_3_chunk._ts_meta_v2_min_ts, compress_hyper_4_3_chunk._ts_meta_v2_max_ts, compress_hyper_4_3_chunk.ts, compress_hyper_4_3_chunk.data
                Filter: ((compress_hyper_4_3_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_4_3_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
                Rows Removed by Filter: 9
 
@@ -312,19 +312,19 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 \d+ :chunk
-                                       Table "_timescaledb_internal.compress_hyper_6_5_chunk"
-       Column       |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
---------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count     | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_min_1     | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_max_1     | integer                               |           |          |         | plain    | 1000         | 
- x                  | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- value              | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- _ts_meta_v2_bl2u_u | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- u                  | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- _ts_meta_v2_min_ts | timestamp without time zone           |           |          |         | plain    | 1000         | 
- _ts_meta_v2_max_ts | timestamp without time zone           |           |          |         | plain    | 1000         | 
- ts                 | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+                                        Table "_timescaledb_internal.compress_hyper_6_5_chunk"
+        Column        |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+----------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count       | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_min_1       | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_max_1       | integer                               |           |          |         | plain    | 1000         | 
+ x                    | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ value                | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_bloom2_u | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
+ u                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ _ts_meta_v2_min_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ _ts_meta_v2_max_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
+ ts                   | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
 Indexes:
     "compress_hyper_6_5_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
 Options: toast_tuple_target=128
@@ -341,8 +341,8 @@ select count(*) from test_sparse_index where u = '90ec9e8e-4501-4232-9d03-6d7cf6
          Rows Removed by Filter: 999
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_5_chunk (actual rows=1.00 loops=1)
-               Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk._ts_meta_v2_bl2u_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
-               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_6_5_chunk._ts_meta_v2_bl2u_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
+               Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk._ts_meta_v2_bloom2_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
+               Filter: _timescaledb_functions.bloom1_contains(compress_hyper_6_5_chunk._ts_meta_v2_bloom2_u, '90ec9e8e-4501-4232-9d03-6d7cf6132815'::uuid)
                Rows Removed by Filter: 9
 
 -- Timestamp uses minmax
@@ -356,7 +356,7 @@ select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-0
          Rows Removed by Filter: 831
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_5_chunk (actual rows=1.00 loops=1)
-               Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk._ts_meta_v2_bl2u_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
+               Output: compress_hyper_6_5_chunk._ts_meta_count, compress_hyper_6_5_chunk._ts_meta_min_1, compress_hyper_6_5_chunk._ts_meta_max_1, compress_hyper_6_5_chunk.x, compress_hyper_6_5_chunk.value, compress_hyper_6_5_chunk._ts_meta_v2_bloom2_u, compress_hyper_6_5_chunk.u, compress_hyper_6_5_chunk._ts_meta_v2_min_ts, compress_hyper_6_5_chunk._ts_meta_v2_max_ts, compress_hyper_6_5_chunk.ts
                Filter: ((compress_hyper_6_5_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_6_5_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
                Rows Removed by Filter: 9
 
@@ -385,7 +385,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
  _ts_meta_max_1         | integer                               |           |          |         | plain    | 1000         | 
  x                      | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  value_new              | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- _ts_meta_v2_bl2u_u     | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
+ _ts_meta_v2_bloom2_u   | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
  u                      | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
  _ts_meta_v2_min_ts_new | timestamp without time zone           |           |          |         | plain    | 1000         | 
  _ts_meta_v2_max_ts_new | timestamp without time zone           |           |          |         | plain    | 1000         | 
@@ -447,17 +447,17 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 \d+ :chunk
-                                           Table "_timescaledb_internal.compress_hyper_6_7_chunk"
-           Column           |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
-----------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count             | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_min_1             | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_max_1             | integer                               |           |          |         | plain    | 1000         | 
- x                          | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- _ts_meta_v2_bl2u_value_new | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- value_new                  | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- u                          | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- ts_new                     | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+                                            Table "_timescaledb_internal.compress_hyper_6_7_chunk"
+            Column            |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+------------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count               | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_min_1               | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_max_1               | integer                               |           |          |         | plain    | 1000         | 
+ x                            | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ _ts_meta_v2_bloom2_value_new | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
+ value_new                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ u                            | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ ts_new                       | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
 Indexes:
     "compress_hyper_6_7_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
 Options: toast_tuple_target=128
