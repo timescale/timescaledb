@@ -399,10 +399,12 @@ build_columndefs(CompressionSettings *settings, Oid src_reloid)
 			{
 				if (!ts_guc_enable_sparse_index_bloom)
 				{
-					ereport(ERROR,
+					ereport(WARNING,
 							(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 							 errmsg("Creating bloom sparse index is disabled"),
-							 errhint("Set \"enable_sparse_index_bloom\" to true.")));
+							 errhint("Either set \"enable_sparse_index_bloom\" to true or remove "
+									 "the bloom filter indexes from \"sparse_index\" configuration "
+									 "of the hypertable.")));
 				}
 				/*
 				 * Add bloom filter sparse index for this column.
