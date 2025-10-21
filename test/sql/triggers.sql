@@ -337,8 +337,5 @@ CREATE TRIGGER t4 AFTER DELETE ON :chunk REFERENCING OLD TABLE AS old_trans FOR 
 CREATE TRIGGER t5 AFTER INSERT ON transition_test REFERENCING NEW TABLE AS new_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
 CREATE TRIGGER t6 AFTER UPDATE ON transition_test REFERENCING NEW TABLE AS new_trans OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
 CREATE TRIGGER t7 AFTER DELETE ON transition_test REFERENCING OLD TABLE AS old_trans FOR EACH ROW EXECUTE FUNCTION test_trigger();
-
--- Test insert blocker trigger does not crash when called directly
-SELECT _timescaledb_functions.insert_blocker();
-
 \set ON_ERROR_STOP 1
+

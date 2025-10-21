@@ -197,11 +197,3 @@ CREATE INDEX _materialized_hypertable_12_bucket_idx ON _timescaledb_internal._ma
 
 CREATE INDEX conditions_time_idx ON public.conditions USING btree ("time" DESC);
 
-CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_10 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker();
-
-CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_11 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker();
-
-CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_12 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker();
-
-CREATE TRIGGER ts_insert_blocker BEFORE INSERT ON public.conditions FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker();
-

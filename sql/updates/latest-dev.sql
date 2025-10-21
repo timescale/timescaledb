@@ -34,3 +34,20 @@ $$;
 DROP FUNCTION IF EXISTS _timescaledb_internal.continuous_agg_invalidation_trigger();
 DROP FUNCTION IF EXISTS _timescaledb_functions.continuous_agg_invalidation_trigger();
 DROP FUNCTION IF EXISTS _timescaledb_functions.has_invalidation_trigger(regclass);
+
+-- remove ts_insert_blocker trigger from all hypertables
+DO $$
+DECLARE
+  rel regclass;
+BEGIN
+  FOR rel IN SELECT format('%I.%I', schema_name, table_name)::regclass
+    FROM _timescaledb_catalog.hypertable ht
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS ts_insert_blocker ON %s;', rel);
+  END LOOP;
+END
+$$;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.insert_blocker();
+DROP FUNCTION IF EXISTS _timescaledb_functions.insert_blocker();
+

@@ -151,10 +151,9 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
  constraint_2                          | c    | {device_id}                     | -                                                             | (_timescaledb_functions.get_partition_hash(device_id) >= 1073741823)                                 | f          | f        | t
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-      Trigger      | Type |               Function                
--------------------+------+---------------------------------------
- restore_trigger   |    7 | test_trigger
- ts_insert_blocker |    7 | _timescaledb_functions.insert_blocker
+     Trigger     | Type |   Function   
+-----------------+------+--------------
+ restore_trigger |    7 | test_trigger
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
      Trigger     | Type |   Function   
@@ -243,14 +242,6 @@ SHOW timescaledb.restoring;
  on
 
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
--- Inserting with restoring ON in current session causes tuples to be
--- inserted on main table, but this should be protected by the insert
--- blocking trigger.
-\set ON_ERROR_STOP 0
-INSERT INTO "test_schema"."two_Partitions"("timeCustom", device_id, series_0, series_1)
-VALUES (1357894000000000000, 'dev5', 1.5, 2);
-ERROR:  cannot INSERT into hypertable "two_Partitions" during restore
-\set ON_ERROR_STOP 1
 -- Now run our post-restore function.
 SELECT timescaledb_post_restore();
  timescaledb_post_restore 
@@ -353,10 +344,9 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_1_1_chunk');
  constraint_2                          | c    | {device_id}                     | -                                                             | (_timescaledb_functions.get_partition_hash(device_id) >= 1073741823)                                 | f          | f        | t
 
 SELECT * FROM test.show_triggers('"test_schema"."two_Partitions"');
-      Trigger      | Type |               Function                
--------------------+------+---------------------------------------
- restore_trigger   |    7 | test_trigger
- ts_insert_blocker |    7 | _timescaledb_functions.insert_blocker
+     Trigger     | Type |   Function   
+-----------------+------+--------------
+ restore_trigger |    7 | test_trigger
 
 SELECT * FROM test.show_triggers('_timescaledb_internal._hyper_1_1_chunk');
      Trigger     | Type |   Function   

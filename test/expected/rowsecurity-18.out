@@ -147,8 +147,6 @@ Policies:
     POLICY "p2r" AS RESTRICTIVE
       TO regress_rls_dave
       USING (((cid <> 44) AND (cid < 50)))
-Triggers:
-    ts_insert_blocker BEFORE INSERT ON document FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
 Number of child tables: 6 (Use \d+ to list them.)
 
 SELECT * FROM pg_policies WHERE schemaname = 'regress_rls_schema' AND tablename = 'document' ORDER BY policyname;
@@ -974,8 +972,6 @@ Policies:
 Not-null constraints:
     "hyper_document_did_not_null" NOT NULL "did"
     "hyper_document_dlevel_not_null" NOT NULL "dlevel"
-Triggers:
-    ts_insert_blocker BEFORE INSERT ON hyper_document FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
 Child tables: _timescaledb_internal._hyper_2_10_chunk,
               _timescaledb_internal._hyper_2_11_chunk,
               _timescaledb_internal._hyper_2_12_chunk,
