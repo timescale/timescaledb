@@ -174,7 +174,7 @@ jobs:
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=$HOME/$PG_SRC_DIR -DPG_PATH=$HOME/$PG_INSTALL_DIR \
           ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
-          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)" -DTEST_GROUP_SIZE=$(nproc*4)
         make -j $(nproc) -C build
         make -C build install
 

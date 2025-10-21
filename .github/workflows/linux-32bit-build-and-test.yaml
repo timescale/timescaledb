@@ -163,7 +163,7 @@ jobs:
         git config --global --add safe.directory $(pwd)
         ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          -DREQUIRE_ALL_TESTS=ON \
+          -DREQUIRE_ALL_TESTS=ON -DTEST_GROUP_SIZE=$(nproc*4) \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $(nproc) -C build
         make -C build install
