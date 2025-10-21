@@ -333,8 +333,9 @@ ROLLBACK;
 BEGIN;
 CREATE TABLE t40(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.index='bloom(value)');
 ROLLBACK;
-reset timescaledb.enable_sparse_index_bloom;
 \set ON_ERROR_STOP 1
+
+reset timescaledb.enable_sparse_index_bloom;
 
 -- test UUID partitioning + compression
 BEGIN;
