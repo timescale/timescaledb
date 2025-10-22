@@ -1,1 +1,0 @@
-Implements: #8373 More precise estimates of row numbers for columnar storage based on Postgres statistics
