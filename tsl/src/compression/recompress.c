@@ -36,7 +36,12 @@
  * https://github.com/postgres/postgres/blob/4a0650d359c5981270039eeb634c3b7427aa0af5/src/backend/access/heap/vacuumlazy.c#L82
  */
 #define RECOMPRESS_EXCLUSIVE_LOCK_WAIT_INTERVAL 50 /* ms */
-#define RECOMPRESS_EXCLUSIVE_LOCK_TIMEOUT 5000	   /* ms */
+#ifdef TS_DEBUG
+/* Lock timeout reduced for the sake of faster testing. */
+#define RECOMPRESS_EXCLUSIVE_LOCK_TIMEOUT 100 /* ms */
+#else
+#define RECOMPRESS_EXCLUSIVE_LOCK_TIMEOUT 5000 /* ms */
+#endif
 
 static bool fetch_uncompressed_chunk_into_tuplesort(Tuplesortstate *tuplesortstate,
 													Relation uncompressed_chunk_rel,
