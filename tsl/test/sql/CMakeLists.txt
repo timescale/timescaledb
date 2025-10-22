@@ -27,6 +27,7 @@ set(TEST_FILES
     columnstore_aliases.sql
     compress_auto_sparse_index.sql
     compress_bitmap_scan.sql
+    compress_bloom_hash.sql
     compress_sparse_config.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -113,6 +114,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     scheduler_fixed.sql
     cagg_policy_incremental.sql
     compress_bgw_reorder_drop_chunks.sql
+    compress_bloom_legacy_v1.sql
     chunk_api.sql
     chunk_merge.sql
     chunk_utils_compression.sql
