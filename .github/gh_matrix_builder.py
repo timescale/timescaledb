@@ -60,6 +60,10 @@ default_ignored_tests = {
 # Some tests are ignored on PG earlier than 17 due to broken MergeAppend cost model there.
 ignored_before_pg17 = default_ignored_tests | {"merge_append_partially_compressed"}
 
+# Some tests are ignored on PG earlier than 16 due to changes in default relation
+# size estimates.
+ignored_before_pg16 = default_ignored_tests | {"columnar_scan_cost"}
+
 # Tests that we do not run as part of a Flake tests
 flaky_exclude_tests = {
     # Not executed as a flake test since it easily exhausts available
@@ -177,7 +181,7 @@ def macos_config(overrides):
 
 # always test debug build on latest of all supported pg versions
 m["include"].append(
-    build_debug_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg17})
+    build_debug_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg16})
 )
 
 m["include"].append(
@@ -225,7 +229,7 @@ m["include"].append(
 if not pull_request:
     # add debug test for first supported PG15 version
     m["include"].append(
-        build_debug_config({"pg": PG15_EARLIEST, "ignored_tests": ignored_before_pg17})
+        build_debug_config({"pg": PG15_EARLIEST, "ignored_tests": ignored_before_pg16})
     )
 
     # add debug test for first supported PG16 version
@@ -244,7 +248,7 @@ if not pull_request:
     # add debug tests for timescaledb on latest postgres release in MacOS
     m["include"].append(
         build_debug_config(
-            macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg17})
+            macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg16})
         )
     )
 
@@ -260,7 +264,7 @@ if not pull_request:
 
     # add release test for latest pg releases
     m["include"].append(
-        build_release_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg17})
+        build_release_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg16})
     )
     m["include"].append(
         build_release_config({"pg": PG16_LATEST, "ignored_tests": ignored_before_pg17})
@@ -279,7 +283,7 @@ if not pull_request:
         build_debug_config(
             {
                 "pg": 15,
-                "ignored_tests": ignored_before_pg17
+                "ignored_tests": ignored_before_pg16
                 | {
                     "bgw_custom",
                     "bgw_scheduler_restart",
