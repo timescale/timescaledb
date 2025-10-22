@@ -64,7 +64,3 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.invalidation_plugin_name()
    LANGUAGE C STRICT PARALLEL SAFE
    AS '@MODULE_PATHNAME@', 'ts_invalidation_plugin_name';
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.has_invalidation_trigger(regclass)
-   RETURNS bool
-   LANGUAGE C STRICT PARALLEL SAFE
-   AS '@MODULE_PATHNAME@', 'ts_has_invalidation_trigger';

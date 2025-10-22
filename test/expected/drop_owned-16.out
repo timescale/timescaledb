@@ -10,7 +10,6 @@ SELECT create_hypertable('hypertable_schema.default_perm_user', 'time', 'locatio
              create_hypertable             
 -------------------------------------------
  (1,hypertable_schema,default_perm_user,t)
-(1 row)
 
 INSERT INTO hypertable_schema.default_perm_user VALUES ('2001-01-01 01:01:01', 23.3, 1);
 RESET ROLE;
@@ -19,7 +18,6 @@ SELECT create_hypertable('hypertable_schema.superuser', 'time', 'location', 2);
          create_hypertable         
 -----------------------------------
  (2,hypertable_schema,superuser,t)
-(1 row)
 
 INSERT INTO hypertable_schema.superuser VALUES ('2001-01-01 01:01:01', 23.3, 1);
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
@@ -27,54 +25,45 @@ SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
 ----+-------------------+-------------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   1 | hypertable_schema | default_perm_user | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
   2 | hypertable_schema | superuser         | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(2 rows)
 
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
   1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                     | f       |      0 | f
   2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0 | f
-(2 rows)
 
 DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
  id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   2 | hypertable_schema | superuser  | _timescaledb_internal  | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(1 row)
 
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
   2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0 | f
-(1 row)
 
 DROP TABLE  hypertable_schema.superuser;
 --everything should be cleaned up
 SELECT * FROM _timescaledb_catalog.hypertable GROUP BY id;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+-------------------+--------------------------+--------
-(0 rows)
 
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk;
  id | hypertable_id | schema_name | table_name | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-------------+------------+---------------------+---------+--------+-----------
-(0 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
 ----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------
-(0 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice;
  id | dimension_id | range_start | range_end 
 ----+--------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
  chunk_id | dimension_slice_id | constraint_name | hypertable_constraint_name 
 ----------+--------------------+-----------------+----------------------------
-(0 rows)
 
 -- test drop owned in database without extension installed
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -91,7 +80,6 @@ SELECT * FROM create_hypertable('sensor_data','time');
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
              3 | public      | sensor_data | t
-(1 row)
 
 INSERT INTO sensor_data
 SELECT time,
@@ -102,7 +90,6 @@ FROM generate_series('2020-01-01'::timestamptz, '2020-01-24'::timestamptz, INTER
  Schema |    Name     | Type  | Access privileges | Column privileges | Policies 
 --------+-------------+-------+-------------------+-------------------+----------
  public | sensor_data | table |                   |                   | 
-(1 row)
 
 \dp _timescaledb_internal._hyper_3*
                                           Access privileges
@@ -113,7 +100,6 @@ FROM generate_series('2020-01-01'::timestamptz, '2020-01-24'::timestamptz, INTER
  _timescaledb_internal | _hyper_3_5_chunk | table |                   |                   | 
  _timescaledb_internal | _hyper_3_6_chunk | table |                   |                   | 
  _timescaledb_internal | _hyper_3_7_chunk | table |                   |                   | 
-(5 rows)
 
 GRANT SELECT ON sensor_data TO :ROLE_DEFAULT_PERM_USER;
 \dp sensor_data
@@ -122,7 +108,6 @@ GRANT SELECT ON sensor_data TO :ROLE_DEFAULT_PERM_USER;
 --------+-------------+-------+--------------------------------+-------------------+----------
  public | sensor_data | table | super_user=arwdDxt/super_user +|                   | 
         |             |       | default_perm_user=r/super_user |                   | 
-(1 row)
 
 \dp _timescaledb_internal._hyper_3*
                                                 Access privileges
@@ -138,7 +123,6 @@ GRANT SELECT ON sensor_data TO :ROLE_DEFAULT_PERM_USER;
                        |                  |       | default_perm_user=r/super_user |                   | 
  _timescaledb_internal | _hyper_3_7_chunk | table | super_user=arwdDxt/super_user +|                   | 
                        |                  |       | default_perm_user=r/super_user |                   | 
-(5 rows)
 
 -- Insert more chunks after adding the user to the hypertable. These
 -- will now get the privileges of the hypertable.
@@ -162,7 +146,6 @@ FROM generate_series('2020-01-20'::timestamptz, '2020-02-05'::timestamptz, INTER
                        |                  |       | default_perm_user=r/super_user |                   | 
  _timescaledb_internal | _hyper_3_8_chunk | table | super_user=arwdDxt/super_user +|                   | 
                        |                  |       | default_perm_user=r/super_user |                   | 
-(6 rows)
 
 -- This should revoke the privileges on both the hypertable and the chunks.
 DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
@@ -171,7 +154,6 @@ DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
  Schema |    Name     | Type  |       Access privileges       | Column privileges | Policies 
 --------+-------------+-------+-------------------------------+-------------------+----------
  public | sensor_data | table | super_user=arwdDxt/super_user |                   | 
-(1 row)
 
 \dp _timescaledb_internal._hyper_3*
                                                 Access privileges
@@ -183,5 +165,4 @@ DROP OWNED BY :ROLE_DEFAULT_PERM_USER;
  _timescaledb_internal | _hyper_3_6_chunk | table | super_user=arwdDxt/super_user |                   | 
  _timescaledb_internal | _hyper_3_7_chunk | table | super_user=arwdDxt/super_user |                   | 
  _timescaledb_internal | _hyper_3_8_chunk | table | super_user=arwdDxt/super_user |                   | 
-(6 rows)
 

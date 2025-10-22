@@ -23,7 +23,6 @@ SELECT * FROM create_hypertable('"public"."two_Partitions"'::regclass, 'timeCust
  hypertable_id | schema_name |   table_name   | created 
 ---------------+-------------+----------------+---------
              1 | public      | two_Partitions | t
-(1 row)
 
 \set QUIET off
 BEGIN;
@@ -46,49 +45,41 @@ SELECT * FROM hypertable_detailed_size('"public"."two_Partitions"');
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
        32768 |      475136 |       40960 |      548864 | 
-(1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_device_id_timeCustom_idx"');
  hypertable_index_size 
 -----------------------
                  73728
-(1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_device_id_idx"');
  hypertable_index_size 
 -----------------------
                  73728
-(1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_idx"');
  hypertable_index_size 
 -----------------------
                  73728
-(1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_0_idx"');
  hypertable_index_size 
 -----------------------
                  73728
-(1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_1_idx"');
  hypertable_index_size 
 -----------------------
                  73728
-(1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_2_idx"');
  hypertable_index_size 
 -----------------------
                  49152
-(1 row)
 
 SELECT * FROM hypertable_index_size('"public"."two_Partitions_timeCustom_series_bool_idx"');
  hypertable_index_size 
 -----------------------
                  57344
-(1 row)
 
 SELECT * FROM chunks_detailed_size('"public"."two_Partitions"') order by chunk_name;
      chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
@@ -97,7 +88,6 @@ SELECT * FROM chunks_detailed_size('"public"."two_Partitions"') order by chunk_n
  _timescaledb_internal | _hyper_1_2_chunk |        8192 |      106496 |        8192 |      122880 | 
  _timescaledb_internal | _hyper_1_3_chunk |        8192 |       98304 |        8192 |      114688 | 
  _timescaledb_internal | _hyper_1_4_chunk |        8192 |       98304 |        8192 |      114688 | 
-(4 rows)
 
 CREATE TABLE timestamp_partitioned(time TIMESTAMP, value TEXT);
 SELECT * FROM create_hypertable('timestamp_partitioned', 'time', 'value', 2);
@@ -105,7 +95,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
              2 | public      | timestamp_partitioned | t
-(1 row)
 
 INSERT INTO timestamp_partitioned VALUES('2004-10-19 10:23:54', '10');
 INSERT INTO timestamp_partitioned VALUES('2004-12-19 10:23:54', '30');
@@ -114,7 +103,6 @@ SELECT * FROM chunks_detailed_size('timestamp_partitioned') order by chunk_name;
 -----------------------+------------------+-------------+-------------+-------------+-------------+-----------
  _timescaledb_internal | _hyper_2_5_chunk |        8192 |       32768 |        8192 |       49152 | 
  _timescaledb_internal | _hyper_2_6_chunk |        8192 |       32768 |        8192 |       49152 | 
-(2 rows)
 
 CREATE TABLE timestamp_partitioned_2(time TIMESTAMP, value CHAR(9));
 SELECT * FROM create_hypertable('timestamp_partitioned_2', 'time', 'value', 2);
@@ -122,7 +110,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
  hypertable_id | schema_name |       table_name        | created 
 ---------------+-------------+-------------------------+---------
              3 | public      | timestamp_partitioned_2 | t
-(1 row)
 
 INSERT INTO timestamp_partitioned_2 VALUES('2004-10-19 10:23:54', '10');
 INSERT INTO timestamp_partitioned_2 VALUES('2004-12-19 10:23:54', '30');
@@ -131,7 +118,6 @@ SELECT * FROM chunks_detailed_size('timestamp_partitioned_2') order by chunk_nam
 -----------------------+------------------+-------------+-------------+-------------+-------------+-----------
  _timescaledb_internal | _hyper_3_7_chunk |        8192 |       32768 |           0 |       40960 | 
  _timescaledb_internal | _hyper_3_8_chunk |        8192 |       32768 |           0 |       40960 | 
-(2 rows)
 
 CREATE TABLE toast_test(time TIMESTAMP, value TEXT);
 -- Set storage type to EXTERNAL to prevent PostgreSQL from compressing my
@@ -142,7 +128,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              4 | public      | toast_test | t
-(1 row)
 
 INSERT INTO toast_test VALUES('2004-10-19 10:23:54', $$
 this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k. this must be over 2k.
@@ -151,7 +136,6 @@ SELECT * FROM chunks_detailed_size('toast_test');
      chunk_schema      |    chunk_name    | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -----------------------+------------------+-------------+-------------+-------------+-------------+-----------
  _timescaledb_internal | _hyper_4_9_chunk |        8192 |       16384 |       24576 |       49152 | 
-(1 row)
 
 --
 -- Tests for approximate_row_count()
@@ -170,20 +154,17 @@ SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                      0
-(1 row)
 
 ANALYZE approx_count;
 SELECT count(*) FROM approx_count;
  count 
 -------
      7
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                      7
-(1 row)
 
 DROP TABLE approx_count;
 -- Regular table with basic inheritance
@@ -194,20 +175,17 @@ SELECT count(*) FROM approx_count;
  count 
 -------
      1
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                      0
-(1 row)
 
 ANALYZE approx_count;
 SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                      1
-(1 row)
 
 CREATE TABLE approx_count_child(id2 int) INHERITS (approx_count);
 INSERT INTO approx_count_child VALUES(0);
@@ -215,20 +193,17 @@ SELECT count(*) FROM approx_count;
  count 
 -------
      2
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                      1
-(1 row)
 
 ANALYZE approx_count_child;
 SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                      2
-(1 row)
 
 DROP TABLE approx_count CASCADE;
 NOTICE:  drop cascades to table approx_count_child
@@ -246,7 +221,6 @@ SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                      0
-(1 row)
 
 ANALYZE approx_count_a;
 ANALYZE approx_count_b;
@@ -256,49 +230,41 @@ SELECT count(*) FROM approx_count;
  count 
 -------
      4
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                      4
-(1 row)
 
 SELECT count(*) FROM approx_count_a;
  count 
 -------
      3
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count_a');
  approximate_row_count 
 -----------------------
                      3
-(1 row)
 
 SELECT count(*) FROM approx_count_b;
  count 
 -------
      2
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count_b');
  approximate_row_count 
 -----------------------
                      2
-(1 row)
 
 SELECT count(*) FROM approx_count_c;
  count 
 -------
      1
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count_c');
  approximate_row_count 
 -----------------------
                      1
-(1 row)
 
 DROP TABLE approx_count CASCADE;
 NOTICE:  drop cascades to 3 other objects
@@ -324,56 +290,47 @@ SELECT count(*) FROM approx_count_dp;
  count 
 -------
      9
-(1 row)
 
 SELECT count(*) FROM approx_count_dp0;
  count 
 -------
      3
-(1 row)
 
 SELECT count(*) FROM approx_count_dp1;
  count 
 -------
      3
-(1 row)
 
 SELECT count(*) FROM approx_count_dp2;
  count 
 -------
      3
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count_dp');
  approximate_row_count 
 -----------------------
                      0
-(1 row)
 
 ANALYZE approx_count_dp;
 SELECT * FROM approximate_row_count('approx_count_dp');
  approximate_row_count 
 -----------------------
                      9
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count_dp0');
  approximate_row_count 
 -----------------------
                      3
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count_dp1');
  approximate_row_count 
 -----------------------
                      3
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count_dp2');
  approximate_row_count 
 -----------------------
                      3
-(1 row)
 
 CREATE TABLE approx_count_dp_nested(time TIMESTAMP, device_id int, value int) PARTITION BY RANGE(time);
 CREATE TABLE approx_count_dp_nested_0 PARTITION OF approx_count_dp_nested FOR VALUES FROM ('2004-01-01 00:00:00') TO ('2005-01-01 00:00:00') PARTITION BY RANGE (device_id);
@@ -398,7 +355,6 @@ SELECT * FROM approximate_row_count('approx_count_dp_nested');
  approximate_row_count 
 -----------------------
                      0
-(1 row)
 
 ANALYZE approx_count_dp_nested;
 SELECT
@@ -422,7 +378,6 @@ SELECT
 -----------+-------------+---------------+---------------+-------------+---------------+---------------
         12 |           6 |             3 |             3 |           6 |             3 |             3
         12 |           6 |             3 |             3 |           6 |             3 |             3
-(2 rows)
 
 -- Hypertable
 --
@@ -432,7 +387,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              5 | public      | approx_count | t
-(1 row)
 
 INSERT INTO approx_count VALUES('2004-01-01 10:00:01', 1);
 INSERT INTO approx_count VALUES('2004-01-01 10:00:02', 2);
@@ -448,20 +402,17 @@ SELECT count(*) FROM approx_count;
  count 
 -------
     10
-(1 row)
 
 SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                      0
-(1 row)
 
 ANALYZE approx_count;
 SELECT * FROM approximate_row_count('approx_count');
  approximate_row_count 
 -----------------------
                     10
-(1 row)
 
 \set ON_ERROR_STOP 0
 SELECT * FROM approximate_row_count('unexisting');
@@ -472,7 +423,6 @@ SELECT * FROM approximate_row_count(NULL);
  approximate_row_count 
 -----------------------
                       
-(1 row)
 
 \set ON_ERROR_STOP 1
 -- Test size functions with invalid or non-existing OID
@@ -480,152 +430,125 @@ SELECT * FROM hypertable_size(0);
  hypertable_size 
 -----------------
                 
-(1 row)
 
 SELECT * FROM hypertable_detailed_size(0) ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM chunks_detailed_size(0) ORDER BY node_name;
  chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 --------------+------------+-------------+-------------+-------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_compression_stats(0) ORDER BY node_name;
  total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM chunk_compression_stats(0) ORDER BY node_name;
  chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_index_size(0);
  hypertable_index_size 
 -----------------------
                       
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_size(0);
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
             |           |            |           
-(1 row)
 
 SELECT * FROM hypertable_size(1);
  hypertable_size 
 -----------------
                 
-(1 row)
 
 SELECT * FROM hypertable_detailed_size(1) ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM chunks_detailed_size(1) ORDER BY node_name;
  chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 --------------+------------+-------------+-------------+-------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_compression_stats(1) ORDER BY node_name;
  total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM chunk_compression_stats(1) ORDER BY node_name;
  chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_index_size(1);
  hypertable_index_size 
 -----------------------
                       
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_size(1);
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
           0 |         0 |          0 |          0
-(1 row)
 
 -- Test size functions with NULL input
 SELECT * FROM hypertable_size(NULL);
  hypertable_size 
 -----------------
                 
-(1 row)
 
 SELECT * FROM hypertable_detailed_size(NULL) ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM chunks_detailed_size(NULL) ORDER BY node_name;
  chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 --------------+------------+-------------+-------------+-------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_compression_stats(NULL) ORDER BY node_name;
  total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM chunk_compression_stats(NULL) ORDER BY node_name;
  chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_index_size(NULL);
  hypertable_index_size 
 -----------------------
                       
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_size(NULL);
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
             |           |            |           
-(1 row)
 
 -- Test approximate size functions with invalid input
 SELECT * FROM hypertable_approximate_size(0);
  hypertable_approximate_size 
 -----------------------------
                             
-(1 row)
 
 SELECT * FROM hypertable_approximate_detailed_size(0);
  table_bytes | index_bytes | toast_bytes | total_bytes 
 -------------+-------------+-------------+-------------
              |             |             |            
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_approximate_size(0);
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
             |           |            |           
-(1 row)
 
 SELECT * FROM hypertable_approximate_size(NULL);
  hypertable_approximate_size 
 -----------------------------
                             
-(1 row)
 
 SELECT * FROM hypertable_approximate_detailed_size(NULL);
  table_bytes | index_bytes | toast_bytes | total_bytes 
 -------------+-------------+-------------+-------------
              |             |             |            
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_approximate_size(NULL);
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
-(0 rows)
 
 -- Test size on view, sequence and composite type
 CREATE VIEW view1 as SELECT 1;
@@ -633,13 +556,11 @@ SELECT * FROM _timescaledb_functions.relation_approximate_size('view1');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
           0 |         0 |          0 |          0
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_size('view1');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
           0 |         0 |          0 |          0
-(1 row)
 
 CREATE SEQUENCE test_id_seq
     INCREMENT 1
@@ -650,26 +571,22 @@ SELECT * FROM _timescaledb_functions.relation_approximate_size('test_id_seq');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |      8192 |          0 |          0
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_size('test_id_seq');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |      8192 |          0 |          0
-(1 row)
 
 CREATE TYPE test_type AS (time timestamp, temp float);
 SELECT * FROM _timescaledb_functions.relation_approximate_size('test_type');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
           0 |         0 |          0 |          0
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_size('test_type');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
           0 |         0 |          0 |          0
-(1 row)
 
 -- Test size functions on regular table
 CREATE TABLE hypersize(time timestamptz, device int);
@@ -681,51 +598,42 @@ SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_siz
  pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size | pg_relation_size 
 ------------------+---------------+-----------------+------------------------+------------------
                 0 |             0 |            8192 |                   8192 |             8192
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_size('hypersize');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
-(1 row)
 
 SELECT * FROM hypertable_size('hypersize');
  hypertable_size 
 -----------------
                 
-(1 row)
 
 SELECT * FROM hypertable_detailed_size('hypersize') ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
  chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 --------------+------------+-------------+-------------+-------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
  total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
  chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_index_size('hypersize_time_idx');
  hypertable_index_size 
 -----------------------
                   8192
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
-(1 row)
 
 SELECT * FROM hypertable_approximate_size('hypersize');
 ERROR:  "hypersize" is not a hypertable or a continuous aggregate
@@ -740,70 +648,58 @@ SELECT * FROM create_hypertable('hypersize', 'time');
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              6 | public      | hypersize  | t
-(1 row)
 
 SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_size('hypersize'), pg_total_relation_size('hypersize'), pg_relation_size('hypersize_time_idx');
  pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size | pg_relation_size 
 ------------------+---------------+-----------------+------------------------+------------------
                 0 |             0 |            8192 |                   8192 |             8192
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_size('hypersize');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
-(1 row)
 
 SELECT * FROM hypertable_size('hypersize');
  hypertable_size 
 -----------------
             8192
-(1 row)
 
 SELECT * FROM hypertable_detailed_size('hypersize') ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
            0 |        8192 |           0 |        8192 | 
-(1 row)
 
 SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
  chunk_schema | chunk_name | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 --------------+------------+-------------+-------------+-------------+-------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
  total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
  chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_index_size('hypersize_time_idx');
  hypertable_index_size 
 -----------------------
                   8192
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
-(1 row)
 
 SELECT * FROM hypertable_approximate_size('hypersize');
  hypertable_approximate_size 
 -----------------------------
                         8192
-(1 row)
 
 SELECT * FROM hypertable_approximate_detailed_size('hypersize');
  table_bytes | index_bytes | toast_bytes | total_bytes 
 -------------+-------------+-------------+-------------
            0 |        8192 |           0 |        8192
-(1 row)
 
 -- Test size functions on non-empty hypertable
 INSERT INTO hypersize VALUES('2021-02-25', 1);
@@ -811,7 +707,6 @@ SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_siz
  pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size | pg_relation_size 
 ------------------+---------------+-----------------+------------------------+------------------
                 0 |             0 |            8192 |                   8192 |             8192
-(1 row)
 
 SELECT pg_relation_size(ch), pg_table_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
 FROM show_chunks('hypersize') ch
@@ -819,84 +714,70 @@ ORDER BY ch;
  pg_relation_size | pg_table_size | pg_indexes_size | pg_total_relation_size 
 ------------------+---------------+-----------------+------------------------
              8192 |          8192 |           16384 |                  24576
-(1 row)
 
 SELECT * FROM show_chunks('hypersize') ch JOIN LATERAL _timescaledb_functions.relation_size(ch) ON true;
                    ch                    | total_size | heap_size | index_size | toast_size 
 -----------------------------------------+------------+-----------+------------+------------
  _timescaledb_internal._hyper_6_11_chunk |      24576 |      8192 |      16384 |          0
-(1 row)
 
 SELECT * FROM hypertable_size('hypersize');
  hypertable_size 
 -----------------
            32768
-(1 row)
 
 SELECT * FROM hypertable_detailed_size('hypersize') ORDER BY node_name;
  table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -------------+-------------+-------------+-------------+-----------
         8192 |       24576 |           0 |       32768 | 
-(1 row)
 
 SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
      chunk_schema      |    chunk_name     | table_bytes | index_bytes | toast_bytes | total_bytes | node_name 
 -----------------------+-------------------+-------------+-------------+-------------+-------------+-----------
  _timescaledb_internal | _hyper_6_11_chunk |        8192 |       16384 |           0 |       24576 | 
-(1 row)
 
 SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
  total_chunks | number_compressed_chunks | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+--------------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
  chunk_schema | chunk_name | compression_status | before_compression_table_bytes | before_compression_index_bytes | before_compression_toast_bytes | before_compression_total_bytes | after_compression_table_bytes | after_compression_index_bytes | after_compression_toast_bytes | after_compression_total_bytes | node_name 
 --------------+------------+--------------------+--------------------------------+--------------------------------+--------------------------------+--------------------------------+-------------------------------+-------------------------------+-------------------------------+-------------------------------+-----------
-(0 rows)
 
 SELECT * FROM hypertable_index_size('hypersize_time_idx');
  hypertable_index_size 
 -----------------------
                  24576
-(1 row)
 
 SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
-(1 row)
 
 SELECT * FROM hypertable_approximate_size('hypersize');
  hypertable_approximate_size 
 -----------------------------
                        32768
-(1 row)
 
 SELECT * FROM hypertable_approximate_detailed_size('hypersize');
  table_bytes | index_bytes | toast_bytes | total_bytes 
 -------------+-------------+-------------+-------------
         8192 |       24576 |           0 |       32768
-(1 row)
 
 -- Test approx size functions with toast entries
 SELECT * FROM _timescaledb_functions.relation_approximate_size('toast_test');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
       16384 |         0 |       8192 |       8192
-(1 row)
 
 SELECT * FROM hypertable_approximate_size('toast_test');
  hypertable_approximate_size 
 -----------------------------
                        65536
-(1 row)
 
 SELECT * FROM hypertable_approximate_detailed_size('toast_test');
  table_bytes | index_bytes | toast_bytes | total_bytes 
 -------------+-------------+-------------+-------------
         8192 |       24576 |       32768 |       65536
-(1 row)
 
 -- Test approx size function against a regular table
 \set ON_ERROR_STOP 0
@@ -913,19 +794,16 @@ SELECT * FROM hypertable_approximate_size('drop_chunks_table');
  hypertable_approximate_size 
 -----------------------------
                        81920
-(1 row)
 
 SELECT drop_chunks('drop_chunks_table', older_than => 19);
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_7_12_chunk
-(1 row)
 
 SELECT * FROM hypertable_approximate_size('drop_chunks_table');
  hypertable_approximate_size 
 -----------------------------
                        57344
-(1 row)
 
 -- github issue #4857
 -- below procedure should not crash

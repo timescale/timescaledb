@@ -7,7 +7,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
          create_hypertable         
 -----------------------------------
  (1,public,many_partitions_test,t)
-(1 row)
 
 --NOTE: how much slower the first two queries are -- they are creating chunks
 INSERT INTO many_partitions_test
@@ -21,13 +20,11 @@ SELECT * FROM  many_partitions_test ORDER BY time DESC LIMIT 2;
 --------------------------+------+--------
  Wed Dec 31 16:05:00 1969 |  300 | 99
  Wed Dec 31 16:04:59 1969 |  299 | 98
-(2 rows)
 
 SELECT count(*) FROM  many_partitions_test;
  count 
 -------
    300
-(1 row)
 
 CREATE TABLE many_partitions_test_1m (time timestamp, temp float8, device text NOT NULL);
 SELECT create_hypertable('many_partitions_test_1m', 'time', 'device', 1000);
@@ -35,15 +32,13 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
           create_hypertable           
 --------------------------------------
  (2,public,many_partitions_test_1m,t)
-(1 row)
 
 EXPLAIN (verbose on, buffers off, costs off)
 INSERT INTO many_partitions_test_1m(time, temp, device)
 SELECT time_bucket('1 minute', time) AS period, avg(temp), device
 FROM many_partitions_test
 GROUP BY period, device;
-                                                                     QUERY PLAN                                                                     
-----------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ModifyHypertable)
    ->  Insert on public.many_partitions_test_1m
          ->  HashAggregate
@@ -408,7 +403,6 @@ GROUP BY period, device;
                                  Output: _hyper_1_177_chunk."time", _hyper_1_177_chunk.temp, _hyper_1_177_chunk.device
                            ->  Seq Scan on _timescaledb_internal._hyper_1_178_chunk
                                  Output: _hyper_1_178_chunk."time", _hyper_1_178_chunk.temp, _hyper_1_178_chunk.device
-(364 rows)
 
 INSERT INTO many_partitions_test_1m(time, temp, device)
 SELECT time_bucket('1 minute', time) AS period, avg(temp), device
@@ -427,5 +421,4 @@ SELECT * FROM many_partitions_test_1m ORDER BY time, device LIMIT 10;
  Wed Dec 31 16:00:00 1969 |   16 | 16
  Wed Dec 31 16:00:00 1969 |   17 | 17
  Wed Dec 31 16:00:00 1969 |   18 | 18
-(10 rows)
 

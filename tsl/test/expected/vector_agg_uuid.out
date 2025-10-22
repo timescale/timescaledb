@@ -26,7 +26,6 @@ SELECT public.create_hypertable(
    create_hypertable    
 ------------------------
  (1,public,plan_plus,t)
-(1 row)
 
 ALTER TABLE public.plan_plus SET (
   timescaledb.compress,
@@ -51,7 +50,6 @@ SELECT count(compress_chunk(c)) FROM show_chunks('plan_plus') AS c;
  count 
 -------
      5
-(1 row)
 
 -- Get one of the UUIDs
 SELECT device FROM plan_plus LIMIT 1 \gset
@@ -72,7 +70,6 @@ LIMIT 1;
  ?column? |  field  | value 
 ----------+---------+-------
  t        | field 1 |   340
-(1 row)
 
 SELECT
     device = :'device'::uuid,
@@ -88,20 +85,17 @@ LIMIT 1;
  ?column? | value 
 ----------+-------
  t        |   340
-(1 row)
 
 RESET timescaledb.debug_require_vector_agg;
 SELECT count(*) FROM (SELECT device FROM plan_plus GROUP BY device) t;
  count 
 -------
     10
-(1 row)
 
 SELECT count(*) FROM (SELECT device, field FROM plan_plus GROUP BY device, field) t;
  count 
 -------
   1000
-(1 row)
 
 -- UUID groupping
 create table uuid_table(ts int, u uuid);
@@ -109,7 +103,6 @@ select count(*) from create_hypertable('uuid_table', 'ts', chunk_time_interval =
  count 
 -------
      1
-(1 row)
 
 alter table uuid_table set (timescaledb.compress);
 insert into uuid_table values
@@ -130,7 +123,6 @@ select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
  count 
 -------
      4
-(1 row)
 
 SET timescaledb.debug_require_vector_agg = 'require';
 SELECT ver, u, ts, uuid_ts from uuid_table
@@ -147,7 +139,6 @@ order by 1,2;
    7 | 0197a7a9-b48b-7c75-a810-8acf630e634f |  5 | Wed Jun 25 08:16:46.347778 2025 PDT
    7 | 0197a7a9-b48b-7c75-a810-8acf630e634f |  6 | Wed Jun 25 08:16:46.347778 2025 PDT
    7 | 0197a7a9-b48b-7c76-b616-69e64a802b5c |  7 | Wed Jun 25 08:16:46.347778 2025 PDT
-(9 rows)
 
 SELECT ver, u, count(*), sum(ts) from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
@@ -159,6 +150,5 @@ group by 1,2 order by 1,2;
    7 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f |     4 |  10
    7 | 0197a7a9-b48b-7c75-a810-8acf630e634f |     2 |  11
    7 | 0197a7a9-b48b-7c76-b616-69e64a802b5c |     1 |   7
-(5 rows)
 
 RESET timescaledb.debug_require_vector_agg;

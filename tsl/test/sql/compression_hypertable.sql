@@ -7,6 +7,8 @@
 \ir include/compression_utils.sql
 CREATE TYPE customtype;
 
+SET client_min_messages TO WARNING;
+
 CREATE OR REPLACE FUNCTION customtype_in(cstring) RETURNS customtype
 AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_in'
 LANGUAGE C IMMUTABLE STRICT;
@@ -18,6 +20,8 @@ LANGUAGE C IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION customtype_eq(customtype, customtype) RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_eq'
 LANGUAGE C IMMUTABLE STRICT;
+
+SET client_min_messages TO DEFAULT;
 
 -- for testing purposes we need a fixed length pass-by-ref type, and one whose
 -- alignment is greater than it's size. This type serves both purposes.

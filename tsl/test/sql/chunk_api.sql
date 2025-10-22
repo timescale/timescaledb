@@ -35,7 +35,7 @@ SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419
 -- Same dimension twice
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}');
 -- Bad bounds value
-SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["-1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 -- Bad bounds value
 SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["badtimestamp", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 -- Bad slices format

@@ -9,7 +9,6 @@ int_value integer,
 float_value double precision);
 SELECT FROM create_hypertable(relation=>'testtable', time_column_name=> 'time');
 --
-(1 row)
 
 ALTER TABLE testtable SET (timescaledb.compress, timescaledb.compress_segmentby='segment_by_value');
 INSERT INTO testtable
@@ -26,7 +25,6 @@ SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
   sum   |  sum   |  sum   
 --------+--------+--------
  304695 | 304695 | 304695
-(1 row)
 
 --
 -- Enable this GUC to run this test with Hypercore TAM. The EXPLAINs
@@ -42,7 +40,6 @@ SELECT compress_chunk(ch) FROM show_chunks('testtable') ch LIMIT 3;
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
-(3 rows)
 
 VACUUM ANALYZE testtable;
 -- Vectorized aggregation possible
@@ -50,12 +47,10 @@ SELECT sum(segment_by_value) FROM testtable;
   sum   
 --------
  304695
-(1 row)
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Append
@@ -108,13 +103,11 @@ SELECT sum(segment_by_value) FROM testtable;
                Output: PARTIAL sum(_hyper_1_10_chunk.segment_by_value)
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.segment_by_value
-(52 rows)
 
 -- Vectorization possible - filter on segment_by
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Append
@@ -177,13 +170,11 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0;
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.segment_by_value
                      Filter: (_hyper_1_10_chunk.segment_by_value > 0)
-(62 rows)
 
 -- Vectorization with filter on compressed columns
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0 AND int_value > 0;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Append
@@ -249,12 +240,10 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0 AND int_v
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.segment_by_value
                      Filter: ((_hyper_1_10_chunk.segment_by_value > 0) AND (_hyper_1_10_chunk.int_value > 0))
-(65 rows)
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE int_value > 0;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Append
@@ -317,12 +306,10 @@ SELECT sum(segment_by_value) FROM testtable WHERE int_value > 0;
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.segment_by_value
                      Filter: (_hyper_1_10_chunk.int_value > 0)
-(62 rows)
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable WHERE float_value > 0;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Append
@@ -385,13 +372,11 @@ SELECT sum(segment_by_value) FROM testtable WHERE float_value > 0;
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.segment_by_value
                      Filter: (_hyper_1_10_chunk.float_value > '0'::double precision)
-(62 rows)
 
 -- Vectorization possible with grouping by one fixed-size column
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize HashAggregate
    Output: sum(testtable.segment_by_value), testtable.float_value
    Group Key: testtable.float_value
@@ -452,12 +437,10 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
                Group Key: _hyper_1_10_chunk.float_value
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.float_value, _hyper_1_10_chunk.segment_by_value
-(60 rows)
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize HashAggregate
    Output: sum(testtable.segment_by_value), testtable.int_value
    Group Key: testtable.int_value
@@ -518,13 +501,11 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
                Group Key: _hyper_1_10_chunk.int_value
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.segment_by_value
-(60 rows)
 
 -- Vectorization possible with grouping by multiple columns
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize HashAggregate
    Output: sum(testtable.segment_by_value), testtable.int_value, testtable.float_value
    Group Key: testtable.int_value, testtable.float_value
@@ -585,13 +566,11 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY int_value, float_value;
                Group Key: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.float_value
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.float_value, _hyper_1_10_chunk.segment_by_value
-(60 rows)
 
 -- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
 SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize HashAggregate
    Output: sum(testtable.int_value), testtable.segment_by_value
    Group Key: testtable.segment_by_value
@@ -652,12 +631,10 @@ SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
                Group Key: _hyper_1_10_chunk.segment_by_value
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.segment_by_value, _hyper_1_10_chunk.int_value
-(60 rows)
 
 :EXPLAIN
 SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
-                                                                                                                                                           QUERY PLAN                                                                                                                                                           
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: (sum(testtable.segment_by_value)), testtable.segment_by_value
    Sort Key: (sum(testtable.segment_by_value)), testtable.segment_by_value
@@ -721,7 +698,6 @@ SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_b
                      Group Key: _hyper_1_10_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                            Output: _hyper_1_10_chunk.segment_by_value
-(63 rows)
 
 SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
  sum  | segment_by_value 
@@ -837,12 +813,10 @@ SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_b
  5978 |               98
  6039 |               99
  6100 |              100
-(111 rows)
 
 :EXPLAIN
 SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
-                                                                                                                                                           QUERY PLAN                                                                                                                                                           
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Output: testtable.segment_by_value, (sum(testtable.segment_by_value))
    Sort Key: testtable.segment_by_value, (sum(testtable.segment_by_value))
@@ -906,7 +880,6 @@ SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_b
                      Group Key: _hyper_1_10_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                            Output: _hyper_1_10_chunk.segment_by_value
-(63 rows)
 
 SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
  segment_by_value | sum  
@@ -1022,19 +995,16 @@ SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_b
                98 | 5978
                99 | 6039
               100 | 6100
-(111 rows)
 
 -- Vectorized aggregation possible
 SELECT sum(int_value) FROM testtable;
   sum   
 --------
  304695
-(1 row)
 
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value)
    ->  Append
@@ -1087,19 +1057,16 @@ SELECT sum(int_value) FROM testtable;
                Output: PARTIAL sum(_hyper_1_10_chunk.int_value)
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.int_value
-(52 rows)
 
 -- Vectorized aggregation possible
 SELECT sum(float_value) FROM testtable;
   sum   
 --------
  304695
-(1 row)
 
 :EXPLAIN
 SELECT sum(float_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.float_value)
    ->  Append
@@ -1152,7 +1119,6 @@ SELECT sum(float_value) FROM testtable;
                Output: PARTIAL sum(_hyper_1_10_chunk.float_value)
                ->  Seq Scan on _timescaledb_internal._hyper_1_10_chunk
                      Output: _hyper_1_10_chunk.float_value
-(52 rows)
 
 ---
 -- Tests with all chunks compressed
@@ -1173,7 +1139,6 @@ NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_1_8_chunk
  _timescaledb_internal._hyper_1_9_chunk
  _timescaledb_internal._hyper_1_10_chunk
-(10 rows)
 
 VACUUM ANALYZE testtable;
 -- Vectorized aggregation possible
@@ -1181,12 +1146,10 @@ SELECT sum(segment_by_value) FROM testtable;
   sum   
 --------
  304695
-(1 row)
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Append
@@ -1260,19 +1223,16 @@ SELECT sum(segment_by_value) FROM testtable;
                      Output: _hyper_1_10_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(73 rows)
 
 -- Vectorized aggregation possible
 SELECT sum(int_value) FROM testtable;
   sum   
 --------
  304695
-(1 row)
 
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value)
    ->  Append
@@ -1346,7 +1306,6 @@ SELECT sum(int_value) FROM testtable;
                      Output: _hyper_1_10_chunk.int_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(73 rows)
 
 ---
 -- Tests with some chunks are partially compressed
@@ -1358,12 +1317,10 @@ SELECT sum(segment_by_value) FROM testtable;
   sum   
 --------
  304695
-(1 row)
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Append
@@ -1441,19 +1398,16 @@ SELECT sum(segment_by_value) FROM testtable;
                      Output: _hyper_1_10_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(77 rows)
 
 -- Vectorized aggregation possible
 SELECT sum(int_value) FROM testtable;
   sum   
 --------
  304695
-(1 row)
 
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value)
    ->  Append
@@ -1531,19 +1485,16 @@ SELECT sum(int_value) FROM testtable;
                      Output: _hyper_1_10_chunk.int_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(77 rows)
 
 --Vectorized aggregation not possible for expression
 SELECT sum(abs(int_value)) FROM testtable;
   sum   
 --------
  311405
-(1 row)
 
 :EXPLAIN
 SELECT sum(abs(int_value)) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(abs(testtable.int_value))
    ->  Append
@@ -1611,14 +1562,12 @@ SELECT sum(abs(int_value)) FROM testtable;
                      Output: _hyper_1_10_chunk.int_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(67 rows)
 
 -- Vectorized aggregation NOT possible
 SET timescaledb.enable_vectorized_aggregation = OFF;
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value)
    ->  Append
@@ -1686,7 +1635,6 @@ SELECT sum(int_value) FROM testtable;
                      Output: _hyper_1_10_chunk.int_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(67 rows)
 
 RESET timescaledb.enable_vectorized_aggregation;
 -- Vectorized aggregation without bulk decompression only possible for
@@ -1694,8 +1642,7 @@ RESET timescaledb.enable_vectorized_aggregation;
 SET timescaledb.enable_bulk_decompression = OFF;
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value)
    ->  Append
@@ -1763,12 +1710,10 @@ SELECT sum(int_value) FROM testtable;
                      Output: _hyper_1_10_chunk.int_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(67 rows)
 
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Append
@@ -1846,20 +1791,17 @@ SELECT sum(segment_by_value) FROM testtable;
                      Output: _hyper_1_10_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(77 rows)
 
 SELECT sum(segment_by_value) FROM testtable;
   sum   
 --------
  304695
-(1 row)
 
 RESET timescaledb.enable_bulk_decompression;
 -- Using the same sum function multiple times is supported by vectorization
 :EXPLAIN
 SELECT sum(int_value), sum(int_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value), sum(testtable.int_value)
    ->  Append
@@ -1937,13 +1879,11 @@ SELECT sum(int_value), sum(int_value) FROM testtable;
                      Output: _hyper_1_10_chunk.int_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(77 rows)
 
 -- Using the same sum function multiple times is supported by vectorization
 :EXPLAIN
 SELECT sum(segment_by_value), sum(segment_by_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value), sum(testtable.segment_by_value)
    ->  Append
@@ -2021,13 +1961,11 @@ SELECT sum(segment_by_value), sum(segment_by_value) FROM testtable;
                      Output: _hyper_1_10_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(77 rows)
 
 -- Performing a sum on multiple columns is supported.
 :EXPLAIN
 SELECT sum(int_value), sum(segment_by_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value), sum(testtable.segment_by_value)
    ->  Append
@@ -2105,19 +2043,16 @@ SELECT sum(int_value), sum(segment_by_value) FROM testtable;
                      Output: _hyper_1_10_chunk.int_value, _hyper_1_10_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(77 rows)
 
 SELECT sum(int_value), sum(segment_by_value) FROM testtable;
   sum   |  sum   
 --------+--------
  304695 | 304695
-(1 row)
 
 -- Using the sum function together with another non-vector capable aggregate is not supported
 :EXPLAIN
 SELECT sum(int_value), bit_or(int_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value), bit_or(testtable.int_value)
    ->  Append
@@ -2185,13 +2120,11 @@ SELECT sum(int_value), bit_or(int_value) FROM testtable;
                      Output: _hyper_1_10_chunk.int_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(67 rows)
 
 -- Using the sum function together with another non-vector capable aggregate is not supported
 :EXPLAIN
 SELECT sum(segment_by_value), bit_or(segment_by_value) FROM testtable;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                        
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value), bit_or(testtable.segment_by_value)
    ->  Append
@@ -2259,7 +2192,6 @@ SELECT sum(segment_by_value), bit_or(segment_by_value) FROM testtable;
                      Output: _hyper_1_10_chunk.segment_by_value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_2_20_chunk
                            Output: compress_hyper_2_20_chunk._ts_meta_count, compress_hyper_2_20_chunk.segment_by_value, compress_hyper_2_20_chunk._ts_meta_min_1, compress_hyper_2_20_chunk._ts_meta_max_1, compress_hyper_2_20_chunk."time", compress_hyper_2_20_chunk.int_value, compress_hyper_2_20_chunk.float_value
-(67 rows)
 
 ---
 -- Tests with only negative values
@@ -2279,7 +2211,6 @@ SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
   sum  |  sum  |  sum  
 -------+-------+-------
  -3355 | -3355 | -3355
-(1 row)
 
 SELECT compress_chunk(ch) FROM show_chunks('testtable') ch;
              compress_chunk              
@@ -2294,20 +2225,17 @@ SELECT compress_chunk(ch) FROM show_chunks('testtable') ch;
  _timescaledb_internal._hyper_1_28_chunk
  _timescaledb_internal._hyper_1_29_chunk
  _timescaledb_internal._hyper_1_30_chunk
-(10 rows)
 
 -- Aggregation with vectorization
 SELECT sum(segment_by_value) FROM testtable;
   sum  
 -------
  -3355
-(1 row)
 
 SELECT sum(int_value) FROM testtable;
   sum  
 -------
  -3355
-(1 row)
 
 ---
 -- Tests with only positive values
@@ -2327,7 +2255,6 @@ SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
  sum  | sum  | sum  
 ------+------+------
  3355 | 3355 | 3355
-(1 row)
 
 SELECT compress_chunk(ch) FROM show_chunks('testtable') ch;
              compress_chunk              
@@ -2342,26 +2269,22 @@ SELECT compress_chunk(ch) FROM show_chunks('testtable') ch;
  _timescaledb_internal._hyper_1_48_chunk
  _timescaledb_internal._hyper_1_49_chunk
  _timescaledb_internal._hyper_1_50_chunk
-(10 rows)
 
 -- Aggregation with vectorization
 SELECT sum(segment_by_value) FROM testtable;
  sum  
 ------
  3355
-(1 row)
 
 SELECT sum(int_value) FROM testtable;
  sum  
 ------
  3355
-(1 row)
 
 -- Vectorization possible - filter on segment_by
 :EXPLAIN
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
-                                                                                                                                                           QUERY PLAN                                                                                                                                                           
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value)
    ->  Gather
@@ -2448,34 +2371,29 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
                            ->  Parallel Index Scan using compress_hyper_2_60_chunk_segment_by_value__ts_meta_min_1___idx on _timescaledb_internal.compress_hyper_2_60_chunk
                                  Output: compress_hyper_2_60_chunk._ts_meta_count, compress_hyper_2_60_chunk.segment_by_value, compress_hyper_2_60_chunk._ts_meta_min_1, compress_hyper_2_60_chunk._ts_meta_max_1, compress_hyper_2_60_chunk."time", compress_hyper_2_60_chunk.int_value, compress_hyper_2_60_chunk.float_value
                                  Index Cond: (compress_hyper_2_60_chunk.segment_by_value > 5)
-(86 rows)
 
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
  sum  
 ------
  2440
-(1 row)
 
 SET timescaledb.enable_vectorized_aggregation = OFF;
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
  sum  
 ------
  2440
-(1 row)
 
 RESET timescaledb.enable_vectorized_aggregation;
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 10;
  sum 
 -----
     
-(1 row)
 
 SET timescaledb.enable_vectorized_aggregation = OFF;
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 10;
  sum 
 -----
     
-(1 row)
 
 RESET timescaledb.enable_vectorized_aggregation;
 ---
@@ -2487,8 +2405,7 @@ SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable;
-                                                                                                                                                           QUERY PLAN                                                                                                                                                           
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Gather
@@ -2565,13 +2482,11 @@ SELECT sum(segment_by_value) FROM testtable;
                            Output: _hyper_1_50_chunk.segment_by_value
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_60_chunk
                                  Output: compress_hyper_2_60_chunk._ts_meta_count, compress_hyper_2_60_chunk.segment_by_value, compress_hyper_2_60_chunk._ts_meta_min_1, compress_hyper_2_60_chunk._ts_meta_max_1, compress_hyper_2_60_chunk."time", compress_hyper_2_60_chunk.int_value, compress_hyper_2_60_chunk.float_value
-(76 rows)
 
 SELECT sum(segment_by_value) FROM testtable;
  sum  
 ------
  3355
-(1 row)
 
 RESET parallel_leader_participation;
 RESET min_parallel_table_scan_size;
@@ -2594,7 +2509,6 @@ SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
  sum | sum | sum 
 -----+-----+-----
    0 |   0 |   0
-(1 row)
 
 SELECT compress_chunk(ch) FROM show_chunks('testtable') ch;
              compress_chunk              
@@ -2609,20 +2523,17 @@ SELECT compress_chunk(ch) FROM show_chunks('testtable') ch;
  _timescaledb_internal._hyper_1_68_chunk
  _timescaledb_internal._hyper_1_69_chunk
  _timescaledb_internal._hyper_1_70_chunk
-(10 rows)
 
 -- Aggregation with vectorization
 SELECT sum(segment_by_value) FROM testtable;
  sum 
 -----
    0
-(1 row)
 
 SELECT sum(int_value) FROM testtable;
  sum 
 -----
    0
-(1 row)
 
 ---
 -- Tests with null values
@@ -2662,7 +2573,6 @@ SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
  sum  | sum  | sum  
 ------+------+------
  4270 | 3538 | 3538
-(1 row)
 
 SELECT compress_chunk(ch) FROM show_chunks('testtable') ch;
              compress_chunk              
@@ -2677,13 +2587,11 @@ SELECT compress_chunk(ch) FROM show_chunks('testtable') ch;
  _timescaledb_internal._hyper_1_88_chunk
  _timescaledb_internal._hyper_1_89_chunk
  _timescaledb_internal._hyper_1_90_chunk
-(10 rows)
 
 -- Aggregation with vectorization
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable;
-                                                                                                                                                              QUERY PLAN                                                                                                                                                               
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value)
    ->  Gather
@@ -2760,12 +2668,10 @@ SELECT sum(segment_by_value) FROM testtable;
                            Output: _hyper_1_90_chunk.segment_by_value
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_100_chunk
                                  Output: compress_hyper_2_100_chunk._ts_meta_count, compress_hyper_2_100_chunk.segment_by_value, compress_hyper_2_100_chunk._ts_meta_min_1, compress_hyper_2_100_chunk._ts_meta_max_1, compress_hyper_2_100_chunk."time", compress_hyper_2_100_chunk.int_value, compress_hyper_2_100_chunk.float_value
-(76 rows)
 
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
-                                                                                                                                                              QUERY PLAN                                                                                                                                                               
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.int_value)
    ->  Gather
@@ -2842,25 +2748,21 @@ SELECT sum(int_value) FROM testtable;
                            Output: _hyper_1_90_chunk.int_value
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_100_chunk
                                  Output: compress_hyper_2_100_chunk._ts_meta_count, compress_hyper_2_100_chunk.segment_by_value, compress_hyper_2_100_chunk._ts_meta_min_1, compress_hyper_2_100_chunk._ts_meta_max_1, compress_hyper_2_100_chunk."time", compress_hyper_2_100_chunk.int_value, compress_hyper_2_100_chunk.float_value
-(76 rows)
 
 SELECT sum(segment_by_value) FROM testtable;
  sum  
 ------
  4270
-(1 row)
 
 SELECT sum(int_value) FROM testtable;
  sum  
 ------
  3538
-(1 row)
 
 -- Vectorizable aggregation filters are supported
 :EXPLAIN
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
-                                                                                                                                                              QUERY PLAN                                                                                                                                                               
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable.segment_by_value) FILTER (WHERE (testtable.segment_by_value > 99999))
    ->  Gather
@@ -2937,21 +2839,18 @@ SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testta
                            Output: _hyper_1_90_chunk.segment_by_value
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_100_chunk
                                  Output: compress_hyper_2_100_chunk._ts_meta_count, compress_hyper_2_100_chunk.segment_by_value, compress_hyper_2_100_chunk._ts_meta_min_1, compress_hyper_2_100_chunk._ts_meta_max_1, compress_hyper_2_100_chunk."time", compress_hyper_2_100_chunk.int_value, compress_hyper_2_100_chunk.float_value
-(76 rows)
 
 SET timescaledb.enable_vectorized_aggregation = OFF;
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
  sum 
 -----
     
-(1 row)
 
 RESET timescaledb.enable_vectorized_aggregation;
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
  sum 
 -----
     
-(1 row)
 
 ---
 -- Tests with multiple segment by values
@@ -2964,7 +2863,6 @@ int_value integer NOT NULL,
 float_value double precision NOT NULL);
 SELECT FROM create_hypertable(relation=>'testtable2', time_column_name=> 'time');
 --
-(1 row)
 
 ALTER TABLE testtable2 SET (timescaledb.compress, timescaledb.compress_segmentby='segment_by_value1, segment_by_value2');
 INSERT INTO testtable2
@@ -2983,7 +2881,6 @@ SELECT sum(segment_by_value1), sum(segment_by_value2) FROM testtable2;
   sum   |   sum   
 --------+---------
  853740 | -569160
-(1 row)
 
 SELECT compress_chunk(ch) FROM show_chunks('testtable2') ch;
               compress_chunk              
@@ -2997,13 +2894,11 @@ SELECT compress_chunk(ch) FROM show_chunks('testtable2') ch;
  _timescaledb_internal._hyper_3_107_chunk
  _timescaledb_internal._hyper_3_108_chunk
  _timescaledb_internal._hyper_3_109_chunk
-(9 rows)
 
 ANALYZE testtable2;
 :EXPLAIN
 SELECT sum(segment_by_value1) FROM testtable2;
-                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable2.segment_by_value1)
    ->  Append
@@ -3070,18 +2965,15 @@ SELECT sum(segment_by_value1) FROM testtable2;
                      Output: _hyper_3_109_chunk.segment_by_value1
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_4_118_chunk
                            Output: compress_hyper_4_118_chunk._ts_meta_count, compress_hyper_4_118_chunk.segment_by_value1, compress_hyper_4_118_chunk.segment_by_value2, compress_hyper_4_118_chunk._ts_meta_min_1, compress_hyper_4_118_chunk._ts_meta_max_1, compress_hyper_4_118_chunk."time", compress_hyper_4_118_chunk.int_value, compress_hyper_4_118_chunk.float_value
-(66 rows)
 
 SELECT sum(segment_by_value1) FROM testtable2;
   sum   
 --------
  853740
-(1 row)
 
 :EXPLAIN
 SELECT sum(segment_by_value2) FROM testtable2;
-                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable2.segment_by_value2)
    ->  Append
@@ -3148,19 +3040,16 @@ SELECT sum(segment_by_value2) FROM testtable2;
                      Output: _hyper_3_109_chunk.segment_by_value2
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_4_118_chunk
                            Output: compress_hyper_4_118_chunk._ts_meta_count, compress_hyper_4_118_chunk.segment_by_value1, compress_hyper_4_118_chunk.segment_by_value2, compress_hyper_4_118_chunk._ts_meta_min_1, compress_hyper_4_118_chunk._ts_meta_max_1, compress_hyper_4_118_chunk."time", compress_hyper_4_118_chunk.int_value, compress_hyper_4_118_chunk.float_value
-(66 rows)
 
 SELECT sum(segment_by_value2) FROM testtable2;
    sum   
 ---------
  -569160
-(1 row)
 
 -- Vectorization possible - filter on segment_by
 :EXPLAIN
 SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0;
-                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable2.segment_by_value1)
    ->  Append
@@ -3236,12 +3125,10 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0;
                      ->  Index Scan using compress_hyper_4_118_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_118_chunk
                            Output: compress_hyper_4_118_chunk._ts_meta_count, compress_hyper_4_118_chunk.segment_by_value1, compress_hyper_4_118_chunk.segment_by_value2, compress_hyper_4_118_chunk._ts_meta_min_1, compress_hyper_4_118_chunk._ts_meta_max_1, compress_hyper_4_118_chunk."time", compress_hyper_4_118_chunk.int_value, compress_hyper_4_118_chunk.float_value
                            Index Cond: (compress_hyper_4_118_chunk.segment_by_value1 > 0)
-(75 rows)
 
 :EXPLAIN
 SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND segment_by_value2 > 0;
-                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable2.segment_by_value1)
    ->  Append
@@ -3317,12 +3204,10 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND se
                      ->  Index Scan using compress_hyper_4_118_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_118_chunk
                            Output: compress_hyper_4_118_chunk._ts_meta_count, compress_hyper_4_118_chunk.segment_by_value1, compress_hyper_4_118_chunk.segment_by_value2, compress_hyper_4_118_chunk._ts_meta_min_1, compress_hyper_4_118_chunk._ts_meta_max_1, compress_hyper_4_118_chunk."time", compress_hyper_4_118_chunk.int_value, compress_hyper_4_118_chunk.float_value
                            Index Cond: ((compress_hyper_4_118_chunk.segment_by_value1 > 0) AND (compress_hyper_4_118_chunk.segment_by_value2 > 0))
-(75 rows)
 
 :EXPLAIN
 SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND segment_by_value2 > 0 AND 2>1;
-                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable2.segment_by_value1)
    ->  Append
@@ -3398,15 +3283,13 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 0 AND se
                      ->  Index Scan using compress_hyper_4_118_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_118_chunk
                            Output: compress_hyper_4_118_chunk._ts_meta_count, compress_hyper_4_118_chunk.segment_by_value1, compress_hyper_4_118_chunk.segment_by_value2, compress_hyper_4_118_chunk._ts_meta_min_1, compress_hyper_4_118_chunk._ts_meta_max_1, compress_hyper_4_118_chunk."time", compress_hyper_4_118_chunk.int_value, compress_hyper_4_118_chunk.float_value
                            Index Cond: ((compress_hyper_4_118_chunk.segment_by_value1 > 0) AND (compress_hyper_4_118_chunk.segment_by_value2 > 0))
-(75 rows)
 
 -- Vectorization not possible filter on segment_by and compressed value
 -- Disable parallel worker to get deterministic query plans on i386
 SET max_parallel_workers_per_gather = 0;
 :EXPLAIN
 SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND int_value > 1000;
-                                                                                                                                                                                   QUERY PLAN                                                                                                                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Finalize Aggregate
    Output: sum(testtable2.segment_by_value1)
    ->  Append
@@ -3491,7 +3374,6 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND
                      ->  Index Scan using compress_hyper_4_118_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_118_chunk
                            Output: compress_hyper_4_118_chunk._ts_meta_count, compress_hyper_4_118_chunk.segment_by_value1, compress_hyper_4_118_chunk.segment_by_value2, compress_hyper_4_118_chunk._ts_meta_min_1, compress_hyper_4_118_chunk._ts_meta_max_1, compress_hyper_4_118_chunk."time", compress_hyper_4_118_chunk.int_value, compress_hyper_4_118_chunk.float_value
                            Index Cond: (compress_hyper_4_118_chunk.segment_by_value1 > 1000)
-(84 rows)
 
 RESET max_parallel_workers_per_gather;
 -- Can't group by a system column
@@ -3499,7 +3381,6 @@ SELECT sum(float_value) FROM testtable2 GROUP BY tableoid ORDER BY 1 LIMIT 1;
   sum  
 -------
  82620
-(1 row)
 
 -- Postgres versions starting with 16 remove the grouping columns that are
 -- equated to a constant. Check that our planning code handles this well.
@@ -3507,7 +3388,6 @@ SELECT sum(float_value), int_value FROM testtable2 WHERE int_value = 1 GROUP BY 
  sum  | int_value 
 ------+-----------
  3162 |         1
-(1 row)
 
 --
 -- Test handling of Agg on top of ChunkAppend. This reproduces a crash
@@ -3518,7 +3398,6 @@ SELECT create_hypertable('testtable3', 'time');
     create_hypertable    
 -------------------------
  (5,public,testtable3,t)
-(1 row)
 
 ALTER TABLE testtable3 SET (timescaledb.compress_orderby='time', timescaledb.compress_segmentby='location_id');
 INSERT INTO testtable3 SELECT t, ceil(random() * 20)::int, ceil(random() * 30)::int, ceil(random() * 20)::int FROM generate_series('2024-01-01'::timestamptz, '2024-01-10'::timestamptz, '1h') AS t;
@@ -3526,12 +3405,10 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('testtable3') ch;
  count 
 -------
      2
-(1 row)
 
 VACUUM FULL ANALYZE testtable3;
 EXPLAIN (buffers off, costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
-                                                                         QUERY PLAN                                                                          
--------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  HashAggregate
    Group Key: tt.location_id, tt.device_id
    ->  Custom Scan (ChunkAppend) on testtable3 tt
@@ -3540,6 +3417,5 @@ EXPLAIN (buffers off, costs off) SELECT (date_trunc('hour', '2024-01-09'::timest
                Vectorized Filter: ("time" >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
                ->  Seq Scan on compress_hyper_6_122_chunk
                      Filter: (_ts_meta_max_1 >= (date_trunc('hour'::text, 'Tue Jan 09 00:00:00 2024 PST'::timestamp with time zone) - '@ 1 hour'::interval))
-(8 rows)
 
 SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id \g :TEST_OUTPUT_DIR/vectorized_aggregation_query_result.out

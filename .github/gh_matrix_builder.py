@@ -33,6 +33,8 @@ from ci_settings import (
     PG16_LATEST,
     PG17_EARLIEST,
     PG17_LATEST,
+    PG18_EARLIEST,
+    PG18_LATEST,
     PG_LATEST,
 )
 
@@ -48,6 +50,7 @@ m = {
 default_ignored_tests = {
     "bgw_db_scheduler",
     "bgw_db_scheduler_fixed",
+    "bgw_job_stat_history",
     "bgw_launcher",
     "telemetry",
     "memoize",
@@ -187,12 +190,14 @@ m["include"].append(
 
 m["include"].append(build_debug_config({"pg": PG17_LATEST}))
 
+m["include"].append(build_debug_config({"pg": PG18_LATEST}))
+
 # Also test on ARM. See the available runners here:
 # https://github.com/timescale/timescaledb/actions/runners
 m["include"].append(
     build_debug_config(
         {
-            "pg": PG17_LATEST,
+            "pg": PG18_LATEST,
             "os": "timescaledb-runner-arm64",
             # We need to enable ARM crypto extensions to build the vectorized grouping
             # code. The actual architecture for our ARM CI runner is reported as:
@@ -203,31 +208,17 @@ m["include"].append(
 )
 
 # test timescaledb with release config on latest postgres release in MacOS
-m["include"].append(build_release_config(macos_config({"pg": PG17_LATEST})))
+m["include"].append(build_release_config(macos_config({"pg": PG18_LATEST})))
 
 # Test latest postgres release without telemetry. Also run clang-tidy on it
 # because it's the fastest one.
 m["include"].append(
     build_without_telemetry(
         {
-            "pg": PG17_LATEST,
+            "pg": PG18_LATEST,
             "cc": "clang-14",
             "cxx": "clang++-14",
             "tsdb_build_args": "-DLINTER=ON -DWARNINGS_AS_ERRORS=ON",
-        }
-    )
-)
-
-# test building against PG18rc1
-m["include"].append(
-    build_debug_config(
-        {
-            "pg": "18.0",
-            "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-            "tsdb_build_args": "-DEXPERIMENTAL=ON -DWARNINGS_AS_ERRORS=OFF",
-            "installcheck": False,
-            "pginstallcheck": False,
-            "coverage": False,
         }
     )
 )
@@ -250,6 +241,10 @@ if not pull_request:
     if PG17_EARLIEST != PG17_LATEST:
         m["include"].append(build_debug_config({"pg": PG17_EARLIEST}))
 
+    # add debug test for first supported PG18 version
+    if PG18_EARLIEST != PG18_LATEST:
+        m["include"].append(build_debug_config({"pg": PG18_EARLIEST}))
+
     # add debug tests for timescaledb on latest postgres release in MacOS
     m["include"].append(
         build_debug_config(
@@ -265,6 +260,8 @@ if not pull_request:
 
     m["include"].append(build_debug_config(macos_config({"pg": PG17_LATEST})))
 
+    m["include"].append(build_debug_config(macos_config({"pg": PG18_LATEST})))
+
     # add release test for latest pg releases
     m["include"].append(
         build_release_config({"pg": PG15_LATEST, "ignored_tests": ignored_before_pg16})
@@ -273,6 +270,8 @@ if not pull_request:
         build_release_config({"pg": PG16_LATEST, "ignored_tests": ignored_before_pg17})
     )
     m["include"].append(build_release_config({"pg": PG17_LATEST}))
+
+    m["include"].append(build_release_config({"pg": PG18_LATEST}))
 
     # add apache only test for latest pg versions
     for PG_LATEST_VER in PG_LATEST:
@@ -313,6 +312,14 @@ if not pull_request:
         build_debug_config(
             {
                 "pg": 17,
+                "snapshot": "snapshot",
+            }
+        )
+    )
+    m["include"].append(
+        build_debug_config(
+            {
+                "pg": 18,
                 "snapshot": "snapshot",
             }
         )
@@ -375,7 +382,7 @@ elif len(sys.argv) > 2:
                     "coverage": False,
                     "installcheck_args": installcheck_args,
                     "name": "Flaky Check Debug",
-                    "pg": PG17_LATEST,
+                    "pg": PG18_LATEST,
                     "pginstallcheck": False,
                 }
             )

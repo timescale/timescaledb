@@ -28,8 +28,8 @@
 #include <compression/wal_utils.h>
 #include <expression_utils.h>
 #include <indexing.h>
-#include <nodes/decompress_chunk/vector_dict.h>
-#include <nodes/decompress_chunk/vector_predicates.h>
+#include <nodes/columnar_scan/vector_dict.h>
+#include <nodes/columnar_scan/vector_predicates.h>
 #include <nodes/modify_hypertable.h>
 #include <ts_catalog/array_utils.h>
 
@@ -1729,6 +1729,9 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 	 * If there is a RETURNING clause we skip the optimization to delete compressed batches directly
 	 */
 	if (ht_state->mt->returningLists)
+		return false;
+
+	if (ts_hypertable_has_continuous_aggregates(ht_state->ht->fd.id))
 		return false;
 
 	/*

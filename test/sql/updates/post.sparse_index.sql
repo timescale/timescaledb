@@ -24,5 +24,8 @@ WHERE id = (
 )
 \gset
 
-\d+ :chunk
+-- Note: we can't use \d+ here because it prevents changing the TOAST storage flag
+--   if we do, like in the UUID compression changes from external to extended, then
+--   the upgrade tests fail
+\d :chunk
 

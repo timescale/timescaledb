@@ -8,7 +8,6 @@ select create_hypertable('costtab', 'ts');
   create_hypertable   
 ----------------------
  (1,public,costtab,t)
-(1 row)
 
 alter table costtab set (timescaledb.compress, timescaledb.compress_segmentby = 's',
     timescaledb.compress_orderby = 'ts');
@@ -19,122 +18,93 @@ select count(compress_chunk(x)) from show_chunks('costtab') x;
  count 
 -------
      1
-(1 row)
 
 vacuum freeze analyze costtab;
-explain select * from costtab;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+explain (buffers off) select * from costtab;
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=108)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=142)
-(2 rows)
 
-explain select * from costtab where s = '1';
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+explain (buffers off) select * from costtab where s = '1';
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=108)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=1 width=142)
          Filter: (s = '1'::text)
-(3 rows)
 
-explain select * from costtab where c = '100';
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
+explain (buffers off) select * from costtab where c = '100';
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=108)
    Vectorized Filter: (c = '100'::text)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=142)
-(3 rows)
 
-explain select * from costtab where ti = '200';
-                                         QUERY PLAN                                         
---------------------------------------------------------------------------------------------
+explain (buffers off) select * from costtab where ti = '200';
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.38..31.12 rows=3000 width=108)
    Vectorized Filter: (ti = '200'::text)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=3 width=142)
          Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloom1_ti, '200'::text)
-(4 rows)
 
-explain select * from costtab where fi = 200;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+explain (buffers off) select * from costtab where fi = 200;
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.15 rows=10000 width=108)
    Vectorized Filter: (fi = '200'::double precision)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.15 rows=10 width=142)
          Filter: ((_ts_meta_v2_min_fi <= '200'::double precision) AND (_ts_meta_v2_max_fi >= '200'::double precision))
-(4 rows)
 
-explain select ts from costtab;
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+explain (buffers off) select ts from costtab;
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=4)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=44)
-(2 rows)
 
-explain select ts from costtab where s = '1';
-                                      QUERY PLAN                                      
---------------------------------------------------------------------------------------
+explain (buffers off) select ts from costtab where s = '1';
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=4)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=1 width=46)
          Filter: (s = '1'::text)
-(3 rows)
 
-explain select ts from costtab where c = '100';
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+explain (buffers off) select ts from costtab where c = '100';
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=4)
    Vectorized Filter: (c = '100'::text)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=76)
-(3 rows)
 
-explain select ts, s from costtab;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+explain (buffers off) select ts, s from costtab;
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=36)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=46)
-(2 rows)
 
-explain select ts, s from costtab where s = '1';
-                                      QUERY PLAN                                       
----------------------------------------------------------------------------------------
+explain (buffers off) select ts, s from costtab where s = '1';
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.12..11.12 rows=1000 width=36)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.12 rows=1 width=46)
          Filter: (s = '1'::text)
-(3 rows)
 
-explain select ts, s from costtab where c = '100';
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+explain (buffers off) select ts, s from costtab where c = '100';
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.11..101.10 rows=10000 width=36)
    Vectorized Filter: (c = '100'::text)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.10 rows=10 width=78)
-(3 rows)
 
-explain select * from costtab where ts = 5000;
-                                       QUERY PLAN                                       
-----------------------------------------------------------------------------------------
+explain (buffers off) select * from costtab where ts = 5000;
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.15..11.15 rows=1000 width=108)
    Vectorized Filter: (ts = 5000)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.15 rows=1 width=142)
          Filter: ((_ts_meta_min_1 <= 5000) AND (_ts_meta_max_1 >= 5000))
-(4 rows)
 
-explain select * from costtab where fi = 200 and ts = 5000;
-                                                                                   QUERY PLAN                                                                                    
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+explain (buffers off) select * from costtab where fi = 200 and ts = 5000;
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.20..11.20 rows=1000 width=108)
    Vectorized Filter: ((fi = '200'::double precision) AND (ts = 5000))
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.20 rows=1 width=142)
          Filter: ((_ts_meta_v2_min_fi <= '200'::double precision) AND (_ts_meta_v2_max_fi >= '200'::double precision) AND (_ts_meta_min_1 <= 5000) AND (_ts_meta_max_1 >= 5000))
-(4 rows)
 
-explain select * from costtab where s = '1' or (fi = 200 and ts = 5000);
-                                                                                              QUERY PLAN                                                                                              
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+explain (buffers off) select * from costtab where s = '1' or (fi = 200 and ts = 5000);
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=1.23..11.22 rows=1000 width=108)
    Filter: ((s = '1'::text) OR ((fi = '200'::double precision) AND (ts = 5000)))
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..1.23 rows=1 width=142)
          Filter: ((s = '1'::text) OR ((_ts_meta_v2_min_fi <= '200'::double precision) AND (_ts_meta_v2_max_fi >= '200'::double precision) AND (_ts_meta_min_1 <= 5000) AND (_ts_meta_max_1 >= 5000)))
-(4 rows)
 
 -- Test estimation of compressed batch size using the _ts_meta_count stats.
 create table estimate_count(time timestamptz, device int, value float);
@@ -142,7 +112,6 @@ select create_hypertable('estimate_count','time');
       create_hypertable      
 -----------------------------
  (3,public,estimate_count,t)
-(1 row)
 
 alter table estimate_count
   set (timescaledb.compress,
@@ -158,18 +127,15 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
  count 
 -------
      2
-(1 row)
 
 vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append  (cost=0.04..2974.00 rows=193000 width=20) (actual rows=193000.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_3_chunk  (cost=0.04..679.00 rows=64000 width=20) (actual rows=64000.00 loops=1)
          ->  Seq Scan on compress_hyper_4_5_chunk  (cost=0.00..39.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_4_chunk  (cost=0.04..1330.00 rows=129000 width=20) (actual rows=129000.00 loops=1)
          ->  Seq Scan on compress_hyper_4_6_chunk  (cost=0.00..40.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
-(5 rows)
 
 -- different batch sizes
 truncate estimate_count;
@@ -183,18 +149,15 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
  count 
 -------
      2
-(1 row)
 
 vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append  (cost=0.04..934.50 rows=57100 width=20) (actual rows=57100.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk  (cost=0.04..230.00 rows=19100 width=20) (actual rows=19100.00 loops=1)
          ->  Seq Scan on compress_hyper_4_9_chunk  (cost=0.00..39.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk  (cost=0.04..419.00 rows=38000 width=20) (actual rows=38000.00 loops=1)
          ->  Seq Scan on compress_hyper_4_10_chunk  (cost=0.00..39.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
-(5 rows)
 
 -- more different batch sizes
 truncate estimate_count;
@@ -208,18 +171,15 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
  count 
 -------
      2
-(1 row)
 
 vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                        QUERY PLAN                                                        
---------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append  (cost=0.04..265.21 rows=12548 width=20) (actual rows=12559.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_11_chunk  (cost=0.04..83.50 rows=4550 width=20) (actual rows=4553.00 loops=1)
          ->  Seq Scan on compress_hyper_4_13_chunk  (cost=0.00..38.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_12_chunk  (cost=0.04..118.97 rows=7997 width=20) (actual rows=8006.00 loops=1)
          ->  Seq Scan on compress_hyper_4_14_chunk  (cost=0.00..39.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
-(5 rows)
 
 -- more different + one very frequent
 truncate estimate_count;
@@ -234,18 +194,15 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
  count 
 -------
      2
-(1 row)
 
 vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append  (cost=0.04..2340.10 rows=150807 width=20) (actual rows=150830.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk  (cost=0.04..541.81 rows=50281 width=20) (actual rows=50287.00 loops=1)
          ->  Seq Scan on compress_hyper_4_17_chunk  (cost=0.00..39.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_16_chunk  (cost=0.04..1044.26 rows=100526 width=20) (actual rows=100543.00 loops=1)
          ->  Seq Scan on compress_hyper_4_18_chunk  (cost=0.00..39.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
-(5 rows)
 
 -- single row. Postgres generates all-zero entry in pg_statistics in this case,
 -- but we want to avoid zero row counts.
@@ -257,15 +214,12 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
  count 
 -------
      1
-(1 row)
 
 vacuum analyze estimate_count;
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_3_19_chunk  (cost=1.01..11.01 rows=1000 width=20) (actual rows=1.00 loops=1)
    ->  Seq Scan on compress_hyper_4_20_chunk  (cost=0.00..1.01 rows=1 width=88) (actual rows=1.00 loops=1)
-(2 rows)
 
 -- no statistics
 truncate estimate_count;
@@ -279,17 +233,14 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
  count 
 -------
      2
-(1 row)
 
 explain (analyze, timing off, summary off) select * from estimate_count;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append  (cost=0.02..67308.80 rows=4480000 width=20) (actual rows=193000.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_21_chunk  (cost=0.02..22454.40 rows=2240000 width=20) (actual rows=64000.00 loops=1)
          ->  Seq Scan on compress_hyper_4_23_chunk  (cost=0.00..54.40 rows=2240 width=88) (actual rows=1000.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_22_chunk  (cost=0.02..22454.40 rows=2240000 width=20) (actual rows=129000.00 loops=1)
          ->  Seq Scan on compress_hyper_4_24_chunk  (cost=0.00..54.40 rows=2240 width=88) (actual rows=1000.00 loops=1)
-(5 rows)
 
 -- Test a high-cardinality orderby column
 create table highcard(ts int) with (tsdb.hypertable, tsdb.partition_column = 'ts',
@@ -299,50 +250,41 @@ select count(compress_chunk(x)) from show_chunks('highcard') x;
  count 
 -------
      1
-(1 row)
 
 vacuum freeze analyze highcard;
-explain (analyze, timing off, summary off)
+explain (buffers off, analyze, timing off, summary off)
 select * from highcard where ts > 200000 and ts < 300000;
-                                                                                   QUERY PLAN                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_5_25_chunk  (cost=0.43..1005.58 rows=99000 width=4) (actual rows=99999.00 loops=1)
    Vectorized Filter: ((ts > 200000) AND (ts < 300000))
    Rows Removed by Filter: 1
    ->  Index Scan using compress_hyper_6_26_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_26_chunk  (cost=0.28..15.58 rows=99 width=44) (actual rows=100.00 loops=1)
          Index Cond: ((_ts_meta_min_1 < 300000) AND (_ts_meta_max_1 > 200000))
-(5 rows)
 
-explain (analyze, timing off, summary off)
+explain (buffers off, analyze, timing off, summary off)
 select * from highcard where ts = 500000;
-                                                                                 QUERY PLAN                                                                                  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_5_25_chunk  (cost=18.70..28.70 rows=1000 width=4) (actual rows=1.00 loops=1)
    Vectorized Filter: (ts = 500000)
    Rows Removed by Filter: 999
    ->  Index Scan using compress_hyper_6_26_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_26_chunk  (cost=0.28..18.70 rows=1 width=44) (actual rows=1.00 loops=1)
          Index Cond: ((_ts_meta_min_1 <= 500000) AND (_ts_meta_max_1 >= 500000))
-(5 rows)
 
-explain (analyze, timing off, summary off)
+explain (buffers off, analyze, timing off, summary off)
 select * from highcard where ts < 500000;
-                                                                                   QUERY PLAN                                                                                    
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_5_25_chunk  (cost=0.32..5001.61 rows=498000 width=4) (actual rows=499999.00 loops=1)
    Vectorized Filter: (ts < 500000)
    Rows Removed by Filter: 1
    ->  Index Scan using compress_hyper_6_26_chunk__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_6_26_chunk  (cost=0.28..21.61 rows=498 width=44) (actual rows=500.00 loops=1)
          Index Cond: (_ts_meta_min_1 < 500000)
-(5 rows)
 
-explain (analyze, timing off, summary off)
+explain (buffers off, analyze, timing off, summary off)
 select * from highcard where ts > 500000;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_5_25_chunk  (cost=0.05..5035.50 rows=501000 width=4) (actual rows=500000.00 loops=1)
    Vectorized Filter: (ts > 500000)
    ->  Seq Scan on compress_hyper_6_26_chunk  (cost=0.00..25.50 rows=501 width=44) (actual rows=500.00 loops=1)
          Filter: (_ts_meta_max_1 > 500000)
          Rows Removed by Filter: 500
-(5 rows)
 

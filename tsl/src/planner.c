@@ -19,7 +19,7 @@
 #include "continuous_aggs/planner.h"
 #include "guc.h"
 #include "hypertable.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/gapfill/gapfill.h"
 #include "nodes/skip_scan/skip_scan.h"
@@ -102,7 +102,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 }
 
 /*
- * Check if a chunk should be decompressed via a DecompressChunk plan.
+ * Check if a chunk should be decompressed via a ColumnarScan plan.
  *
  * Check first that it is a compressed chunk. Then, decompress unless it is
  * SELECT * FROM ONLY <chunk>. We check if it is the ONLY case by calling
@@ -110,7 +110,7 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
  * break postgres tools like pg_dump.
  */
 static inline bool
-use_decompress_chunk_node(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *chunk)
+use_columnar_scan(const RelOptInfo *rel, const RangeTblEntry *rte, const Chunk *chunk)
 {
 	if (!ts_guc_enable_transparent_decompression)
 		return false;
@@ -143,9 +143,9 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	if (chunk == NULL)
 		return;
 
-	if (use_decompress_chunk_node(rel, rte, chunk))
+	if (use_columnar_scan(rel, rte, chunk))
 	{
-		ts_decompress_chunk_generate_paths(root, rel, ht, chunk);
+		ts_columnar_scan_generate_paths(root, rel, ht, chunk);
 	}
 }
 

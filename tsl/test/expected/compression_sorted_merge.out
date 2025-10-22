@@ -15,7 +15,6 @@ time timestamptz NOT NULL,
     x5 integer);
 SELECT FROM create_hypertable('test1', 'time');
 --
-(1 row)
 
 ALTER TABLE test1 SET (timescaledb.compress, timescaledb.compress_segmentby='x1, x2, x5', timescaledb.compress_orderby = 'time DESC, x3 ASC, x4 ASC');
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:00:00-00', 1, 2, 1, 1, 0);
@@ -26,7 +25,6 @@ SELECT compress_chunk(i) FROM show_chunks('test1') i;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 ANALYZE test1;
 CREATE TABLE test2 (
@@ -38,7 +36,6 @@ time timestamptz NOT NULL,
     x5 integer);
 SELECT FROM create_hypertable('test2', 'time');
 --
-(1 row)
 
 ALTER TABLE test2 SET (timescaledb.compress, timescaledb.compress_segmentby='x1, x2, x5', timescaledb.compress_orderby = 'time ASC, x3 DESC, x4 DESC');
 INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 00:00:00-00', 1, 2, 1, 1, 0);
@@ -49,7 +46,6 @@ SELECT compress_chunk(i) FROM show_chunks('test2') i;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_3_chunk
-(1 row)
 
 ANALYZE test2;
 CREATE TABLE test_with_defined_null (
@@ -59,7 +55,6 @@ CREATE TABLE test_with_defined_null (
     x3 integer);
 SELECT FROM create_hypertable('test_with_defined_null','time');
 --
-(1 row)
 
 ALTER TABLE test_with_defined_null SET (timescaledb.compress,timescaledb.compress_segmentby='x1', timescaledb.compress_orderby='x2 ASC NULLS FIRST');
 INSERT INTO test_with_defined_null (time, x1, x2) values('2000-01-01', '1', NULL);
@@ -70,7 +65,6 @@ SELECT compress_chunk(i) FROM show_chunks('test_with_defined_null') i;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_5_5_chunk
-(1 row)
 
 ANALYZE test_with_defined_null;
 -- test1 uses compress_segmentby='x1, x2, x5' and compress_orderby = 'time DESC, x3 ASC, x4 ASC'
@@ -83,8 +77,7 @@ set timescaledb.debug_require_batch_sorted_merge to 'force';
 -- Should be optimized (implicit NULLS first)
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
@@ -95,13 +88,11 @@ SELECT * FROM test1 ORDER BY time DESC;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(10 rows)
 
 -- Should be optimized
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
@@ -112,13 +103,11 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(10 rows)
 
 -- Should be optimized (implicit NULLS last)
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
@@ -130,13 +119,11 @@ SELECT * FROM test1 ORDER BY time ASC;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(11 rows)
 
 -- Should be optimized
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
@@ -148,13 +135,11 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(11 rows)
 
 -- Should be optimized
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
@@ -165,13 +150,11 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(10 rows)
 
 -- Should be optimized
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
@@ -182,13 +165,11 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NU
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(10 rows)
 
 -- Should be optimized (backward scan)
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
@@ -200,13 +181,11 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(11 rows)
 
 -- Should be optimized (backward scan)
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
@@ -218,13 +197,11 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(11 rows)
 
 -- Should be optimized (backward scan)
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Batch Sorted Merge: true
@@ -236,13 +213,11 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC N
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(11 rows)
 
 -- Should be optimized
 :PREFIX
 SELECT * FROM test2 ORDER BY time ASC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Batch Sorted Merge: true
@@ -253,13 +228,11 @@ SELECT * FROM test2 ORDER BY time ASC;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(10 rows)
 
 -- Should be optimized
 :PREFIX
 SELECT * FROM test2 ORDER BY time ASC, x3 DESC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Batch Sorted Merge: true
@@ -270,13 +243,11 @@ SELECT * FROM test2 ORDER BY time ASC, x3 DESC;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(10 rows)
 
 -- Should be optimized
 :PREFIX
 SELECT * FROM test2 ORDER BY time ASC, x3 DESC, x4 DESC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Batch Sorted Merge: true
@@ -287,13 +258,11 @@ SELECT * FROM test2 ORDER BY time ASC, x3 DESC, x4 DESC;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(10 rows)
 
 -- Should be optimized (backward scan)
 :PREFIX
 SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Batch Sorted Merge: true
@@ -305,13 +274,11 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(11 rows)
 
 -- Should be optimized (backward scan)
 :PREFIX
 SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Batch Sorted Merge: true
@@ -323,13 +290,11 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(11 rows)
 
 -- Should be optimized (backward scan)
 :PREFIX
 SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS LAST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Batch Sorted Merge: true
@@ -341,13 +306,11 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS 
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(11 rows)
 
 -- Should be optimized
 :PREFIX
 SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
-                                                                                                                                                                        QUERY PLAN                                                                                                                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_5_chunk (actual rows=4.00 loops=1)
    Output: _hyper_5_5_chunk."time", _hyper_5_5_chunk.x1, _hyper_5_5_chunk.x2, _hyper_5_5_chunk.x3
    Batch Sorted Merge: true
@@ -358,13 +321,11 @@ SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=2.00 loops=1)
                Output: compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3
-(10 rows)
 
 -- Should be optimized (backward scan)
 :PREFIX
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
-                                                                                                                                                                        QUERY PLAN                                                                                                                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_5_5_chunk (actual rows=4.00 loops=1)
    Output: _hyper_5_5_chunk."time", _hyper_5_5_chunk.x1, _hyper_5_5_chunk.x2, _hyper_5_5_chunk.x3
    Batch Sorted Merge: true
@@ -376,14 +337,12 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=2.00 loops=1)
                Output: compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3
-(11 rows)
 
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 -- Should not be optimized (wrong order for x3 in backward scan)
 :PREFIX
 SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS FIRST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Sort Key: _hyper_3_3_chunk."time" DESC NULLS LAST, _hyper_3_3_chunk.x3 DESC, _hyper_3_3_chunk.x4 NULLS FIRST
@@ -393,13 +352,11 @@ SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(9 rows)
 
 -- Should not be optimized (wrong order for x3 in backward scan)
 :PREFIX
 SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS FIRST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Sort Key: _hyper_3_3_chunk."time" DESC NULLS LAST, _hyper_3_3_chunk.x3 DESC NULLS LAST, _hyper_3_3_chunk.x4 NULLS FIRST
@@ -409,13 +366,11 @@ SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS 
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(9 rows)
 
 -- Should not be optimized (NULL order wrong)
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS LAST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Sort Key: _hyper_1_1_chunk."time" DESC NULLS LAST
@@ -425,13 +380,11 @@ SELECT * FROM test1 ORDER BY time DESC NULLS LAST;
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(9 rows)
 
 -- Should not be optimized (NULL order wrong)
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Sort Key: _hyper_1_1_chunk."time" NULLS FIRST
@@ -441,13 +394,11 @@ SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(9 rows)
 
 -- Should not be optimized (wrong order for x4)
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Sort Key: _hyper_1_1_chunk."time" DESC, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4 DESC
@@ -457,13 +408,11 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC N
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(9 rows)
 
 -- Should not be optimized (wrong order for x4 in backward scan)
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Sort Key: _hyper_1_1_chunk."time" NULLS FIRST, _hyper_1_1_chunk.x3 DESC NULLS LAST, _hyper_1_1_chunk.x4
@@ -473,13 +422,11 @@ SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(9 rows)
 
 -- Should not be optimized (wrong order for x3)
 :PREFIX
 SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Sort Key: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4 DESC
@@ -489,13 +436,11 @@ SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC;
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(9 rows)
 
 -- Should not be optimized (wrong order for x3)
 :PREFIX
 SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x1, _hyper_3_3_chunk.x2, _hyper_3_3_chunk.x3, _hyper_3_3_chunk.x4, _hyper_3_3_chunk.x5
    Sort Key: _hyper_3_3_chunk."time", _hyper_3_3_chunk.x3 NULLS FIRST, _hyper_3_3_chunk.x4 DESC
@@ -505,13 +450,11 @@ SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC;
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.x1, compress_hyper_4_4_chunk.x2, compress_hyper_4_4_chunk.x5, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk."time", compress_hyper_4_4_chunk._ts_meta_min_2, compress_hyper_4_4_chunk._ts_meta_max_2, compress_hyper_4_4_chunk.x3, compress_hyper_4_4_chunk._ts_meta_min_3, compress_hyper_4_4_chunk._ts_meta_max_3, compress_hyper_4_4_chunk.x4
-(9 rows)
 
 -- Should not be optimized
 :PREFIX
 SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
-                                                                                                                                                                        QUERY PLAN                                                                                                                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_5_5_chunk."time", _hyper_5_5_chunk.x1, _hyper_5_5_chunk.x2, _hyper_5_5_chunk.x3
    Sort Key: _hyper_5_5_chunk.x2
@@ -521,13 +464,11 @@ SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=2.00 loops=1)
                Output: compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3
-(9 rows)
 
 -- Should not be optimized
 :PREFIX
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
-                                                                                                                                                                        QUERY PLAN                                                                                                                                                                         
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=4.00 loops=1)
    Output: _hyper_5_5_chunk."time", _hyper_5_5_chunk.x1, _hyper_5_5_chunk.x2, _hyper_5_5_chunk.x3
    Sort Key: _hyper_5_5_chunk.x2 DESC
@@ -537,7 +478,6 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=2.00 loops=1)
                Output: compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3
-(9 rows)
 
 ------
 -- Tests based on attributes
@@ -546,8 +486,7 @@ set timescaledb.debug_require_batch_sorted_merge to 'force';
 -- Should be optimized (some batches qualify by pushed down filter on _ts_meta_max_3)
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 0 ORDER BY time DESC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 0)
@@ -560,13 +499,11 @@ SELECT * FROM test1 WHERE x4 > 0 ORDER BY time DESC;
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
                Filter: (compress_hyper_2_2_chunk._ts_meta_max_3 > 0)
-(12 rows)
 
 -- Should be optimized (no batches qualify by pushed down filter on _ts_meta_max_3)
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 100)
@@ -580,13 +517,11 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
                Filter: (compress_hyper_2_2_chunk._ts_meta_max_3 > 100)
                Rows Removed by Filter: 3
-(13 rows)
 
 -- Should be optimized
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 100)
@@ -600,13 +535,11 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4;
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
                Filter: (compress_hyper_2_2_chunk._ts_meta_max_3 > 100)
                Rows Removed by Filter: 3
-(13 rows)
 
 -- Should be optimized (duplicate order by attributes)
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x3;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 100)
@@ -620,13 +553,11 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x3;
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
                Filter: (compress_hyper_2_2_chunk._ts_meta_max_3 > 100)
                Rows Removed by Filter: 3
-(13 rows)
 
 -- Should be optimized (duplicate order by attributes)
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4, x3, x4;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=0.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Filter: (_hyper_1_1_chunk.x4 > 100)
@@ -640,14 +571,12 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4, x3, x4;
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
                Filter: (compress_hyper_2_2_chunk._ts_meta_max_3 > 100)
                Rows Removed by Filter: 3
-(13 rows)
 
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 -- Should not be optimized
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=0.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Sort Key: _hyper_1_1_chunk."time" DESC, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x3
@@ -660,13 +589,11 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3;
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
                Filter: (compress_hyper_2_2_chunk._ts_meta_max_3 > 100)
                Rows Removed by Filter: 3
-(12 rows)
 
 -- Should not be optimized
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4;
-                                                                                                                                                                                                                                              QUERY PLAN                                                                                                                                                                                                                                               
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=0.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
    Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4
@@ -679,7 +606,6 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4;
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
                Filter: (compress_hyper_2_2_chunk._ts_meta_max_3 > 100)
                Rows Removed by Filter: 3
-(12 rows)
 
 ------
 -- Tests based on results
@@ -693,7 +619,6 @@ SELECT * FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0
-(4 rows)
 
 -- Forward scan
 SELECT * FROM test2 ORDER BY time ASC;
@@ -703,7 +628,6 @@ SELECT * FROM test2 ORDER BY time ASC;
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0
  Fri Dec 31 19:00:00 1999 PST |  1 |  2 |  4 |  4 |  0
-(4 rows)
 
 set timescaledb.debug_require_batch_sorted_merge to 'force';
 -- Backward scan
@@ -714,7 +638,6 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0
  Fri Dec 31 19:00:00 1999 PST |  1 |  2 |  4 |  4 |  0
-(4 rows)
 
 -- Backward scan
 SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
@@ -724,14 +647,12 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0
-(4 rows)
 
 set timescaledb.debug_require_batch_sorted_merge to 'force';
 -- With selection on compressed column (value larger as max value for all batches, so no batch has to be opened)
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
  time | x1 | x2 | x3 | x4 | x5 
 ------+----+----+----+----+----
-(0 rows)
 
 -- With selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
 SELECT * FROM test1 WHERE x4 > 2 ORDER BY time DESC;
@@ -739,13 +660,11 @@ SELECT * FROM test1 WHERE x4 > 2 ORDER BY time DESC;
 ------------------------------+----+----+----+----+----
  Fri Dec 31 19:00:00 1999 PST |  1 |  2 |  4 |  4 |  0
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0
-(2 rows)
 
 -- With selection on segment_by column
 SELECT * FROM test1 WHERE time < '1980-01-01 00:00:00-00' ORDER BY time DESC;
  time | x1 | x2 | x3 | x4 | x5 
 ------+----+----+----+----+----
-(0 rows)
 
 SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
              time             | x1 | x2 | x3 | x4 | x5 
@@ -754,7 +673,6 @@ SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0
-(4 rows)
 
 -- With selection on segment_by and compressed column
 SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
@@ -764,12 +682,10 @@ SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0
-(4 rows)
 
 SELECT * FROM test1 WHERE time > '1980-01-01 00:00:00-00' AND x4 > 100 ORDER BY time DESC;
  time | x1 | x2 | x3 | x4 | x5 
 ------+----+----+----+----+----
-(0 rows)
 
 -- Without projection
 SELECT * FROM test1 ORDER BY time DESC;
@@ -779,7 +695,6 @@ SELECT * FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0
-(4 rows)
 
 -- With projection on time
 SELECT time FROM test1 ORDER BY time DESC;
@@ -789,7 +704,6 @@ SELECT time FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST
  Fri Dec 31 17:00:00 1999 PST
  Fri Dec 31 16:00:00 1999 PST
-(4 rows)
 
 -- With projection on x3
 SELECT x3 FROM test1 ORDER BY time DESC;
@@ -799,7 +713,6 @@ SELECT x3 FROM test1 ORDER BY time DESC;
   3
   2
   1
-(4 rows)
 
 -- With projection on x3 and time
 SELECT x3,time FROM test1 ORDER BY time DESC;
@@ -809,7 +722,6 @@ SELECT x3,time FROM test1 ORDER BY time DESC;
   3 | Fri Dec 31 18:00:00 1999 PST
   2 | Fri Dec 31 17:00:00 1999 PST
   1 | Fri Dec 31 16:00:00 1999 PST
-(4 rows)
 
 -- With projection on time and x3
 SELECT time,x3 FROM test1 ORDER BY time DESC;
@@ -819,12 +731,10 @@ SELECT time,x3 FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  3
  Fri Dec 31 17:00:00 1999 PST |  2
  Fri Dec 31 16:00:00 1999 PST |  1
-(4 rows)
 
 -- Test with projection and constants
 EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
-                                                                                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                                                                                  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result
    Output: 1, 2, 3, _hyper_1_1_chunk."time", _hyper_1_1_chunk.x2
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
@@ -835,7 +745,6 @@ EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three,
                Sort Key: compress_hyper_2_2_chunk._ts_meta_max_1 DESC
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
                      Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(10 rows)
 
 SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
  one | two | three |             time             | x2 
@@ -844,12 +753,10 @@ SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
    1 |   2 |     3 | Fri Dec 31 18:00:00 1999 PST |  1
    1 |   2 |     3 | Fri Dec 31 17:00:00 1999 PST |  3
    1 |   2 |     3 | Fri Dec 31 16:00:00 1999 PST |  2
-(4 rows)
 
 -- Test with projection and constants
 EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
-                                                                                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                                                                                  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result
    Output: 1, 2, 3, _hyper_1_1_chunk.x2, _hyper_1_1_chunk."time"
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
@@ -860,7 +767,6 @@ EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three,
                Sort Key: compress_hyper_2_2_chunk._ts_meta_max_1 DESC
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk
                      Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3, compress_hyper_2_2_chunk.x4
-(10 rows)
 
 SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
  one | two | three | x2 |             time             
@@ -869,7 +775,6 @@ SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
    1 |   2 |     3 |  1 | Fri Dec 31 18:00:00 1999 PST
    1 |   2 |     3 |  3 | Fri Dec 31 17:00:00 1999 PST
    1 |   2 |     3 |  2 | Fri Dec 31 16:00:00 1999 PST
-(4 rows)
 
 -- With projection and selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
 SELECT x4 FROM test1 WHERE x4 > 2 ORDER BY time DESC;
@@ -877,7 +782,6 @@ SELECT x4 FROM test1 WHERE x4 > 2 ORDER BY time DESC;
 ----
   4
   3
-(2 rows)
 
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 -- Aggregation with count
@@ -885,7 +789,6 @@ SELECT count(*) FROM test1;
  count 
 -------
      4
-(1 row)
 
 -- Test with default values
 ALTER TABLE test1 ADD COLUMN c1 int;
@@ -898,20 +801,17 @@ SELECT * FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0 |    | 42
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0 |    | 42
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0 |    | 42
-(4 rows)
 
 -- Recompress
 SELECT decompress_chunk(i) FROM show_chunks('test1') i;
             decompress_chunk            
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 ANALYZE test1;
 -- Test with a changed physical layout
@@ -923,7 +823,6 @@ SELECT * FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0 |    | 42
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0 |    | 42
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0 |    | 42
-(4 rows)
 
 ALTER TABLE test1 DROP COLUMN c2;
 SELECT * FROM test1 ORDER BY time DESC;
@@ -933,7 +832,6 @@ SELECT * FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0 |   
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0 |   
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0 |   
-(4 rows)
 
 -- Test with a re-created column
 ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 43;
@@ -944,13 +842,11 @@ SELECT * FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0 |    | 43
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0 |    | 43
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0 |    | 43
-(4 rows)
 
 -- Test with the recreated column
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC;
-                                                                                                                                                                                                                                                                           QUERY PLAN                                                                                                                                                                                                                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5, _hyper_1_1_chunk.c1, _hyper_1_1_chunk.c2
    Batch Sorted Merge: true
@@ -961,7 +857,6 @@ SELECT * FROM test1 ORDER BY time DESC;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk.x1, compress_hyper_2_7_chunk.x2, compress_hyper_2_7_chunk.x3, compress_hyper_2_7_chunk._ts_meta_min_2, compress_hyper_2_7_chunk._ts_meta_max_2, compress_hyper_2_7_chunk.x4, compress_hyper_2_7_chunk._ts_meta_min_3, compress_hyper_2_7_chunk._ts_meta_max_3, compress_hyper_2_7_chunk.x5, compress_hyper_2_7_chunk.c1, compress_hyper_2_7_chunk.c2, compress_hyper_2_7_chunk._ts_meta_count
-(10 rows)
 
 SELECT * FROM test1 ORDER BY time DESC;
              time             | x1 | x2 | x3 | x4 | x5 | c1 | c2 
@@ -970,13 +865,11 @@ SELECT * FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0 |    | 43
  Fri Dec 31 17:00:00 1999 PST |  1 |  3 |  2 |  2 |  0 |    | 43
  Fri Dec 31 16:00:00 1999 PST |  1 |  2 |  1 |  1 |  0 |    | 43
-(4 rows)
 
 -- Test with projection and recreated column
 :PREFIX
 SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
-                                                                                                                               QUERY PLAN                                                                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x1, _hyper_1_1_chunk.c2
    Batch Sorted Merge: true
@@ -987,7 +880,6 @@ SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk.x2, compress_hyper_2_7_chunk.x1, compress_hyper_2_7_chunk.c2, compress_hyper_2_7_chunk._ts_meta_count
-(10 rows)
 
 SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
              time             | x2 | x1 | c2 
@@ -996,13 +888,11 @@ SELECT time, x2, x1, c2 FROM test1 ORDER BY time DESC;
  Fri Dec 31 18:00:00 1999 PST |  1 |  2 | 43
  Fri Dec 31 17:00:00 1999 PST |  3 |  1 | 43
  Fri Dec 31 16:00:00 1999 PST |  2 |  1 | 43
-(4 rows)
 
 -- Test with projection and recreated column
 :PREFIX
 SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
-                                                                                                                               QUERY PLAN                                                                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x1, _hyper_1_1_chunk.c2, _hyper_1_1_chunk."time"
    Batch Sorted Merge: true
@@ -1013,7 +903,6 @@ SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_7_chunk.x2, compress_hyper_2_7_chunk.x1, compress_hyper_2_7_chunk.c2, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_count
-(10 rows)
 
 SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
  x2 | x1 | c2 |             time             
@@ -1022,13 +911,11 @@ SELECT x2, x1, c2, time FROM test1 ORDER BY time DESC;
   1 |  2 | 43 | Fri Dec 31 18:00:00 1999 PST
   3 |  1 | 43 | Fri Dec 31 17:00:00 1999 PST
   2 |  1 | 43 | Fri Dec 31 16:00:00 1999 PST
-(4 rows)
 
 -- Test with projection, constants and recreated column
 :PREFIX
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
-                                                                                                                                  QUERY PLAN                                                                                                                                   
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=4.00 loops=1)
    Output: 1, 2, 3, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x1, _hyper_1_1_chunk.c2, _hyper_1_1_chunk."time"
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
@@ -1041,7 +928,6 @@ SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk (actual rows=3.00 loops=1)
                      Output: compress_hyper_2_7_chunk.x2, compress_hyper_2_7_chunk.x1, compress_hyper_2_7_chunk.c2, compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk._ts_meta_count
-(12 rows)
 
 SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time DESC;
  one | two | three | x2 | x1 | c2 |             time             
@@ -1050,7 +936,6 @@ SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time
    1 |   2 |     3 |  1 |  2 | 43 | Fri Dec 31 18:00:00 1999 PST
    1 |   2 |     3 |  3 |  1 | 43 | Fri Dec 31 17:00:00 1999 PST
    1 |   2 |     3 |  2 |  1 | 43 | Fri Dec 31 16:00:00 1999 PST
-(4 rows)
 
 -- Test with null values
 SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
@@ -1060,7 +945,6 @@ SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
  Sat Jan 01 00:00:00 2000 PST |  1 |    |   
  Sat Jan 01 00:00:00 2000 PST |  1 |  1 |   
  Sat Jan 01 00:00:00 2000 PST |  1 |  2 |   
-(4 rows)
 
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
              time             | x1 | x2 | x3 
@@ -1069,7 +953,6 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
  Sat Jan 01 00:00:00 2000 PST |  1 |  1 |   
  Sat Jan 01 00:00:00 2000 PST |  1 |    |   
  Sat Jan 01 00:00:00 2000 PST |  2 |    |   
-(4 rows)
 
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
@@ -1079,7 +962,6 @@ SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
  Sat Jan 01 00:00:00 2000 PST |  1 |  2 |   
  Sat Jan 01 00:00:00 2000 PST |  1 |    |   
  Sat Jan 01 00:00:00 2000 PST |  2 |    |   
-(4 rows)
 
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
              time             | x1 | x2 | x3 
@@ -1088,7 +970,6 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
  Sat Jan 01 00:00:00 2000 PST |  2 |    |   
  Sat Jan 01 00:00:00 2000 PST |  1 |  2 |   
  Sat Jan 01 00:00:00 2000 PST |  1 |  1 |   
-(4 rows)
 
 ------
 -- Tests based on compressed chunk state
@@ -1097,8 +978,7 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 set timescaledb.debug_require_batch_sorted_merge to 'force';
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
-                                                                                                                                                                                                                                                                           QUERY PLAN                                                                                                                                                                                                                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4.00 loops=1)
    Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5, _hyper_1_1_chunk.c1, _hyper_1_1_chunk.c2
    Batch Sorted Merge: true
@@ -1110,15 +990,13 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_7_chunk (actual rows=3.00 loops=1)
                Output: compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk.x1, compress_hyper_2_7_chunk.x2, compress_hyper_2_7_chunk.x3, compress_hyper_2_7_chunk._ts_meta_min_2, compress_hyper_2_7_chunk._ts_meta_max_2, compress_hyper_2_7_chunk.x4, compress_hyper_2_7_chunk._ts_meta_min_3, compress_hyper_2_7_chunk._ts_meta_max_3, compress_hyper_2_7_chunk.x5, compress_hyper_2_7_chunk.c1, compress_hyper_2_7_chunk.c2, compress_hyper_2_7_chunk._ts_meta_count
-(11 rows)
 
 BEGIN TRANSACTION;
 INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 02:01:00-00', 10, 20, 30, 40, 50);
 -- Should be optimized using a merge append path between the compressed and uncompressed part of the chunk
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
-                                                                                                                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                                                                                                                  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on public.test1 (actual rows=5.00 loops=1)
    Output: test1."time", test1.x1, test1.x2, test1.x3, test1.x4, test1.x5, test1.c1, test1.c2
    Order: test1."time"
@@ -1139,7 +1017,6 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
                            Output: compress_hyper_2_7_chunk."time", compress_hyper_2_7_chunk._ts_meta_min_1, compress_hyper_2_7_chunk._ts_meta_max_1, compress_hyper_2_7_chunk.x1, compress_hyper_2_7_chunk.x2, compress_hyper_2_7_chunk.x3, compress_hyper_2_7_chunk._ts_meta_min_2, compress_hyper_2_7_chunk._ts_meta_max_2, compress_hyper_2_7_chunk.x4, compress_hyper_2_7_chunk._ts_meta_min_3, compress_hyper_2_7_chunk._ts_meta_max_3, compress_hyper_2_7_chunk.x5, compress_hyper_2_7_chunk.c1, compress_hyper_2_7_chunk.c2, compress_hyper_2_7_chunk._ts_meta_count
          ->  Index Scan Backward using _hyper_1_1_chunk_test1_time_idx on _timescaledb_internal._hyper_1_1_chunk (actual rows=1.00 loops=1)
                Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5, _hyper_1_1_chunk.c1, _hyper_1_1_chunk.c2
-(20 rows)
 
 -- The inserted value should be visible
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
@@ -1150,7 +1027,6 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
  Fri Dec 31 18:00:00 1999 PST |  2 |  1 |  3 |  3 |  0 |    | 43
  Fri Dec 31 18:01:00 1999 PST | 10 | 20 | 30 | 40 | 50 |    | 43
  Fri Dec 31 19:00:00 1999 PST |  1 |  2 |  4 |  4 |  0 |    | 43
-(5 rows)
 
 ROLLBACK;
 ------
@@ -1164,7 +1040,6 @@ cpu double precision NULL,
 temperature double precision NULL);
 SELECT FROM create_hypertable('sensor_data','time');
 --
-(1 row)
 
 INSERT INTO sensor_data
 SELECT
@@ -1182,7 +1057,6 @@ SELECT add_compression_policy('sensor_data','1 minute'::INTERVAL);
  add_compression_policy 
 ------------------------
                    1000
-(1 row)
 
 SELECT compress_chunk(i) FROM show_chunks('sensor_data') i;
              compress_chunk              
@@ -1193,14 +1067,12 @@ SELECT compress_chunk(i) FROM show_chunks('sensor_data') i;
  _timescaledb_internal._hyper_7_11_chunk
  _timescaledb_internal._hyper_7_12_chunk
  _timescaledb_internal._hyper_7_13_chunk
-(6 rows)
 
 VACUUM ANALYZE sensor_data;
 -- Ensure the optimization is used for queries on this table
 :PREFIX
 SELECT * FROM sensor_data ORDER BY time DESC LIMIT 1;
-                                                                                                                                                 QUERY PLAN                                                                                                                                                  
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    Output: sensor_data."time", sensor_data.sensor_id, sensor_data.cpu, sensor_data.temperature
    ->  Custom Scan (ChunkAppend) on public.sensor_data (actual rows=1.00 loops=1)
@@ -1263,7 +1135,6 @@ SELECT * FROM sensor_data ORDER BY time DESC LIMIT 1;
                      Sort Key: compress_hyper_8_14_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_8_14_chunk (never executed)
                            Output: compress_hyper_8_14_chunk._ts_meta_count, compress_hyper_8_14_chunk.sensor_id, compress_hyper_8_14_chunk._ts_meta_min_1, compress_hyper_8_14_chunk._ts_meta_max_1, compress_hyper_8_14_chunk."time", compress_hyper_8_14_chunk.cpu, compress_hyper_8_14_chunk.temperature
-(62 rows)
 
 -- Verify that we produce the same order without and with the optimization
 CREATE PROCEDURE order_test(query text) LANGUAGE plpgsql AS $$
@@ -1321,7 +1192,6 @@ WHERE EXISTS (
   2
   3
   4
-(4 rows)
 
 ------
 -- Test enabling and disabling the optimization based on costs
@@ -1332,7 +1202,6 @@ segment_by integer NOT NULL,
 x1 integer NOT NULL);
 SELECT FROM create_hypertable('test_costs', 'time');
 --
-(1 row)
 
 ALTER TABLE test_costs SET (timescaledb.compress, timescaledb.compress_segmentby='segment_by', timescaledb.compress_orderby = 'time DESC, x1');
 -- Create 100 segments
@@ -1349,7 +1218,6 @@ SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_20_chunk
-(1 row)
 
 ANALYZE test_costs;
 -- Number of segments
@@ -1357,13 +1225,11 @@ SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS 
  count 
 -------
    100
-(1 row)
 
 -- Test query plan (should be optimized due to 100 different segments)
 :PREFIX
 SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
-                                                                                                                                                                      QUERY PLAN                                                                                                                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_9_20_chunk (actual rows=11800.00 loops=1)
    Output: _hyper_9_20_chunk."time", _hyper_9_20_chunk.segment_by, _hyper_9_20_chunk.x1
    Batch Sorted Merge: true
@@ -1374,14 +1240,12 @@ SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_10_21_chunk (actual rows=100.00 loops=1)
                Output: compress_hyper_10_21_chunk._ts_meta_count, compress_hyper_10_21_chunk.segment_by, compress_hyper_10_21_chunk._ts_meta_min_1, compress_hyper_10_21_chunk._ts_meta_max_1, compress_hyper_10_21_chunk."time", compress_hyper_10_21_chunk._ts_meta_min_2, compress_hyper_10_21_chunk._ts_meta_max_2, compress_hyper_10_21_chunk.x1
-(10 rows)
 
 -- Decompress chunk
 SELECT decompress_chunk(i) FROM show_chunks('test_costs') i;
             decompress_chunk             
 -----------------------------------------
  _timescaledb_internal._hyper_9_20_chunk
-(1 row)
 
 -- Add 900 segments (1000 segments total)
 INSERT INTO test_costs
@@ -1398,7 +1262,6 @@ SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_20_chunk
-(1 row)
 
 ANALYZE test_costs;
 -- Number of segments
@@ -1406,14 +1269,12 @@ SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS 
  count 
 -------
   1000
-(1 row)
 
 -- Test query plan (should not be optimized due to 1000 different segments)
 set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 :PREFIX
 SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
-                                                                                                                                                                      QUERY PLAN                                                                                                                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=118118.00 loops=1)
    Output: _hyper_9_20_chunk."time", _hyper_9_20_chunk.segment_by, _hyper_9_20_chunk.x1
    Sort Key: _hyper_9_20_chunk."time" DESC
@@ -1423,14 +1284,12 @@ SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_10_22_chunk (actual rows=1000.00 loops=1)
                Output: compress_hyper_10_22_chunk._ts_meta_count, compress_hyper_10_22_chunk.segment_by, compress_hyper_10_22_chunk._ts_meta_min_1, compress_hyper_10_22_chunk._ts_meta_max_1, compress_hyper_10_22_chunk."time", compress_hyper_10_22_chunk._ts_meta_min_2, compress_hyper_10_22_chunk._ts_meta_max_2, compress_hyper_10_22_chunk.x1
-(9 rows)
 
 -- Test query plan with predicate (query should be optimized due to ~100 segments)
 set timescaledb.debug_require_batch_sorted_merge to 'require';
 :PREFIX
 SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_by < 999 ORDER BY time DESC;
-                                                                                                                                                                      QUERY PLAN                                                                                                                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_9_20_chunk (actual rows=11564.00 loops=1)
    Output: _hyper_9_20_chunk."time", _hyper_9_20_chunk.segment_by, _hyper_9_20_chunk.x1
    Batch Sorted Merge: true
@@ -1442,7 +1301,6 @@ SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_b
          ->  Index Scan using compress_hyper_10_22_chunk_segment_by__ts_meta_min_1__ts_me_idx on _timescaledb_internal.compress_hyper_10_22_chunk (actual rows=98.00 loops=1)
                Output: compress_hyper_10_22_chunk._ts_meta_count, compress_hyper_10_22_chunk.segment_by, compress_hyper_10_22_chunk._ts_meta_min_1, compress_hyper_10_22_chunk._ts_meta_max_1, compress_hyper_10_22_chunk."time", compress_hyper_10_22_chunk._ts_meta_min_2, compress_hyper_10_22_chunk._ts_meta_max_2, compress_hyper_10_22_chunk.x1
                Index Cond: ((compress_hyper_10_22_chunk.segment_by > 900) AND (compress_hyper_10_22_chunk.segment_by < 999))
-(11 rows)
 
 -- Target list creation - Issue 5738
 CREATE TABLE bugtab(
@@ -1466,7 +1324,6 @@ WARNING:  column type "character varying" used for "signal_string_value" does no
   create_hypertable   
 ----------------------
  (11,public,bugtab,t)
-(1 row)
 
 INSERT INTO bugtab values('2020-01-01 10:00', 'hin1111', 'model111', 'blok111', 'message_here', 'signal1', 12.34, '12.34');
 ALTER TABLE bugtab SET (timescaledb.compress, timescaledb.compress_segmentby = 'hin, signal_name', timescaledb.compress_orderby = 'time');
@@ -1477,14 +1334,12 @@ SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_23_chunk
-(1 row)
 
 ANALYZE bugtab;
 set timescaledb.debug_require_batch_sorted_merge to 'force';
 :PREFIX
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
-                                                                                                                                                                                                                                      QUERY PLAN                                                                                                                                                                                                                                      
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=1.00 loops=1)
    Output: _hyper_11_23_chunk."time", (_hyper_11_23_chunk.hin)::text, (_hyper_11_23_chunk.model)::text, (_hyper_11_23_chunk.block)::text, (_hyper_11_23_chunk.message_name)::text, (_hyper_11_23_chunk.signal_name)::text, _hyper_11_23_chunk.signal_numeric_value, (_hyper_11_23_chunk.signal_string_value)::text
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_11_23_chunk (actual rows=1.00 loops=1)
@@ -1498,19 +1353,16 @@ SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"sign
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_12_24_chunk (actual rows=1.00 loops=1)
                      Output: compress_hyper_12_24_chunk._ts_meta_count, compress_hyper_12_24_chunk.hin, compress_hyper_12_24_chunk.signal_name, compress_hyper_12_24_chunk._ts_meta_min_1, compress_hyper_12_24_chunk._ts_meta_max_1, compress_hyper_12_24_chunk."time", compress_hyper_12_24_chunk.model, compress_hyper_12_24_chunk.block, compress_hyper_12_24_chunk.message_name, compress_hyper_12_24_chunk.signal_numeric_value, compress_hyper_12_24_chunk.signal_string_value
-(13 rows)
 
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
            time           |   hin   |  model   |  block  | message_name | signal_name | signal_numeric_value | signal_string_value 
 --------------------------+---------+----------+---------+--------------+-------------+----------------------+---------------------
  Wed Jan 01 10:00:00 2020 | hin1111 | model111 | blok111 | message_here | signal1     |                12.34 | 12.34
-(1 row)
 
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM bugtab ORDER BY "time" DESC;
            time           |   hin   |  model   |  block  | message_name | signal_name | signal_numeric_value | signal_string_value 
 --------------------------+---------+----------+---------+--------------+-------------+----------------------+---------------------
  Wed Jan 01 10:00:00 2020 | hin1111 | model111 | blok111 | message_here | signal1     |                12.34 | 12.34
-(1 row)
 
 -- Condition that filter the first tuple of a batch - Issue 5797
 CREATE TABLE test (
@@ -1526,7 +1378,6 @@ WARNING:  column type "timestamp without time zone" used for "dttm" does not fol
  create_hypertable  
 --------------------
  (13,public,test,t)
-(1 row)
 
 ALTER TABLE test SET (
     timescaledb.compress,
@@ -1619,7 +1470,6 @@ SELECT compress_chunk(show_chunks('test', older_than => INTERVAL '1 week'), true
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_25_chunk
-(1 row)
 
 SELECT t.dttm FROM test t WHERE t.dttm > '2023-05-25T14:23:12' ORDER BY t.dttm;
            dttm           
@@ -1655,15 +1505,13 @@ SELECT t.dttm FROM test t WHERE t.dttm > '2023-05-25T14:23:12' ORDER BY t.dttm;
  Thu May 25 23:12:13 2023
  Thu May 25 23:12:13 2023
  Thu May 25 23:59:13 2023
-(31 rows)
 
 -- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
 SET enable_sort TO OFF;
 set timescaledb.debug_require_batch_sorted_merge = 'require';
 :PREFIX
 SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
-                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                  
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    Output: t.dttm
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_13_25_chunk t (actual rows=1.00 loops=1)
@@ -1677,7 +1525,6 @@ SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
                Sort Method: quicksort 
                ->  Seq Scan on _timescaledb_internal.compress_hyper_14_26_chunk (actual rows=32.00 loops=1)
                      Output: compress_hyper_14_26_chunk._ts_meta_count, compress_hyper_14_26_chunk.otherid, compress_hyper_14_26_chunk.valuefk, compress_hyper_14_26_chunk.otherfk, compress_hyper_14_26_chunk.id, compress_hyper_14_26_chunk._ts_meta_min_1, compress_hyper_14_26_chunk._ts_meta_max_1, compress_hyper_14_26_chunk.dttm, compress_hyper_14_26_chunk.measure
-(13 rows)
 
 RESET enable_sort;
 reset timescaledb.debug_require_batch_sorted_merge;

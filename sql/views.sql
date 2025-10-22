@@ -128,11 +128,7 @@ SELECT ht.schema_name AS hypertable_schema,
   mat_ht.schema_name AS materialization_hypertable_schema,
   mat_ht.table_name AS materialization_hypertable_name,
   directview.viewdefinition AS view_definition,
-  cagg.finalized,
-  CASE WHEN _timescaledb_functions.has_invalidation_trigger(format('%I.%I', ht.schema_name, ht.table_name)::regclass)
-       THEN 'trigger'
-       ELSE 'wal'
-  END AS invalidate_using
+  cagg.finalized
 FROM _timescaledb_catalog.continuous_agg cagg,
   _timescaledb_catalog.hypertable ht,
   LATERAL (

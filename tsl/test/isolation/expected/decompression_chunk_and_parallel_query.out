@@ -4,7 +4,6 @@ starting permutation: s2_read_sensor_data s1_begin s1_decompress s2_read_sensor_
 compression_status
 ------------------
 Compressed        
-(1 row)
 
 step s2_read_sensor_data: 
    SELECT FROM sensor_data;
@@ -13,7 +12,6 @@ step s2_read_sensor_data:
 compression_status
 ------------------
 Compressed        
-(1 row)
 
 step s1_begin: 
   BEGIN;
@@ -25,12 +23,10 @@ step s1_decompress:
 count
 -----
     1
-(1 row)
 
 compression_status
 ------------------
 Uncompressed      
-(1 row)
 
 step s2_read_sensor_data: 
    SELECT FROM sensor_data;
@@ -43,7 +39,6 @@ step s2_read_sensor_data: <... completed>
 compression_status
 ------------------
 Uncompressed      
-(1 row)
 
 step s2_read_sensor_data: 
    SELECT FROM sensor_data;
@@ -52,5 +47,4 @@ step s2_read_sensor_data:
 compression_status
 ------------------
 Uncompressed      
-(1 row)
 

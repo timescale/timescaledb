@@ -339,6 +339,11 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 										initial_start,
 										timezone);
 
+	if (!TIMESTAMP_NOT_FINITE(initial_start))
+	{
+		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
+	}
+
 	ts_cache_release(&hcache);
 	PG_RETURN_INT32(job_id);
 }
@@ -404,11 +409,6 @@ policy_compression_add(PG_FUNCTION_ARGS)
 											 initial_start,
 											 valid_timezone);
 
-	if (!TIMESTAMP_NOT_FINITE(initial_start))
-	{
-		int32 job_id = DatumGetInt32(retval);
-		ts_bgw_job_stat_upsert_next_start(job_id, initial_start);
-	}
 	return retval;
 }
 

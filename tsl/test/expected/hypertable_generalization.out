@@ -23,62 +23,52 @@ SELECT by_range('id');
     by_range     
 -----------------
  range//id//-//-
-(1 row)
 
 SELECT by_range('id', partition_func => 'part_func');
         by_range         
 -------------------------
  range//id//-//part_func
-(1 row)
 
 SELECT by_range('id', '1 week'::interval);
         by_range        
 ------------------------
  range//id//@ 7 days//-
-(1 row)
 
 SELECT by_range('id', '1 week'::interval, 'part_func'::regproc);
             by_range            
 --------------------------------
  range//id//@ 7 days//part_func
-(1 row)
 
 SELECT by_hash('id', 3);
     by_hash     
 ----------------
  hash//id//3//-
-(1 row)
 
 SELECT by_hash('id', 3, partition_func => 'part_func');
         by_hash         
 ------------------------
  hash//id//3//part_func
-(1 row)
 
 -- Check if we handle the varlength of the datatype properly
 SELECT * FROM by_range('id') WHERE by_range IS NOT NULL;
     by_range     
 -----------------
  range//id//-//-
-(1 row)
 
 SELECT * FROM by_range('id', partition_func => 'part_func') WHERE by_range IS NOT NULL;
         by_range         
 -------------------------
  range//id//-//part_func
-(1 row)
 
 SELECT * FROM by_hash('id', 3) WHERE by_hash IS NOT NULL;
     by_hash     
 ----------------
  hash//id//3//-
-(1 row)
 
 SELECT * FROM by_hash('id', 3, partition_func => 'part_func') WHERE by_hash IS NOT NULL;
         by_hash         
 ------------------------
  hash//id//3//part_func
-(1 row)
 
 \set ON_ERROR_STOP 0
 SELECT 'hash//id//3//-'::_timescaledb_internal.dimension_info;
@@ -94,14 +84,12 @@ SELECT create_hypertable('test_table_smallint', by_range('id'));
  create_hypertable 
 -------------------
  (1,t)
-(1 row)
 
 -- default interval
 SELECT integer_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'test_table_smallint';
  integer_interval 
 ------------------
             10000
-(1 row)
 
 -- Add data with default partition (10000)
 INSERT INTO test_table_smallint VALUES (1, 10, '01-01-2023 11:00'::TIMESTAMPTZ);
@@ -113,7 +101,6 @@ SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name='test_
  count 
 -------
      3
-(1 row)
 
 -- Validate generalized hypertable for int
 CREATE TABLE test_table_int(id INTEGER, device INTEGER, time TIMESTAMPTZ);
@@ -121,14 +108,12 @@ SELECT create_hypertable('test_table_int', by_range('id'));
  create_hypertable 
 -------------------
  (2,t)
-(1 row)
 
 -- Default interval
 SELECT integer_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'test_table_int';
  integer_interval 
 ------------------
            100000
-(1 row)
 
 -- Add data
 INSERT INTO test_table_int VALUES (1, 10, '01-01-2023 11:00'::TIMESTAMPTZ);
@@ -140,7 +125,6 @@ SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name='test_
  count 
 -------
      3
-(1 row)
 
 -- Validate generalized hypertable for bigint
 CREATE TABLE test_table_bigint(id BIGINT, device INTEGER, time TIMESTAMPTZ);
@@ -148,14 +132,12 @@ SELECT create_hypertable('test_table_bigint', by_range('id'));
  create_hypertable 
 -------------------
  (3,t)
-(1 row)
 
 -- Default interval
 SELECT integer_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'test_table_bigint';
  integer_interval 
 ------------------
           1000000
-(1 row)
 
 -- Add data
 INSERT INTO test_table_bigint VALUES (1, 10, '01-01-2023 11:00'::TIMESTAMPTZ);
@@ -167,7 +149,6 @@ SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name='test_
  count 
 -------
      3
-(1 row)
 
 DROP TABLE test_table_smallint;
 DROP TABLE test_table_int;
@@ -178,7 +159,6 @@ SELECT create_hypertable('jobs_serial', by_range('job_id', partition_interval =>
  create_hypertable 
 -------------------
  (4,t)
-(1 row)
 
 -- Insert data
 INSERT INTO jobs_serial (device_id, start_time, end_time)
@@ -186,16 +166,13 @@ SELECT abs(timestamp_hash(t::timestamp)) % 10, t, t + INTERVAL '1 day'
 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00':: TIMESTAMPTZ,'1 hour')t;
 -- Verify chunk pruning
 EXPLAIN VERBOSE SELECT * FROM jobs_serial WHERE job_id < 30;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Index Scan using "10_1_jobs_serial_pkey" on _timescaledb_internal._hyper_4_10_chunk  (cost=0.15..20.30 rows=523 width=24)
    Output: _hyper_4_10_chunk.job_id, _hyper_4_10_chunk.device_id, _hyper_4_10_chunk.start_time, _hyper_4_10_chunk.end_time
    Index Cond: (_hyper_4_10_chunk.job_id < 30)
-(3 rows)
 
 EXPLAIN VERBOSE SELECT * FROM jobs_serial WHERE job_id >= 30 AND job_id < 90;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append  (cost=0.15..14.71 rows=16 width=24)
    ->  Index Scan using "11_2_jobs_serial_pkey" on _timescaledb_internal._hyper_4_11_chunk  (cost=0.15..7.31 rows=8 width=24)
          Output: _hyper_4_11_chunk.job_id, _hyper_4_11_chunk.device_id, _hyper_4_11_chunk.start_time, _hyper_4_11_chunk.end_time
@@ -203,11 +180,9 @@ EXPLAIN VERBOSE SELECT * FROM jobs_serial WHERE job_id >= 30 AND job_id < 90;
    ->  Index Scan using "12_3_jobs_serial_pkey" on _timescaledb_internal._hyper_4_12_chunk  (cost=0.15..7.31 rows=8 width=24)
          Output: _hyper_4_12_chunk.job_id, _hyper_4_12_chunk.device_id, _hyper_4_12_chunk.start_time, _hyper_4_12_chunk.end_time
          Index Cond: ((_hyper_4_12_chunk.job_id >= 30) AND (_hyper_4_12_chunk.job_id < 90))
-(7 rows)
 
 EXPLAIN VERBOSE SELECT * FROM jobs_serial WHERE job_id > 90;
-                                                           QUERY PLAN                                                            
----------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Append  (cost=0.15..45.84 rows=1046 width=24)
    ->  Index Scan using "13_4_jobs_serial_pkey" on _timescaledb_internal._hyper_4_13_chunk  (cost=0.15..20.30 rows=523 width=24)
          Output: _hyper_4_13_chunk.job_id, _hyper_4_13_chunk.device_id, _hyper_4_13_chunk.start_time, _hyper_4_13_chunk.end_time
@@ -215,7 +190,6 @@ EXPLAIN VERBOSE SELECT * FROM jobs_serial WHERE job_id > 90;
    ->  Index Scan using "14_5_jobs_serial_pkey" on _timescaledb_internal._hyper_4_14_chunk  (cost=0.15..20.30 rows=523 width=24)
          Output: _hyper_4_14_chunk.job_id, _hyper_4_14_chunk.device_id, _hyper_4_14_chunk.start_time, _hyper_4_14_chunk.end_time
          Index Cond: (_hyper_4_14_chunk.job_id > 90)
-(7 rows)
 
 -- Update rows
 UPDATE jobs_serial SET end_time = end_time + INTERVAL '1 hour' where job_id = 1;
@@ -225,19 +199,16 @@ SELECT start_time, end_time FROM jobs_serial WHERE job_id = 1;
           start_time          |           end_time           
 ------------------------------+------------------------------
  Fri Mar 02 01:00:00 2018 PST | Sat Mar 03 02:00:00 2018 PST
-(1 row)
 
 SELECT start_time, end_time FROM jobs_serial WHERE job_id = 30;
           start_time          |           end_time           
 ------------------------------+------------------------------
  Sat Mar 03 06:00:00 2018 PST | Sun Mar 04 07:00:00 2018 PST
-(1 row)
 
 SELECT start_time, end_time FROM jobs_serial WHERE job_id = 90;
           start_time          |           end_time           
 ------------------------------+------------------------------
  Mon Mar 05 18:00:00 2018 PST | Tue Mar 06 19:00:00 2018 PST
-(1 row)
 
 -- Test delete rows
 -- Existing tuple counts. We saves these and compare with the values
@@ -254,7 +225,6 @@ SELECT
  total_removed | matching_removed 
 ---------------+------------------
              9 |                9
-(1 row)
 
 DROP TABLE jobs_serial;
 DROP TABLE counts;
@@ -264,7 +234,6 @@ SELECT create_hypertable('jobs_big_serial', by_range('job_id', 100));
  create_hypertable 
 -------------------
  (5,t)
-(1 row)
 
 -- Insert data
 INSERT INTO jobs_big_serial (device_id, start_time, end_time)
@@ -275,21 +244,18 @@ SELECT count(*) FROM timescaledb_information.chunks;
  count 
 -------
      3
-(1 row)
 
 -- Get current sequence and verify updating sequence
 SELECT currval(pg_get_serial_sequence('jobs_big_serial', 'job_id'));
  currval 
 ---------
      289
-(1 row)
 
 -- Update sequence value to 500
 SELECT setval(pg_get_serial_sequence('jobs_big_serial', 'job_id'), 500, false);
  setval 
 --------
     500
-(1 row)
 
 -- Insert few rows and verify that the next sequence starts from 500
 INSERT INTO jobs_big_serial (device_id, start_time, end_time)
@@ -300,64 +266,54 @@ SELECT count(*) FROM jobs_big_serial WHERE job_id >= 290 AND job_id < 500;
  count 
 -------
      0
-(1 row)
 
 -- The new rows should be added with job_id > 500
 SELECT count(*) from jobs_big_serial WHERE job_id > 500;
  count 
 -------
     48
-(1 row)
 
 -- Verify show_chunks API
 SELECT show_chunks('jobs_big_serial', older_than => 100);
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_15_chunk
-(1 row)
 
 SELECT show_chunks('jobs_big_serial', newer_than => 200, older_than => 300);
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_17_chunk
-(1 row)
 
 SELECT show_chunks('jobs_big_serial', newer_than => 500);
                show_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_18_chunk
-(1 row)
 
 -- Verify drop_chunks API
 SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = 'jobs_big_serial';
  count 
 -------
      4
-(1 row)
 
 SELECT drop_chunks('jobs_big_serial', newer_than => 500);
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_18_chunk
-(1 row)
 
 SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = 'jobs_big_serial';
  count 
 -------
      3
-(1 row)
 
 SELECT drop_chunks('jobs_big_serial', newer_than => 200, older_than => 300);
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_17_chunk
-(1 row)
 
 SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = 'jobs_big_serial';
  count 
 -------
      2
-(1 row)
 
 DROP TABLE jobs_big_serial;
 -- Verify partition function
@@ -366,7 +322,6 @@ SELECT create_hypertable('test_table_int', by_range('id', 10, partition_func => 
  create_hypertable 
 -------------------
  (6,t)
-(1 row)
 
 INSERT INTO test_table_int VALUES('1', 1, '01-01-2023 11:00'::TIMESTAMPTZ);
 INSERT INTO test_table_int VALUES('10', 10, '01-01-2023 11:00'::TIMESTAMPTZ);
@@ -375,7 +330,6 @@ SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = 'tes
  count 
 -------
      3
-(1 row)
 
 DROP TABLE test_table_int;
 DROP FUNCTION part_func;
@@ -387,20 +341,17 @@ NOTICE:  migrating data to chunks
  create_hypertable 
 -------------------
  (7,t)
-(1 row)
 
 -- Show default indexes created for hypertables.
 SELECT indexname FROM pg_indexes WHERE tablename = 'test_table_int';
        indexname       
 -----------------------
  test_table_int_id_idx
-(1 row)
 
 SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_table_int';
  count 
 -------
      6
-(1 row)
 
 DROP TABLE test_table_int;
 -- create_hypertable without default indexes
@@ -409,12 +360,10 @@ SELECT create_hypertable('test_table_int', by_range('id', 10), create_default_in
  create_hypertable 
 -------------------
  (8,t)
-(1 row)
 
 SELECT indexname FROM pg_indexes WHERE tablename = 'test_table_int';
  indexname 
 -----------
-(0 rows)
 
 DROP TABLE test_table_int;
 -- if_not_exists
@@ -423,7 +372,6 @@ SELECT create_hypertable('test_table_int', by_range('id', 10));
  create_hypertable 
 -------------------
  (9,t)
-(1 row)
 
 -- No error when if_not_exists => true
 SELECT create_hypertable('test_table_int', by_range('id', 10), if_not_exists => true);
@@ -431,13 +379,11 @@ NOTICE:  table "test_table_int" is already a hypertable, skipping
  create_hypertable 
 -------------------
  (9,f)
-(1 row)
 
 SELECT * FROM _timescaledb_functions.get_create_command('test_table_int');
                                                  get_create_command                                                 
 --------------------------------------------------------------------------------------------------------------------
  SELECT create_hypertable('public.test_table_int', 'id', chunk_time_interval => 10, create_default_indexes=>FALSE);
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- Should throw an error when if_not_exists is not set
@@ -454,7 +400,6 @@ SELECT create_hypertable('test_table_int', by_range('id', 10), migrate_data => t
  create_hypertable 
 -------------------
  (10,t)
-(1 row)
 
 INSERT INTO test_table_int SELECT t, t%10, '01-01-2023 11:00'::TIMESTAMPTZ FROM generate_series(1, 50, 1) t;
 -- adding a space dimension via "by_hash" should work
@@ -462,32 +407,27 @@ SELECT add_dimension('test_table_int', by_hash('device', number_partitions => 2)
  add_dimension 
 ---------------
  (11,t)
-(1 row)
 
 SELECT hypertable_name, dimension_number, column_name FROM timescaledb_information.dimensions WHERE hypertable_name = 'test_table_int';
  hypertable_name | dimension_number | column_name 
 -----------------+------------------+-------------
  test_table_int  |                1 | id
  test_table_int  |                2 | device
-(2 rows)
 
 SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name='test_table_int';
  count 
 -------
      6
-(1 row)
 
 SELECT set_partitioning_interval('test_table_int', 5, 'id');
  set_partitioning_interval 
 ---------------------------
  
-(1 row)
 
 SELECT set_number_partitions('test_table_int', 3, 'device');
  set_number_partitions 
 -----------------------
  
-(1 row)
 
 SELECT integer_interval, num_partitions
   FROM timescaledb_information.dimensions
@@ -496,7 +436,6 @@ SELECT integer_interval, num_partitions
 ------------------+----------------
                 5 |               
                   |              3
-(2 rows)
 
 DROP TABLE test_table_int;
 -- Hypertable with time dimension using new API
@@ -506,45 +445,38 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
  create_hypertable 
 -------------------
  (11,t)
-(1 row)
 
 -- Default interval
 SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'test_time';
  time_interval 
 ---------------
  @ 7 days
-(1 row)
 
 INSERT INTO test_time SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 0.10 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-08 1:00', '1 hour') t;
 SELECT count(*) FROM timescaledb_information.chunks WHERE hypertable_name='test_time';
  count 
 -------
      2
-(1 row)
 
 SELECT add_dimension('test_time', by_range('device', partition_interval => 2));
  add_dimension 
 ---------------
  (13,t)
-(1 row)
 
 SELECT hypertable_name, dimension_number, column_name FROM timescaledb_information.dimensions WHERE hypertable_name = 'test_time';
  hypertable_name | dimension_number | column_name 
 -----------------+------------------+-------------
  test_time       |                1 | time
  test_time       |                2 | device
-(2 rows)
 
 SELECT set_partitioning_interval('test_time', INTERVAL '1 day', 'time');
  set_partitioning_interval 
 ---------------------------
  
-(1 row)
 
 SELECT time_interval FROM timescaledb_information.dimensions WHERE hypertable_name = 'test_time' AND column_name = 'time';
  time_interval 
 ---------------
  @ 1 day
-(1 row)
 
 DROP TABLE test_time;

@@ -32,7 +32,6 @@ SELECT create_hypertable('mytab_oneseg', 'time', chunk_time_interval => interval
      create_hypertable     
 ---------------------------
  (1,public,mytab_oneseg,t)
-(1 row)
 
 insert into mytab_oneseg values
 ('2023-01-01 21:56:20.048355+02'::timestamptz, 2, NULL, 2),
@@ -44,7 +43,6 @@ INFO:  using tuplesort to scan rows from "_hyper_1_1_chunk" for converting to co
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name_1
 from compressed_chunk_info_view where hypertable_name = 'mytab_oneseg' \gset
@@ -52,14 +50,12 @@ SELECT ctid, * FROM :compressed_chunk_name_1;
  ctid  | _ts_meta_count | a | c |           _ts_meta_min_1            |           _ts_meta_max_1            |                                 time                                 |  b   
 -------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+------
  (0,1) |              2 | 2 | 2 | Sun Jan 01 11:56:10.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/qlnY///////Z2mAAAAAAgAAAAIAAAAAAAAA7gAFKG/+g/vGAAUob/+1KMU= | Bg==
-(1 row)
 
 -- after compressing the chunk
 select numrows_pre_compression, numrows_post_compression from _timescaledb_catalog.compression_chunk_size;
  numrows_pre_compression | numrows_post_compression 
 -------------------------+--------------------------
                        2 |                        1
-(1 row)
 
 insert into mytab_oneseg values ('2023-01-01 19:56:20.048355+02'::timestamptz, 2, NULL, 2);
 -- after inserting new row in compressed chunk
@@ -67,14 +63,12 @@ select numrows_pre_compression, numrows_post_compression from _timescaledb_catal
  numrows_pre_compression | numrows_post_compression 
 -------------------------+--------------------------
                        2 |                        1
-(1 row)
 
 select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_1');
 INFO:  Using index "compress_hyper_2_2_chunk_a_c__ts_meta_min_1__ts_meta_max_1_idx" for recompression
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 -- check the ctid of the rows in the recompressed chunk to verify that we've written new data
 SELECT ctid, * FROM :compressed_chunk_name_1;
@@ -82,14 +76,12 @@ SELECT ctid, * FROM :compressed_chunk_name_1;
 -------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+------
  (0,1) |              2 | 2 | 2 | Sun Jan 01 11:56:10.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/qlnY///////Z2mAAAAAAgAAAAIAAAAAAAAA7gAFKG/+g/vGAAUob/+1KMU= | Bg==
  (0,2) |              1 | 2 | 2 | Sun Jan 01 09:56:20.048355 2023 PST | Sun Jan 01 09:56:20.048355 2023 PST | BAAAApQ2Uhq14wAClDZSGrXjAAAAAQAAAAEAAAAAAAAADgAFKGykNWvG             | Bg==
-(2 rows)
 
 -- after recompressing chunk
 select numrows_pre_compression, numrows_post_compression from _timescaledb_catalog.compression_chunk_size;
  numrows_pre_compression | numrows_post_compression 
 -------------------------+--------------------------
                        2 |                        1
-(1 row)
 
 insert into mytab_oneseg values ('2023-01-01 19:56:20.048355+02'::timestamptz, 2, NULL, 2);
 select chunk_id
@@ -107,7 +99,6 @@ SELECT create_hypertable('mytab_twoseg', 'time', chunk_time_interval => interval
      create_hypertable     
 ---------------------------
  (3,public,mytab_twoseg,t)
-(1 row)
 
 insert into mytab_twoseg values
 ('2023-01-01 21:56:20.048355+02'::timestamptz, 2, NULL, 2),
@@ -120,14 +111,12 @@ INFO:  using tuplesort to scan rows from "_hyper_3_3_chunk" for converting to co
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_3_chunk
-(1 row)
 
 -- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
  numrows_pre_compression | numrows_post_compression |               chunk_name               | chunk_id 
 -------------------------+--------------------------+----------------------------------------+----------
                        3 |                        2 | _timescaledb_internal._hyper_3_3_chunk |        3
-(1 row)
 
 insert into mytab_twoseg values ('2023-01-01 19:56:20.048355+02'::timestamptz, 2, NULL, 2);
 select * from :chunk_to_compress_2 ORDER BY a, c, time DESC;
@@ -137,7 +126,6 @@ select * from :chunk_to_compress_2 ORDER BY a, c, time DESC;
  Sun Jan 01 09:56:20.048355 2023 PST | 2 |   | 2
  Sun Jan 01 11:57:20.048355 2023 PST | 3 |   | 3
  Sun Jan 01 11:56:20.048355 2023 PST | 3 |   | 3
-(4 rows)
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name_2
 from compressed_chunk_info_view where hypertable_name = 'mytab_twoseg' \gset
@@ -146,14 +134,12 @@ select ctid, * from :compressed_chunk_name_2;
 -------+----------------+---+---+-------------------------------------+-------------------------------------+----------------------------------------------------------------------+------
  (0,1) |              1 | 2 | 2 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/0H94wAClDf/Qf3jAAAAAQAAAAEAAAAAAAAADgAFKG/+g/vG             | Bg==
  (0,2) |              2 | 3 | 3 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:57:20.048355 2023 PST | BAAAApQ3/0H94//////8bHkAAAAAAgAAAAIAAAAAAAAA7gAFKHAFqwnGAAUocAzSF8U= | Bg==
-(2 rows)
 
 select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
 INFO:  Using index "compress_hyper_4_4_chunk_a_c__ts_meta_min_1__ts_meta_max_1_idx" for recompression
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_3_3_chunk
-(1 row)
 
 -- verify that metadata count looks good
 select ctid, * from :compressed_chunk_name_2;
@@ -162,7 +148,6 @@ select ctid, * from :compressed_chunk_name_2;
  (0,1) |              1 | 2 | 2 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:56:20.048355 2023 PST | BAAAApQ3/0H94wAClDf/Qf3jAAAAAQAAAAEAAAAAAAAADgAFKG/+g/vG             | Bg==
  (0,2) |              2 | 3 | 3 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:57:20.048355 2023 PST | BAAAApQ3/0H94//////8bHkAAAAAAgAAAAIAAAAAAAAA7gAFKHAFqwnGAAUocAzSF8U= | Bg==
  (0,3) |              1 | 2 | 2 | Sun Jan 01 09:56:20.048355 2023 PST | Sun Jan 01 09:56:20.048355 2023 PST | BAAAApQ2Uhq14wAClDZSGrXjAAAAAQAAAAEAAAAAAAAADgAFKGykNWvG             | Bg==
-(3 rows)
 
 -- verify that initial data is returned as expected
 select * from :chunk_to_compress_2 ORDER BY a, c, time DESC;
@@ -172,14 +157,12 @@ select * from :chunk_to_compress_2 ORDER BY a, c, time DESC;
  Sun Jan 01 09:56:20.048355 2023 PST | 2 |   | 2
  Sun Jan 01 11:57:20.048355 2023 PST | 3 |   | 3
  Sun Jan 01 11:56:20.048355 2023 PST | 3 |   | 3
-(4 rows)
 
 -- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
  numrows_pre_compression | numrows_post_compression |               chunk_name               | chunk_id 
 -------------------------+--------------------------+----------------------------------------+----------
                        3 |                        2 | _timescaledb_internal._hyper_3_3_chunk |        3
-(1 row)
 
 ----------------- more than one batch per segment ----------------------
 -- test that metadata sequence number is correct
@@ -188,7 +171,6 @@ select create_hypertable('mytab2', 'time', chunk_time_interval => interval '1 we
   create_hypertable  
 ---------------------
  (5,public,mytab2,t)
-(1 row)
 
 insert into mytab2 (time, a, c) select t,s,s from
 generate_series('2023-01-01 00:00:00+00'::timestamptz, '2023-01-01 00:00:00+00'::timestamptz + interval '1 day', interval '30 sec') t cross join generate_series(0,2, 1) s;
@@ -198,7 +180,6 @@ INFO:  using tuplesort to scan rows from "_hyper_5_5_chunk" for converting to co
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_5_5_chunk
-(1 row)
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name_2
 from compressed_chunk_info_view where hypertable_name = 'mytab2'
@@ -217,7 +198,6 @@ select ctid, * from :compressed_chunk_name_2;
  (0,7) |           1000 | 2 | 2 | Sun Jan 01 07:40:30 2023 PST | Sun Jan 01 16:00:00 2023 PST | BAAAApQ0bFLXgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKHbNWYAAAAUodtDtBv8AAD5gAAAAAA== | Bg==
  (0,8) |           1000 | 2 | 2 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA== | Bg==
  (0,9) |            881 | 2 | 2 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA== | Bg==
-(9 rows)
 
 -- after compression
 -- stats are no longer updated during segmentwise recompression
@@ -225,14 +205,12 @@ select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
  numrows_pre_compression | numrows_post_compression |               chunk_name               | chunk_id 
 -------------------------+--------------------------+----------------------------------------+----------
                     8643 |                        9 | _timescaledb_internal._hyper_5_5_chunk |        5
-(1 row)
 
 select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
 INFO:  Using index "compress_hyper_6_6_chunk_a_c__ts_meta_min_1__ts_meta_max_1_idx" for recompression
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_5_5_chunk
-(1 row)
 
 select ctid, * from :compressed_chunk_name_2;
   ctid  | _ts_meta_count | a | c |        _ts_meta_min_1        |        _ts_meta_max_1        |                                           time                                           |  b   
@@ -246,14 +224,12 @@ select ctid, * from :compressed_chunk_name_2;
  (0,8)  |           1000 | 2 | 2 | Sat Dec 31 23:20:30 2022 PST | Sun Jan 01 07:40:00 2023 PST | BAAAApQtcC8rgP/////+NjyAAAAD6AAAAAMAAAAAAAAP7gAFKGjVEigAAAUoaNilrv8AAD5gAAAAAA==         | Bg==
  (0,9)  |            881 | 2 | 2 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP/////+NjyAAAADcQAAAAMAAAAAAAAP7gAFKFrcytAAAAUoWuBeVv8AADbwAAAAAA==         | Bg==
  (0,10) |            882 | 0 | 0 | Sat Dec 31 16:00:00 2022 PST | Sat Dec 31 23:20:00 2022 PST | BAAAApQnSNVgAP//////4XuAAAADcgAAAAQAAAAAAADf7gAFKFrcytAAAAUoWuBeVv8AADbgAAAAAAMZdQAAPQkA | Bg==
-(9 rows)
 
 -- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
  numrows_pre_compression | numrows_post_compression |               chunk_name               | chunk_id 
 -------------------------+--------------------------+----------------------------------------+----------
                     8643 |                        9 | _timescaledb_internal._hyper_5_5_chunk |        5
-(1 row)
 
 -- failing test from compression_ddl
 CREATE TABLE test_defaults(time timestamptz NOT NULL, device_id int);
@@ -261,7 +237,6 @@ SELECT create_hypertable('test_defaults','time');
      create_hypertable      
 ----------------------------
  (7,public,test_defaults,t)
-(1 row)
 
 ALTER TABLE test_defaults SET (timescaledb.compress,timescaledb.compress_segmentby='device_id');
 -- create 2 chunks
@@ -274,14 +249,12 @@ select * from compression_rowcnt_view where chunk_name = :'compressed_chunk';
  numrows_pre_compression | numrows_post_compression |               chunk_name               | chunk_id 
 -------------------------+--------------------------+----------------------------------------+----------
                        1 |                        1 | _timescaledb_internal._hyper_7_7_chunk |        7
-(1 row)
 
 SELECT * FROM test_defaults ORDER BY 1;
              time             | device_id 
 ------------------------------+-----------
  Sat Jan 01 00:00:00 2000 PST |         1
  Mon Jan 01 00:00:00 2001 PST |         1
-(2 rows)
 
 ALTER TABLE test_defaults ADD COLUMN c1 int;
 ALTER TABLE test_defaults ADD COLUMN c2 int NOT NULL DEFAULT 42;
@@ -290,7 +263,6 @@ SELECT * FROM test_defaults ORDER BY 1,2;
 ------------------------------+-----------+----+----
  Sat Jan 01 00:00:00 2000 PST |         1 |    | 42
  Mon Jan 01 00:00:00 2001 PST |         1 |    | 42
-(2 rows)
 
 INSERT INTO test_defaults SELECT '2000-01-01', 2;
 SELECT * FROM test_defaults ORDER BY 1,2;
@@ -299,14 +271,12 @@ SELECT * FROM test_defaults ORDER BY 1,2;
  Sat Jan 01 00:00:00 2000 PST |         1 |    | 42
  Sat Jan 01 00:00:00 2000 PST |         2 |    | 42
  Mon Jan 01 00:00:00 2001 PST |         1 |    | 42
-(3 rows)
 
 SELECT compress_chunk(:'compressed_chunk');
 INFO:  Using index "compress_hyper_8_9_chunk_device_id__ts_meta_min_1__ts_meta__idx" for recompression
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_7_7_chunk
-(1 row)
 
 SELECT * FROM test_defaults ORDER BY 1,2;
              time             | device_id | c1 | c2 
@@ -314,14 +284,12 @@ SELECT * FROM test_defaults ORDER BY 1,2;
  Sat Jan 01 00:00:00 2000 PST |         1 |    | 42
  Sat Jan 01 00:00:00 2000 PST |         2 |    | 42
  Mon Jan 01 00:00:00 2001 PST |         1 |    | 42
-(3 rows)
 
 -- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'compressed_chunk';
  numrows_pre_compression | numrows_post_compression |               chunk_name               | chunk_id 
 -------------------------+--------------------------+----------------------------------------+----------
                        1 |                        1 | _timescaledb_internal._hyper_7_7_chunk |        7
-(1 row)
 
 -- test prepared statements
 -- PREPRE A SELECT before recompress and perform it after recompress
@@ -330,7 +298,6 @@ SELECT create_hypertable('mytab_prep', 'time');
     create_hypertable    
 -------------------------
  (9,public,mytab_prep,t)
-(1 row)
 
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, NULL, 2),
 ('2023-01-01'::timestamptz, 2, NULL, 2);
@@ -343,22 +310,19 @@ INFO:  using tuplesort to scan rows from "_hyper_9_10_chunk" for converting to c
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_10_chunk
-(1 row)
 
 INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 VACUUM ANALYZE mytab_prep;
 -- plan should be invalidated to return results from the uncompressed chunk also
 set enable_sort to off; /* penalize MergeAppend for predictable plans on PG < 17. */
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
-                           QUERY PLAN                           
-----------------------------------------------------------------
+--- QUERY PLAN ---
  Sort
    Sort Key: mytab_prep.a, mytab_prep.c, mytab_prep."time" DESC
    ->  Append
          ->  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
                ->  Seq Scan on compress_hyper_10_11_chunk
          ->  Seq Scan on _hyper_9_10_chunk
-(6 rows)
 
 EXECUTE p1;
              time             | a | b | c 
@@ -366,7 +330,6 @@ EXECUTE p1;
  Sun Jan 01 00:00:00 2023 PST | 2 |   | 2
  Sun Jan 01 00:00:00 2023 PST | 2 |   | 2
  Sun Jan 01 00:00:00 2023 PST | 2 | 3 | 2
-(3 rows)
 
 reset enable_sort;
 -- check plan again after recompression
@@ -375,17 +338,14 @@ INFO:  Using index "compress_hyper_10_11_chunk_a_c__ts_meta_min_1__ts_meta_max__
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_10_chunk
-(1 row)
 
 VACUUM ANALYZE mytab_prep;
 EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1;
-                                                                                  QUERY PLAN                                                                                  
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_9_10_chunk
    ->  Sort
          Sort Key: compress_hyper_10_11_chunk.a, compress_hyper_10_11_chunk.c, compress_hyper_10_11_chunk._ts_meta_min_1 DESC, compress_hyper_10_11_chunk._ts_meta_max_1 DESC
          ->  Seq Scan on compress_hyper_10_11_chunk
-(4 rows)
 
 EXECUTE p1;
              time             | a | b | c 
@@ -393,7 +353,6 @@ EXECUTE p1;
  Sun Jan 01 00:00:00 2023 PST | 2 |   | 2
  Sun Jan 01 00:00:00 2023 PST | 2 |   | 2
  Sun Jan 01 00:00:00 2023 PST | 2 | 3 | 2
-(3 rows)
 
 -- verify segmentwise recompression when index exists, decompress + compress otherwise
 -- we verify by checking the compressed chunk after recompression in both cases.
@@ -404,7 +363,6 @@ SELECT create_hypertable('mytab', 'time');
   create_hypertable  
 ---------------------
  (11,public,mytab,t)
-(1 row)
 
 INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, NULL, 2),
 ('2023-01-01'::timestamptz, 2, NULL, 2);
@@ -416,7 +374,6 @@ INFO:  using tuplesort to scan rows from "_hyper_11_12_chunk" for converting to 
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_12_chunk
-(1 row)
 
 select compressed_chunk_name as compressed_chunk_name_before_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
@@ -426,14 +383,12 @@ INFO:  Using index "compress_hyper_12_13_chunk_a_c__ts_meta_min_1__ts_meta_max__
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_12_chunk
-(1 row)
 
 select compressed_chunk_name as compressed_chunk_name_after_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 select :'compressed_chunk_name_before_recompression' as before_segmentwise_recompression, :'compressed_chunk_name_after_recompression' as after_segmentwise_recompression;
  before_segmentwise_recompression | after_segmentwise_recompression 
 ----------------------------------+---------------------------------
  compress_hyper_12_13_chunk       | compress_hyper_12_13_chunk
-(1 row)
 
 INSERT INTO mytab
 SELECT t, a, 3, 2
@@ -445,32 +400,27 @@ INFO:  Using index "compress_hyper_12_13_chunk_a_c__ts_meta_min_1__ts_meta_max__
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_12_chunk
-(1 row)
 
 VACUUM ANALYZE mytab;
 -- make sure we are hitting the index and that the index contains the tuples
 SET enable_seqscan TO off;
 EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT count(*) FROM mytab where a = 2;
-                                                         QUERY PLAN                                                         
-----------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Aggregate
    ->  Custom Scan (ColumnarScan) on _hyper_11_12_chunk
          ->  Index Scan using compress_hyper_12_13_chunk_a_c__ts_meta_min_1__ts_meta_max__idx on compress_hyper_12_13_chunk
                Index Cond: (a = 2)
-(4 rows)
 
 SELECT count(*) FROM mytab where a = 2;
  count 
 -------
     28
-(1 row)
 
 RESET enable_seqscan;
 SELECT decompress_chunk(show_chunks('mytab'));
              decompress_chunk             
 ------------------------------------------
  _timescaledb_internal._hyper_11_12_chunk
-(1 row)
 
 alter table mytab set (timescaledb.compress = false);
 alter table mytab set (timescaledb.compress);
@@ -479,7 +429,6 @@ INFO:  using tuplesort to scan rows from "_hyper_11_12_chunk" for converting to 
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_12_chunk
-(1 row)
 
 select compressed_chunk_name as compressed_chunk_name_before_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
@@ -489,14 +438,12 @@ INFO:  Using index "compress_hyper_13_14_chunk__ts_meta_min_1__ts_meta_max_1_idx
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_12_chunk
-(1 row)
 
 select compressed_chunk_name as compressed_chunk_name_after_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 select :'compressed_chunk_name_before_recompression' as before_recompression, :'compressed_chunk_name_after_recompression' as after_recompression;
     before_recompression    |    after_recompression     
 ----------------------------+----------------------------
  compress_hyper_13_14_chunk | compress_hyper_13_14_chunk
-(1 row)
 
 -- check behavior with NULL values in segmentby columns
 select '2022-01-01 09:00:00+00' as start_time \gset
@@ -505,7 +452,6 @@ select create_hypertable('nullseg_one', 'time');
      create_hypertable     
 ---------------------------
  (14,public,nullseg_one,t)
-(1 row)
 
 insert into nullseg_one values (:'start_time', 1, 1), (:'start_time', 1, 2), (:'start_time', 2,2), (:'start_time', 2,3);
 alter table nullseg_one set (timescaledb.compress, timescaledb.compress_segmentby= 'a');
@@ -514,7 +460,6 @@ INFO:  using tuplesort to scan rows from "_hyper_14_15_chunk" for converting to 
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_14_15_chunk
-(1 row)
 
 insert into nullseg_one values (:'start_time', NULL, 4);
 select show_chunks as chunk_to_compress from show_chunks('nullseg_one') limit 1 \gset
@@ -524,7 +469,6 @@ INFO:  Using index "compress_hyper_15_16_chunk_a__ts_meta_min_1__ts_meta_max_1_i
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_14_15_chunk
-(1 row)
 
 select * from :compressed_chunk_name;
  _ts_meta_count | a |        _ts_meta_min_1        |        _ts_meta_max_1        |                                 time                                 |                            b                             
@@ -532,7 +476,6 @@ select * from :compressed_chunk_name;
               2 | 1 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAAAAAAAAAAAAAAAAgAAAAIAAAAAAAAA7gAE7wCP5IgAAATvAI/kh/8= | BAAAAAAAAAAAAgAAAAAAAAABAAAAAgAAAAEAAAAAAAAAAgAAAAAAAAAC
               2 | 2 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAAAAAAAAAAAAAAAAgAAAAIAAAAAAAAA7gAE7wCP5IgAAATvAI/kh/8= | BAAAAAAAAAAAAwAAAAAAAAABAAAAAgAAAAEAAAAAAAAAAwAAAAAAAAAM
               1 |   | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAACd4BH8kQAAAAAAQAAAAEAAAAAAAAADgAE7wCP5IgA             | BAAAAAAAAAAABAAAAAAAAAAEAAAAAQAAAAEAAAAAAAAABAAAAAAAAAAI
-(3 rows)
 
 -- insert again, check both index insertion works and NULL values properly handled
 insert into nullseg_one values (:'start_time', NULL, 4);
@@ -541,7 +484,6 @@ INFO:  Using index "compress_hyper_15_16_chunk_a__ts_meta_min_1__ts_meta_max_1_i
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_14_15_chunk
-(1 row)
 
 select * from :compressed_chunk_name;
  _ts_meta_count | a |        _ts_meta_min_1        |        _ts_meta_max_1        |                                 time                                 |                            b                             
@@ -549,7 +491,6 @@ select * from :compressed_chunk_name;
               2 | 1 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAAAAAAAAAAAAAAAAgAAAAIAAAAAAAAA7gAE7wCP5IgAAATvAI/kh/8= | BAAAAAAAAAAAAgAAAAAAAAABAAAAAgAAAAEAAAAAAAAAAgAAAAAAAAAC
               2 | 2 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAAAAAAAAAAAAAAAAgAAAAIAAAAAAAAA7gAE7wCP5IgAAATvAI/kh/8= | BAAAAAAAAAAAAwAAAAAAAAABAAAAAgAAAAEAAAAAAAAAAwAAAAAAAAAM
               2 |   | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAAAAAAAAAAAAAAAAgAAAAIAAAAAAAAA7gAE7wCP5IgAAATvAI/kh/8= | BAAAAAAAAAAABAAAAAAAAAAAAAAAAgAAAAEAAAAAAAAABAAAAAAAAAB4
-(3 rows)
 
 -- test multiple NULL segmentby columns
 create table nullseg_many (time timestamptz, a int, b int, c int);
@@ -557,7 +498,6 @@ select create_hypertable('nullseg_many', 'time');
      create_hypertable      
 ----------------------------
  (16,public,nullseg_many,t)
-(1 row)
 
 insert into nullseg_many values (:'start_time', 1, 1, 1), (:'start_time', 1, 2, 2), (:'start_time', 2,2, 2), (:'start_time', 2,3, 3), (:'start_time', 2, NULL, 3);
 alter table nullseg_many set (timescaledb.compress, timescaledb.compress_segmentby= 'a, c');
@@ -566,7 +506,6 @@ INFO:  using tuplesort to scan rows from "_hyper_16_17_chunk" for converting to 
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_16_17_chunk
-(1 row)
 
 -- new segment (1, NULL)
 insert into nullseg_many values (:'start_time', 1, 4, NULL);
@@ -577,7 +516,6 @@ INFO:  Using index "compress_hyper_17_18_chunk_a_c__ts_meta_min_1__ts_meta_max__
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_16_17_chunk
-(1 row)
 
 select * from :compressed_chunk_name;
  _ts_meta_count | a | c |        _ts_meta_min_1        |        _ts_meta_max_1        |                                 time                                 |                                            b                                             
@@ -587,7 +525,6 @@ select * from :compressed_chunk_name;
               1 | 2 | 2 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAACd4BH8kQAAAAAAQAAAAEAAAAAAAAADgAE7wCP5IgA             | BAAAAAAAAAAAAgAAAAAAAAACAAAAAQAAAAEAAAAAAAAAAwAAAAAAAAAE
               2 | 2 | 3 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAAAAAAAAAAAAAAAAgAAAAIAAAAAAAAA7gAE7wCP5IgAAATvAI/kh/8= | BAEAAAAAAAAAAwAAAAAAAAADAAAAAQAAAAEAAAAAAAAAAwAAAAAAAAAGAAAAAgAAAAEAAAAAAAAAAQAAAAAAAAAC
               1 | 1 |   | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAACd4BH8kQAAAAAAQAAAAEAAAAAAAAADgAE7wCP5IgA             | BAAAAAAAAAAABAAAAAAAAAAEAAAAAQAAAAEAAAAAAAAABAAAAAAAAAAI
-(5 rows)
 
 -- insert again, check both index insertion works and NULL values properly handled
 -- should match existing segment (1, NULL)
@@ -597,7 +534,6 @@ INFO:  Using index "compress_hyper_17_18_chunk_a_c__ts_meta_min_1__ts_meta_max__
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_16_17_chunk
-(1 row)
 
 select * from :compressed_chunk_name;
  _ts_meta_count | a | c |        _ts_meta_min_1        |        _ts_meta_max_1        |                                 time                                 |                                            b                                             
@@ -607,7 +543,6 @@ select * from :compressed_chunk_name;
               1 | 2 | 2 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAACd4BH8kQAAAAAAQAAAAEAAAAAAAAADgAE7wCP5IgA             | BAAAAAAAAAAAAgAAAAAAAAACAAAAAQAAAAEAAAAAAAAAAwAAAAAAAAAE
               2 | 2 | 3 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAAAAAAAAAAAAAAAAgAAAAIAAAAAAAAA7gAE7wCP5IgAAATvAI/kh/8= | BAEAAAAAAAAAAwAAAAAAAAADAAAAAQAAAAEAAAAAAAAAAwAAAAAAAAAGAAAAAgAAAAEAAAAAAAAAAQAAAAAAAAAC
               2 | 1 |   | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST | BAAAAneAR/JEAAAAAAAAAAAAAAAAAgAAAAIAAAAAAAAA7gAE7wCP5IgAAATvAI/kh/8= | BAEAAAAAAAAABAAAAAAAAAAEAAAAAQAAAAEAAAAAAAAABAAAAAAAAAAIAAAAAgAAAAEAAAAAAAAAAQAAAAAAAAAC
-(5 rows)
 
 -- Test behaviour when no segmentby columns are present
 CREATE TABLE noseg(time timestamptz, a int, b int, c int);
@@ -615,7 +550,6 @@ SELECT create_hypertable('noseg', by_range('time', INTERVAL '1 day'));
  create_hypertable 
 -------------------
  (18,t)
-(1 row)
 
 ALTER TABLE noseg set (timescaledb.compress, timescaledb.compress_segmentby = '');
 INSERT INTO noseg VALUES ('2025-01-24 09:54:27.323421-07'::timestamptz, 1, 1, 1);
@@ -625,7 +559,6 @@ INFO:  using tuplesort to scan rows from "_hyper_18_19_chunk" for converting to 
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_18_19_chunk
-(1 row)
 
 INSERT INTO noseg VALUES ('2025-01-24 10:54:27.323421-07'::timestamptz, 1, 1, 2);
 -- should recompress chunk using the default index
@@ -634,7 +567,6 @@ INFO:  Using index "compress_hyper_19_20_chunk__ts_meta_min_1__ts_meta_max_1_idx
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_18_19_chunk
-(1 row)
 
 -- Test behaviour when default order by is empty: should not segmentwise-recompress in this case
 CREATE TABLE no_oby(ts int, c1 int);
@@ -642,7 +574,6 @@ SELECT create_hypertable('no_oby','ts');
   create_hypertable   
 ----------------------
  (20,public,no_oby,t)
-(1 row)
 
 \set VERBOSITY default
 ALTER TABLE no_oby SET (timescaledb.compress, timescaledb.compress_segmentby = 'ts');
@@ -654,7 +585,6 @@ INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for converting to 
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_20_21_chunk
-(1 row)
 
 INSERT INTO no_oby (ts,c1) VALUES (7,7);
 -- Direct segmentwise-recompress request: throw an error
@@ -669,7 +599,6 @@ INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for converting to 
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_20_21_chunk
-(1 row)
 
 RESET timescaledb.debug_compression_path_info;
 --- Test behaviour when enable_segmentwise_recompression GUC if OFF
@@ -678,7 +607,6 @@ SELECT create_hypertable('guc_test', by_range('time', INTERVAL '1 day'));
  create_hypertable 
 -------------------
  (22,t)
-(1 row)
 
 ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
 INSERT INTO guc_test VALUES ('2024-10-30 14:04:00.501519-06'::timestamptz, 1, 1, 1);
@@ -687,7 +615,6 @@ SELECT compress_chunk(:'chunk_to_compress');
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_22_24_chunk
-(1 row)
 
 INSERT INTO guc_test VALUES ('2024-10-30 14:14:00.501519-06'::timestamptz, 1, 1, 2);
 -- When GUC is OFF, recompress function should throw an error
@@ -702,7 +629,6 @@ NOTICE:  segmentwise recompression is disabled, performing full recompression on
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_22_24_chunk
-(1 row)
 
 RESET timescaledb.enable_segmentwise_recompression;
 --- Test behaviour of enable_exclusive_locking_recompression GUC
@@ -711,7 +637,6 @@ SELECT create_hypertable('exclusive_test', by_range('time', INTERVAL '1 day'));
  create_hypertable 
 -------------------
  (24,t)
-(1 row)
 
 ALTER TABLE guc_test set (timescaledb.compress, timescaledb.compress_segmentby = 'a, b');
 INSERT INTO guc_test VALUES ('2024-10-30 14:04:00.501519-06'::timestamptz, 1, 1, 1);
@@ -720,7 +645,6 @@ SELECT compress_chunk(:'chunk_to_compress');
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_22_24_chunk
-(1 row)
 
 INSERT INTO guc_test VALUES ('2024-10-30 14:14:00.501519-06'::timestamptz, 1, 1, 2);
 -- Default behavior will try to get exclusive lock at the end of operation
@@ -732,7 +656,6 @@ SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress')
        recompress_chunk_segmentwise       
 ------------------------------------------
  _timescaledb_internal._hyper_22_24_chunk
-(1 row)
 
 SELECT c.relname FROM pg_locks l
 INNER JOIN pg_class c ON c.oid = l.relation
@@ -741,7 +664,6 @@ ORDER BY 1;
       relname       
 --------------------
  _hyper_22_24_chunk
-(1 row)
 
 ROLLBACK;
 -- If we enable this GUC, it should get exclusive locks on 3 relations:
@@ -753,7 +675,6 @@ SELECT _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress')
        recompress_chunk_segmentwise       
 ------------------------------------------
  _timescaledb_internal._hyper_22_24_chunk
-(1 row)
 
 SELECT c.relname FROM pg_locks l
 INNER JOIN pg_class c ON c.oid = l.relation
@@ -764,7 +685,6 @@ ORDER BY 1;
  _hyper_22_24_chunk
  compress_hyper_23_26_chunk
  compress_hyper_23_26_chunk_a_b__ts_meta_min_1__ts_meta_max__idx
-(3 rows)
 
 ROLLBACK;
 RESET timescaledb.enable_exclusive_locking_recompression;

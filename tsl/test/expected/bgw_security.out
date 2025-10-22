@@ -18,7 +18,6 @@ SELECT id, proc_name, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id;
   id  | proc_name  |         owner         
 ------+------------+-----------------------
  1000 | custom_job | db_bgw_security_admin
-(1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
 -- We should fail to execute and delete the job since we do not own it
@@ -37,7 +36,6 @@ SELECT delete_job(:job_id);
  delete_job 
 ------------
  
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP ROLE :ROLE_ADMIN;

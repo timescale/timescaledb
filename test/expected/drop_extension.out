@@ -7,31 +7,27 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
    create_hypertable    
 ------------------------
  (1,public,drop_test,t)
-(1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(1 row)
 
 INSERT INTO drop_test VALUES('Mon Mar 20 09:17:00.936242 2017', 23.4, 'dev1');
 SELECT * FROM drop_test;
               time               | temp | device 
 ---------------------------------+------+--------
  Mon Mar 20 09:17:00.936242 2017 | 23.4 | dev1
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP EXTENSION timescaledb CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_1_1_chunk
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- Querying the original table should not return any rows since all of
 -- them actually existed in chunks that are now gone
 SELECT * FROM drop_test;
  time | temp | device 
 ------+------+--------
-(0 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- Recreate the extension
@@ -53,20 +49,17 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
    create_hypertable    
 ------------------------
  (1,public,drop_test,t)
-(1 row)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   1 | public      | drop_test  | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(1 row)
 
 INSERT INTO drop_test VALUES('Mon Mar 20 09:18:19.100462 2017', 22.1, 'dev1');
 SELECT * FROM drop_test;
               time               | temp | device 
 ---------------------------------+------+--------
  Mon Mar 20 09:18:19.100462 2017 | 22.1 | dev1
-(1 row)
 
 --test drops thru cascades of other objects
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -75,7 +68,6 @@ SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 SET client_min_messages TO ERROR;
 REVOKE CONNECT ON DATABASE :TEST_DBNAME FROM public;
@@ -92,5 +84,4 @@ NOTICE:  drop cascades to 3 other objects
  Name |   Owner    
 ------+------------
  test | super_user
-(1 row)
 

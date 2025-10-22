@@ -18,7 +18,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 
 #include "batch_metadata_builder_minmax.h"
 #include "hypertable.h"
-#include "nodes/decompress_chunk/detoaster.h"
+#include "nodes/columnar_scan/detoaster.h"
 #include "ts_catalog/compression_settings.h"
 
 /*

@@ -95,8 +95,8 @@
 #include <utils/datum.h>
 
 #include "guc.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "nodes/decompress_chunk/exec.h"
+#include "nodes/columnar_scan/columnar_scan.h"
+#include "nodes/columnar_scan/exec.h"
 #include "nodes/skip_scan/skip_scan.h"
 
 typedef enum SkipScanStage
@@ -187,7 +187,7 @@ skip_scan_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	else if (IsA(child_state, CustomScanState))
 	{
-		Assert(ts_is_decompress_chunk_plan(state->child_plan));
+		Assert(ts_is_columnar_scan_plan(state->child_plan));
 		state->idx = linitial(castNode(CustomScanState, child_state)->custom_ps);
 	}
 	else
@@ -277,9 +277,9 @@ skip_scan_rescan_index(SkipScanState *state)
 		/* Discard current compressed index tuple as we are ready to move to the next compressed
 		 * tuple via SkipScan */
 		ScanState *child = linitial(state->cscan_state.custom_ps);
-		if (ts_is_decompress_chunk_plan(state->child_plan))
+		if (ts_is_columnar_scan_plan(state->child_plan))
 		{
-			DecompressChunkState *ds = (DecompressChunkState *) child;
+			ColumnarScanState *ds = (ColumnarScanState *) child;
 			TupleTableSlot *slot = ds->batch_queue->funcs->top_tuple(ds->batch_queue);
 			if (slot)
 			{
@@ -338,19 +338,6 @@ skip_scan_switch_stage(SkipScanState *state, SkipScanStage new_stage)
 					state->skip_keys[i].skip_key->sk_strategy = BTEqualStrategyNumber;
 				}
 			}
-#if PG18_GE
-			/* PG18+ skip arrays are not used for "=",..,"=",">" multikey index quals,
-			 * but so->skipScan is never reset to false in PG18
-			 * when we change from ">",...,">" quals to "=",..,"=",">",
-			 * so we reset it here.
-			 * https://github.com/postgres/postgres/commit/8a51027
-			 */
-			if (*state->scan_desc && state->num_skip_keys > 1)
-			{
-				BTScanOpaque so = (BTScanOpaque) (*state->scan_desc)->opaque;
-				so->skipScan = false;
-			}
-#endif
 			state->current_key = state->num_skip_keys - 1;
 			state->needs_rescan = true;
 			break;
@@ -552,7 +539,7 @@ tsl_skip_scan_state_create(CustomScan *cscan)
 	SkipScanState *state = (SkipScanState *) newNode(sizeof(SkipScanState), T_CustomScanState);
 
 	state->child_plan = linitial(cscan->custom_plans);
-	if (ts_is_decompress_chunk_plan(state->child_plan))
+	if (ts_is_columnar_scan_plan(state->child_plan))
 	{
 		CustomScan *csplan = castNode(CustomScan, state->child_plan);
 		state->idx_scan = linitial(csplan->custom_plans);

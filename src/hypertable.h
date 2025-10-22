@@ -18,9 +18,6 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/tablespace.h"
 
-#define OLD_INSERT_BLOCKER_NAME "insert_blocker"
-#define INSERT_BLOCKER_NAME "ts_insert_blocker"
-
 #define INVALID_HYPERTABLE_ID 0
 
 typedef struct SubspaceStore SubspaceStore;
@@ -149,6 +146,7 @@ extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *
 															  int dimension_index, bool *isnull);
 
 extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht);
+extern TSDLLEXPORT bool ts_hypertable_has_continuous_aggregates(int32 hypertable_id);
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \

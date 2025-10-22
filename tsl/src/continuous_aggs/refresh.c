@@ -47,6 +47,7 @@ typedef struct ContinuousAggRefreshState
 	Hypertable *cagg_ht;
 	InternalTimeRange refresh_window;
 	SchemaAndName partial_view;
+	bool bucketing_refresh_window;
 } ContinuousAggRefreshState;
 
 static Hypertable *cagg_get_hypertable_or_fail(int32 hypertable_id);
@@ -57,7 +58,8 @@ compute_inscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
 										  const int64 bucket_width);
 static void continuous_agg_refresh_init(ContinuousAggRefreshState *refresh,
 										const ContinuousAgg *cagg,
-										const InternalTimeRange *refresh_window);
+										const InternalTimeRange *refresh_window,
+										bool bucketing_refresh_window);
 static void continuous_agg_refresh_execute(const ContinuousAggRefreshState *refresh,
 										   const InternalTimeRange *bucketed_refresh_window,
 										   const int32 chunk_id);
@@ -72,13 +74,15 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
 											   int32 chunk_id,
-											   const ContinuousAggRefreshContext context);
+											   const ContinuousAggRefreshContext context,
+											   bool bucketing_refresh_window);
 static void emit_up_to_date_notice(const ContinuousAgg *cagg,
 								   const ContinuousAggRefreshContext context);
 static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
 												   const ContinuousAggRefreshContext context,
-												   int32 chunk_id, bool force);
+												   int32 chunk_id, bool bucketing_refresh_window,
+												   bool force);
 static void fill_bucket_offset_origin(const ContinuousAgg *cagg,
 									  const InternalTimeRange *const refresh_window,
 									  NullableDatum *offset, NullableDatum *origin);
@@ -103,9 +107,7 @@ get_all_wal_using_hypertables(void)
 
 		Assert(!isnull);
 		int32 hypertable_id = DatumGetInt32(datum);
-		Oid relid = ts_hypertable_id_to_relid(hypertable_id, false);
-		if (!has_invalidation_trigger(relid))
-			hypertables = list_append_unique_int(hypertables, hypertable_id);
+		hypertables = list_append_unique_int(hypertables, hypertable_id);
 	}
 	ts_scan_iterator_close(&iterator);
 
@@ -409,12 +411,13 @@ compute_circumscribed_bucketed_refresh_window(const ContinuousAgg *cagg,
  */
 static void
 continuous_agg_refresh_init(ContinuousAggRefreshState *refresh, const ContinuousAgg *cagg,
-							const InternalTimeRange *refresh_window)
+							const InternalTimeRange *refresh_window, bool bucketing_refresh_window)
 {
 	MemSet(refresh, 0, sizeof(*refresh));
 	refresh->cagg = *cagg;
 	refresh->cagg_ht = cagg_get_hypertable_or_fail(cagg->data.mat_hypertable_id);
 	refresh->refresh_window = *refresh_window;
+	refresh->bucketing_refresh_window = bucketing_refresh_window;
 	refresh->partial_view.schema = &refresh->cagg.data.partial_view_schema;
 	refresh->partial_view.name = &refresh->cagg.data.partial_view_name;
 }
@@ -499,6 +502,7 @@ continuous_agg_scan_refresh_window_ranges(const ContinuousAgg *cagg,
 {
 	TupleTableSlot *slot;
 	long count = 0;
+	ContinuousAggRefreshState *refresh = (ContinuousAggRefreshState *) func_arg1;
 
 	slot = MakeSingleTupleTableSlot(invalidations->tupdesc, &TTSOpsMinimalTuple);
 
@@ -525,11 +529,19 @@ continuous_agg_scan_refresh_window_ranges(const ContinuousAgg *cagg,
 			.end = ts_time_saturating_add(DatumGetInt64(end), 1, refresh_window->type),
 		};
 
-		InternalTimeRange bucketed_refresh_window =
-			compute_circumscribed_bucketed_refresh_window(cagg,
-														  &invalidation,
-														  cagg->bucket_function);
+		InternalTimeRange bucketed_refresh_window = {
+			.type = invalidation.type,
+			.start = invalidation.start,
+			.end = invalidation.end,
+		};
 
+		if (refresh->bucketing_refresh_window)
+		{
+			bucketed_refresh_window =
+				compute_circumscribed_bucketed_refresh_window(cagg,
+															  &invalidation,
+															  cagg->bucket_function);
+		}
 		(*exec_func)(&bucketed_refresh_window, context, count, func_arg1, func_arg2);
 
 		count++;
@@ -570,11 +582,12 @@ static void
 continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
 								   const InvalidationStore *invalidations, int32 chunk_id,
-								   const ContinuousAggRefreshContext context)
+								   const ContinuousAggRefreshContext context,
+								   bool bucketing_refresh_window)
 {
 	ContinuousAggRefreshState refresh;
 
-	continuous_agg_refresh_init(&refresh, cagg, refresh_window);
+	continuous_agg_refresh_init(&refresh, cagg, refresh_window, bucketing_refresh_window);
 
 	/*
 	 * If we're refreshing a finalized CAgg then we should force
@@ -682,7 +695,7 @@ static bool
 process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const InternalTimeRange *refresh_window,
 									   const ContinuousAggRefreshContext context, int32 chunk_id,
-									   bool force)
+									   bool bucketing_refresh_window, bool force)
 {
 	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
@@ -721,7 +734,12 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 							 "aggregate on creation.")));
 		}
 
-		continuous_agg_refresh_with_window(cagg, refresh_window, invalidations, chunk_id, context);
+		continuous_agg_refresh_with_window(cagg,
+										   refresh_window,
+										   invalidations,
+										   chunk_id,
+										   context,
+										   bucketing_refresh_window);
 		if (invalidations)
 			invalidation_store_free(invalidations);
 		return true;
@@ -910,8 +928,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		 * lock, so we need to add a separate lock to ensure a blocking
 		 * behaviour.
 		 */
-		if (has_invalidation_trigger(
-				ts_hypertable_id_to_relid(cagg->data.raw_hypertable_id, false)))
+		if (!ts_guc_enable_cagg_wal_based_invalidation)
 			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
 		else
 			multi_invalidation_process_hypertable_log(get_all_wal_using_hypertables());
@@ -926,6 +943,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 															&refresh_window,
 															context,
 															INVALID_CHUNK_ID,
+															bucketing_refresh_window,
 															force);
 
 	/* check if we have any pending materializations in our refresh window range,
@@ -939,7 +957,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if (has_pending_materializations)
 	{
 		ContinuousAggRefreshState refresh;
-		continuous_agg_refresh_init(&refresh, cagg, &refresh_window);
+		continuous_agg_refresh_init(&refresh, cagg, &refresh_window, bucketing_refresh_window);
 
 		InternalTimeRange invalidation = {
 			.type = refresh_window.type,
@@ -949,10 +967,19 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 			.end = ts_time_saturating_add(refresh_window.end, 1, refresh_window.type),
 		};
 
-		InternalTimeRange bucketed_refresh_window =
-			compute_circumscribed_bucketed_refresh_window(cagg,
-														  &invalidation,
-														  cagg->bucket_function);
+		InternalTimeRange bucketed_refresh_window = {
+			.type = invalidation.type,
+			.start = invalidation.start,
+			.end = invalidation.end,
+		};
+
+		if (bucketing_refresh_window)
+		{
+			bucketed_refresh_window =
+				compute_circumscribed_bucketed_refresh_window(cagg,
+															  &invalidation,
+															  cagg->bucket_function);
+		}
 
 		continuous_agg_refresh_execute(&refresh, &bucketed_refresh_window, INVALID_CHUNK_ID);
 	}

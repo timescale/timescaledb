@@ -41,7 +41,7 @@
 #include "export.h"
 #include "hypertable.h"
 #include "license_guc.h"
-#include "nodes/decompress_chunk/planner.h"
+#include "nodes/columnar_scan/planner.h"
 #include "nodes/gapfill/gapfill_functions.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
@@ -134,12 +134,12 @@ CrossModuleFunctions tsl_cm_functions = {
 	.finalize_agg_sfunc = tsl_finalize_agg_sfunc,
 	.finalize_agg_ffunc = tsl_finalize_agg_ffunc,
 	.process_cagg_viewstmt = tsl_process_continuous_agg_viewstmt,
-	.continuous_agg_invalidation_trigger = continuous_agg_trigfn,
 	.continuous_agg_refresh = continuous_agg_refresh,
 	.continuous_agg_process_hypertable_invalidations =
 		continuous_agg_process_hypertable_invalidations,
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
+	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
@@ -217,7 +217,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	ts_cm_functions = &tsl_cm_functions;
 
 	_continuous_aggs_cache_inval_init();
-	_decompress_chunk_init();
+	_columnar_scan_init();
 	_skip_scan_init();
 	_vector_agg_init();
 

@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 SELECT
-    format('%2$s/results/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE'), :'TEST_OUTPUT_DIR') AS "TEST_SCHEMA_FILE"
+    format('../data/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE')) AS "TEST_SCHEMA_FILE"
 \gset
 SELECT timescaledb_pre_restore();
 \ir :TEST_SCHEMA_FILE
