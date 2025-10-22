@@ -129,7 +129,7 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
      2
 
 vacuum analyze estimate_count;
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 --- QUERY PLAN ---
  Append  (cost=0.04..2974.00 rows=193000 width=20) (actual rows=193000.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_3_chunk  (cost=0.04..679.00 rows=64000 width=20) (actual rows=64000.00 loops=1)
@@ -151,7 +151,7 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
      2
 
 vacuum analyze estimate_count;
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 --- QUERY PLAN ---
  Append  (cost=0.04..934.50 rows=57100 width=20) (actual rows=57100.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk  (cost=0.04..230.00 rows=19100 width=20) (actual rows=19100.00 loops=1)
@@ -173,7 +173,7 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
      2
 
 vacuum analyze estimate_count;
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 --- QUERY PLAN ---
  Append  (cost=0.04..265.21 rows=12548 width=20) (actual rows=12559.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_11_chunk  (cost=0.04..83.50 rows=4550 width=20) (actual rows=4553.00 loops=1)
@@ -196,7 +196,7 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
      2
 
 vacuum analyze estimate_count;
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 --- QUERY PLAN ---
  Append  (cost=0.04..2340.10 rows=150807 width=20) (actual rows=150830.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_15_chunk  (cost=0.04..541.81 rows=50281 width=20) (actual rows=50287.00 loops=1)
@@ -216,7 +216,7 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
      1
 
 vacuum analyze estimate_count;
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 --- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _hyper_3_19_chunk  (cost=1.01..11.01 rows=1000 width=20) (actual rows=1.00 loops=1)
    ->  Seq Scan on compress_hyper_4_20_chunk  (cost=0.00..1.01 rows=1 width=88) (actual rows=1.00 loops=1)
@@ -234,7 +234,7 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 -------
      2
 
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 --- QUERY PLAN ---
  Append  (cost=0.02..67308.80 rows=4480000 width=20) (actual rows=193000.00 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_3_21_chunk  (cost=0.02..22454.40 rows=2240000 width=20) (actual rows=64000.00 loops=1)

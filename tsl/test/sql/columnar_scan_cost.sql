@@ -63,7 +63,7 @@ from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 vacuum analyze estimate_count;
 
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 
 
 -- different batch sizes
@@ -78,7 +78,7 @@ from generate_series(1, 1000) d,
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 vacuum analyze estimate_count;
 
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 
 
 -- more different batch sizes
@@ -93,7 +93,7 @@ from generate_series(1, 1000) d,
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 vacuum analyze estimate_count;
 
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 
 
 -- more different + one very frequent
@@ -109,7 +109,7 @@ from generate_series(1, 1000) d,
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 vacuum analyze estimate_count;
 
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 
 
 -- single row. Postgres generates all-zero entry in pg_statistics in this case,
@@ -122,7 +122,7 @@ select '2025-01-01', 1, 2
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 vacuum analyze estimate_count;
 
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 
 
 -- no statistics
@@ -136,7 +136,7 @@ from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
 
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 
-explain (analyze, timing off, summary off) select * from estimate_count;
+explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 
 
 -- Test a high-cardinality orderby column
