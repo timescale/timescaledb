@@ -719,7 +719,7 @@ estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compres
  */
 static void
 cost_columnar_scan(PlannerInfo *root, const CompressionInfo *compression_info, Path *path,
-					  Path *compressed_path)
+				   Path *compressed_path)
 {
 	/* startup_cost is cost before fetching first tuple */
 	const double compressed_rows = Max(1, compressed_path->rows);
@@ -2317,7 +2317,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 
 static ColumnarScanPath *
 columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_info,
-							 Path *compressed_path)
+						  Path *compressed_path)
 {
 	ColumnarScanPath *path;
 
