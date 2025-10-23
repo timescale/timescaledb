@@ -4,11 +4,9 @@
 -- Test array compression overallocation protection
 CREATE TABLE vector_overalloc (time timestamptz, device int8, ord numeric, value text);
 SELECT create_hypertable('vector_overalloc', 'time', create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "time"
        create_hypertable       
 -------------------------------
  (1,public,vector_overalloc,t)
-(1 row)
 
 -- This will try to create an array of chars over 1GB allocation limit
 INSERT INTO vector_overalloc
@@ -25,7 +23,6 @@ SELECT compress_chunk(ch) FROM show_chunks('vector_overalloc') ch;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 SELECT ch1.id "CHUNK_ID"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'vector_overalloc'
@@ -40,6 +37,5 @@ SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_
 ----------------
               5
               1
-(2 rows)
 
 DROP TABLE vector_overalloc;

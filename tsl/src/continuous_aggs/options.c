@@ -179,6 +179,7 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_update_materialized_only(agg, materialized_only);
 		ts_cache_release(&hcache);
 	}
+
 	if (!with_clause_options[CreateMaterializedViewFlagChunkTimeInterval].is_default)
 	{
 		Cache *hcache = ts_hypertable_cache_pin();
@@ -192,6 +193,7 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		ts_dimension_set_chunk_interval(dim, interval);
 		ts_cache_release(&hcache);
 	}
+
 	List *compression_options = ts_continuous_agg_get_compression_defelems(with_clause_options);
 
 	if (list_length(compression_options) > 0)
@@ -204,12 +206,14 @@ continuous_agg_update_options(ContinuousAgg *agg, WithClauseResult *with_clause_
 		cagg_alter_compression(agg, mat_ht, compression_options);
 		ts_cache_release(&hcache);
 	}
+
 	if (!with_clause_options[CreateMaterializedViewFlagCreateGroupIndexes].is_default)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot alter create_group_indexes option for continuous aggregates")));
 	}
+
 	if (!with_clause_options[CreateMaterializedViewFlagFinalized].is_default)
 	{
 		ereport(ERROR,

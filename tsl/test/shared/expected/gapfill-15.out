@@ -1,14 +1,14 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set EXPLAIN 'EXPLAIN (COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (BUFFERS OFF, COSTS OFF)'
 -- we want to see error details in the output
 \set VERBOSITY default
 CREATE TABLE gapfill_plan_test(time timestamptz NOT NULL, value float);
 SELECT table_name FROM create_hypertable('gapfill_plan_test','time',chunk_time_interval=>'4 weeks'::interval);
     table_name     
+-------------------
  gapfill_plan_test
-(1 row)
 
 INSERT INTO gapfill_plan_test SELECT generate_series('2018-01-01'::timestamptz,'2018-04-01'::timestamptz,'1m'::interval), 1.0;
 -- simple example
@@ -19,14 +19,13 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Custom Scan (GapFill)
    ->  GroupAggregate
          Group Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
          ->  Sort
                Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
                ->  Values Scan on "*VALUES*"
-(6 rows)
 
 -- test sorting
 :EXPLAIN
@@ -36,7 +35,7 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 2;
-QUERY PLAN
+--- QUERY PLAN ---
  Sort
    Sort Key: (avg("*VALUES*".column2))
    ->  Custom Scan (GapFill)
@@ -45,7 +44,6 @@ QUERY PLAN
                ->  Sort
                      Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
                      ->  Values Scan on "*VALUES*"
-(8 rows)
 
 -- test sort direction
 :EXPLAIN
@@ -55,7 +53,7 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 1 DESC;
-QUERY PLAN
+--- QUERY PLAN ---
  Sort
    Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now())) DESC
    ->  Custom Scan (GapFill)
@@ -64,7 +62,6 @@ QUERY PLAN
                ->  HashAggregate
                      Group Key: time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now())
                      ->  Values Scan on "*VALUES*"
-(8 rows)
 
 -- test order by aggregate function
 :EXPLAIN
@@ -74,7 +71,7 @@ SELECT
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1
 ORDER BY 2,1;
-QUERY PLAN
+--- QUERY PLAN ---
  Sort
    Sort Key: (avg("*VALUES*".column2)), (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
    ->  Custom Scan (GapFill)
@@ -83,7 +80,6 @@ QUERY PLAN
                ->  Sort
                      Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
                      ->  Values Scan on "*VALUES*"
-(8 rows)
 
 -- test query without order by
 :EXPLAIN
@@ -92,14 +88,13 @@ SELECT
   avg(c2)
 FROM (VALUES (now(),1),(now(),NULL),(now(),NULL)) as t(time,c2)
 GROUP BY 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Custom Scan (GapFill)
    ->  GroupAggregate
          Group Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
          ->  Sort
                Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, "*VALUES*".column1, now(), now()))
                ->  Values Scan on "*VALUES*"
-(6 rows)
 
 -- test parallel query
 :EXPLAIN
@@ -109,23 +104,22 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Custom Scan (GapFill)
    ->  Finalize GroupAggregate
-         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
          ->  Gather Merge
                Workers Planned: 2
                ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
                      ->  Partial HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Result
                                  ->  Parallel Append
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
-(15 rows)
 
 -- test parallel query with locf
 :EXPLAIN
@@ -135,23 +129,22 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Custom Scan (GapFill)
    ->  Finalize GroupAggregate
-         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
          ->  Gather Merge
                Workers Planned: 2
                ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
                      ->  Partial HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Result
                                  ->  Parallel Append
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
-(15 rows)
 
 -- test parallel query with interpolate
 :EXPLAIN
@@ -161,23 +154,22 @@ SELECT
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Custom Scan (GapFill)
    ->  Finalize GroupAggregate
-         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
          ->  Gather Merge
                Workers Planned: 2
                ->  Sort
-                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
                      ->  Partial HashAggregate
-                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                           Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                            ->  Result
                                  ->  Parallel Append
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
                                        ->  Parallel Seq Scan on _hyper_X_X_chunk
-(15 rows)
 
 -- make sure we can run gapfill in parallel workers
 -- ensure this plan runs in parallel
@@ -189,26 +181,25 @@ FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 2
 LIMIT 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Limit
    ->  Sort
          Sort Key: (interpolate(avg(gapfill_plan_test.value), NULL::record, NULL::record))
          ->  Custom Scan (GapFill)
                ->  Finalize GroupAggregate
-                     Group Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                     Group Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
                      ->  Gather Merge
                            Workers Planned: 2
                            ->  Sort
-                                 Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+                                 Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
                                  ->  Partial HashAggregate
-                                       Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+                                       Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                                        ->  Result
                                              ->  Parallel Append
                                                    ->  Parallel Seq Scan on _hyper_X_X_chunk
                                                    ->  Parallel Seq Scan on _hyper_X_X_chunk
                                                    ->  Parallel Seq Scan on _hyper_X_X_chunk
                                                    ->  Parallel Seq Scan on _hyper_X_X_chunk
-(18 rows)
 
 -- actually run a parallel gapfill
 SELECT
@@ -221,7 +212,6 @@ LIMIT 1;
      time_bucket_gapfill      | interpolate 
 ------------------------------+-------------
  Mon Jan 01 00:00:00 2018 PST |           1
-(1 row)
 
 -- test sort optimizations
 -- test sort optimization with single member order by,
@@ -229,16 +219,15 @@ LIMIT 1;
 :EXPLAIN SELECT time_bucket_gapfill('5m',time),value
 FROM gapfill_plan_test
 ORDER BY 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Sort
-   Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+   Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
    ->  Result
          ->  Append
                ->  Seq Scan on _hyper_X_X_chunk
                ->  Seq Scan on _hyper_X_X_chunk
                ->  Seq Scan on _hyper_X_X_chunk
                ->  Seq Scan on _hyper_X_X_chunk
-(8 rows)
 
 SET max_parallel_workers_per_gather TO 0;
 -- test sort optimizations with locf
@@ -246,38 +235,36 @@ SET max_parallel_workers_per_gather TO 0;
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Custom Scan (GapFill)
    ->  Sort
-         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
          ->  HashAggregate
-               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+               Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                ->  Result
                      ->  Append
                            ->  Seq Scan on _hyper_X_X_chunk
                            ->  Seq Scan on _hyper_X_X_chunk
                            ->  Seq Scan on _hyper_X_X_chunk
                            ->  Seq Scan on _hyper_X_X_chunk
-(11 rows)
 
 -- test sort optimizations with interpolate
 :EXPLAIN SELECT time_bucket_gapfill('5m',time,to_timestamp(0),to_timestamp(0)), interpolate(avg(value))
 FROM gapfill_plan_test
 GROUP BY 1
 ORDER BY 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Custom Scan (GapFill)
    ->  Sort
-         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
+         Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone))
          ->  HashAggregate
-               Group Key: time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
+               Group Key: time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone, 'Wed Dec 31 16:00:00 1969 PST'::timestamp with time zone)
                ->  Result
                      ->  Append
                            ->  Seq Scan on _hyper_X_X_chunk
                            ->  Seq Scan on _hyper_X_X_chunk
                            ->  Seq Scan on _hyper_X_X_chunk
                            ->  Seq Scan on _hyper_X_X_chunk
-(11 rows)
 
 RESET max_parallel_workers_per_gather;
 CREATE INDEX gapfill_plan_test_indx ON gapfill_plan_test(value, time);
@@ -286,32 +273,30 @@ CREATE INDEX gapfill_plan_test_indx ON gapfill_plan_test(value, time);
 :EXPLAIN  SELECT time_bucket_gapfill('5m',time),value
 FROM gapfill_plan_test
 ORDER BY 1,2;
-QUERY PLAN
+--- QUERY PLAN ---
  Sort
-   Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone)), _hyper_X_X_chunk.value
+   Sort Key: (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", NULL::timestamp with time zone, NULL::timestamp with time zone)), gapfill_plan_test.value
    ->  Result
          ->  Append
                ->  Seq Scan on _hyper_X_X_chunk
                ->  Seq Scan on _hyper_X_X_chunk
                ->  Seq Scan on _hyper_X_X_chunk
                ->  Seq Scan on _hyper_X_X_chunk
-(8 rows)
 
 -- test sort optimization with ordering by multiple columns and time_bucket as last member,
 -- should use index scan
 :EXPLAIN SELECT time_bucket_gapfill('5m',time),value
 FROM gapfill_plan_test
 ORDER BY 2,1;
-QUERY PLAN
+--- QUERY PLAN ---
  Sort
-   Sort Key: _hyper_X_X_chunk.value, (time_bucket_gapfill('@ 5 mins'::interval, _hyper_X_X_chunk."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
+   Sort Key: gapfill_plan_test.value, (time_bucket_gapfill('@ 5 mins'::interval, gapfill_plan_test."time", NULL::timestamp with time zone, NULL::timestamp with time zone))
    ->  Result
          ->  Append
                ->  Seq Scan on _hyper_X_X_chunk
                ->  Seq Scan on _hyper_X_X_chunk
                ->  Seq Scan on _hyper_X_X_chunk
                ->  Seq Scan on _hyper_X_X_chunk
-(8 rows)
 
 DROP TABLE gapfill_plan_test;
 \set METRICS metrics_int
@@ -372,6 +357,7 @@ HINT:  Specify start and finish as arguments or in the WHERE clause.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- test locf lookup query does not trigger when not needed
+--
 -- 1/(SELECT 0) will throw an error in the lookup query but in order to not
 -- always trigger evaluation it needs to be correlated otherwise postgres will
 -- always run it once even if the value is never used
@@ -388,7 +374,6 @@ GROUP BY 1,2,3 ORDER BY 2,3,1;
     0 |         1 |         1 |     5
     5 |         1 |         1 |     5
    10 |         1 |         1 |     5
-(3 rows)
 
 -- test locf with correlated subquery
 SELECT
@@ -411,7 +396,6 @@ GROUP BY 1,2,3 ORDER BY 2,3,1;
     0 |         1 |         2 |     |      |    23 |    42 |  -100
     5 |         1 |         2 |  10 |   10 |    10 |    10 |    10
    10 |         1 |         2 |     |   10 |    10 |    10 |    10
-(6 rows)
 
 -- test locf with correlated subquery and "wrong order"
 SELECT
@@ -434,7 +418,6 @@ GROUP BY 1,2,3 ORDER BY 1,2,3;
     5 |         1 |         2 |  10 |   10 |    10 |    10 |    10
    10 |         1 |         1 |     |    5 |     5 |     5 |     5
    10 |         1 |         2 |     |   10 |    10 |    10 |    10
-(6 rows)
 
 -- test locf with correlated subquery and window functions
 SELECT
@@ -454,7 +437,6 @@ GROUP BY 1,2,3;
     0 |         1 |         2 | -100 | -100
     5 |         1 |         2 |   10 |  -90
    10 |         1 |         2 |   10 |   20
-(6 rows)
 
 -- test JOINs
 SELECT
@@ -482,7 +464,6 @@ GROUP BY 1,2,3,4,5;
     3 |         1 | Device 1 |         2 | Sensor 2 |    
     4 |         1 | Device 1 |         2 | Sensor 2 |    
     5 |         1 | Device 1 |         2 | Sensor 2 |  10
-(11 rows)
 
 -- test interpolate with correlated subquery
 SELECT
@@ -513,7 +494,6 @@ GROUP BY 1,2,3 ORDER BY 2,3,1;
     0 |         1 |         2 |     |    | 2.5 | 3.33333333333333 | 4.76190476190476
     5 |         1 |         2 |  10 | 10 |  10 |               10 |               10
    10 |         1 |         2 |     |    |  15 |               15 | 4.21052631578947
-(6 rows)
 
 -- test interpolate with correlated subquery and window function
 SELECT
@@ -549,7 +529,6 @@ GROUP BY 1,2,3 ORDER BY 2,3,1;
     0 |         1 |         2 | 4.76190476190476 | 4.76190476190476
     5 |         1 |         2 |               10 | 14.7619047619048
    10 |         1 |         2 | 4.21052631578947 | 14.2105263157895
-(6 rows)
 
 -- test subqueries
 -- subqueries will alter the shape of the plan and top-level constraints
@@ -560,9 +539,9 @@ FROM :METRICS m1
 WHERE m1.time >=0 AND m1.time < 2 AND device_id IN (SELECT device_id FROM :METRICS)
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
-(2 rows)
 
 -- test inner join with constraints in join condition
 SELECT
@@ -570,9 +549,9 @@ SELECT
 FROM :METRICS m1 INNER JOIN :METRICS m2 ON m1.time=m2.time AND m2.time >=0 AND m2.time < 2
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
-(2 rows)
 
 -- test actual table
 SELECT
@@ -581,9 +560,9 @@ FROM :METRICS
 WHERE time >=0 AND time < 2
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
-(2 rows)
 
 -- test with table alias
 SELECT
@@ -592,9 +571,9 @@ FROM :METRICS m
 WHERE m.time >=0 AND m.time < 2
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
-(2 rows)
 
 -- test with 2 tables
 SELECT
@@ -603,9 +582,9 @@ FROM :METRICS m, :METRICS m2
 WHERE m.time >=0 AND m.time < 2
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
-(2 rows)
 
 -- test prepared statement with locf with lookup query
 PREPARE prep_gapfill AS
@@ -624,7 +603,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id | locf 
@@ -632,7 +610,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id | locf 
@@ -640,7 +617,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id | locf 
@@ -648,7 +624,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id | locf 
@@ -656,7 +631,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id | locf 
@@ -664,7 +638,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id | locf 
@@ -672,7 +645,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id | locf 
@@ -680,7 +652,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id | locf 
@@ -688,7 +659,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id | locf 
@@ -696,7 +666,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         1 |    5
     5 |         1 |         1 |    5
    10 |         1 |         1 |    5
-(3 rows)
 
 DEALLOCATE prep_gapfill;
 -- test prepared statement with interpolate with lookup query
@@ -727,7 +696,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id |   interpolate    
@@ -738,7 +706,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id |   interpolate    
@@ -749,7 +716,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id |   interpolate    
@@ -760,7 +726,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id |   interpolate    
@@ -771,7 +736,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id |   interpolate    
@@ -782,7 +746,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id |   interpolate    
@@ -793,7 +756,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id |   interpolate    
@@ -804,7 +766,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id |   interpolate    
@@ -815,7 +776,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 EXECUTE prep_gapfill;
  time | device_id | sensor_id |   interpolate    
@@ -826,7 +786,6 @@ EXECUTE prep_gapfill;
     0 |         1 |         2 | 4.76190476190476
     5 |         1 |         2 |               10
    10 |         1 |         2 | 4.21052631578947
-(6 rows)
 
 DEALLOCATE prep_gapfill;
 -- test prepared statement with variable gapfill arguments
@@ -845,7 +804,6 @@ EXECUTE prep_gapfill(5,0,10);
 ------+-----------+-----------+-----
     0 |         1 |         1 |   5
     5 |         1 |         1 |    
-(2 rows)
 
 EXECUTE prep_gapfill(4,100,110);
  time | device_id | sensor_id | min 
@@ -853,14 +811,12 @@ EXECUTE prep_gapfill(4,100,110);
   100 |         1 |         1 |   0
   104 |         1 |         1 |    
   108 |         1 |         1 |    
-(3 rows)
 
 EXECUTE prep_gapfill(5,0,10);
  time | device_id | sensor_id | min 
 ------+-----------+-----------+-----
     0 |         1 |         1 |   5
     5 |         1 |         1 |    
-(2 rows)
 
 EXECUTE prep_gapfill(4,100,110);
  time | device_id | sensor_id | min 
@@ -868,14 +824,12 @@ EXECUTE prep_gapfill(4,100,110);
   100 |         1 |         1 |   0
   104 |         1 |         1 |    
   108 |         1 |         1 |    
-(3 rows)
 
 EXECUTE prep_gapfill(5,0,10);
  time | device_id | sensor_id | min 
 ------+-----------+-----------+-----
     0 |         1 |         1 |   5
     5 |         1 |         1 |    
-(2 rows)
 
 EXECUTE prep_gapfill(4,100,110);
  time | device_id | sensor_id | min 
@@ -883,14 +837,12 @@ EXECUTE prep_gapfill(4,100,110);
   100 |         1 |         1 |   0
   104 |         1 |         1 |    
   108 |         1 |         1 |    
-(3 rows)
 
 EXECUTE prep_gapfill(5,0,10);
  time | device_id | sensor_id | min 
 ------+-----------+-----------+-----
     0 |         1 |         1 |   5
     5 |         1 |         1 |    
-(2 rows)
 
 EXECUTE prep_gapfill(4,100,110);
  time | device_id | sensor_id | min 
@@ -898,14 +850,12 @@ EXECUTE prep_gapfill(4,100,110);
   100 |         1 |         1 |   0
   104 |         1 |         1 |    
   108 |         1 |         1 |    
-(3 rows)
 
 EXECUTE prep_gapfill(5,0,10);
  time | device_id | sensor_id | min 
 ------+-----------+-----------+-----
     0 |         1 |         1 |   5
     5 |         1 |         1 |    
-(2 rows)
 
 EXECUTE prep_gapfill(4,100,110);
  time | device_id | sensor_id | min 
@@ -913,31 +863,30 @@ EXECUTE prep_gapfill(4,100,110);
   100 |         1 |         1 |   0
   104 |         1 |         1 |    
   108 |         1 |         1 |    
-(3 rows)
 
 DEALLOCATE prep_gapfill;
 -- Tests without tables
 -- test locf and interpolate call without gapfill
 SELECT locf(1);
  locf 
+------
     1
-(1 row)
 
 SELECT interpolate(1);
  interpolate 
+-------------
            1
-(1 row)
 
 -- test locf and interpolate call with NULL input
 SELECT locf(NULL::int);
  locf 
+------
      
-(1 row)
 
 SELECT interpolate(NULL::bigint);
  interpolate 
+-------------
             
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- test time_bucket_gapfill not top level function call
@@ -1202,9 +1151,9 @@ SELECT
   time_bucket_gapfill(1,time,1,11)
 FROM (VALUES (1),(2)) v(time);
  time_bucket_gapfill 
+---------------------
                    1
                    2
-(2 rows)
 
 SELECT
   time_bucket_gapfill(1,time,1,11),
@@ -1214,7 +1163,6 @@ FROM (VALUES (1),(2)) v(time);
 ---------------------+--------------------
                    1 | 1.5000000000000000
                    2 | 1.5000000000000000
-(2 rows)
 
 -- test int int2/4/8
 SELECT
@@ -1222,39 +1170,39 @@ SELECT
 FROM (VALUES (1),(4)) v(time)
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
                    2
                    3
                    4
                    5
-(6 rows)
 
 SELECT
   time_bucket_gapfill(1::int4,time::int4,0::int4,6::int4)
 FROM (VALUES (1),(4)) v(time)
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
                    2
                    3
                    4
                    5
-(6 rows)
 
 SELECT
   time_bucket_gapfill(1::int8,time::int8,0::int8,6::int8)
 FROM (VALUES (1),(4)) v(time)
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
                    2
                    3
                    4
                    5
-(6 rows)
 
 -- test non-aligned bucket start
 SELECT
@@ -1262,11 +1210,11 @@ SELECT
 FROM (VALUES (11),(22)) v(time)
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                   10
                   20
                   30
-(4 rows)
 
 -- simple gapfill query
 SELECT
@@ -1283,7 +1231,6 @@ GROUP BY 1 ORDER BY 1;
    30 |     6
    40 |      
    60 |     7
-(7 rows)
 
 -- test references to different columns
 SELECT
@@ -1298,7 +1245,6 @@ GROUP BY 1 ORDER BY 1;
  2 |   2 |   2 |   5 |   5
  3 |     |     |     |    
  4 |     |     |     |    
-(5 rows)
 
 -- test passing of values outside boundaries
 SELECT
@@ -1315,7 +1261,6 @@ GROUP BY 1 ORDER BY 1;
                    3 |   3
                    4 |    
                    6 |   6
-(7 rows)
 
 -- test gap fill before first row and after last row
 SELECT
@@ -1330,7 +1275,6 @@ GROUP BY 1 ORDER BY 1;
                    2 |   2
                    3 |   3
                    4 |    
-(5 rows)
 
 -- test gap fill without rows in resultset
 SELECT
@@ -1346,7 +1290,6 @@ GROUP BY 1 ORDER BY 1;
                    2 |    
                    3 |    
                    4 |    
-(5 rows)
 
 -- test coalesce
 SELECT
@@ -1363,7 +1306,6 @@ GROUP BY 1 ORDER BY 1;
                    2 |        2 |        2 |        2
                    3 |        3 |        3 |        3
                    4 |        0 |        0 |        7
-(5 rows)
 
 -- test case
 SELECT
@@ -1381,7 +1323,6 @@ GROUP BY 1 ORDER BY 1;
                    2 |   2 |    2 |    9 |    1
                    3 |   3 |    3 |   10 |    1
                    4 |     |   -1 |    0 |    1
-(5 rows)
 
 -- test constants
 SELECT
@@ -1396,7 +1337,6 @@ GROUP BY 1 ORDER BY 1;
                    2 |   2 |   2 | 4
                    3 |   3 |   3 | 4
                    4 |     |     | 4
-(5 rows)
 
 -- test column reordering
 SELECT
@@ -1413,7 +1353,6 @@ GROUP BY 3 ORDER BY 3;
   1 | 2  |                   2 | 3.0 |   2 |   2 |  4
   1 | 2  |                   3 | 3.0 |   3 |   3 |  4
   1 | 2  |                   4 | 3.0 |     |     |  4
-(5 rows)
 
 -- test timestamptz
 SELECT
@@ -1428,7 +1367,6 @@ GROUP BY 1 ORDER BY 1;
  Sat Jan 01 10:00:00 2000 PST | 
  Sat Jan 01 16:00:00 2000 PST | Sat Jan 01 18:00:00 2000 PST
  Sat Jan 01 22:00:00 2000 PST | 
-(5 rows)
 
 -- test timestamp
 SELECT
@@ -1442,7 +1380,6 @@ GROUP BY 1 ORDER BY 1;
  Sat Jan 01 06:00:00 2000 | Sat Jan 01 09:00:00 2000
  Sat Jan 01 12:00:00 2000 | 
  Sat Jan 01 18:00:00 2000 | Sat Jan 01 18:00:00 2000
-(4 rows)
 
 -- test date
 SELECT
@@ -1459,7 +1396,6 @@ GROUP BY 1 ORDER BY 1;
  01-24-2000          | 
  01-31-2000          | 
  02-07-2000          | 
-(7 rows)
 
 -- test grouping by non-time columns
 SELECT
@@ -1480,7 +1416,6 @@ GROUP BY 1,id ORDER BY 2,1;
     2 |  2 | 2
     3 |  2 |  
     4 |  2 |  
-(10 rows)
 
 -- test grouping by non-time columns with no rows in resultset
 SELECT
@@ -1492,7 +1427,6 @@ WHERE false
 GROUP BY 1,id ORDER BY 2,1;
  time | id | m 
 ------+----+---
-(0 rows)
 
 -- test duplicate columns in GROUP BY
 SELECT
@@ -1514,7 +1448,6 @@ GROUP BY 1,2,3 ORDER BY 2,1;
     2 |  2 |  2 | 2
     3 |  2 |  2 |  
     4 |  2 |  2 |  
-(10 rows)
 
 -- test grouping by columns not in resultset
 SELECT
@@ -1534,7 +1467,6 @@ GROUP BY 1,id ORDER BY id,1;
     2 | 2
     3 |  
     4 |  
-(10 rows)
 
 -- test grouping by non-time columns with text columns
 SELECT
@@ -1555,7 +1487,6 @@ GROUP BY 1,color ORDER BY 2,1;
     2 | red   | 2
     3 | red   |  
     4 | red   |  
-(10 rows)
 
 -- test grouping by non-time columns with text columns with no rows in resultset
 SELECT
@@ -1567,18 +1498,17 @@ WHERE false
 GROUP BY 1,color ORDER BY 2,1;
  time | color | m 
 ------+-------+---
-(0 rows)
 
 --- test insert into SELECT
 CREATE TABLE gapfill_insert_test(id INT);
 INSERT INTO gapfill_insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
 SELECT * FROM gapfill_insert_test;
  id 
+----
   1
   2
   3
   4
-(4 rows)
 
 DROP TABLE gapfill_insert_test;
 -- test join
@@ -1609,7 +1539,6 @@ SELECT t1.*,t2.m FROM
     2 | red   |   |  
     3 | red   |   | 1
     4 | red   |   |  
-(10 rows)
 
 -- test join with locf
 SELECT t1.*,t2.m FROM
@@ -1643,7 +1572,6 @@ SELECT t1.*,t2.m FROM
     2 | red   |    1 |  
     3 | red   |    1 | 1
     4 | red   |    1 | 1
-(10 rows)
 
 -- test locf
 SELECT
@@ -1659,7 +1587,6 @@ GROUP BY 1 ORDER BY 1;
    30 |     3
    40 |     3
    50 |     6
-(6 rows)
 
 -- test locf with NULLs in resultset
 SELECT
@@ -1675,7 +1602,6 @@ GROUP BY 1 ORDER BY 1;
    30 |      
    40 |      
    50 |     6
-(6 rows)
 
 SELECT
   time_bucket_gapfill(10,time,0,50) AS time,
@@ -1690,7 +1616,6 @@ GROUP BY 1 ORDER BY 1;
    30 |      
    40 |      
    50 |     6
-(6 rows)
 
 SELECT
   time_bucket_gapfill(10,time,0,50) AS time,
@@ -1705,7 +1630,6 @@ GROUP BY 1 ORDER BY 1;
    30 |      
    40 |      
    50 |     6
-(6 rows)
 
 -- test locf with NULLs in resultset and treat_null_as_missing
 SELECT
@@ -1721,7 +1645,6 @@ GROUP BY 1 ORDER BY 1;
    30 |     3
    40 |     3
    50 |     6
-(6 rows)
 
 -- test locf with NULLs in first row of resultset and treat_null_as_missing with lookup query
 SELECT
@@ -1738,7 +1661,6 @@ GROUP BY 1 ORDER BY 1;
    30 |    | 100
    40 |    | 100
    50 |  6 |   6
-(6 rows)
 
 -- test locf with NULLs in resultset and treat_null_as_missing with resort
 SELECT
@@ -1754,7 +1676,6 @@ GROUP BY 1 ORDER BY 1 DESC;
    20 |     3
    10 |     9
     0 |      
-(6 rows)
 
 -- test locf with constants
 SELECT
@@ -1770,7 +1691,6 @@ GROUP BY 1;
                    2 |        2 |    1
                    3 |        2 |    1
                    4 |        2 |    2
-(5 rows)
 
 -- test expressions inside locf
 SELECT
@@ -1787,7 +1707,6 @@ GROUP BY 1;
                    2 |    1 |    4 |    5
                    3 |    1 |    4 |    5
                    4 |    2 |    4 |    6
-(5 rows)
 
 -- test locf with out of boundary lookup
 SELECT
@@ -1804,7 +1723,6 @@ GROUP BY 1 ORDER BY 1;
    40 |     6
    50 |     6
    60 |     6
-(7 rows)
 
 -- test locf with different datatypes
 SELECT
@@ -1824,7 +1742,6 @@ GROUP BY 1;
     2 | foo  | {1,2,3} | 4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k
     3 | bar  | {3,4,5} | 8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k
     4 | bar  | {3,4,5} | 8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k
-(5 rows)
 
 -- test locf with different datatypes and treat_null_as_missing
 SELECT
@@ -1845,7 +1762,6 @@ GROUP BY 1;
     2 | foo  | {1,2,3} | 4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k4k
     3 | bar  | {3,4,5} | 8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k
     4 | bar  | {3,4,5} | 8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k8k
-(5 rows)
 
 -- test interpolate
 SELECT
@@ -1861,7 +1777,6 @@ GROUP BY 1 ORDER BY 1;
    30 |     4
    40 |     5
    50 |     6
-(6 rows)
 
 -- test interpolate with NULL values
 SELECT
@@ -1877,7 +1792,6 @@ GROUP BY 1;
     3 |     
     4 |     
     5 |    5
-(6 rows)
 
 -- test interpolate datatypes
 SELECT
@@ -1897,7 +1811,6 @@ GROUP BY 1 ORDER BY 1;
    30 |        1 |   1 |      1 |    0.6 |    0.6
    40 |        2 |   2 |      2 |    1.8 |    1.8
    50 |        3 |   3 |      3 |      3 |      3
-(6 rows)
 
 -- test interpolate datatypes with negative time
 SELECT
@@ -1918,7 +1831,6 @@ GROUP BY 1 ORDER BY 1;
     0 |        1 |   1 |      1 |      1 |      1
    10 |        2 |   2 |      2 |      2 |      2
    20 |        3 |   3 |      3 |      3 |      3
-(7 rows)
 
 -- test interpolate with multiple groupings
 SELECT
@@ -1935,7 +1847,6 @@ GROUP BY 1,2 ORDER BY 2,1;
                    0 |      2 |          -3
                    5 |      2 |           0
                   10 |      2 |           3
-(6 rows)
 
 -- test cte with gap filling in outer query
 WITH data AS (
@@ -1959,7 +1870,6 @@ GROUP BY 1,id;
     2 |  2 | 2
     3 |  2 |  
     4 |  2 |  
-(10 rows)
 
 -- test cte with gap filling in inner query
 WITH gapfill AS (
@@ -1983,7 +1893,6 @@ SELECT * FROM gapfill;
     2 |  2 | 2
     3 |  2 |  
     4 |  2 |  
-(10 rows)
 
 -- test window functions
 SELECT
@@ -2000,7 +1909,6 @@ GROUP BY 1;
                   30 |          30 |    
                   40 |          40 |    
                   50 |          50 |    
-(6 rows)
 
 -- test window functions with multiple windows
 SELECT
@@ -2026,7 +1934,6 @@ GROUP BY 1;
                    7 |           7 |          8 |    0 |  13 |  18 |  22 |  25
                    8 |           8 |          9 |    0 |  15 |  21 |  26 |  30
                    9 |           9 |         10 |    9 |  17 |  24 |  30 |  35
-(10 rows)
 
 -- test window functions with constants
 SELECT
@@ -2043,7 +1950,6 @@ GROUP BY 1;
                    2 |   2 | 4 |   1
                    3 |   3 | 4 |   2
                    4 |     | 4 |   3
-(5 rows)
 
 --test window functions with locf
 SELECT
@@ -2063,7 +1969,6 @@ GROUP BY 1;
                    2 |   2 |       1 |          |    2 |        1 |         2
                    3 |     |       2 |          |    2 |        2 |         2
                    4 |     |         |          |    2 |        2 |          
-(5 rows)
 
 --test window functions with interpolate
 SELECT
@@ -2083,7 +1988,6 @@ GROUP BY 1;
                    2 |     |       1 |        3 |           2 |               1 |                3
                    3 |   3 |         |          |           3 |               2 |                 
                    4 |     |       3 |          |             |               3 |                 
-(5 rows)
 
 --test window functions with expressions
 SELECT
@@ -2103,7 +2007,6 @@ GROUP BY 1;
                    2 |     |       1 |       2 |           2 |               1 |               2
                    3 |   3 |         |         |           3 |               2 |               3
                    4 |     |       3 |       4 |             |               3 |               4
-(5 rows)
 
 --test row_number/rank/percent_rank/... window functions with gapfill reference
 SELECT
@@ -2125,7 +2028,6 @@ GROUP BY 1;
                    2 |       1 |       2 |       3 |          3 |       0.6 |    1 |    3 |          0.5
                    3 |       2 |       2 |       4 |          4 |       0.8 |    1 |    4 |         0.75
                    4 |       2 |       3 |       5 |          5 |         1 |    1 |    5 |            1
-(5 rows)
 
 -- test first_value/last_value/nth_value
 SELECT
@@ -2143,7 +2045,6 @@ GROUP BY 1;
                    3 |           0 |         2 |          5
                    4 |           0 |         2 |          5
                    5 |           0 |         2 |          5
-(6 rows)
 
 -- test window functions with PARTITION BY
 SELECT
@@ -2165,7 +2066,6 @@ GROUP BY 1,color ORDER BY 2,1;
     2 | red   |          8 |          3
     3 | red   |          9 |          4
     4 | red   |         10 |          5
-(10 rows)
 
 -- test multiple windows
 \set ON_ERROR_STOP 0
@@ -2189,7 +2089,6 @@ GROUP BY 1;
                    8 |           7 |           8 |          9
                    9 |           8 |           9 |         10
                   10 |           9 |          10 |         10
-(11 rows)
 
 -- test reorder
 SELECT
@@ -2211,7 +2110,6 @@ GROUP BY 1,id ORDER BY 1,id;
     3 |  2 |  
     4 |  1 |  
     4 |  2 |  
-(10 rows)
 
 -- test order by locf
 SELECT
@@ -2227,7 +2125,6 @@ GROUP BY 1 ORDER BY 1,2;
                    3 |    3
                    4 |    3
                    5 |    3
-(5 rows)
 
 SELECT
   time_bucket_gapfill(1,time,1,6),
@@ -2242,7 +2139,6 @@ GROUP BY 1 ORDER BY 2 NULLS FIRST,1;
                    3 |    3
                    4 |    3
                    5 |    3
-(5 rows)
 
 SELECT
   time_bucket_gapfill(1,time,1,6),
@@ -2257,7 +2153,6 @@ GROUP BY 1 ORDER BY 2 NULLS LAST,1;
                    4 |    3
                    5 |    3
                    1 |     
-(5 rows)
 
 -- test order by interpolate
 SELECT
@@ -2273,7 +2168,6 @@ GROUP BY 1 ORDER BY 1,2;
                    3 |           3
                    4 |            
                    5 |            
-(5 rows)
 
 SELECT
   time_bucket_gapfill(1,time,1,6),
@@ -2288,7 +2182,6 @@ GROUP BY 1 ORDER BY 2 NULLS FIRST,1;
                    1 |           1
                    2 |           2
                    3 |           3
-(5 rows)
 
 SELECT
   time_bucket_gapfill(1,time,1,6),
@@ -2303,7 +2196,6 @@ GROUP BY 1 ORDER BY 2 NULLS LAST,1;
                    3 |           3
                    4 |            
                    5 |            
-(5 rows)
 
 -- test queries on hypertable
 -- test locf and interpolate together
@@ -2328,7 +2220,6 @@ ORDER BY 1,2;
  Mon Jan 01 07:00:00 2018 PST |         1 |       0 |       0 |              0 |              0
  Mon Jan 01 07:00:00 2018 PST |         2 |     1.4 |      40 |            1.4 |             40
  Mon Jan 01 07:00:00 2018 PST |         3 |     0.9 |      30 |            0.9 |             30
-(9 rows)
 
 SELECT
   time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz),
@@ -2343,7 +2234,6 @@ FROM metrics_tstz WHERE time < '2017-01-01' GROUP BY 1;
  Sat Dec 31 16:00:00 2016 PST | 0.666666666666667
  Sun Jan 01 04:00:00 2017 PST |  1.16666666666667
  Sun Jan 01 16:00:00 2017 PST |  1.66666666666667
-(3 rows)
 
 SELECT
   time_bucket_gapfill('12h'::interval,time,'2017-01-01'::timestamptz, '2017-01-02'::timestamptz),
@@ -2358,7 +2248,6 @@ FROM metrics_tstz WHERE time_bucket_gapfill('12h'::interval,time,'2017-01-01'::t
  Sat Dec 31 16:00:00 2016 PST | 0.666666666666667
  Sun Jan 01 04:00:00 2017 PST |  1.16666666666667
  Sun Jan 01 16:00:00 2017 PST |  1.66666666666667
-(3 rows)
 
 -- interpolation with correlated subquery lookup before interval
 SELECT
@@ -2378,7 +2267,6 @@ WHERE device_id=1 GROUP BY 1,2 ORDER BY 1,2;
  Mon Jan 01 05:00:00 2018 PST |         1 |         0.5 | 0.5
  Mon Jan 01 06:00:00 2018 PST |         1 |        0.25 |    
  Mon Jan 01 07:00:00 2018 PST |         1 |           0 |   0
-(5 rows)
 
 -- interpolation with correlated subquery lookup after interval
 SELECT
@@ -2395,7 +2283,6 @@ FROM metrics_tstz m1 WHERE device_id=1 GROUP BY 1,2 ORDER BY 1,2;
  Mon Jan 01 06:00:00 2018 PST |         1 |        0.25 |    
  Mon Jan 01 07:00:00 2018 PST |         1 |           0 |   0
  Mon Jan 01 08:00:00 2018 PST |         1 |          -5 |    
-(4 rows)
 
 \set ON_ERROR_STOP 0
 -- bucket_width non simple expression
@@ -2557,11 +2444,11 @@ WHERE
   t >= -1 AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                   -1
                    0
                    1
                    2
-(4 rows)
 
 -- same query with less or equal as finish
 SELECT
@@ -2571,12 +2458,12 @@ WHERE
   t >= -1 AND t <= 3
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                   -1
                    0
                    1
                    2
                    3
-(5 rows)
 
 -- int32 time_bucket_gapfill with start column and value switched
 SELECT
@@ -2586,10 +2473,10 @@ WHERE
   -1 < t AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
                    2
-(3 rows)
 
 -- int32 time_bucket_gapfill with finish column and value switched
 SELECT
@@ -2599,11 +2486,11 @@ WHERE
   t >= 0 AND 3 >= t
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    0
                    1
                    2
                    3
-(4 rows)
 
 -- int16 time_bucket_gapfill with no start/finish
 SELECT
@@ -2613,11 +2500,11 @@ WHERE
   t >= -1 AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                   -1
                    0
                    1
                    2
-(4 rows)
 
 -- int64 time_bucket_gapfill with no start/finish
 SELECT
@@ -2627,11 +2514,11 @@ WHERE
   t >= -1 AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                   -1
                    0
                    1
                    2
-(4 rows)
 
 -- date time_bucket_gapfill with no start/finish
 SELECT
@@ -2641,12 +2528,12 @@ WHERE
   t >= '1999-12-29' AND t < '2000-01-03'
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
  12-29-1999
  12-30-1999
  12-31-1999
  01-01-2000
  01-02-2000
-(5 rows)
 
 -- timestamp time_bucket_gapfill with no start/finish
 SELECT
@@ -2656,6 +2543,7 @@ WHERE
   t >= '1999-12-29' AND t < '2000-01-03'
 GROUP BY 1;
    time_bucket_gapfill    
+--------------------------
  Wed Dec 29 00:00:00 1999
  Wed Dec 29 12:00:00 1999
  Thu Dec 30 00:00:00 1999
@@ -2666,7 +2554,6 @@ GROUP BY 1;
  Sat Jan 01 12:00:00 2000
  Sun Jan 02 00:00:00 2000
  Sun Jan 02 12:00:00 2000
-(10 rows)
 
 -- timestamptz time_bucket_gapfill with no start/finish
 SELECT
@@ -2676,6 +2563,7 @@ WHERE
   t >= '1999-12-29' AND t < '2000-01-03'
 GROUP BY 1;
      time_bucket_gapfill      
+------------------------------
  Tue Dec 28 16:00:00 1999 PST
  Wed Dec 29 04:00:00 1999 PST
  Wed Dec 29 16:00:00 1999 PST
@@ -2687,7 +2575,6 @@ GROUP BY 1;
  Sat Jan 01 16:00:00 2000 PST
  Sun Jan 02 04:00:00 2000 PST
  Sun Jan 02 16:00:00 2000 PST
-(11 rows)
 
 -- timestamptz time_bucket_gapfill with more complex expression
 SELECT
@@ -2697,6 +2584,7 @@ WHERE
   t >= '2000-01-03'::timestamptz - '4d'::interval AND t < '2000-01-03'
 GROUP BY 1;
      time_bucket_gapfill      
+------------------------------
  Wed Dec 29 16:00:00 1999 PST
  Thu Dec 30 04:00:00 1999 PST
  Thu Dec 30 16:00:00 1999 PST
@@ -2706,7 +2594,6 @@ GROUP BY 1;
  Sat Jan 01 16:00:00 2000 PST
  Sun Jan 02 04:00:00 2000 PST
  Sun Jan 02 16:00:00 2000 PST
-(9 rows)
 
 -- timestamptz time_bucket_gapfill with different datatype in finish constraint
 SELECT
@@ -2716,6 +2603,7 @@ WHERE
   t >= '2000-01-03'::timestamptz - '4d'::interval AND t < '2000-01-03'::date
 GROUP BY 1;
      time_bucket_gapfill      
+------------------------------
  Wed Dec 29 16:00:00 1999 PST
  Thu Dec 30 04:00:00 1999 PST
  Thu Dec 30 16:00:00 1999 PST
@@ -2725,7 +2613,6 @@ GROUP BY 1;
  Sat Jan 01 16:00:00 2000 PST
  Sun Jan 02 04:00:00 2000 PST
  Sun Jan 02 16:00:00 2000 PST
-(9 rows)
 
 -- time_bucket_gapfill with now() as start
 SELECT
@@ -2735,7 +2622,7 @@ WHERE
  t >= now() AND t < now() - '1h'::interval
 GROUP BY 1;
  time_bucket_gapfill 
-(0 rows)
+---------------------
 
 -- time_bucket_gapfill with multiple constraints
 SELECT
@@ -2745,8 +2632,8 @@ WHERE
  t >= -1 AND t < 3 and t>1 AND t <=4 AND length(version()) > 0
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                    2
-(1 row)
 
 -- int32 time_bucket_gapfill with greater for start
 SELECT
@@ -2756,11 +2643,11 @@ WHERE
   t > -2 AND t < 3
 GROUP BY 1;
  time_bucket_gapfill 
+---------------------
                   -1
                    0
                    1
                    2
-(4 rows)
 
 -- test DISTINCT
 SELECT DISTINCT ON (color)
@@ -2773,7 +2660,6 @@ GROUP BY 1,color ORDER BY 2,1;
 ------+-------+---
     0 | blue  |  
     0 | red   |  
-(2 rows)
 
 -- test DISTINCT with window functions
 SELECT DISTINCT ON (row_number() OVER ())
@@ -2794,7 +2680,6 @@ GROUP BY 1,color;
     2 | red   |          8
     3 | red   |          9
     4 | red   |         10
-(10 rows)
 
 -- test DISTINCT with window functions and PARTITION BY
 SELECT DISTINCT ON (color,row_number() OVER (PARTITION BY color))
@@ -2815,7 +2700,6 @@ GROUP BY 1,color;
     2 | red   |          3
     3 | red   |          4
     4 | red   |          5
-(10 rows)
 
 -- test DISTINCT with window functions not in targetlist
 SELECT DISTINCT ON (row_number() OVER ())
@@ -2836,7 +2720,6 @@ GROUP BY 1,color;
     2 | red   |          3
     3 | red   |          4
     4 | red   |          5
-(10 rows)
 
 -- test column references
 SELECT
@@ -2858,7 +2741,6 @@ GROUP BY 3,4;
           3 |    2 | red   |    2
           4 |    2 | red   |    3
           5 |    2 | red   |    4
-(10 rows)
 
 -- test with Nested Loop
 SELECT l.id, bucket, data_value FROM
@@ -2879,7 +2761,6 @@ SELECT l.id, bucket, data_value FROM
   2 |      2 |         -1
   2 |      3 |         -1
   2 |      4 |         -4
-(8 rows)
 
 -- test prepared statement
 PREPARE prep_gapfill AS
@@ -2897,7 +2778,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 EXECUTE prep_gapfill;
  time | locf 
@@ -2907,7 +2787,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 EXECUTE prep_gapfill;
  time | locf 
@@ -2917,7 +2796,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 EXECUTE prep_gapfill;
  time | locf 
@@ -2927,7 +2805,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 EXECUTE prep_gapfill;
  time | locf 
@@ -2937,7 +2814,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 EXECUTE prep_gapfill;
  time | locf 
@@ -2947,7 +2823,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 EXECUTE prep_gapfill;
  time | locf 
@@ -2957,7 +2832,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 EXECUTE prep_gapfill;
  time | locf 
@@ -2967,7 +2841,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 EXECUTE prep_gapfill;
  time | locf 
@@ -2977,7 +2850,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 EXECUTE prep_gapfill;
  time | locf 
@@ -2987,7 +2859,6 @@ EXECUTE prep_gapfill;
     2 |    2
     3 |    2
     4 |    2
-(5 rows)
 
 DEALLOCATE prep_gapfill;
 -- test column references with TIME_COLUMN last
@@ -3010,7 +2881,6 @@ GROUP BY 3,4;
           3 |    2 | red   |    2
           4 |    2 | red   |    3
           5 |    2 | red   |    4
-(10 rows)
 
 -- test expressions on GROUP BY columns
 SELECT
@@ -3033,7 +2903,6 @@ GROUP BY 3,5;
           3 |    2 | red   |      3 |    2
           4 |    2 | red   |      3 |    3
           5 |    2 | red   |      3 |    4
-(10 rows)
 
 -- test columns derived from GROUP BY columns with cast
 SELECT
@@ -3053,7 +2922,6 @@ GROUP BY 1,device_id;
     2 | 2
     3 | 2
     4 | 2
-(10 rows)
 
 -- test columns derived from GROUP BY columns with expression
 SELECT
@@ -3073,7 +2941,6 @@ GROUP BY 1,device_id;
     2 | Device 2
     3 | Device 2
     4 | Device 2
-(10 rows)
 
 --test interpolation with big differences in values (test overflows in calculations)
 --we use the biggest possible difference in time(x) and the value(y).
@@ -3096,7 +2963,6 @@ GROUP BY 1 ORDER BY 1;
  -9223372036854775808 |   -32768 | -2147483648 | -9223372036854775808 | -2147483648 | -Infinity
                     0 |        0 |           0 |                    0 |           0 |  Infinity
   9223372036854775807 |    32767 |  2147483647 |  9223372036854775807 |  2147483647 |  Infinity
-(3 rows)
 
 -- issue #2232: This query used to trigger error "could not find
 -- pathkey item to sort" due to a corrupt query plan
@@ -3113,7 +2979,6 @@ ORDER BY 1 DESC;
  Mon Jan 01 06:00:00 2018 PST |    2.1 |     65
  Mon Jan 01 05:00:00 2018 PST |    2.1 |     60
  Mon Jan 01 04:00:00 2018 PST |        |       
-(4 rows)
 
 -- query without gapfill:
 SELECT time_bucket('1 h', time) AS time,
@@ -3127,7 +2992,6 @@ ORDER BY 1 DESC;
 ------------------------------+--------+--------
  Mon Jan 01 07:00:00 2018 PST |    2.3 |     70
  Mon Jan 01 05:00:00 2018 PST |    2.1 |     60
-(2 rows)
 
 -- query to show original data
 SELECT * FROM metrics_tstz
@@ -3141,35 +3005,33 @@ ORDER BY 1 DESC, 2;
  Mon Jan 01 05:00:00 2018 PST |         1 | 0.5 | 10
  Mon Jan 01 05:00:00 2018 PST |         2 | 0.7 | 20
  Mon Jan 01 05:00:00 2018 PST |         3 | 0.9 | 30
-(6 rows)
 
 -- issue #3048
 -- test gapfill/hashagg planner interaction
 -- this used to produce a plan without gapfill node
-EXPLAIN (costs off) SELECT time_bucket_gapfill('52w', time, start:='2000-01-01', finish:='2000-01-10') AS time,
+EXPLAIN (buffers off, costs off) SELECT time_bucket_gapfill('52w', time, start:='2000-01-01', finish:='2000-01-10') AS time,
        sum(v1) AS v1_sum
 FROM metrics
 GROUP BY 1;
-QUERY PLAN
+--- QUERY PLAN ---
  Custom Scan (GapFill)
    ->  Sort
-         Sort Key: (time_bucket_gapfill('@ 364 days'::interval, _hyper_X_X_chunk."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
+         Sort Key: (time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
          ->  HashAggregate
-               Group Key: time_bucket_gapfill('@ 364 days'::interval, _hyper_X_X_chunk."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
+               Group Key: time_bucket_gapfill('@ 364 days'::interval, metrics."time", 'Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone, 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                ->  Result
                      ->  Append
                            ->  Seq Scan on _hyper_X_X_chunk
                            ->  Seq Scan on _hyper_X_X_chunk
                            ->  Seq Scan on _hyper_X_X_chunk
-(10 rows)
 
 -- issue #3834
 -- test projection handling in gapfill
 CREATE TABLE i3834(time timestamptz NOT NULL, ship_id int, value float);
 SELECT table_name FROM create_hypertable('i3834','time');
  table_name 
+------------
  i3834
-(1 row)
 
 INSERT INTO i3834 VALUES ('2020-12-01 14:05:00+01',1,3.123), ('2020-12-01 14:05:00+01',2,4.123), ('2020-12-01 14:05:00+01',3,5.123);
 SELECT
@@ -3206,7 +3068,6 @@ GROUP BY 1,2;
  Tue Dec 01 05:08:30 2020 PST |       2 |             | speedlog
  Tue Dec 01 05:09:00 2020 PST |       2 |             | speedlog
  Tue Dec 01 05:09:30 2020 PST |       2 |             | speedlog
-(20 rows)
 
 DROP TABLE i3834;
 -- issue #1528
@@ -3230,14 +3091,13 @@ GROUP BY 1;
  Tue Nov 05 02:28:00 2019 PST | 20266.958984375 | 20266.959547
  Tue Nov 05 02:29:00 2019 PST | 20266.958984375 | 20266.959547
  Tue Nov 05 02:30:00 2019 PST | 20266.958984375 | 20266.959547
-(11 rows)
 
 -- check gapfill group change detection with TOASTed values
 CREATE TABLE gapfill_group_toast(time timestamptz NOT NULL, device text, value float);
 SELECT table_name FROM create_hypertable('gapfill_group_toast', 'time');
      table_name      
+---------------------
  gapfill_group_toast
-(1 row)
 
 INSERT INTO gapfill_group_toast
 SELECT
@@ -3245,11 +3105,10 @@ SELECT
   '4e0ee04cc6a94fd40497b8dbaac2fe434e0ee04cc6a94fd40497b8dbaac2fe43',
   random();
 ALTER TABLE gapfill_group_toast SET(timescaledb.compress, timescaledb.compress_segmentby = 'device');
-NOTICE:  default order by for hypertable "gapfill_group_toast" is set to ""time" DESC"
 SELECT count(compress_chunk(c)) FROM show_chunks('gapfill_group_toast') c;
  count 
+-------
      2
-(1 row)
 
 SELECT
   time_bucket_gapfill('1 day', time), device
@@ -3260,12 +3119,12 @@ GROUP BY 1,2;
 ------------------------------+------------------------------------------------------------------
  Tue May 31 17:00:00 2022 PDT | 4e0ee04cc6a94fd40497b8dbaac2fe434e0ee04cc6a94fd40497b8dbaac2fe43
  Wed Jun 01 17:00:00 2022 PDT | 4e0ee04cc6a94fd40497b8dbaac2fe434e0ee04cc6a94fd40497b8dbaac2fe43
-(2 rows)
 
 DROP TABLE gapfill_group_toast;
 -- test bucketing by month
 SELECT time_bucket_gapfill('2 month'::interval, ts, '2000-01-01'::timestamptz,'2001-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
      time_bucket_gapfill      
+------------------------------
  Fri Dec 31 16:00:00 1999 PST
  Tue Feb 29 16:00:00 2000 PST
  Sun Apr 30 17:00:00 2000 PDT
@@ -3273,26 +3132,26 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, '2000-01-01'::timestamptz,'2
  Thu Aug 31 17:00:00 2000 PDT
  Tue Oct 31 16:00:00 2000 PST
  Sun Dec 31 16:00:00 2000 PST
-(7 rows)
 
 SELECT time_bucket_gapfill('1 year'::interval, ts, '2000-01-01'::timestamptz,'2003-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
      time_bucket_gapfill      
+------------------------------
  Fri Dec 31 16:00:00 1999 PST
  Sun Dec 31 16:00:00 2000 PST
  Mon Dec 31 16:00:00 2001 PST
  Tue Dec 31 16:00:00 2002 PST
-(4 rows)
 
 SELECT time_bucket_gapfill('1 century'::interval, ts, '1900-01-01'::timestamptz,'2103-01-01'::timestamptz) FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
      time_bucket_gapfill      
+------------------------------
  Sun Dec 31 16:00:00 1899 PST
  Fri Dec 31 16:00:00 1999 PST
  Thu Dec 31 16:00:00 2099 PST
-(3 rows)
 
 -- test bucketing with timezone
 SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
      time_bucket_gapfill      
+------------------------------
  Fri Dec 31 15:00:00 1999 PST
  Tue Feb 29 15:00:00 2000 PST
  Sun Apr 30 15:00:00 2000 PDT
@@ -3300,20 +3159,20 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01
  Thu Aug 31 15:00:00 2000 PDT
  Tue Oct 31 15:00:00 2000 PST
  Sun Dec 31 15:00:00 2000 PST
-(7 rows)
 
 SELECT time_bucket_gapfill('2 month'::interval, ts, current_setting('timezone'), '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
      time_bucket_gapfill      
+------------------------------
  Sat Jan 01 00:00:00 2000 PST
  Wed Mar 01 00:00:00 2000 PST
  Mon May 01 00:00:00 2000 PDT
  Sat Jul 01 00:00:00 2000 PDT
  Fri Sep 01 00:00:00 2000 PDT
  Wed Nov 01 00:00:00 2000 PST
-(6 rows)
 
 SELECT time_bucket_gapfill('2 month'::interval, ts, 'UTC', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
      time_bucket_gapfill      
+------------------------------
  Fri Dec 31 16:00:00 1999 PST
  Tue Feb 29 16:00:00 2000 PST
  Sun Apr 30 17:00:00 2000 PDT
@@ -3321,18 +3180,17 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, 'UTC', '2000-01-01','2001-01
  Thu Aug 31 17:00:00 2000 PDT
  Tue Oct 31 16:00:00 2000 PST
  Sun Dec 31 16:00:00 2000 PST
-(7 rows)
 
 SET timezone TO 'Europe/Berlin';
 SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
       time_bucket_gapfill      
+-------------------------------
  Sat Jan 01 00:00:00 2000 CET
  Wed Mar 01 00:00:00 2000 CET
  Mon May 01 00:00:00 2000 CEST
  Sat Jul 01 00:00:00 2000 CEST
  Fri Sep 01 00:00:00 2000 CEST
  Wed Nov 01 00:00:00 2000 CET
-(6 rows)
 
 RESET timezone;
 -- Test gapfill with arrays (#5981)
@@ -3364,15 +3222,14 @@ GROUP BY 1, 2;
  85 | {1,2,3,4} | 500001
  90 | {1,2,3,4} | 500001
  95 | {1,2,3,4} | 500001
-(20 rows)
 
 -- Test gapfill is aligned with non-gapfill time_bucket
 -- when using different timezones and month bucketing
 CREATE TABLE month_timezone(time timestamptz NOT NULL, value float);
 SELECT table_name FROM create_hypertable('month_timezone','time');
    table_name   
+----------------
  month_timezone
-(1 row)
 
 INSERT INTO month_timezone VALUES ('2023-03-01 14:05:00+01', 3.123), ('2023-04-01 14:05:00+01',4.123), ('2023-05-01 14:05:00+01', 5.123);
 SELECT
@@ -3390,7 +3247,6 @@ GROUP BY 1;
  Sun Apr 30 15:00:00 2023 PDT | 5.123
  Wed May 31 15:00:00 2023 PDT |      
  Fri Jun 30 15:00:00 2023 PDT |      
-(7 rows)
 
 -- Test gapfill respects DST changes when generating timestamps (#6344)
 SELECT time_bucket_gapfill('1 month', time, 'awst','2023-01-01', '2023-07-01' ) AS month, sum(value) AS sum
@@ -3405,7 +3261,6 @@ GROUP BY 1;
  Sun Apr 30 09:00:00 2023 PDT | 5.123
  Wed May 31 09:00:00 2023 PDT |      
  Fri Jun 30 09:00:00 2023 PDT |      
-(7 rows)
 
 DROP TABLE month_timezone;
 -- Test gapfill with additional group pathkeys added for optimization (#6396)
@@ -3439,7 +3294,6 @@ GROUP BY 1;
  Thu Dec 07 16:00:00 2023 PST |             
  Fri Dec 08 16:00:00 2023 PST |             
  Sat Dec 09 16:00:00 2023 PST |             
-(10 rows)
 
 SELECT
   time_bucket_gapfill('1 day', time) AS day,
@@ -3461,7 +3315,6 @@ ORDER BY 1 DESC;
  Sat Dec 02 16:00:00 2023 PST |             
  Fri Dec 01 16:00:00 2023 PST |             
  Thu Nov 30 16:00:00 2023 PST |             
-(10 rows)
 
 DROP TABLE stocks_real_time;
 SET timezone TO 'Europe/Berlin';
@@ -3469,25 +3322,25 @@ SET timezone TO 'Europe/Berlin';
 SELECT time_bucket_gapfill('1h', time, 'Europe/Berlin', '2024-03-31T0:00Z', '2024-03-31T02:00Z')
 FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
       time_bucket_gapfill      
+-------------------------------
  Sun Mar 31 01:00:00 2024 CET
  Sun Mar 31 03:00:00 2024 CEST
-(2 rows)
 
 SELECT time_bucket_gapfill('30 minutes', time, 'Europe/Berlin', '2024-03-31T0:00Z', '2024-03-31T02:00Z')
 FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
       time_bucket_gapfill      
+-------------------------------
  Sun Mar 31 01:00:00 2024 CET
  Sun Mar 31 01:30:00 2024 CET
  Sun Mar 31 03:00:00 2024 CEST
  Sun Mar 31 03:30:00 2024 CEST
-(4 rows)
 
 SELECT time_bucket_gapfill('1h', time, 'Europe/Berlin', '2024-10-26T23:00Z', '2024-10-27T02:00Z')
 FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
       time_bucket_gapfill      
+-------------------------------
  Sun Oct 27 01:00:00 2024 CEST
  Sun Oct 27 02:00:00 2024 CEST
  Sun Oct 27 02:00:00 2024 CET
-(3 rows)
 
 RESET timezone;

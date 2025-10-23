@@ -163,10 +163,10 @@ WHERE hypertable_id = :ht_id;
 -- Make sure the catalog is cleaned up when the cagg is dropped
 DROP MATERIALIZED VIEW conditions_summary;
 
-SELECT * FROM _timescaledb_catalog.continuous_agg
+SELECT count(*) FROM _timescaledb_catalog.continuous_agg
 WHERE mat_hypertable_id = :cagg_id;
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT count(*) FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
 
 -- Re-create cagg, this time WITH DATA
@@ -412,7 +412,6 @@ SELECT * FROM conditions_large_1y1m ORDER BY bucket;
 
 -- Trigger merged refresh to check corresponding code path as well
 DROP MATERIALIZED VIEW conditions_large_1y;
-SET timescaledb.materializations_per_refresh_window = 0;
 
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_1y
@@ -434,8 +433,6 @@ FROM generate_series('2020-01-01' :: date, '2021-01-01' :: date - interval '1 da
 CALL refresh_continuous_aggregate('conditions_large_1y', '2020-01-01', '2021-01-01');
 
 SELECT * FROM conditions_large_1y ORDER BY bucket;
-
-RESET timescaledb.materializations_per_refresh_window;
 
 -- Test the specific code path of creating a CAGG on top of empty hypertable.
 

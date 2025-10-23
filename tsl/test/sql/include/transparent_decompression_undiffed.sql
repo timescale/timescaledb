@@ -18,7 +18,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('readings') ch;
 
 VACUUM ANALYZE readings;
 
-EXPLAIN (costs off) SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
+EXPLAIN (buffers off, costs off) SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
 FROM tags t
 INNER JOIN LATERAL(SELECT tags_id, fuel_consumption FROM readings r WHERE r.tags_id = t.id ) r ON true
 GROUP BY fleet;
@@ -31,10 +31,10 @@ SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
 SET min_parallel_table_scan_size TO '0';
 
-EXPLAIN (costs off) SELECT * FROM metrics ORDER BY time, device_id;
-EXPLAIN (costs off) SELECT time_bucket('10 minutes', time) bucket, avg(v0) avg_v0 FROM metrics GROUP BY bucket;
+EXPLAIN (buffers off, costs off) SELECT * FROM metrics ORDER BY time, device_id;
+EXPLAIN (buffers off, costs off) SELECT time_bucket('10 minutes', time) bucket, avg(v0) avg_v0 FROM metrics GROUP BY bucket;
 
-EXPLAIN (costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
+EXPLAIN (buffers off, costs off) SELECT * FROM metrics_space ORDER BY time, device_id;
 
 RESET min_parallel_table_scan_size;
 RESET parallel_setup_cost;
@@ -43,7 +43,7 @@ RESET parallel_tuple_cost;
 SET enable_seqscan TO false;
 -- should order compressed chunks using index
 -- (we only EXPLAIN here b/c the resulting order is too inconsistent)
-EXPLAIN (costs off) SELECT * FROM metrics WHERE time > '2000-01-08' ORDER BY device_id;
-EXPLAIN (costs off) SELECT * FROM metrics_space WHERE time > '2000-01-08' ORDER BY device_id;
+EXPLAIN (buffers off, costs off) SELECT * FROM metrics WHERE time > '2000-01-08' ORDER BY device_id;
+EXPLAIN (buffers off, costs off) SELECT * FROM metrics_space WHERE time > '2000-01-08' ORDER BY device_id;
 
 SET enable_seqscan TO true;

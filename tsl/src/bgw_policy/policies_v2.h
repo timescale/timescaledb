@@ -30,7 +30,6 @@
 #define POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER "compress_after"
 #define POL_COMPRESSION_CONF_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
 #define POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE "compress_created_before"
-#define POL_COMPRESSION_CONF_KEY_USE_ACCESS_METHOD "hypercore_use_access_method"
 
 #define POLICY_RECOMPRESSION_PROC_NAME "policy_recompression"
 #define POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER "recompress_after"
@@ -74,8 +73,8 @@ extern Datum policies_show(PG_FUNCTION_ARGS);
 typedef struct CaggPolicyConfig
 {
 	Oid partition_type;
-	CaggPolicyOffset offset_start;
-	CaggPolicyOffset offset_end;
+	ContinuousAggPolicyOffset offset_start;
+	ContinuousAggPolicyOffset offset_end;
 } CaggPolicyConfig;
 
 typedef struct refresh_policy
@@ -92,7 +91,6 @@ typedef struct compression_policy
 	Datum compress_after;
 	Oid compress_after_type;
 	bool create_policy;
-	UseAccessMethod use_access_method;
 } compression_policy;
 
 typedef struct retention_policy

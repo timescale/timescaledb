@@ -5,7 +5,6 @@ step s2_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     2
-(1 row)
 
 step s3_show_data: 
     select * from readings order by time desc, device;
@@ -17,12 +16,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_begin: 
     start transaction isolation level repeatable read;
@@ -31,7 +28,6 @@ step s1_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s3_begin: 
     start transaction isolation level read committed;
@@ -40,7 +36,6 @@ step s3_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s4_modify: 
     delete from readings where device=1;
@@ -53,13 +48,11 @@ step s1_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     1
-(1 row)
 
 step s3_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     1
-(1 row)
 
 step s1_show_data: 
     select * from readings order by time desc, device;
@@ -71,12 +64,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s3_show_data: 
     select * from readings order by time desc, device;
@@ -88,12 +79,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:05:00 2024 PST|     5|   5
 Mon Jan 01 01:01:00 2024 PST|     2|   2
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           0|           1
-(1 row)
 
 step s1_commit: commit;
 step s1_show_data: 
@@ -106,12 +95,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:05:00 2024 PST|     5|   5
 Mon Jan 01 01:01:00 2024 PST|     2|   2
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           0|           1
-(1 row)
 
 step s3_commit: commit;
 
@@ -120,7 +107,6 @@ step s2_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     2
-(1 row)
 
 step s1_begin: 
     start transaction isolation level repeatable read;
@@ -129,7 +115,6 @@ step s1_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s1_show_data: 
     select * from readings order by time desc, device;
@@ -141,12 +126,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s2_merge_chunks: 
     call merge_all_chunks('readings');
@@ -161,12 +144,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_commit: commit;
 step s2_merge_chunks: <... completed>
@@ -180,18 +161,15 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s2_set_lock_upgrade s2_show_chunks s1_begin s1_show_data s2_merge_chunks s1_show_data s1_commit s1_show_data s1_show_chunks
@@ -202,7 +180,6 @@ step s2_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     2
-(1 row)
 
 step s1_begin: 
     start transaction isolation level repeatable read;
@@ -211,7 +188,6 @@ step s1_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s1_show_data: 
     select * from readings order by time desc, device;
@@ -223,12 +199,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s2_merge_chunks: 
     call merge_all_chunks('readings');
@@ -243,12 +217,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_commit: commit;
 step s2_merge_chunks: <... completed>
@@ -262,18 +234,15 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s4_wp_enable s2_show_chunks s1_begin s1_show_data s2_merge_chunks s1_show_data s1_row_exclusive_lock s4_wp_release s1_commit s1_show_data s1_show_chunks
@@ -281,13 +250,11 @@ step s4_wp_enable: SELECT debug_waitpoint_enable('merge_chunks_before_heap_swap'
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     2
-(1 row)
 
 step s1_begin: 
     start transaction isolation level repeatable read;
@@ -296,7 +263,6 @@ step s1_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s1_show_data: 
     select * from readings order by time desc, device;
@@ -308,12 +274,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s2_merge_chunks: 
     call merge_all_chunks('readings');
@@ -328,19 +292,16 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_row_exclusive_lock: call lock_one_chunk('readings');
 step s4_wp_release: SELECT debug_waitpoint_release('merge_chunks_before_heap_swap');
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s1_commit: commit;
 step s2_merge_chunks: <... completed>
@@ -354,18 +315,15 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s4_wp_enable s2_show_chunks s1_begin s2_merge_chunks s1_show_data s4_wp_release s1_commit s1_show_data s1_show_chunks
@@ -373,13 +331,11 @@ step s4_wp_enable: SELECT debug_waitpoint_enable('merge_chunks_before_heap_swap'
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     2
-(1 row)
 
 step s1_begin: 
     start transaction isolation level repeatable read;
@@ -388,7 +344,6 @@ step s1_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s2_merge_chunks: 
     call merge_all_chunks('readings');
@@ -401,7 +356,6 @@ step s4_wp_release: SELECT debug_waitpoint_release('merge_chunks_before_heap_swa
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_merge_chunks: <... completed>
 step s1_show_data: <... completed>
@@ -411,12 +365,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_commit: commit;
 step s1_show_data: 
@@ -429,18 +381,15 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     1
-(1 row)
 
 
 starting permutation: s2_set_lock_upgrade_conditional s4_wp_enable s2_show_chunks s1_begin s1_show_data s2_merge_chunks s1_show_data s1_row_exclusive_lock s4_wp_release s1_commit s1_show_data s1_show_chunks
@@ -451,13 +400,11 @@ step s4_wp_enable: SELECT debug_waitpoint_enable('merge_chunks_before_heap_swap'
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     2
-(1 row)
 
 step s1_begin: 
     start transaction isolation level repeatable read;
@@ -466,7 +413,6 @@ step s1_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s1_show_data: 
     select * from readings order by time desc, device;
@@ -478,12 +424,10 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s2_merge_chunks: 
     call merge_all_chunks('readings');
@@ -498,19 +442,16 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_row_exclusive_lock: call lock_one_chunk('readings'); <waiting ...>
 step s4_wp_release: SELECT debug_waitpoint_release('merge_chunks_before_heap_swap');
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_merge_chunks: <... completed>
 ERROR:  could not lock relation "_hyper_X_X_chunk" for merge
@@ -526,18 +467,15 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     2
-(1 row)
 
 
 starting permutation: s4_wp_enable s2_merge_chunks s3_merge_chunks s4_wp_release s1_show_data s1_show_chunks
@@ -545,7 +483,6 @@ step s4_wp_enable: SELECT debug_waitpoint_enable('merge_chunks_before_heap_swap'
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_merge_chunks: 
     call merge_all_chunks('readings');
@@ -557,11 +494,10 @@ step s4_wp_release: SELECT debug_waitpoint_release('merge_chunks_before_heap_swa
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_merge_chunks: <... completed>
 step s3_merge_chunks: <... completed>
-ERROR:  relation does not exist
+ERROR:  chunk does not exist
 step s1_show_data: 
     select * from readings order by time desc, device;
     select count(*) as num_device_all, count(*) filter (where device=1) as num_device_1, count(*) filter (where device=5) as num_device_5 from readings;
@@ -572,16 +508,13 @@ Mon Jan 01 02:00:00 2024 PST|     3|   3
 Mon Jan 01 02:00:00 2024 PST|     4|   4
 Mon Jan 01 01:01:00 2024 PST|     2|   2
 Mon Jan 01 01:00:00 2024 PST|     1|   1
-(4 rows)
 
 num_device_all|num_device_1|num_device_5
 --------------+------------+------------
              4|           1|           0
-(1 row)
 
 step s1_show_chunks: select count(*) from show_chunks('readings');
 count
 -----
     1
-(1 row)
 

@@ -14,18 +14,27 @@ ALTER TABLE alter_before ALTER COLUMN temp SET STATISTICS 100;
 ALTER TABLE alter_before ALTER COLUMN notes SET STORAGE EXTERNAL;
 SELECT create_hypertable('alter_before', 'time', chunk_time_interval => 2628000000000);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
      create_hypertable     
 ---------------------------
  (1,public,alter_before,t)
-(1 row)
 
+-- Test error hint for invalid timescaledb options on ALTER TABLE
+\set ON_ERROR_STOP 0
+-- Invalid timescaledb option should show hint with valid options
+\set VERBOSITY default
+ALTER TABLE alter_before SET (tsdb.invalid_option = true);
+ERROR:  unrecognized parameter "tsdb.invalid_option"
+HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index
+ALTER TABLE alter_before SET (timescaledb.nonexistent = false);
+ERROR:  unrecognized parameter "timescaledb.nonexistent"
+HINT:  Valid timescaledb parameters are: chunk_interval, compress, compress_segmentby, compress_orderby, compress_chunk_interval, compress_index
+\set ON_ERROR_STOP 1
+\set VERBOSITY terse
 INSERT INTO alter_before VALUES ('2017-03-22T09:18:22', 23.5, 1);
 SELECT * FROM alter_before;
            time           | temp | colorid | notes | notes_2 
 --------------------------+------+---------+-------+---------
  Wed Mar 22 09:18:22 2017 | 23.5 |       1 |       | 
-(1 row)
 
 -- Show that deleted column is marked as dropped and that attnums are
 -- now different for the root table and the chunk
@@ -48,17 +57,14 @@ ORDER BY c.relname, a.attnum;
  alter_before     | colorid                      |      4 |                 |               | p
  alter_before     | notes                        |      5 |                 |               | e
  alter_before     | notes_2                      |      6 |                 |               | x
-(11 rows)
 
 -- DROP a table's column after making it a hypertable and having data
 CREATE TABLE alter_after(id serial, time timestamp, temp float, colorid integer, notes text, notes_2 text);
 SELECT create_hypertable('alter_after', 'time', chunk_time_interval => 2628000000000);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
     create_hypertable     
 --------------------------
  (2,public,alter_after,t)
-(1 row)
 
 -- Create first chunk
 INSERT INTO alter_after (time, temp, colorid) VALUES ('2017-03-22T09:18:22', 23.5, 1);
@@ -84,7 +90,6 @@ SELECT * FROM alter_after;
  Mon May 22 09:18:23 2017 | 15.2 |       2 |       | 
  Tue Aug 22 09:19:22 2017 | 21.4 |       3 | nr1   | n2r1
  Wed Aug 23 09:20:17 2017 | 31.5 |       2 | nr2   | n2r2
-(6 rows)
 
 -- Show that attnums are different for chunks created after DROP
 -- column
@@ -117,7 +122,6 @@ ORDER BY c.relname, a.attnum;
  alter_after      | colorid                      |      4
  alter_after      | notes                        |      5
  alter_after      | notes_2                      |      6
-(22 rows)
 
 -- Add an ID column again
 ALTER TABLE alter_after ADD COLUMN id serial;
@@ -161,7 +165,6 @@ ORDER BY c.relname, a.attnum;
  alter_after      | notes                        |      5 |                 |               | x
  alter_after      | notes_2                      |      6 |                 |               | e
  alter_after      | id                           |      7 |                 |               | p
-(26 rows)
 
 SELECT * FROM alter_after;
            time           | temp | colorid | notes | notes_2 | id 
@@ -173,7 +176,6 @@ SELECT * FROM alter_after;
  Tue Aug 22 09:19:22 2017 | 21.4 |       3 | nr1   | n2r1    |  5
  Wed Aug 23 09:20:17 2017 | 31.5 |       2 | nr2   | n2r2    |  6
  Tue Aug 22 09:19:14 2017 | 12.5 |       3 |       |         |  7
-(7 rows)
 
 -- test setting reloptions
 ALTER TABLE  _timescaledb_internal._hyper_2_3_chunk SET (parallel_workers=2);
@@ -184,7 +186,6 @@ SELECT relname, reloptions FROM pg_class WHERE relname IN ('_hyper_2_3_chunk','_
 ------------------+----------------------
  _hyper_2_3_chunk | {parallel_workers=2}
  _hyper_2_4_chunk | 
-(2 rows)
 
 -- Need superuser to ALTER chunks in _timescaledb_internal schema
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -192,7 +193,6 @@ SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped,
  id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
   2 |             2 | _timescaledb_internal | _hyper_2_2_chunk |                     | f       |      0 | f
-(1 row)
 
 -- Rename chunk
 ALTER TABLE _timescaledb_internal._hyper_2_2_chunk RENAME TO new_chunk_name;
@@ -200,7 +200,6 @@ SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped,
  id | hypertable_id |      schema_name      |   table_name   | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+----------------+---------------------+---------+--------+-----------
   2 |             2 | _timescaledb_internal | new_chunk_name |                     | f       |      0 | f
-(1 row)
 
 -- Set schema
 ALTER TABLE _timescaledb_internal.new_chunk_name SET SCHEMA public;
@@ -208,7 +207,6 @@ SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped,
  id | hypertable_id | schema_name |   table_name   | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-------------+----------------+---------------------+---------+--------+-----------
   2 |             2 | public      | new_chunk_name |                     | f       |      0 | f
-(1 row)
 
 -- Test that we cannot rename chunk columns
 \set ON_ERROR_STOP 0
@@ -231,7 +229,6 @@ SELECT tablespace FROM pg_tables WHERE tablename = 'new_chunk_name';
  tablespace  
 -------------
  tablespace1
-(1 row)
 
 -- drop all tables to make checking the tests below easier
 DROP TABLE alter_before;
@@ -241,15 +238,12 @@ SELECT tablename, tablespace FROM pg_tables
 WHERE tablename = 'hyper_in_space' OR tablename LIKE '\_hyper\__\__\_chunk' ORDER BY tablename;
  tablename | tablespace 
 -----------+------------
-(0 rows)
 
 CREATE TABLE hyper_in_space(time bigint, temp float, device int);
 SELECT create_hypertable('hyper_in_space', 'time', 'device', 4, chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (3,public,hyper_in_space,t)
-(1 row)
 
 INSERT INTO hyper_in_space(time, temp, device) VALUES (1, 20, 1);
 INSERT INTO hyper_in_space(time, temp, device) VALUES (3, 21, 2);
@@ -257,7 +251,6 @@ INSERT INTO hyper_in_space(time, temp, device) VALUES (5, 23, 1);
 SELECT tablename FROM pg_tables WHERE tablespace = 'tablespace1' ORDER BY tablename;
  tablename 
 -----------
-(0 rows)
 
 SET default_tablespace = tablespace1;
 -- should be inserted in tablespace1 which is now default
@@ -271,7 +264,6 @@ WHERE tablename = 'hyper_in_space' OR tablename LIKE '\_hyper\__\__\_chunk' ORDE
  _hyper_3_7_chunk | 
  _hyper_3_8_chunk | tablespace1
  hyper_in_space   | 
-(5 rows)
 
 SET default_tablespace TO DEFAULT;
 ALTER TABLE hyper_in_space SET TABLESPACE tablespace1;
@@ -283,7 +275,6 @@ SELECT tablename FROM pg_tables WHERE tablespace = 'tablespace1' ORDER BY tablen
  _hyper_3_7_chunk
  _hyper_3_8_chunk
  hyper_in_space
-(5 rows)
 
 -- should be inserted in an existing chunk in the new tablespace,
 -- no new chunks
@@ -300,7 +291,6 @@ WHERE tablename = 'hyper_in_space' OR tablename LIKE '\_hyper\__\__\_chunk' ORDE
  _hyper_3_8_chunk | tablespace1
  _hyper_3_9_chunk | tablespace1
  hyper_in_space   | tablespace1
-(6 rows)
 
 -- should not fail (unlike attach_tablespace)
 ALTER TABLE hyper_in_space SET TABLESPACE tablespace1;
@@ -316,13 +306,11 @@ ERROR:  tablespace "tablespace1" is still attached to 1 hypertables
  Different Rows | Total Rows from Query 1 | Total Rows from Query 2 
 ----------------+-------------------------+-------------------------
               0 |                       5 |                       5
-(1 row)
 
 SELECT tablename, tablespace FROM pg_tables WHERE tablespace = 'tablespace1' ORDER BY tablename;
    tablename    | tablespace  
 ----------------+-------------
  hyper_in_space | tablespace1
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- should not be able to drop tablespace if a hypertable depends on it
@@ -333,11 +321,9 @@ ERROR:  tablespace "tablespace1" is still attached to 1 hypertables
 DROP TABLE hyper_in_space;
 CREATE TABLE hyper_in_space(time bigint, temp float, device int) TABLESPACE tablespace1;
 SELECT create_hypertable('hyper_in_space', 'time', 'device', 4, chunk_time_interval=>1);
-NOTICE:  adding not-null constraint to column "time"
       create_hypertable      
 -----------------------------
  (4,public,hyper_in_space,t)
-(1 row)
 
 INSERT INTO hyper_in_space(time, temp, device) VALUES (1, 20, 1);
 INSERT INTO hyper_in_space(time, temp, device) VALUES (3, 21, 2);
@@ -350,13 +336,11 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_11_chunk | tablespace1
  _hyper_4_12_chunk | tablespace1
  hyper_in_space    | tablespace1
-(4 rows)
 
 SELECT attach_tablespace('tablespace2', 'hyper_in_space');
  attach_tablespace 
 -------------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- should fail as >1 tablespaces are attached
@@ -367,13 +351,11 @@ SELECT detach_tablespace('tablespace2', 'hyper_in_space');
  detach_tablespace 
 -------------------
                  1
-(1 row)
 
 SELECT * FROM _timescaledb_catalog.tablespace;
  id | hypertable_id | tablespace_name 
 ----+---------------+-----------------
   3 |             4 | tablespace1
-(1 row)
 
 -- make sure when using ALTER TABLE, table spaces are not accumulated
 -- as in case of attach_tablespace
@@ -382,7 +364,6 @@ SELECT * FROM _timescaledb_catalog.tablespace;
  id | hypertable_id | tablespace_name 
 ----+---------------+-----------------
   3 |             4 | tablespace1
-(1 row)
 
 ALTER TABLE hyper_in_space SET TABLESPACE tablespace2;
 -- should have one result
@@ -390,7 +371,6 @@ SELECT * FROM _timescaledb_catalog.tablespace;
  id | hypertable_id | tablespace_name 
 ----+---------------+-----------------
   5 |             4 | tablespace2
-(1 row)
 
 ALTER TABLE hyper_in_space SET TABLESPACE tablespace1;
 -- should have one result, (same as the first in the block)
@@ -398,7 +378,6 @@ SELECT * FROM _timescaledb_catalog.tablespace;
  id | hypertable_id | tablespace_name 
 ----+---------------+-----------------
   6 |             4 | tablespace1
-(1 row)
 
 SELECT tablename, tablespace FROM pg_tables
 WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
@@ -408,14 +387,12 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_11_chunk | tablespace1
  _hyper_4_12_chunk | tablespace1
  hyper_in_space    | tablespace1
-(4 rows)
 
 -- attach tb2 <-> ALTER SET tb1 <-> detach tb1 should work
 SELECT detach_tablespace('tablespace1', 'hyper_in_space');
  detach_tablespace 
 -------------------
                  1
-(1 row)
 
 INSERT INTO hyper_in_space(time, temp, device) VALUES (5, 23, 1);
 INSERT INTO hyper_in_space(time, temp, device) VALUES (7, 23, 1);
@@ -430,25 +407,21 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_12_chunk | tablespace1
  _hyper_4_13_chunk | 
  hyper_in_space    | 
-(5 rows)
 
 SELECT * FROM _timescaledb_catalog.tablespace;
  id | hypertable_id | tablespace_name 
 ----+---------------+-----------------
-(0 rows)
 
 -- tablespace functions should handle the default tablespace just as they do others
 SELECT attach_tablespace('pg_default', 'hyper_in_space');
  attach_tablespace 
 -------------------
  
-(1 row)
 
 SELECT attach_tablespace('tablespace2', 'hyper_in_space');
  attach_tablespace 
 -------------------
  
-(1 row)
 
 SELECT tablename, tablespace FROM pg_tables
 WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER BY tablename;
@@ -459,14 +432,12 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_12_chunk | tablespace1
  _hyper_4_13_chunk | 
  hyper_in_space    | tablespace2
-(5 rows)
 
 SELECT * FROM _timescaledb_catalog.tablespace;
  id | hypertable_id | tablespace_name 
 ----+---------------+-----------------
   7 |             4 | pg_default
   8 |             4 | tablespace2
-(2 rows)
 
 INSERT INTO hyper_in_space(time, temp, device) VALUES (12, 22, 1);
 INSERT INTO hyper_in_space(time, temp, device) VALUES (13, 23, 3);
@@ -481,13 +452,11 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_14_chunk | 
  _hyper_4_15_chunk | tablespace2
  hyper_in_space    | tablespace2
-(7 rows)
 
 SELECT detach_tablespace('pg_default', 'hyper_in_space');
  detach_tablespace 
 -------------------
                  1
-(1 row)
 
 ALTER TABLE hyper_in_space SET TABLESPACE pg_default;
 SELECT tablename, tablespace FROM pg_tables
@@ -501,13 +470,11 @@ WHERE tablename = 'hyper_in_space' OR tablename ~ '_hyper_\d+_\d+_chunk' ORDER B
  _hyper_4_14_chunk | 
  _hyper_4_15_chunk | 
  hyper_in_space    | 
-(7 rows)
 
 SELECT detach_tablespace('pg_default', 'hyper_in_space');
  detach_tablespace 
 -------------------
                  1
-(1 row)
 
 DROP TABLE hyper_in_space;
 -- test altering tablespace on index, issue #903
@@ -520,7 +487,6 @@ SELECT create_hypertable('series', 'time', create_default_indexes => FALSE);
   create_hypertable  
 ---------------------
  (5,public,series,t)
-(1 row)
 
 INSERT INTO series VALUES ('2019-04-21 10:12', 1, 1.01);
 CREATE INDEX series_value ON series (value, time) TABLESPACE tablespace2;
@@ -534,7 +500,6 @@ ORDER BY indexname;
  _timescaledb_internal | _hyper_5_16_chunk | _hyper_5_16_chunk_series_value | tablespace2
  public                | series            | series_pk                      | tablespace1
  public                | series            | series_value                   | tablespace2
-(4 rows)
 
 ALTER INDEX series_pk SET TABLESPACE tablespace2;
 CREATE INDEX ON series (time) TABLESPACE tablespace1;
@@ -555,7 +520,6 @@ ORDER BY indexname;
  public                | series            | series_pk                         | tablespace2
  public                | series            | series_time_idx                   | tablespace1
  public                | series            | series_value                      | 
-(9 rows)
 
 DROP TABLE series;
 DROP TABLESPACE tablespace1;
@@ -571,7 +535,6 @@ SELECT create_hypertable('original_name.my_table','date');
       create_hypertable       
 ------------------------------
  (6,original_name,my_table,t)
-(1 row)
 
 INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
 ALTER SCHEMA original_name RENAME TO new_name;
@@ -595,19 +558,16 @@ SELECT create_hypertable('original_name.my_table','date');
       create_hypertable       
 ------------------------------
  (7,original_name,my_table,t)
-(1 row)
 
 SELECT create_hypertable('original_name.my_table2','date');
        create_hypertable       
 -------------------------------
  (8,original_name,my_table2,t)
-(1 row)
 
 SELECT create_hypertable('regular_table','date');
      create_hypertable      
 ----------------------------
  (9,public,regular_table,t)
-(1 row)
 
 INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
 INSERT INTO original_name.my_table2 (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
@@ -631,24 +591,20 @@ SELECT create_hypertable('original_name.my_table','date');
        create_hypertable       
 -------------------------------
  (10,original_name,my_table,t)
-(1 row)
 
 SELECT create_hypertable('original_name.my_table2','date');
        create_hypertable        
 --------------------------------
  (11,original_name,my_table2,t)
-(1 row)
 
 INSERT INTO original_name.my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
 INSERT INTO original_name.my_table2 (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
 ALTER SCHEMA original_name RENAME TO new_name;
 DROP SCHEMA new_name CASCADE;
 NOTICE:  drop cascades to 4 other objects
-\dt new_name.*;
-      List of relations
- Schema | Name | Type | Owner 
+SELECT * FROM test.relation WHERE schema = 'new_name';
+ schema | name | type | owner 
 --------+------+------+-------
-(0 rows)
 
 -- Make sure we can't rename internal schemas
 \set ON_ERROR_STOP 0
@@ -670,7 +626,6 @@ SELECT create_hypertable('my_table','date', associated_schema_name => 'my_associ
    create_hypertable    
 ------------------------
  (12,public,my_table,t)
-(1 row)
 
 INSERT INTO my_table (date, quantity) VALUES ('2018-07-04T21:00:00+00:00', 8);
 ALTER SCHEMA my_associated_schema RENAME TO new_associated_schema;
@@ -680,14 +635,12 @@ SELECT * from _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
  12 | public      | my_table   | new_associated_schema  | _hyper_12               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(1 row)
 
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk from _timescaledb_catalog.chunk;
  id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
 ----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
  24 |            12 | new_associated_schema | _hyper_12_24_chunk |                     | f       |      0 | f
  25 |            12 | new_associated_schema | _hyper_12_25_chunk |                     | f       |      0 | f
-(2 rows)
 
 DROP TABLE my_table;
 -- test renaming unique constraints/indexes
@@ -696,45 +649,28 @@ SELECT create_hypertable('t_hypertable', 'time');
      create_hypertable      
 ----------------------------
  (13,public,t_hypertable,t)
-(1 row)
 
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:00:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 INSERT INTO t_hypertable AS h VALUES ( 1, '2021-01-01 00:00:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 BEGIN;
 ALTER INDEX t_hypertable_id_time_key RENAME TO t_new_constraint;
--- chunk_index and chunk_constraint should both have updated constraint names
-SELECT hypertable_index_name, index_name from _timescaledb_catalog.chunk_index WHERE hypertable_index_name = 't_new_constraint' ORDER BY 1,2;
- hypertable_index_name |             index_name              
------------------------+-------------------------------------
- t_new_constraint      | _hyper_13_26_chunk_t_new_constraint
- t_new_constraint      | _hyper_13_27_chunk_t_new_constraint
-(2 rows)
-
+-- chunk_constraint should have updated constraint names
 SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
  hypertable_constraint_name |           constraint_name           
 ----------------------------+-------------------------------------
  t_new_constraint           | _hyper_13_26_chunk_t_new_constraint
  t_new_constraint           | _hyper_13_27_chunk_t_new_constraint
-(2 rows)
 
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 ROLLBACK;
 BEGIN;
 ALTER TABLE t_hypertable RENAME CONSTRAINT t_hypertable_id_time_key TO t_new_constraint;
--- chunk_index and chunk_constraint should both have updated constraint names
-SELECT hypertable_index_name, index_name from _timescaledb_catalog.chunk_index WHERE hypertable_index_name = 't_new_constraint' ORDER BY 1,2;
- hypertable_index_name |      index_name       
------------------------+-----------------------
- t_new_constraint      | 26_5_t_new_constraint
- t_new_constraint      | 27_6_t_new_constraint
-(2 rows)
-
+-- chunk_constraint should have updated constraint names
 SELECT hypertable_constraint_name, constraint_name from _timescaledb_catalog.chunk_constraint WHERE hypertable_constraint_name = 't_new_constraint' ORDER BY 1,2;
  hypertable_constraint_name |    constraint_name    
 ----------------------------+-----------------------
  t_new_constraint           | 26_5_t_new_constraint
  t_new_constraint           | 27_6_t_new_constraint
-(2 rows)
 
 INSERT INTO t_hypertable AS h VALUES ( 1, '2020-01-01 00:01:00', 3.2) ON CONFLICT (id, time) DO UPDATE SET value = h.value + EXCLUDED.value;
 ROLLBACK;
@@ -744,20 +680,19 @@ SELECT create_hypertable('p_hypertable', 'a', chunk_time_interval => int '3');
      create_hypertable      
 ----------------------------
  (14,public,p_hypertable,t)
-(1 row)
 
 BEGIN;
 ALTER TABLE p_hypertable DROP COLUMN b, ADD COLUMN d boolean;
 CREATE INDEX idx_ht ON p_hypertable(a, c) WHERE d = FALSE;
 END;
 INSERT INTO p_hypertable(a, c, d) VALUES (1, 1, FALSE);
-\d+ _timescaledb_internal._hyper_14_28_chunk
-                     Table "_timescaledb_internal._hyper_14_28_chunk"
- Column |  Type   | Collation | Nullable | Default | Storage | Stats target | Description 
---------+---------+-----------+----------+---------+---------+--------------+-------------
- a      | integer |           | not null |         | plain   |              | 
- c      | integer |           |          |         | plain   |              | 
- d      | boolean |           |          |         | plain   |              | 
+\d _timescaledb_internal._hyper_14_28_chunk
+ Table "_timescaledb_internal._hyper_14_28_chunk"
+ Column |  Type   | Collation | Nullable | Default 
+--------+---------+-----------+----------+---------
+ a      | integer |           | not null | 
+ c      | integer |           |          | 
+ d      | boolean |           |          | 
 Indexes:
     "_hyper_14_28_chunk_idx_ht" btree (a, c) WHERE NOT d
     "_hyper_14_28_chunk_p_hypertable_a_idx" btree (a DESC)
@@ -782,7 +717,6 @@ SELECT table_name FROM public.create_hypertable( 'i4474', 'time');
  table_name 
 ------------
  i4474
-(1 row)
 
 GRANT SELECT, INSERT on i4474 TO role_4474;
 -- create chunk as owner
@@ -799,18 +733,15 @@ DROP ROLE role_4474;
 -- root table's setting
 CREATE TABLE replid(time timestamptz, value int);
 SELECT create_hypertable('replid', 'time', chunk_time_interval => interval '1 day', create_default_indexes => false);
-NOTICE:  adding not-null constraint to column "time"
   create_hypertable   
 ----------------------
  (16,public,replid,t)
-(1 row)
 
 -- replica identity set to default
 SELECT relreplident FROM pg_class WHERE relname = 'replid';
  relreplident 
 --------------
  d
-(1 row)
 
 INSERT INTO replid VALUES ('2023-01-01', 1);
 -- the new chunk should have the same replica identity setting
@@ -818,7 +749,6 @@ SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c
       relname       | relreplident 
 --------------------+--------------
  _hyper_16_31_chunk | d
-(1 row)
 
 -- test change to replica identity full
 ALTER TABLE replid REPLICA IDENTITY FULL;
@@ -826,14 +756,12 @@ SELECT relname, relreplident FROM pg_class WHERE relname = 'replid' ORDER BY rel
  relname | relreplident 
 ---------+--------------
  replid  | f
-(1 row)
 
 -- the chunk's setting should also change to FULL
 SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
       relname       | relreplident 
 --------------------+--------------
  _hyper_16_31_chunk | f
-(1 row)
 
 -- change to replica identity index
 CREATE UNIQUE INDEX time_key ON replid (time);
@@ -842,13 +770,11 @@ SELECT relname, relreplident FROM pg_class WHERE relname = 'replid' ORDER BY rel
  relname | relreplident 
 ---------+--------------
  replid  | i
-(1 row)
 
 SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
       relname       | relreplident 
 --------------------+--------------
  _hyper_16_31_chunk | i
-(1 row)
 
 SELECT indexrelid::regclass::text AS index_name
 FROM show_chunks('replid') chid
@@ -857,7 +783,6 @@ ORDER BY index_name;
                     index_name                     
 ---------------------------------------------------
  _timescaledb_internal._hyper_16_31_chunk_time_key
-(1 row)
 
 INSERT INTO replid VALUES ('2023-01-02', 2);
 -- the new chunk will also have replica identity "index"
@@ -866,7 +791,6 @@ SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c
 --------------------+--------------
  _hyper_16_31_chunk | i
  _hyper_16_32_chunk | i
-(2 rows)
 
 SELECT indexrelid::regclass::text AS index_name
 FROM show_chunks('replid') chid
@@ -876,7 +800,6 @@ ORDER BY index_name;
 ---------------------------------------------------
  _timescaledb_internal._hyper_16_31_chunk_time_key
  _timescaledb_internal._hyper_16_32_chunk_time_key
-(2 rows)
 
 -- drop the replica identity index and create a new chunk. The new
 -- chunk should have replica identity "NOTHING" since this is the
@@ -890,7 +813,6 @@ SELECT relname, relreplident FROM show_chunks('replid') ch INNER JOIN pg_class c
  _hyper_16_31_chunk | i
  _hyper_16_32_chunk | i
  _hyper_16_33_chunk | n
-(3 rows)
 
 SELECT indexrelid::regclass::text AS index_name
 FROM show_chunks('replid') chid
@@ -898,7 +820,6 @@ INNER JOIN pg_index i ON (i.indrelid = chid) AND indisreplident=true
 ORDER BY index_name;
  index_name 
 ------------
-(0 rows)
 
 -- Alter replica identity directly on a chunk is not supported
 SELECT ch AS chunk_name FROM show_chunks('replid') ch ORDER BY chunk_name LIMIT 1 \gset

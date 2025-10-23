@@ -13,8 +13,8 @@ DROP TABLE t1;
 
 -- test error cases
 \set ON_ERROR_STOP 0
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
+CREATE TABLE t2(time float, device text, value float) WITH (tsdb.hypertable);
+CREATE TABLE t2(time float, device text, value float) WITH (timescaledb.hypertable);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='');
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='foo');
@@ -215,4 +215,152 @@ BEGIN;
 CREATE TABLE t24(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.enable_columnstore=false);
 SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables;
 ROLLBACK;
+BEGIN;
+CREATE TABLE t25(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't25'::regclass;
+ROLLBACK;
 
+-- test compression policy creation with columnstore
+BEGIN;
+CREATE TABLE t25_policy(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=true);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy' AND proc_name = 'policy_compression';
+ROLLBACK;
+
+-- test compression policy creation with custom chunk interval
+BEGIN;
+CREATE TABLE t25_policy_custom(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='3 days',tsdb.columnstore=true);
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_custom' AND proc_name = 'policy_compression';
+ROLLBACK;
+
+-- test compression policy creation with integer partition column (int2)
+BEGIN;
+CREATE TABLE t25_policy_int2(time int2 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=100,tsdb.columnstore=true);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy_int2';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int2' AND proc_name = 'policy_compression';
+ROLLBACK;
+
+-- test compression policy creation with integer partition column (int4)
+BEGIN;
+CREATE TABLE t25_policy_int4(time int4 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=1000,tsdb.columnstore=true);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy_int4';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int4' AND proc_name = 'policy_compression';
+ROLLBACK;
+
+-- test compression policy creation with integer partition column (int8)
+BEGIN;
+CREATE TABLE t25_policy_int8(time int8 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval=10000,tsdb.columnstore=true);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 't25_policy_int8';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes"') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 't25_policy_int8' AND proc_name = 'policy_compression';
+ROLLBACK;
+BEGIN;
+-- don't allow empty orderby
+\set ON_ERROR_STOP 0
+CREATE TABLE t26(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby = '');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't26'::regclass;
+ROLLBACK;
+\set ON_ERROR_STOP 1
+-- can allow empty segmentby
+BEGIN;
+CREATE TABLE t27(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.segmentby = '');
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 't27'::regclass;
+ROLLBACK;
+
+-- test configurable bloom and minmax
+BEGIN;
+CREATE TABLE t28(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='time', tsdb.index='bloom(value)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t29(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='time', tsdb.index='bloom(value),minmax(device)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+
+--multi column
+BEGIN;
+CREATE TABLE t30(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='time',tsdb.index='bloom(value),bloom(device)');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ROLLBACK;
+
+--test errors
+\set ON_ERROR_STOP 0
+-- invalid syntax
+BEGIN;
+CREATE TABLE t31(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),bloom(count(device))');
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t32(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='value,bloom(count(device))');
+ROLLBACK;
+
+-- duplicate column
+BEGIN;
+CREATE TABLE t33(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),minmax(value)');
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t34(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),bloom(value)');
+ROLLBACK;
+
+-- invalid column
+BEGIN;
+CREATE TABLE t35(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value),bloom(foo)');
+ROLLBACK;
+
+-- same column as orderby
+BEGIN;
+CREATE TABLE t36(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value)');
+ROLLBACK;
+
+BEGIN;
+CREATE TABLE t37(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='minmax(value)');
+ROLLBACK;
+
+-- same column as segmentby
+BEGIN;
+CREATE TABLE t38(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.segmentby='device', tsdb.index='minmax(device)');
+ROLLBACK;
+
+-- guc disabled
+set timescaledb.enable_sparse_index_bloom to false;
+
+BEGIN;
+CREATE TABLE t39(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.orderby='value', tsdb.index='bloom(value)');
+ROLLBACK;
+
+--no orderby
+BEGIN;
+CREATE TABLE t40(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time', tsdb.index='bloom(value)');
+ROLLBACK;
+\set ON_ERROR_STOP 1
+
+reset timescaledb.enable_sparse_index_bloom;
+
+-- test UUID partitioning + compression
+BEGIN;
+CREATE TABLE IF NOT EXISTS events (
+     event_id UUID NOT NULL,
+     entity_id VARCHAR(100) NOT NULL,
+     ts TIMESTAMPTZ NOT NULL,
+     event_type VARCHAR(100) NOT NULL,
+     metadata JSONB,
+     PRIMARY KEY (event_id)
+)
+WITH (
+     tsdb.hypertable,
+     tsdb.partition_column='event_id',
+     tsdb.order_by='ts DESC, event_id',
+     tsdb.segment_by='entity_id',
+     tsdb.chunk_interval='2 hours',
+     tsdb.compress=true
+);
+SELECT hypertable_name, compression_enabled FROM timescaledb_information.hypertables WHERE hypertable_name = 'events';
+SELECT hypertable_name, schedule_interval, TO_CHAR(next_start - NOW(),'"in" DD "days" HH24 "hours" MI "minutes') as next_start, config
+FROM timescaledb_information.jobs WHERE hypertable_name = 'events' AND proc_name = 'policy_compression';
+ROLLBACK;

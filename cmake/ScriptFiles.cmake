@@ -16,21 +16,17 @@ set(PRE_INSTALL_SOURCE_FILES
     pre_install/types.post.sql # Must be before tables.sql
     pre_install/tables.sql
     pre_install/cache.sql
-    pre_install/tam.functions.sql
-    pre_install/tam.sql
     pre_install/insert_data.sql)
 
 # Source files that define functions and need to be rerun in update
 set(PRE_INSTALL_FUNCTION_FILES
     pre_install/types.functions.sql
-    pre_install/tam.functions.sql
     )
 
 # The rest of the source files defining mostly functions
 set(SOURCE_FILES
     hypertable.sql
     chunk.sql
-    ddl_internal.sql
     util_time.sql
     util_internal_table_ddl.sql
     chunk_constraint.sql
@@ -45,6 +41,7 @@ set(SOURCE_FILES
     histogram.sql
     bgw_scheduler.sql
     metadata.sql
+    uuidv7.sql
     views.sql
     views_experimental.sql
     gapfill.sql

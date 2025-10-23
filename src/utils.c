@@ -31,22 +31,25 @@
 #include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/date.h>
+#include <utils/elog.h>
 #include <utils/fmgroids.h>
 #include <utils/fmgrprotos.h>
 #include <utils/lsyscache.h>
 #include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <utils/timestamp.h>
+#include <utils/uuid.h>
 
 #include "compat/compat.h"
 #include "chunk.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
-#include "guc.h"
 #include "hypertable_cache.h"
 #include "jsonb_utils.h"
 #include "time_utils.h"
 #include "utils.h"
+#include "uuid.h"
 
 typedef struct
 {
@@ -148,7 +151,7 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 		elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
 	}
 
-	if (IS_INTEGER_TYPE(type_oid))
+	if (IS_INTEGER_TYPE(type_oid) || IS_UUID_TYPE(type_oid))
 	{
 		/* Integer time types have no distinction between min, max and
 		 * infinity. We don't want min and max to be turned into infinity for
@@ -189,6 +192,30 @@ ts_time_value_to_internal(Datum time_val, Oid type_oid)
 			res = DirectFunctionCall1(ts_pg_timestamp_to_unix_microseconds, tz);
 
 			return DatumGetInt64(res);
+		case UUIDOID:
+		{
+			uint64 unixtime_ms = 0;
+
+			/*
+			 * Extract the unix timestamp from the UUID. Note that we cannot
+			 * use the (optional) sub-milliseconds part because there is no
+			 * way to know whether it represents time or is random.
+			 *
+			 * If the UUID is not v7, error out.
+			 */
+			if (!ts_uuid_v7_extract_unixtime(DatumGetUUIDP(time_val), &unixtime_ms, NULL))
+			{
+				ereport(ERROR,
+						errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						errmsg("%s is not a version 7 UUID",
+							   DatumGetCString(DirectFunctionCall1(uuid_out, time_val))),
+						errdetail(
+							"UUID \"time\" partitioning columns only support version 7 UUIDs."));
+			}
+
+			/* Convert to microseconds */
+			return unixtime_ms * 1000;
+		}
 		default:
 			elog(ERROR, "unknown time type \"%s\"", format_type_be(type_oid));
 			return -1;
@@ -338,6 +365,17 @@ ts_internal_to_time_value(int64 value, Oid type)
 			return DirectFunctionCall1(ts_pg_unix_microseconds_to_timestamp, Int64GetDatum(value));
 		case DATEOID:
 			return DirectFunctionCall1(ts_pg_unix_microseconds_to_date, Int64GetDatum(value));
+		case UUIDOID:
+		{
+			/*
+			 * Convert the internal unixtime in ms to a UUID with the
+			 * non-timestamp bits set to zero. We do not set the version
+			 * either, because for ranges we only care about the prefix in
+			 * order to divide the whole UUID space into a set of slices.
+			 */
+			const pg_uuid_t *uuid = ts_create_uuid_v7_from_unixtime_us(value, true, false);
+			return UUIDPGetDatum(uuid);
+		}
 		default:
 			if (ts_type_is_int8_binary_compatible(type))
 				return Int64GetDatum(value);
@@ -365,6 +403,7 @@ ts_internal_to_time_int64(int64 value, Oid type)
 			return value;
 		case TIMESTAMPOID:
 		case TIMESTAMPTZOID:
+		case UUIDOID:
 			/* we continue ts_time_value_to_internal's incorrect handling of TIMESTAMPs for
 			 * compatibility */
 			return DatumGetInt64(
@@ -381,16 +420,23 @@ ts_internal_to_time_int64(int64 value, Oid type)
 }
 
 TSDLLEXPORT char *
-ts_internal_to_time_string(int64 value, Oid type)
+ts_datum_to_string(Datum value, Oid type)
 {
-	Datum time_datum = ts_internal_to_time_value(value, type);
 	Oid typoutputfunc;
 	bool typIsVarlena;
 	FmgrInfo typoutputinfo;
 
 	getTypeOutputInfo(type, &typoutputfunc, &typIsVarlena);
 	fmgr_info(typoutputfunc, &typoutputinfo);
-	return OutputFunctionCall(&typoutputinfo, time_datum);
+	return OutputFunctionCall(&typoutputinfo, value);
+}
+
+TSDLLEXPORT char *
+ts_internal_to_time_string(int64 value, Oid type)
+{
+	Datum time_datum = ts_internal_to_time_value(value, type);
+
+	return ts_datum_to_string(time_datum, type);
 }
 
 TS_FUNCTION_INFO_V1(ts_pg_unix_microseconds_to_interval);
@@ -764,11 +810,24 @@ ts_get_appendrelinfo(PlannerInfo *root, Index rti, bool missing_ok)
 Expr *
 ts_find_em_expr_for_rel(EquivalenceClass *ec, RelOptInfo *rel)
 {
+	EquivalenceMember *em;
+#if PG18_GE
+	/* Use specialized iterator to include child ems.
+	 *
+	 * https://github.com/postgres/postgres/commit/d69d45a5
+	 */
+	EquivalenceMemberIterator it;
+
+	setup_eclass_member_iterator(&it, ec, bms_make_singleton(rel->relid));
+	while ((em = eclass_member_iterator_next(&it)) != NULL)
+	{
+#else
 	ListCell *lc_em;
 
 	foreach (lc_em, ec->ec_members)
 	{
-		EquivalenceMember *em = lfirst(lc_em);
+		em = lfirst(lc_em);
+#endif
 
 		if (bms_is_subset(em->em_relids, rel->relids) && !bms_is_empty(em->em_relids))
 		{
@@ -1759,33 +1818,10 @@ ts_update_placeholder(PG_FUNCTION_ARGS)
 /*
  * Get relation information from the syscache in one call.
  *
- * Returns relkind and access method used. Both are non-optional.
+ * Returns relid and relkind. All are non-optional.
  */
 void
-ts_get_rel_info(Oid relid, Oid *amoid, char *relkind)
-{
-	HeapTuple tuple;
-	Form_pg_class cform;
-
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-
-	cform = (Form_pg_class) GETSTRUCT(tuple);
-	*amoid = cform->relam;
-	*relkind = cform->relkind;
-	ReleaseSysCache(tuple);
-}
-
-/*
- * Get relation information from the syscache in one call.
- *
- * Returns relid, relkind and access method used. All are non-optional.
- */
-void
-ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *relid, Oid *amoid,
-						char *relkind)
+ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *relid, char *relkind)
 {
 	HeapTuple tuple;
 	Form_pg_class cform;
@@ -1798,7 +1834,6 @@ ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *reli
 
 	cform = (Form_pg_class) GETSTRUCT(tuple);
 	*relid = cform->oid;
-	*amoid = cform->relam;
 	*relkind = cform->relkind;
 	ReleaseSysCache(tuple);
 }
@@ -1820,20 +1855,6 @@ ts_get_rel_am(Oid relid)
 	ReleaseSysCache(tuple);
 
 	return amoid;
-}
-
-static Oid hypercore_amoid = InvalidOid;
-
-bool
-ts_is_hypercore_am(Oid amoid)
-{
-	if (!OidIsValid(hypercore_amoid))
-		hypercore_amoid = get_table_am_oid(TS_HYPERCORE_TAM_NAME, true);
-
-	if (!OidIsValid(amoid) || !OidIsValid(hypercore_amoid))
-		return false;
-
-	return amoid == hypercore_amoid;
 }
 
 /*
@@ -1992,4 +2013,27 @@ ts_get_attr_expr(Relation rel, AttrNumber attno)
 	}
 
 	return expr;
+}
+
+char *
+ts_list_to_string(List *list, append_cell_func append)
+{
+	StringInfoData info;
+	ListCell *lc;
+
+	initStringInfo(&info);
+
+	foreach (lc, list)
+	{
+		if (!lnext(list, lc))
+			appendStringInfoString(&info, "and ");
+		append(&info, lc);
+		if (lnext(list, lc))
+		{
+			if (list_length(list) > 2)
+				appendStringInfoChar(&info, ',');
+			appendStringInfoChar(&info, ' ');
+		}
+	}
+	return info.data;
 }

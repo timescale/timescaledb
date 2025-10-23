@@ -494,7 +494,7 @@ INSERT INTO bigint_tab VALUES(5);
 INSERT INTO bigint_tab VALUES(10);
 INSERT INTO bigint_tab VALUES(20);
 CALL run_job(:job_mid);
-SELECT * FROM mat_bigint;
+SELECT * FROM mat_bigint ORDER BY 1;
 
 -- test NULL for end
 SELECT remove_continuous_aggregate_policy('mat_bigint');
@@ -555,6 +555,7 @@ WITH NO DATA;
 
 -- this was previously crashing
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, NULL, '1 h'::interval, if_not_exists => true);
+\set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval, if_not_exists => true);
 SELECT remove_continuous_aggregate_policy('metrics_cagg');
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true);
@@ -562,7 +563,6 @@ SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, 
 SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
 SELECT remove_continuous_aggregate_policy('metrics_cagg');
 --can set compression policy only after setting up refresh policy --
-\set ON_ERROR_STOP 0
 SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
 
 --can set compression policy only after enabling compression --
@@ -654,12 +654,12 @@ ALTER materialized view deals_best_daily set (timescaledb.materialized_only=true
 
 -- we have data from 6 weeks before to May 5 2022 (Thu)
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-03');
-SELECT * FROM deals_best_weekly;
+SELECT * FROM deals_best_weekly ORDER BY bucket;
 CALL refresh_continuous_aggregate('deals_best_daily', '2022-04-20', '2022-05-04');
 SELECT * FROM deals_best_daily ORDER BY bucket LIMIT 2;
 -- expect to get an up-to-date notice
 CALL refresh_continuous_aggregate('deals_best_weekly', '2022-04-24', '2022-05-05');
-SELECT * FROM deals_best_weekly;
+SELECT * FROM deals_best_weekly ORDER BY bucket;
 
 -- github issue 5907: segfault when creating 1-step policies on cagg
 -- whose underlying hypertable has a retention policy setup
@@ -676,3 +676,62 @@ AS SELECT time_bucket(1, a), sum(b)
    FROM t GROUP BY time_bucket(1, a);
 
 SELECT timescaledb_experimental.add_policies('cagg');
+
+-- Issue #6902
+-- Fix timestamp out of range in a refresh policy when setting `end_offset=>NULL`
+-- for a CAgg with variable sized bucket (i.e: using `time_bucket` with timezone)
+CREATE TABLE issue_6902 (
+  ts  TIMESTAMPTZ NOT NULL,
+  temperature NUMERIC
+) WITH (
+  timescaledb.hypertable,
+  timescaledb.partition_column='ts',
+  timescaledb.chunk_interval='1 day',
+  timescaledb.compress='off'
+);
+
+INSERT INTO issue_6902
+SELECT t, 1 FROM generate_series(now() - interval '3 hours', now(), interval '1 minute') AS t;
+
+CREATE MATERIALIZED VIEW issue_6902_by_hour
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket(INTERVAL '1 hour', ts, 'America/Sao_Paulo') AS bucket, -- using timezone
+  MAX(temperature),
+  MIN(temperature),
+  COUNT(*)
+FROM issue_6902
+GROUP BY 1
+WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy (
+  'issue_6902_by_hour',
+  start_offset => INTERVAL '3 hours',
+  end_offset => NULL,
+  schedule_interval => INTERVAL '12 hour',
+  initial_start => now() + INTERVAL '12 hour'
+) AS job_id \gset
+
+-- 181 rows
+CALL run_job(:job_id);
+SELECT count(*) FROM issue_6902;
+
+-- run again without any change, remain 181 rows
+CALL run_job(:job_id);
+SELECT count(*) FROM issue_6902;
+
+-- change existing data
+UPDATE issue_6902
+SET temperature = temperature + 1;
+
+-- run again without any change, remain 181 rows
+CALL run_job(:job_id);
+SELECT count(*) FROM issue_6902;
+
+-- insert more data
+INSERT INTO issue_6902
+SELECT t, 1 FROM generate_series(now() - interval '3 hours', now(), interval '1 minute') AS t;
+
+-- run again without and should have 362 rows
+CALL run_job(:job_id);
+SELECT count(*) FROM issue_6902;

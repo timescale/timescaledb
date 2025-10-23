@@ -13,7 +13,6 @@ WARNING:  column type "character varying" used for "a" does not follow best prac
  create_hypertable 
 -------------------
  (1,public,test,t)
-(1 row)
 
 insert into test values
 ('2020-01-01 00:00'::timestamptz, 'lat', 1, 2),
@@ -24,21 +23,21 @@ insert into test values
 create table test_copy as select * from test;
 -- compress the chunk
 alter table test set (timescaledb.compress, timescaledb.compress_segmentby='a, b');
-NOTICE:  default order by for hypertable "test" is set to ""time" DESC"
 select compress_chunk(show_chunks('test'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
-(1 row)
 
 -- force an index scan
 set enable_seqscan = 'off';
 -- make some tweaks to avoid flakiness
 analyze test;
 analyze test_copy;
+set enable_hashagg = off;
+set enable_sort to off;
 set jit = off;
 set max_parallel_workers_per_gather = 0;
-explain (costs off) with query_params as (
+explain (buffers off, costs off) with query_params as (
 	select distinct a, b
 	from test_copy
 	where test_copy.a IN ('lat', 'lon')
@@ -56,11 +55,10 @@ test inner join query_params q
     on q.a = test.a and q.b = test.b
 where test.time between '2020-01-01 00:00' and '2020-01-01 00:02'
 order by test.time;
-                                                                                           QUERY PLAN                                                                                            
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Nested Loop
    Join Filter: (((_hyper_1_1_chunk.a)::text = (test_copy.a)::text) AND (_hyper_1_1_chunk.b = test_copy.b))
-   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
          Filter: (("time" >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND ("time" <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
          ->  Sort
                Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
@@ -72,7 +70,6 @@ order by test.time;
                      Sort Key: test_copy.a
                      ->  Seq Scan on test_copy
                            Filter: (((a)::text = ANY ('{lat,lon}'::text[])) AND (b = 1))
-(14 rows)
 
 with query_params as (
 	select distinct a, b
@@ -97,11 +94,10 @@ order by test.time;
  Wed Jan 01 00:00:00 2020 PST | t                          | lat | 1 | 2 | lat | 1
  Wed Jan 01 00:01:00 2020 PST | t                          | lat | 1 | 2 | lat | 1
  Wed Jan 01 00:01:00 2020 PST | t                          | lon | 1 | 2 | lon | 1
-(3 rows)
 
 -- Also test outer join for better coverage of nullability handling.
 -- This test case generates a nullable equivalence member for test.b.
-explain (costs off)
+explain (buffers off, costs off)
 with query_params as (
     select distinct a, b + 1 as b
     from test_copy
@@ -114,8 +110,7 @@ full join query_params q
 full join query_params q2
     on q2.b = test.b
 ;
-                              QUERY PLAN                               
------------------------------------------------------------------------
+--- QUERY PLAN ---
  Hash Full Join
    Hash Cond: (_hyper_1_1_chunk.b = q2.b)
    CTE query_params
@@ -126,13 +121,12 @@ full join query_params q2
                        Filter: ((a)::text = ANY ('{lat,lon}'::text[]))
    ->  Hash Full Join
          Hash Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-               ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_a_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_2_2_chunk
          ->  Hash
                ->  CTE Scan on query_params q
    ->  Hash
          ->  CTE Scan on query_params q2
-(16 rows)
 
 reset enable_seqscan;
 reset jit;

@@ -1,57 +1,53 @@
-CREATE PROCEDURE _timescaledb_functions.process_hypertable_invalidations(
-    hypertable REGCLASS
-) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
-
-CREATE PROCEDURE @extschema@.add_process_hypertable_invalidations_policy(
-    hypertable REGCLASS,
-    schedule_interval INTERVAL,
-    if_not_exists BOOL = false,
-    initial_start TIMESTAMPTZ = NULL,
-    timezone TEXT = NULL
-) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
-
-CREATE PROCEDURE @extschema@.remove_process_hypertable_invalidations_policy(
-       hypertable REGCLASS,
-       if_exists BOOL = false
-) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
-
-DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression(job_id INTEGER, config JSONB);
-
-DROP PROCEDURE IF EXISTS _timescaledb_internal.policy_compression_execute(
-INTEGER, INTEGER, ANYELEMENT, INTEGER, BOOLEAN, BOOLEAN, BOOLEAN
-);
-
-DROP PROCEDURE IF EXISTS _timescaledb_functions.policy_compression_execute(
-  INTEGER, INTEGER, ANYELEMENT, INTEGER, BOOLEAN, BOOLEAN, BOOLEAN, BOOLEAN
-);
-
-CREATE PROCEDURE _timescaledb_functions.policy_compression_execute(
-  job_id              INTEGER,
-  htid                INTEGER,
-  lag                 ANYELEMENT,
-  maxchunks           INTEGER,
-  verbose_log         BOOLEAN,
-  recompress_enabled  BOOLEAN,
-  reindex_enabled     BOOLEAN,
-  use_creation_time   BOOLEAN,
-  useam               BOOLEAN = NULL)
-AS $$
+DO $$
 BEGIN
-  -- empty body
-END;
-$$ LANGUAGE PLPGSQL;
+    UPDATE _timescaledb_config.bgw_job
+      SET config = config || '{"max_successes_per_job": 1000, "max_failures_per_job": 1000}',
+          schedule_interval = '6 hours'
+    WHERE id = 3; -- system job retention
 
-DROP PROCEDURE @extschema@.refresh_continuous_aggregate(
-    continuous_aggregate REGCLASS,
-    window_start "any",
-    window_end "any",
-    force BOOLEAN
-);
+    RAISE WARNING 'job history configuration modified'
+    USING DETAIL = 'The job history will only keep the last 1000 successes and failures and run once each day.';
+END
+$$;
 
-CREATE PROCEDURE @extschema@.refresh_continuous_aggregate(
-    continuous_aggregate     REGCLASS,
-    window_start             "any",
-    window_end               "any",
-    force                    BOOLEAN = FALSE,
-    options                  JSONB = NULL
-) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_update_placeholder';
+DROP VIEW IF EXISTS timescaledb_information.job_stats;
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+
+-- remove cagg trigger from all hypertables and chunks
+DO $$
+DECLARE
+  rel regclass;
+BEGIN
+  FOR rel IN SELECT format('%I.%I', schema_name, table_name)::regclass
+    FROM _timescaledb_catalog.hypertable ht
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS ts_cagg_invalidation_trigger ON %s;', rel);
+  END LOOP;
+  FOR rel IN SELECT format('%I.%I', schema_name, table_name)::regclass
+    FROM _timescaledb_catalog.chunk ch
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS ts_cagg_invalidation_trigger ON %s;', rel);
+  END LOOP;
+END
+$$;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.continuous_agg_invalidation_trigger();
+DROP FUNCTION IF EXISTS _timescaledb_functions.continuous_agg_invalidation_trigger();
+DROP FUNCTION IF EXISTS _timescaledb_functions.has_invalidation_trigger(regclass);
+
+-- remove ts_insert_blocker trigger from all hypertables
+DO $$
+DECLARE
+  rel regclass;
+BEGIN
+  FOR rel IN SELECT format('%I.%I', schema_name, table_name)::regclass
+    FROM _timescaledb_catalog.hypertable ht
+  LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS ts_insert_blocker ON %s;', rel);
+  END LOOP;
+END
+$$;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.insert_blocker();
+DROP FUNCTION IF EXISTS _timescaledb_functions.insert_blocker();
+

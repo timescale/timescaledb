@@ -8,12 +8,10 @@ step s2a: <... completed>
 count
 -----
     2
-(1 row)
 
 step s2b: COMMIT;
 step s1c: SELECT COUNT(*) FROM _timescaledb_catalog.chunk_constraint LEFT JOIN _timescaledb_catalog.dimension_slice sl ON dimension_slice_id = sl.id WHERE sl.id IS NULL;
 count
 -----
     0
-(1 row)
 

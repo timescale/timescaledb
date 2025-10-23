@@ -295,7 +295,7 @@ ALTER TABLE :drop_chunks_mat_table_u_name RENAME TO new_name;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET client_min_messages TO NOTICE;
 
-SELECT * FROM new_name;
+SELECT * FROM new_name ORDER BY 1;
 
 SELECT * FROM drop_chunks_view ORDER BY 1;
 
@@ -1437,3 +1437,15 @@ SELECT column_name, compress_interval_length from _timescaledb_catalog.dimension
 ALTER MATERIALIZED VIEW columnstore_options SET (tsdb.compress_chunk_time_interval='4 day');
 SELECT column_name, compress_interval_length from _timescaledb_catalog.dimension where column_name='time_bucket' ORDER BY id DESC LIMIT 1;
 
+-- test set returning functions in caggs
+CREATE TABLE kpis_raw (time TIMESTAMP NOT NULL, value INTEGER, groups TEXT[]) WITH (tsdb.hypertable);
+INSERT INTO kpis_raw (time, value, groups) VALUES
+  ('2025-01-01', 10, '{group1,group2,group3}'),
+  ('2025-01-02', 20, '{group1,group4}'),
+  ('2025-02-01', 10, '{group1,group3}'),
+  ('2025-02-01', 20, '{group1,group4}');
+
+CREATE MATERIALIZED VIEW kpis_cagg WITH (tsdb.continuous) AS
+SELECT time_bucket('7 day', time) AS bucket, count(*) AS number_of_records, avg(value) AS average, unnest(groups) AS kpi_group
+FROM kpis_raw GROUP BY bucket, kpi_group;
+SELECT * FROM kpis_cagg ORDER BY bucket, kpi_group;

@@ -18,8 +18,8 @@ CREATE TABLE decompress_phv_ping (
 SELECT table_name FROM create_hypertable('decompress_phv_ping', 'insert_ts', chunk_time_interval => interval '1 day');
 WARNING:  column type "timestamp without time zone" used for "insert_ts" does not follow best practices
      table_name      
+---------------------
  decompress_phv_ping
-(1 row)
 
 INSERT INTO decompress_phv_device
     VALUES (41040, 'MB10010013', 240), (65101, 'BR100103ca', 240), (65103, 'BR100103cb', 240), (65105, 'BR100103cc', 240), (65107, 'BR100103cd', 240), (41041, 'MB11000000', 241), (65201, 'BR11000014', 241), (65203, 'BR11000015', 241), (65205, 'BR11000016', 241), (65207, 'BR11000017', 241);
@@ -29,8 +29,8 @@ ALTER TABLE decompress_phv_ping SET (timescaledb.compress, timescaledb.compress_
 SELECT count(*) AS compressed
 FROM ( select compress_chunk(i) FROM show_chunks('decompress_phv_ping') i ) q;
  compressed 
+------------
           2
-(1 row)
 
 SELECT from_ts, insert_ts, network_id, pkt_loss, rtt_avg
 FROM generate_series('2019-03-21 01:00:00'::timestamp, '2019-03-23 13:00:00'::timestamp, '12h'::interval) ts_bucket (from_ts)
@@ -71,7 +71,6 @@ ORDER BY 1,2;
  Fri Mar 22 13:00:00 2019 |                              |            |          |                 
  Sat Mar 23 01:00:00 2019 |                              |            |          |                 
  Sat Mar 23 13:00:00 2019 |                              |            |          |                 
-(21 rows)
 
 DROP TABLE decompress_phv_ping;
 DROP TABLE decompress_phv_device;
@@ -88,10 +87,9 @@ SELECT
   table_name
 FROM
   create_hypertable('tickers', 'time');
-NOTICE:  adding not-null constraint to column "time"
  table_name 
+------------
  tickers
-(1 row)
 
 ALTER TABLE tickers SET (timescaledb.compress, timescaledb.compress_segmentby = 'fk_exchange,
   fk_trade_pair', timescaledb.compress_orderby = 'time DESC, microseconds DESC');
@@ -111,8 +109,8 @@ FROM
 GROUP BY
   tableoid;
             substr             
+-------------------------------
  _timescaledb_internal._hyper_
-(1 row)
 
 SELECT
   *
@@ -129,6 +127,5 @@ ORDER BY
              time             | microseconds | fk_exchange | fk_trade_pair 
 ------------------------------+--------------+-------------+---------------
  Sat Jan 01 00:00:00 2000 PST |            0 |           4 |            29
-(1 row)
 
 DROP TABLE tickers;

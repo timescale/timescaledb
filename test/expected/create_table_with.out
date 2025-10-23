@@ -10,10 +10,13 @@ CREATE TABLE t1(time timestamptz, device text, value float) WITH (autovacuum_ena
 DROP TABLE t1;
 -- test error cases
 \set ON_ERROR_STOP 0
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable);
-ERROR:  hypertable option requires time_column
-CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.hypertable);
-ERROR:  hypertable option requires time_column
+\set VERBOSITY default
+CREATE TABLE t2(time float, device text, value float) WITH (tsdb.hypertable);
+ERROR:  partition column could not be determined
+HINT:  Use "timescaledb.partition_column" to specify the column to use as partitioning column.
+CREATE TABLE t2(time float, device text, value float) WITH (timescaledb.hypertable);
+ERROR:  partition column could not be determined
+HINT:  Use "timescaledb.partition_column" to specify the column to use as partitioning column.
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column=NULL);
 ERROR:  column "null" does not exist
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='');
@@ -22,30 +25,44 @@ CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.hypertabl
 ERROR:  column "foo" does not exist
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.partition_column='time');
 ERROR:  timescaledb options requires hypertable option
+HINT:  Use "timescaledb.hypertable" to enable creating a hypertable.
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.partition_column='time');
 ERROR:  timescaledb options requires hypertable option
+HINT:  Use "timescaledb.hypertable" to enable creating a hypertable.
 CREATE TABLE t2(time timestamptz , device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='foo');
 ERROR:  invalid input syntax for type interval: "foo"
 CREATE TABLE t2(time int2 NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.chunk_interval='3 months');
 ERROR:  invalid input syntax for type smallint: "3 months"
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes='time');
 ERROR:  invalid value for tsdb.create_default_indexes 'time'
+HINT:  tsdb.create_default_indexes must be a valid bool
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=2);
 ERROR:  invalid value for tsdb.create_default_indexes '2'
+HINT:  tsdb.create_default_indexes must be a valid bool
 CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.create_default_indexes=-1);
 ERROR:  invalid value for tsdb.create_default_indexes '-1'
-CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time');
+HINT:  tsdb.create_default_indexes must be a valid bool
+CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.hypertable,tsdb.partition_column='time',tsdb.columnstore=true);
 ERROR:  functionality not supported under the current "apache" license. Learn more at https://tsdb.co/pdbir1r3
-CREATE TABLE t3(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore,tsdb.hypertable,tsdb.partition_column='time');
+HINT:  To access all features and the best time-series experience, try out Timescale Cloud.
+CREATE TABLE t2(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore,tsdb.hypertable,tsdb.partition_column='time');
 ERROR:  functionality not supported under the current "apache" license. Learn more at https://tsdb.co/pdbir1r3
+HINT:  To access all features and the best time-series experience, try out Timescale Cloud.
+-- Test error hint for invalid timescaledb options during CREATE TABLE
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (tsdb.invalid_option = true);
+ERROR:  unrecognized parameter "tsdb.invalid_option"
+HINT:  Valid timescaledb parameters are: hypertable, columnstore, partition_column, chunk_interval, create_default_indexes, associated_schema, associated_table_prefix, orderby, segmentby, compress_index
+CREATE TABLE t2(time timestamptz, device text, value float) WITH (timescaledb.nonexistent_param = false);
+ERROR:  unrecognized parameter "timescaledb.nonexistent_param"
+HINT:  Valid timescaledb parameters are: hypertable, columnstore, partition_column, chunk_interval, create_default_indexes, associated_schema, associated_table_prefix, orderby, segmentby, compress_index
 \set ON_ERROR_STOP 1
+\set VERBOSITY terse
 BEGIN;
 CREATE TABLE t3(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time');
 CREATE TABLE t4(time timestamp, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,timescaledb.partition_column='time');
-NOTICE:  adding not-null constraint to column "time"
 CREATE TABLE t5(time date, device text, value float) WITH (tsdb.columnstore=false,tsdb.hypertable,tsdb.partition_column='time',autovacuum_enabled);
-NOTICE:  adding not-null constraint to column "time"
 CREATE TABLE t6(time timestamptz NOT NULL, device text, value float) WITH (tsdb.columnstore=false,timescaledb.hypertable,tsdb.partition_column='time');
+CREATE TABLE t7(time timestamptz, device text, value float) WITH (timescaledb.hypertable,tsdb.partition_column='time');
 SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  hypertable_name 
 -----------------
@@ -53,7 +70,7 @@ SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  t4
  t5
  t6
-(4 rows)
+ t7
 
 ROLLBACK;
 -- IF NOT EXISTS
@@ -67,7 +84,6 @@ SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  hypertable_name 
 -----------------
  t7
-(1 row)
 
 ROLLBACK;
 -- table won't be converted to hypertable unless it is in the initial CREATE TABLE
@@ -80,7 +96,6 @@ NOTICE:  relation "t8" already exists, skipping
 SELECT hypertable_name FROM timescaledb_information.hypertables ORDER BY 1;
  hypertable_name 
 -----------------
-(0 rows)
 
 ROLLBACK;
 -- chunk_interval
@@ -90,7 +105,6 @@ SELECT hypertable_name, column_name, column_type, time_interval FROM timescaledb
  hypertable_name | column_name |       column_type        | time_interval 
 -----------------+-------------+--------------------------+---------------
  t9              | time        | timestamp with time zone | @ 56 days
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -99,7 +113,6 @@ SELECT hypertable_name, column_name, column_type, time_interval FROM timescaledb
  hypertable_name | column_name |         column_type         | time_interval 
 -----------------+-------------+-----------------------------+---------------
  t9              | time        | timestamp without time zone | @ 23 days
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -108,7 +121,6 @@ SELECT hypertable_name, column_name, column_type, time_interval FROM timescaledb
  hypertable_name | column_name | column_type | time_interval 
 -----------------+-------------+-------------+---------------
  t9              | time        | date        | @ 90 days
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -117,7 +129,6 @@ SELECT hypertable_name, column_name, column_type, integer_interval FROM timescal
  hypertable_name | column_name | column_type | integer_interval 
 -----------------+-------------+-------------+------------------
  t9              | time        | smallint    |               12
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -126,7 +137,6 @@ SELECT hypertable_name, column_name, column_type, integer_interval FROM timescal
  hypertable_name | column_name | column_type | integer_interval 
 -----------------+-------------+-------------+------------------
  t9              | time        | integer     |             3453
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -135,7 +145,6 @@ SELECT hypertable_name, column_name, column_type, integer_interval FROM timescal
  hypertable_name | column_name | column_type | integer_interval 
 -----------------+-------------+-------------+------------------
  t9              | time        | bigint      |            32768
-(1 row)
 
 ROLLBACK;
 -- create_default_indexes
@@ -145,7 +154,6 @@ SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER B
   indexrelid  
 --------------
  t10_time_idx
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -154,7 +162,6 @@ SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER B
  indexrelid 
 ------------
  t10_pkey
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -163,7 +170,6 @@ SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER B
   indexrelid  
 --------------
  t10_time_key
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -172,7 +178,6 @@ SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER B
   indexrelid  
 --------------
  t10_time_idx
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -180,7 +185,6 @@ CREATE TABLE t10(time timestamptz NOT NULL, device text, value float) WITH (tsdb
 SELECT indexrelid::regclass from pg_index where indrelid='t10'::regclass ORDER BY indexrelid::regclass::text;
  indexrelid 
 ------------
-(0 rows)
 
 ROLLBACK;
 -- associated_schema
@@ -190,7 +194,6 @@ SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_n
  associated_schema_name 
 ------------------------
  _timescaledb_internal
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -199,15 +202,13 @@ SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_n
  associated_schema_name 
 ------------------------
  abc
-(1 row)
 
 INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
             relname             
 --------------------------------
- _hyper_20_1_chunk
- _hyper_20_1_chunk_t11_time_idx
-(2 rows)
+ _hyper_21_1_chunk
+ _hyper_21_1_chunk_t11_time_idx
 
 ROLLBACK;
 BEGIN;
@@ -217,15 +218,13 @@ SELECT associated_schema_name FROM _timescaledb_catalog.hypertable WHERE table_n
  associated_schema_name 
 ------------------------
  abc2
-(1 row)
 
 INSERT INTO t11 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc2'::regnamespace ORDER BY 1;
             relname             
 --------------------------------
- _hyper_21_2_chunk
- _hyper_21_2_chunk_t11_time_idx
-(2 rows)
+ _hyper_22_2_chunk
+ _hyper_22_2_chunk_t11_time_idx
 
 ROLLBACK;
 -- associated_table_prefix
@@ -234,8 +233,7 @@ CREATE TABLE t12(time timestamptz NOT NULL, device text, value float) WITH (tsdb
 SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_name = 't12';
  associated_table_prefix 
 -------------------------
- _hyper_22
-(1 row)
+ _hyper_23
 
 ROLLBACK;
 BEGIN;
@@ -244,7 +242,6 @@ SELECT associated_table_prefix FROM _timescaledb_catalog.hypertable WHERE table_
  associated_table_prefix 
 -------------------------
  tbl_prefix
-(1 row)
 
 INSERT INTO t12 SELECT '2025-01-01', 'd1', 0.1;
 SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1;
@@ -252,6 +249,18 @@ SELECT relname from pg_class where relnamespace = 'abc'::regnamespace ORDER BY 1
 ---------------------------------
  tbl_prefix_3_chunk
  tbl_prefix_3_chunk_t12_time_idx
-(2 rows)
+
+ROLLBACK;
+-- default partition column
+BEGIN;
+CREATE TABLE t13(time timestamptz, device text, value float) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+CREATE TABLE t14("TiMe" timestamptz, device text, value float) WITH (tsdb.hypertable);
+NOTICE:  using column "TiMe" as partitioning column
+SELECT hypertable_name, column_name FROM timescaledb_information.dimensions WHERE hypertable_name IN ('t13','t14') ORDER BY 1;
+ hypertable_name | column_name 
+-----------------+-------------
+ t13             | time
+ t14             | TiMe
 
 ROLLBACK;

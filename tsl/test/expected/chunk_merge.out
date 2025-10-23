@@ -9,17 +9,14 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_merge_chunks_on_dimension(
 SET timezone TO 'America/Los_Angeles';
 CREATE TABLE test1 ("Time" timestamptz, i integer, value integer);
 SELECT table_name FROM Create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test1
-(1 row)
 
 SELECT table_name FROM  add_dimension('test1', 'i', number_partitions=> 2);
  table_name 
 ------------
  test1
-(1 row)
 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='"Time"', timescaledb.compress_chunk_time_interval='2 hours');
 -- This creates chunks 1 - 3 on first hypertable.
@@ -28,11 +25,9 @@ INSERT INTO test1 SELECT t, 1, 1.0 FROM generate_series('2018-03-02 1:00'::TIMES
 INSERT INTO test1 SELECT t, 2, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
 CREATE TABLE test2 ("Time" timestamptz, i integer, value integer);
 SELECT table_name FROM Create_hypertable('test2', 'Time', chunk_time_interval=> INTERVAL '1 hour');
-NOTICE:  adding not-null constraint to column "Time"
  table_name 
 ------------
  test2
-(1 row)
 
 -- This creates chunks 7 - 9 on second hypertable.
 INSERT INTO test2 SELECT t, 1, 1.0 FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-02 3:00', '1 minute') t;
@@ -48,7 +43,6 @@ SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped,
   7 |             3 | _timescaledb_internal | _hyper_3_7_chunk |                     | f       |      0 | f
   8 |             3 | _timescaledb_internal | _hyper_3_8_chunk |                     | f       |      0 | f
   9 |             3 | _timescaledb_internal | _hyper_3_9_chunk |                     | f       |      0 | f
-(9 rows)
 
 \set ON_ERROR_STOP 0
 -- Cannot merge chunks from different hypertables
@@ -73,14 +67,12 @@ SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_intern
  test_merge_chunks_on_dimension 
 --------------------------------
  
-(1 row)
 
 -- Merge on closed dimension.
 SELECT _timescaledb_internal.test_merge_chunks_on_dimension('_timescaledb_internal._hyper_1_1_chunk','_timescaledb_internal._hyper_1_4_chunk', 2);
  test_merge_chunks_on_dimension 
 --------------------------------
  
-(1 row)
 
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
              compress_chunk             
@@ -89,7 +81,6 @@ SELECT compress_chunk(i) FROM show_chunks('test1') i;
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_5_chunk
-(4 rows)
 
 \set ON_ERROR_STOP 0
 -- Cannot merge chunks internal compressed chunks, no dimensions on them.
@@ -126,5 +117,4 @@ FROM chunks;
  test_merge_chunks_on_dimension 
 --------------------------------
  
-(1 row)
 

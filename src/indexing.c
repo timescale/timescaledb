@@ -501,3 +501,79 @@ ts_indexing_mark_as_invalid(Oid index_id)
 {
 	return ts_indexing_mark_as(index_id, IndexInvalid);
 }
+
+TS_FUNCTION_INFO_V1(ts_index_matches);
+Datum
+ts_index_matches(PG_FUNCTION_ARGS)
+{
+	Oid index1 = PG_GETARG_OID(0);
+	Oid index2 = PG_GETARG_OID(1);
+	bool result;
+
+	if (!OidIsValid(index1) || !OidIsValid(index2))
+		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid index")));
+
+	result = ts_indexing_compare(index1, index2);
+
+	PG_RETURN_BOOL(result);
+}
+
+/* Returns true if the indexes are equivalent */
+bool
+ts_indexing_compare(Oid index1, Oid index2)
+{
+	Relation indexrel1 = index_open(index1, AccessShareLock);
+	Relation indexrel2 = index_open(index2, AccessShareLock);
+	Relation rel1 = table_open(indexrel1->rd_index->indrelid, AccessShareLock);
+	Relation rel2 = table_open(indexrel2->rd_index->indrelid, AccessShareLock);
+
+	if (indexrel1->rd_rel->relkind != RELKIND_INDEX || indexrel2->rd_rel->relkind != RELKIND_INDEX)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_WRONG_OBJECT_TYPE),
+				 errmsg("expected both \"%s\" and \"%s\" to be indexes",
+						RelationGetRelationName(indexrel1),
+						RelationGetRelationName(indexrel2))));
+	}
+
+	IndexInfo *info1 = BuildIndexInfo(indexrel1);
+	IndexInfo *info2 = BuildIndexInfo(indexrel2);
+
+#if PG16_GE
+	AttrMap *attmap = build_attrmap_by_name(RelationGetDescr(rel1), RelationGetDescr(rel2), false);
+#else
+	AttrMap *attmap = build_attrmap_by_name(RelationGetDescr(rel1), RelationGetDescr(rel2));
+#endif
+
+	bool result = CompareIndexInfo(info1,
+								   info2,
+								   indexrel1->rd_indcollation,
+								   indexrel2->rd_indcollation,
+								   indexrel1->rd_opfamily,
+								   indexrel2->rd_opfamily,
+								   attmap);
+
+	if (result)
+	{
+		/*
+		 * CompareIndexInfo does not compare indoption, which means it will
+		 * consider two indexes with different ASC/DESC or NULLS FIRST/LAST
+		 * options as equivalent.
+		 */
+		for (int i = 0; i < IndexRelationGetNumberOfKeyAttributes(indexrel1); i++)
+		{
+			if (indexrel1->rd_indoption[i] != indexrel2->rd_indoption[i])
+			{
+				result = false;
+				break;
+			}
+		}
+	}
+
+	index_close(indexrel1, NoLock);
+	index_close(indexrel2, NoLock);
+	table_close(rel1, NoLock);
+	table_close(rel2, NoLock);
+
+	return result;
+}

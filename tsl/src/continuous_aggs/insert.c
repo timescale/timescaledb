@@ -16,6 +16,7 @@
 #include <miscadmin.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
+#include <utils/elog.h>
 #include <utils/hsearch.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
@@ -29,6 +30,7 @@
 #include "debug_point.h"
 #include "dimension.h"
 #include "export.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "invalidation.h"
@@ -121,6 +123,11 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 	Oid dimtype;
 
 	datum = heap_getattr(tuple, col, tupdesc, &isnull);
+	/*
+	 * Since this is the value of the primary partitioning column and we require
+	 * partitioning columns to be NOT NULL we should never see a NULL here.
+	 */
+	Ensure(!isnull, "primary partition column cannot be NULL");
 
 	if (NULL != d->partitioning)
 	{
@@ -131,13 +138,6 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 	Assert(d->type == DIMENSION_TYPE_OPEN);
 
 	dimtype = ts_dimension_get_partition_type(d);
-
-	if (isnull)
-		ereport(ERROR,
-				(errcode(ERRCODE_NOT_NULL_VIOLATION),
-				 errmsg("NULL value in column \"%s\" violates not-null constraint",
-						NameStr(d->fd.column_name)),
-				 errhint("Columns used for time partitioning cannot be NULL")));
 
 	return ts_time_value_to_internal(datum, dimtype);
 }
@@ -215,43 +215,12 @@ update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 		cache_entry->greatest_modified_value = timeval;
 }
 
-/*
- * Trigger to store what the max/min updated values are for a function.
- * This is used by continuous aggregates to ensure that the aggregated values
- * are updated correctly. Upon creating a continuous aggregate for a hypertable,
- * this trigger should be registered, if it does not already exist.
- */
-Datum
-continuous_agg_trigfn(PG_FUNCTION_ARGS)
+void
+continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
+							  HeapTuple chunk_newtuple, bool update)
 {
-	/*
-	 * Use TriggerData to determine which row to return/work with, in the case
-	 * of updates, we'll need to call the functions twice, once with the old
-	 * rows (which act like deletes) and once with the new rows.
-	 */
-	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	char *hypertable_id_str;
-	int32 hypertable_id;
-
-	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
-		elog(ERROR, "must supply hypertable id");
-
-	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
-	hypertable_id = atol(hypertable_id_str);
-
-	if (!CALLED_AS_TRIGGER(fcinfo))
-		elog(ERROR, "continuous agg trigger function must be called by trigger manager");
-	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event) || !TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
-		elog(ERROR, "continuous agg trigger function must be called in per row after trigger");
-	execute_cagg_trigger(hypertable_id,
-						 trigdata->tg_relation,
-						 trigdata->tg_trigtuple,
-						 trigdata->tg_newtuple,
-						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event));
-	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
-		return PointerGetDatum(trigdata->tg_trigtuple);
-	else
-		return PointerGetDatum(trigdata->tg_newtuple);
+	Assert(!ts_guc_enable_cagg_wal_based_invalidation);
+	execute_cagg_trigger(hypertable_id, chunk_rel, chunk_tuple, chunk_newtuple, update);
 }
 
 /*
@@ -462,6 +431,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 	ScanKeyData scankey[1];
 	ScannerCtx scanctx;
 
+	PushActiveSnapshot(GetLatestSnapshot());
 	ScanKeyInit(&scankey[0],
 				Anum_continuous_aggs_invalidation_threshold_pkey_hypertable_id,
 				BTEqualStrategyNumber,
@@ -486,7 +456,7 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 		   parallel session updates the scanned value and commits during a scan, we end up in a
 		   situation where we see the old and the new value. This causes ts_scanner_scan_one() to
 		   fail. */
-		.snapshot = GetLatestSnapshot(),
+		.snapshot = GetActiveSnapshot(),
 	};
 
 	/* If we don't find any invalidation threshold watermark, then we've never done any
@@ -494,7 +464,8 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 	 * first materialization needs to scan the entire table anyway; the invalidations are redundant.
 	 */
 	if (!ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME))
-		return INVAL_NEG_INFINITY;
+		min_val = INVAL_NEG_INFINITY;
+	PopActiveSnapshot();
 
 	return min_val;
 }

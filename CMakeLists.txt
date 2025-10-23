@@ -191,12 +191,6 @@ option(EXPERIMENTAL "Skip postgres version compatibility check" OFF)
 option(GENERATE_DOWNGRADE_SCRIPT
        "Generate downgrade script. Defaults to not generate a downgrade script."
        OFF)
-cmake_dependent_option(
-  GENERATE_OLD_DOWNGRADE_SCRIPTS
-  "Generate downgrade scripts for old versions. Requires setting GENERATE_DOWNGRADE_SCRIPT to ON. Defaults to OFF."
-  OFF
-  "GENERATE_DOWNGRADE_SCRIPT"
-  ON)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   # CMAKE_BUILD_TYPE is set at CMake configuration type. But usage of
@@ -376,9 +370,9 @@ message(
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
 if((${PG_VERSION_MAJOR} LESS "15")
-   OR (${PG_VERSION_MAJOR} GREATER "17")
+   OR (${PG_VERSION_MAJOR} GREATER "18")
    AND NOT (${EXPERIMENTAL}))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 15, 16 and 17")
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 15, 16, 17 and 18")
 endif()
 
 # Get PostgreSQL configuration from pg_config

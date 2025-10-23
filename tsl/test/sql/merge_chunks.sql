@@ -183,7 +183,6 @@ select * from mergeme;
 rollback;
 
 -- Test mixing hypercore TAM with compression without TAM
-alter table _timescaledb_internal._hyper_1_1_chunk set access method hypercore;
 select * from chunk_info;
 
 begin;
@@ -198,7 +197,6 @@ rollback;
 select * from chunk_info;
 
 -- Only Hypercore TAM and non-compressed chunks
-alter table _timescaledb_internal._hyper_1_3_chunk set access method hypercore;
 
 begin;
 select sum(temp) from mergeme;
@@ -211,7 +209,7 @@ select sum(temp) from mergeme;
 set timescaledb.enable_columnarscan = false;
 set enable_seqscan = false;
 analyze mergeme;
-explain (costs off)
+explain (buffers off, costs off)
 select * from mergeme where device = 1;
 select * from mergeme where device = 1;
 select * from _timescaledb_internal._hyper_1_1_chunk where device = 1;
@@ -295,7 +293,6 @@ from generate_series('2024-01-01'::timestamptz, '2024-01-04', '0.5s') t;
 
 -- Compress two chunks, one using access method
 select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-alter table _timescaledb_internal._hyper_1_2_chunk set access method hypercore;
 
 -- Show partitions before merge
 select * from partitions;

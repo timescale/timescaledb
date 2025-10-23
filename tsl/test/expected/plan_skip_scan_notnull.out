@@ -1,0 +1,1796 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- need superuser to modify statistics
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\ir include/skip_scan_load.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE TABLE skip_scan(time int, dev int, dev_name text, val int);
+INSERT INTO skip_scan SELECT t, d, 'device_' || d::text, t*d FROM generate_series(1, 1000) t, generate_series(1, 10) d;
+INSERT INTO skip_scan VALUES (NULL, 0, -1, NULL), (0, NULL, -1, NULL);
+INSERT INTO skip_scan(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
+ANALYZE skip_scan;
+CREATE TABLE skip_scan_nulls(time int);
+CREATE INDEX ON skip_scan_nulls(time);
+INSERT INTO skip_scan_nulls SELECT NULL FROM generate_series(1,100);
+ANALYZE skip_scan_nulls;
+-- create hypertable with different physical layouts in the chunks
+CREATE TABLE skip_scan_ht(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+SELECT create_hypertable('skip_scan_ht', 'time', chunk_time_interval => 250, create_default_indexes => false);
+     create_hypertable     
+---------------------------
+ (1,public,skip_scan_ht,t)
+
+INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_ht DROP COLUMN f1;
+INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_ht DROP COLUMN f2;
+INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(500, 749) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_ht DROP COLUMN f3;
+INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(750, 999) t, generate_series(1, 10) d;
+INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
+ANALYZE skip_scan_ht;
+ALTER TABLE skip_scan_ht SET (timescaledb.compress,timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+-- create compressed hypertable with different physical layouts in the chunks
+CREATE TABLE skip_scan_htc(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, create_default_indexes => false);
+     create_hypertable      
+----------------------------
+ (3,public,skip_scan_htc,t)
+
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f1;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f2;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(500, 749) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htc DROP COLUMN f3;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(750, 999) t, generate_series(1, 10) d;
+INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
+ANALYZE skip_scan_htc;
+CREATE TABLE skip_scan_insert(time int, dev int, dev_name text, val int, query text);
+CREATE OR REPLACE FUNCTION int_func_immutable() RETURNS int LANGUAGE SQL IMMUTABLE SECURITY DEFINER AS $$SELECT 1; $$;
+CREATE OR REPLACE FUNCTION int_func_stable() RETURNS int LANGUAGE SQL STABLE SECURITY DEFINER AS $$ SELECT 2; $$;
+CREATE OR REPLACE FUNCTION int_func_volatile() RETURNS int LANGUAGE SQL VOLATILE SECURITY DEFINER AS $$ SELECT 3; $$;
+CREATE OR REPLACE FUNCTION inta_func_immutable() RETURNS int[] LANGUAGE SQL IMMUTABLE SECURITY DEFINER AS $$ SELECT ARRAY[1,2,3]; $$;
+CREATE OR REPLACE FUNCTION inta_func_stable() RETURNS int[] LANGUAGE SQL STABLE SECURITY DEFINER AS $$ SELECT ARRAY[2,3,4]; $$;
+CREATE OR REPLACE FUNCTION inta_func_volatile() RETURNS int[] LANGUAGE SQL VOLATILE SECURITY DEFINER AS $$ SELECT ARRAY[3,4,5]; $$;
+-- adjust statistics so we get skipscan plans
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan'::regclass;
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_nulls'::regclass;
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_ht'::regclass;
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_ht'::regclass);
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_htc'::regclass;
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_htc'::regclass);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+alter table skip_scan set (autovacuum_enabled = off);
+alter table skip_scan_nulls set (autovacuum_enabled = off);
+alter table skip_scan_ht set (autovacuum_enabled = off);
+alter table skip_scan_htc set (autovacuum_enabled = off);
+-- create compressed hypertable with different physical layouts in the compressed chunks
+CREATE TABLE skip_scan_htcl(f1 int, f2 int, f3 int, time int NOT NULL, dev int, dev_name text, val int);
+SELECT create_hypertable('skip_scan_htcl', 'time', chunk_time_interval => 250, create_default_indexes => false);
+      create_hypertable      
+-----------------------------
+ (5,public,skip_scan_htcl,t)
+
+ALTER TABLE skip_scan_htcl SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
+-- Make sure 1st compressed chunk has columns which will be dropped later, it also doesn't have NULLs
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_5_9_chunk
+
+ALTER TABLE skip_scan_htcl DROP COLUMN f1;
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htcl DROP COLUMN f2;
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(500, 749) t, generate_series(1, 10) d;
+ALTER TABLE skip_scan_htcl DROP COLUMN f3;
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(750, 999) t, generate_series(1, 10) d;
+INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, NULL, NULL, NULL FROM generate_series(0, 999, 50) t;
+-- The rest of the compressed chunks do not have dropped columns
+-- compressed chunks #2 and #3 have attnos out of sync with uncompressed chunks
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch order by 1 desc limit 3;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_5_13_chunk
+ _timescaledb_internal._hyper_5_12_chunk
+ _timescaledb_internal._hyper_5_11_chunk
+
+ANALYZE skip_scan_htcl;
+-- adjust statistics so we get skipscan plans
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_htcl'::regclass;
+UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_htcl'::regclass);
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+alter table skip_scan_htcl set (autovacuum_enabled = off);
+-- we want to run with analyze here so we can see counts in the nodes
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
+-- test SkipScan NOT NULL mode
+-- also sets up "skip_scan_b" table with a bool column and a not null column
+\ir include/skip_scan_notnull_setup.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test 2-key index "(dev,dev_name)" where index qual may not be on a skip col
+-- Make sure it's the only index to be used for "dev" skipscan key
+-- skip_scan table
+CREATE INDEX skip_scan_dev_devname_idx ON skip_scan(dev,dev_name);
+-- skip_scan_ht table
+CREATE INDEX skip_scan_ht_dev_devname_idx ON skip_scan_ht(dev,dev_name);
+-- skip_scan_htc table
+ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev,dev_name');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_5_chunk
+ _timescaledb_internal._hyper_3_6_chunk
+ _timescaledb_internal._hyper_3_7_chunk
+ _timescaledb_internal._hyper_3_8_chunk
+
+-- table with a bool column
+CREATE TABLE skip_scan_b as select dev, coalesce(time,100) time, nullif(dev%3,2)::boolean as b from skip_scan;
+CREATE INDEX skip_scan_b_idx ON skip_scan_b(b);
+--table with not null constraint
+CREATE TABLE skip_scan_nn as select coalesce(dev,0) dev, coalesce(time,100) time from skip_scan;
+ALTER TABLE skip_scan_nn ALTER COLUMN dev SET NOT NULL;
+CREATE INDEX skip_scan_nn_idx ON skip_scan_nn(dev);
+SET timescaledb.debug_skip_scan_info  TO true;
+\set TABLE skip_scan
+\ir include/skip_scan_notnull.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Base queries with regular NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE;
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=12.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=12.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=12.00 loops=1)
+               Index Cond: (dev > NULL::integer)
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE order by dev DESC;
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS FIRST)
+--- QUERY PLAN ---
+ Unique (actual rows=12.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=12.00 loops=1)
+         ->  Index Only Scan Backward using skip_scan_dev_devname_idx on skip_scan (actual rows=12.00 loops=1)
+               Index Cond: (dev < NULL::integer)
+
+-- Index quals except IS NULL discard NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL;
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=11.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=11.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (dev IS NOT NULL))
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev > 2;
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=8.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=8.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=8.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (dev > 2))
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev BETWEEN 1 AND 5;
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=5.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=5.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=5.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (dev >= 1) AND (dev <= 5))
+
+-- next two filters produce small output for which we may select seqscan, don't want it
+set enable_seqscan=0;
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev in (1,2,3);
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=3.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=3.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=3.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (dev = ANY ('{1,2,3}'::integer[])))
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NULL;
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=1.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=1.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+
+-- PG is smart enough to convert negation of IS NOT NULL to IS NULL index condition
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE (dev IS NOT NULL) = false;
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=1.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=1.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+
+-- Complex expressions over IS NOT NULL are non-strict filters
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE ((dev is null) = false)::int + 1 > 1;
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=11.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=11.00 loops=1)
+               Index Cond: (dev > NULL::integer)
+               Filter: ((((dev IS NOT NULL))::integer + 1) > 1)
+               Rows Removed by Filter: 21
+
+reset enable_seqscan;
+-- Strict Index filters discard NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev * 2 < 8;
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=4.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=4.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=4.00 loops=1)
+               Index Cond: (dev > NULL::integer)
+               Filter: ((dev * 2) < 8)
+               Rows Removed by Filter: 7000
+
+-- OR is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev < 2 OR dev > 0;
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=11.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=11.00 loops=1)
+               Index Cond: (dev > NULL::integer)
+               Filter: ((dev < 2) OR (dev > 0))
+               Rows Removed by Filter: 21
+
+-- Coalesce is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,-1) < 1;
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=2.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=2.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=2.00 loops=1)
+               Index Cond: (dev > NULL::integer)
+               Filter: (COALESCE(dev, '-1'::integer) < 1)
+               Rows Removed by Filter: 10000
+
+-- Strict non-index filters on relation discard NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100;
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=10.00 loops=1)
+         ->  Index Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=10.00 loops=1)
+               Filter: ((dev + "time") < 100)
+               Rows Removed by Filter: 1
+
+-- OR is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100 OR dev > 0;
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=10.00 loops=1)
+         ->  Index Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=10.00 loops=1)
+               Filter: (((dev + "time") < 100) OR (dev > 0))
+               Rows Removed by Filter: 22
+
+-- Coalesce is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100;
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=11.00 loops=1)
+         ->  Index Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=11.00 loops=1)
+               Filter: ((COALESCE(dev, 20) + "time") < 100)
+               Rows Removed by Filter: 1
+
+-- If at least one filter is strict then it filters out NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100 and dev + time < 100;
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=10.00 loops=1)
+         ->  Index Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=10.00 loops=1)
+               Filter: (((COALESCE(dev, 20) + "time") < 100) AND ((dev + "time") < 100))
+               Rows Removed by Filter: 1
+
+-- Index qual on a non-skip key: skip key can be NULL
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1';
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=9.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=9.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=9.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (dev_name > 'device_1'::text))
+
+-- Index quals on several keys including skip key
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1' and dev > 2;
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=8.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=8.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=8.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (dev > 2) AND (dev_name > 'device_1'::text))
+
+-- Index qual row comparison will filter out NULLs in skip key when skip key is a leading column
+-- But for compressed chunks ROW is not pushed into index quals, it is treated as a filter and is not strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev,dev_name) > row(1,'device_1');
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=9.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=9.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=9.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (ROW(dev, dev_name) > ROW(1, 'device_1'::text)))
+
+-- Satisfying (dev_name>'device_1') may allow NULLs into dev
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev_name,dev) > row('device_1',1);
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=9.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=9.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=9.00 loops=1)
+               Index Cond: ((dev > NULL::integer) AND (ROW(dev_name, dev) > ROW('device_1'::text, 1)))
+
+-- Non-index qual row comparison: row comparison in general is not strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev+1,dev_name) > row(1,'device_1');
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=10.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=10.00 loops=1)
+               Index Cond: (dev > NULL::integer)
+               Filter: (ROW((dev + 1), dev_name) > ROW(1, 'device_1'::text))
+               Rows Removed by Filter: 22
+
+-- Different SkipScan column
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev=1 and dev_name IS NOT NULL;
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on skip_scan_dev_devname_idx(dev_name NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=1.00 loops=1)
+         ->  Index Only Scan using skip_scan_dev_devname_idx on skip_scan (actual rows=1.00 loops=1)
+               Index Cond: ((dev = 1) AND (dev_name > NULL::text) AND (dev_name IS NOT NULL))
+
+-- Boolean and NOT NULL constraint tests
+-- Boolean column index qual is strict
+:PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b;
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on skip_scan_b_idx(b NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan_b (actual rows=1.00 loops=1)
+         ->  Index Only Scan using skip_scan_b_idx on skip_scan_b (actual rows=1.00 loops=1)
+               Index Cond: ((b > NULL::boolean) AND (b = true))
+
+:PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b != true;
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on skip_scan_b_idx(b NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan_b (actual rows=1.00 loops=1)
+         ->  Index Only Scan using skip_scan_b_idx on skip_scan_b (actual rows=1.00 loops=1)
+               Index Cond: ((b > NULL::boolean) AND (b = false))
+
+-- Boolean column predicates could be non-strict filters, below filter can accept NULLs
+:PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b IS NOT true;
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on skip_scan_b_idx(b NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=2.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan_b (actual rows=2.00 loops=1)
+         ->  Index Only Scan using skip_scan_b_idx on skip_scan_b (actual rows=2.00 loops=1)
+               Index Cond: (b > NULL::boolean)
+               Filter: (b IS NOT TRUE)
+               Rows Removed by Filter: 4000
+
+-- dev is declared NOT NULL
+:PREFIX SELECT DISTINCT dev FROM skip_scan_nn;
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on skip_scan_nn_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan_nn (actual rows=11.00 loops=1)
+         ->  Index Only Scan using skip_scan_nn_idx on skip_scan_nn (actual rows=11.00 loops=1)
+               Index Cond: (dev > NULL::integer)
+
+-- Set up hypertable with bool column
+SELECT create_hypertable('skip_scan_b', 'time', chunk_time_interval => 500, create_default_indexes => false, migrate_data => true);
+NOTICE:  migrating data to chunks
+    create_hypertable     
+--------------------------
+ (7,public,skip_scan_b,t)
+
+-- Set up hypertable with not null column
+SELECT create_hypertable('skip_scan_nn', 'time', chunk_time_interval => 500, create_default_indexes => false, migrate_data => true);
+NOTICE:  migrating data to chunks
+     create_hypertable     
+---------------------------
+ (8,public,skip_scan_nn,t)
+
+\set TABLE skip_scan_ht
+\ir include/skip_scan_notnull.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Base queries with regular NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE;
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Merge Append (actual rows=44.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE order by dev DESC;
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS FIRST)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Merge Append (actual rows=44.00 loops=1)
+         Sort Key: skip_scan_ht.dev DESC
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan Backward using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev < NULL::integer)
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan Backward using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev < NULL::integer)
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan Backward using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev < NULL::integer)
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan Backward using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev < NULL::integer)
+
+-- Index quals except IS NULL discard NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL;
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NOT NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NOT NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NOT NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NOT NULL))
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev > 2;
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=8.00 loops=1)
+   ->  Merge Append (actual rows=32.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=8.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=8.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 2))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=8.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=8.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 2))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=8.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=8.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 2))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=8.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=8.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 2))
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev BETWEEN 1 AND 5;
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=20.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=5.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=5.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev >= 1) AND (dev <= 5))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=5.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=5.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev >= 1) AND (dev <= 5))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=5.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=5.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev >= 1) AND (dev <= 5))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=5.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=5.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev >= 1) AND (dev <= 5))
+
+-- next two filters produce small output for which we may select seqscan, don't want it
+set enable_seqscan=0;
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev in (1,2,3);
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=3.00 loops=1)
+   ->  Merge Append (actual rows=12.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev = ANY ('{1,2,3}'::integer[])))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=3.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=3.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev = ANY ('{1,2,3}'::integer[])))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=3.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=3.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev = ANY ('{1,2,3}'::integer[])))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=3.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=3.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev = ANY ('{1,2,3}'::integer[])))
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NULL;
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+
+-- PG is smart enough to convert negation of IS NOT NULL to IS NULL index condition
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE (dev IS NOT NULL) = false;
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev IS NULL))
+
+-- Complex expressions over IS NOT NULL are non-strict filters
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE ((dev is null) = false)::int + 1 > 1;
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((((dev IS NOT NULL))::integer + 1) > 1)
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((((dev IS NOT NULL))::integer + 1) > 1)
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((((dev IS NOT NULL))::integer + 1) > 1)
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((((dev IS NOT NULL))::integer + 1) > 1)
+                     Rows Removed by Filter: 5
+
+reset enable_seqscan;
+-- Strict Index filters discard NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev * 2 < 8;
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=3.00 loops=1)
+   ->  Merge Append (actual rows=12.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=3.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((dev * 2) < 8)
+                     Rows Removed by Filter: 1750
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=3.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=3.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((dev * 2) < 8)
+                     Rows Removed by Filter: 1750
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=3.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=3.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((dev * 2) < 8)
+                     Rows Removed by Filter: 1750
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=3.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=3.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((dev * 2) < 8)
+                     Rows Removed by Filter: 1750
+
+-- OR is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev < 2 OR dev > 0;
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((dev < 2) OR (dev > 0))
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((dev < 2) OR (dev > 0))
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((dev < 2) OR (dev > 0))
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: ((dev < 2) OR (dev > 0))
+                     Rows Removed by Filter: 5
+
+-- Coalesce is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,-1) < 1;
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: (COALESCE(dev, '-1'::integer) < 1)
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: (COALESCE(dev, '-1'::integer) < 1)
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: (COALESCE(dev, '-1'::integer) < 1)
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: (COALESCE(dev, '-1'::integer) < 1)
+                     Rows Removed by Filter: 2500
+
+-- Strict non-index filters on relation discard NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100;
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+                     Filter: ((dev + "time") < 100)
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+                     Filter: ((dev + "time") < 100)
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=0.00 loops=1)
+                     Filter: ((dev + "time") < 100)
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=0.00 loops=1)
+                     Filter: ((dev + "time") < 100)
+                     Rows Removed by Filter: 2500
+
+-- OR is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100 OR dev > 0;
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+                     Filter: (((dev + "time") < 100) OR (dev > 0))
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+                     Filter: (((dev + "time") < 100) OR (dev > 0))
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+                     Filter: (((dev + "time") < 100) OR (dev > 0))
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+                     Filter: (((dev + "time") < 100) OR (dev > 0))
+                     Rows Removed by Filter: 5
+
+-- Coalesce is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100;
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Merge Append (actual rows=11.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=11.00 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=11.00 loops=1)
+                     Filter: ((COALESCE(dev, 20) + "time") < 100)
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+                     Filter: ((COALESCE(dev, 20) + "time") < 100)
+                     Rows Removed by Filter: 2505
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=0.00 loops=1)
+                     Filter: ((COALESCE(dev, 20) + "time") < 100)
+                     Rows Removed by Filter: 2505
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=0.00 loops=1)
+                     Filter: ((COALESCE(dev, 20) + "time") < 100)
+                     Rows Removed by Filter: 2505
+
+-- If at least one filter is strict then it filters out NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100 and dev + time < 100;
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+                     Filter: (((COALESCE(dev, 20) + "time") < 100) AND ((dev + "time") < 100))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=0.00 loops=1)
+                     Filter: (((COALESCE(dev, 20) + "time") < 100) AND ((dev + "time") < 100))
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=0.00 loops=1)
+                     Filter: (((COALESCE(dev, 20) + "time") < 100) AND ((dev + "time") < 100))
+                     Rows Removed by Filter: 2500
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=0.00 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=0.00 loops=1)
+                     Filter: (((COALESCE(dev, 20) + "time") < 100) AND ((dev + "time") < 100))
+                     Rows Removed by Filter: 2500
+
+-- Index qual on a non-skip key: skip key can be NULL
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1';
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=9.00 loops=1)
+   ->  Merge Append (actual rows=36.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev_name > 'device_1'::text))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev_name > 'device_1'::text))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev_name > 'device_1'::text))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev_name > 'device_1'::text))
+
+-- Index quals on several keys including skip key
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1' and dev > 2;
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=8.00 loops=1)
+   ->  Merge Append (actual rows=32.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=8.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=8.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 2) AND (dev_name > 'device_1'::text))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=8.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=8.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 2) AND (dev_name > 'device_1'::text))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=8.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=8.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 2) AND (dev_name > 'device_1'::text))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=8.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=8.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (dev > 2) AND (dev_name > 'device_1'::text))
+
+-- Index qual row comparison will filter out NULLs in skip key when skip key is a leading column
+-- But for compressed chunks ROW is not pushed into index quals, it is treated as a filter and is not strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev,dev_name) > row(1,'device_1');
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=9.00 loops=1)
+   ->  Merge Append (actual rows=36.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (ROW(dev, dev_name) > ROW(1, 'device_1'::text)))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (ROW(dev, dev_name) > ROW(1, 'device_1'::text)))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (ROW(dev, dev_name) > ROW(1, 'device_1'::text)))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (ROW(dev, dev_name) > ROW(1, 'device_1'::text)))
+
+-- Satisfying (dev_name>'device_1') may allow NULLs into dev
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev_name,dev) > row('device_1',1);
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=9.00 loops=1)
+   ->  Merge Append (actual rows=36.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (ROW(dev_name, dev) > ROW('device_1'::text, 1)))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (ROW(dev_name, dev) > ROW('device_1'::text, 1)))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (ROW(dev_name, dev) > ROW('device_1'::text, 1)))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=9.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=9.00 loops=1)
+                     Index Cond: ((dev > NULL::integer) AND (ROW(dev_name, dev) > ROW('device_1'::text, 1)))
+
+-- Non-index qual row comparison: row comparison in general is not strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev+1,dev_name) > row(1,'device_1');
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: (ROW((dev + 1), dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: (ROW((dev + 1), dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: (ROW((dev + 1), dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 5
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+                     Filter: (ROW((dev + 1), dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 5
+
+-- Different SkipScan column
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev=1 and dev_name IS NOT NULL;
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx(dev_name NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
+         Sort Key: skip_scan_ht.dev_name
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_1_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_1_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev = 1) AND (dev_name > NULL::text) AND (dev_name IS NOT NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_2_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_2_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev = 1) AND (dev_name > NULL::text) AND (dev_name IS NOT NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_3_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_3_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev = 1) AND (dev_name > NULL::text) AND (dev_name IS NOT NULL))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_1_4_chunk_skip_scan_ht_dev_devname_idx on _hyper_1_4_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((dev = 1) AND (dev_name > NULL::text) AND (dev_name IS NOT NULL))
+
+-- Boolean and NOT NULL constraint tests
+-- Boolean column index qual is strict
+:PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b;
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on _hyper_7_21_chunk_skip_scan_b_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on _hyper_7_22_chunk_skip_scan_b_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on _hyper_7_23_chunk_skip_scan_b_idx(b NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=3.00 loops=1)
+         Sort Key: skip_scan_b.b
+         ->  Custom Scan (SkipScan) on _hyper_7_21_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_7_21_chunk_skip_scan_b_idx on _hyper_7_21_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((b > NULL::boolean) AND (b = true))
+         ->  Custom Scan (SkipScan) on _hyper_7_22_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_7_22_chunk_skip_scan_b_idx on _hyper_7_22_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((b > NULL::boolean) AND (b = true))
+         ->  Custom Scan (SkipScan) on _hyper_7_23_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_7_23_chunk_skip_scan_b_idx on _hyper_7_23_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((b > NULL::boolean) AND (b = true))
+
+:PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b != true;
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on _hyper_7_21_chunk_skip_scan_b_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on _hyper_7_22_chunk_skip_scan_b_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on _hyper_7_23_chunk_skip_scan_b_idx(b NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=3.00 loops=1)
+         Sort Key: skip_scan_b.b
+         ->  Custom Scan (SkipScan) on _hyper_7_21_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_7_21_chunk_skip_scan_b_idx on _hyper_7_21_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((b > NULL::boolean) AND (b = false))
+         ->  Custom Scan (SkipScan) on _hyper_7_22_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_7_22_chunk_skip_scan_b_idx on _hyper_7_22_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((b > NULL::boolean) AND (b = false))
+         ->  Custom Scan (SkipScan) on _hyper_7_23_chunk (actual rows=1.00 loops=1)
+               ->  Index Only Scan using _hyper_7_23_chunk_skip_scan_b_idx on _hyper_7_23_chunk (actual rows=1.00 loops=1)
+                     Index Cond: ((b > NULL::boolean) AND (b = false))
+
+-- Boolean column predicates could be non-strict filters, below filter can accept NULLs
+:PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b IS NOT true;
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on _hyper_7_21_chunk_skip_scan_b_idx(b NULLS LAST)
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on _hyper_7_22_chunk_skip_scan_b_idx(b NULLS LAST)
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on _hyper_7_23_chunk_skip_scan_b_idx(b NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=2.00 loops=1)
+   ->  Merge Append (actual rows=6.00 loops=1)
+         Sort Key: skip_scan_b.b
+         ->  Custom Scan (SkipScan) on _hyper_7_21_chunk (actual rows=2.00 loops=1)
+               ->  Index Only Scan using _hyper_7_21_chunk_skip_scan_b_idx on _hyper_7_21_chunk (actual rows=2.00 loops=1)
+                     Index Cond: (b > NULL::boolean)
+                     Filter: (b IS NOT TRUE)
+                     Rows Removed by Filter: 1996
+         ->  Custom Scan (SkipScan) on _hyper_7_22_chunk (actual rows=2.00 loops=1)
+               ->  Index Only Scan using _hyper_7_22_chunk_skip_scan_b_idx on _hyper_7_22_chunk (actual rows=2.00 loops=1)
+                     Index Cond: (b > NULL::boolean)
+                     Filter: (b IS NOT TRUE)
+                     Rows Removed by Filter: 2000
+         ->  Custom Scan (SkipScan) on _hyper_7_23_chunk (actual rows=2.00 loops=1)
+               ->  Index Only Scan using _hyper_7_23_chunk_skip_scan_b_idx on _hyper_7_23_chunk (actual rows=2.00 loops=1)
+                     Index Cond: (b > NULL::boolean)
+                     Filter: (b IS NOT TRUE)
+                     Rows Removed by Filter: 4
+
+-- dev is declared NOT NULL
+:PREFIX SELECT DISTINCT dev FROM skip_scan_nn;
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on _hyper_8_24_chunk_skip_scan_nn_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on _hyper_8_25_chunk_skip_scan_nn_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on _hyper_8_26_chunk_skip_scan_nn_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Merge Append (actual rows=32.00 loops=1)
+         Sort Key: skip_scan_nn.dev
+         ->  Custom Scan (SkipScan) on _hyper_8_24_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan using _hyper_8_24_chunk_skip_scan_nn_idx on _hyper_8_24_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+         ->  Custom Scan (SkipScan) on _hyper_8_25_chunk (actual rows=11.00 loops=1)
+               ->  Index Only Scan using _hyper_8_25_chunk_skip_scan_nn_idx on _hyper_8_25_chunk (actual rows=11.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+         ->  Custom Scan (SkipScan) on _hyper_8_26_chunk (actual rows=10.00 loops=1)
+               ->  Index Only Scan using _hyper_8_26_chunk_skip_scan_nn_idx on _hyper_8_26_chunk (actual rows=10.00 loops=1)
+                     Index Cond: (dev > NULL::integer)
+
+-- Compress on bool column
+ALTER TABLE skip_scan_b SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='b');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_b') ch;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_7_21_chunk
+ _timescaledb_internal._hyper_7_22_chunk
+ _timescaledb_internal._hyper_7_23_chunk
+
+-- Compress on not null column
+ALTER TABLE skip_scan_nn SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
+SELECT compress_chunk(ch) FROM show_chunks('skip_scan_nn') ch;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_24_chunk
+ _timescaledb_internal._hyper_8_25_chunk
+ _timescaledb_internal._hyper_8_26_chunk
+
+\set TABLE skip_scan_htc
+\ir include/skip_scan_notnull.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Base queries with regular NULL mode
+:PREFIX SELECT DISTINCT dev FROM :TABLE;
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:6: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Merge Append (actual rows=44.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=11.00 loops=1)
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE order by dev DESC;
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS FIRST)
+psql:include/skip_scan_notnull.sql:8: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS FIRST)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Merge Append (actual rows=44.00 loops=1)
+         Sort Key: skip_scan_htc.dev DESC
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan Backward using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=11.00 loops=1)
+
+-- Index quals except IS NULL discard NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NOT NULL;
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:11: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=10.00 loops=1)
+                           Index Cond: (dev IS NOT NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=10.00 loops=1)
+                           Index Cond: (dev IS NOT NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=10.00 loops=1)
+                           Index Cond: (dev IS NOT NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=10.00 loops=1)
+                           Index Cond: (dev IS NOT NULL)
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev > 2;
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:13: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=8.00 loops=1)
+   ->  Merge Append (actual rows=32.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=8.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=8.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=8.00 loops=1)
+                           Index Cond: (dev > 2)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=8.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=8.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=8.00 loops=1)
+                           Index Cond: (dev > 2)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=8.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=8.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=8.00 loops=1)
+                           Index Cond: (dev > 2)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=8.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=8.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=8.00 loops=1)
+                           Index Cond: (dev > 2)
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev BETWEEN 1 AND 5;
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:15: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=5.00 loops=1)
+   ->  Merge Append (actual rows=20.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=5.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=5.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=5.00 loops=1)
+                           Index Cond: ((dev >= 1) AND (dev <= 5))
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=5.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=5.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=5.00 loops=1)
+                           Index Cond: ((dev >= 1) AND (dev <= 5))
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=5.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=5.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=5.00 loops=1)
+                           Index Cond: ((dev >= 1) AND (dev <= 5))
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=5.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=5.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=5.00 loops=1)
+                           Index Cond: ((dev >= 1) AND (dev <= 5))
+
+-- next two filters produce small output for which we may select seqscan, don't want it
+set enable_seqscan=0;
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev in (1,2,3);
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:19: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=3.00 loops=1)
+   ->  Merge Append (actual rows=12.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=3.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=3.00 loops=1)
+                           Index Cond: (dev = ANY ('{1,2,3}'::integer[]))
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=3.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=3.00 loops=1)
+                           Index Cond: (dev = ANY ('{1,2,3}'::integer[]))
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=3.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=3.00 loops=1)
+                           Index Cond: (dev = ANY ('{1,2,3}'::integer[]))
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=3.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=3.00 loops=1)
+                           Index Cond: (dev = ANY ('{1,2,3}'::integer[]))
+
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev IS NULL;
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:21: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (dev IS NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (dev IS NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (dev IS NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (dev IS NULL)
+
+-- PG is smart enough to convert negation of IS NOT NULL to IS NULL index condition
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE (dev IS NOT NULL) = false;
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:24: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (dev IS NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (dev IS NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (dev IS NULL)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (dev IS NULL)
+
+-- Complex expressions over IS NOT NULL are non-strict filters
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE ((dev is null) = false)::int + 1 > 1;
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:27: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=10.00 loops=1)
+                           Filter: ((((dev IS NOT NULL))::integer + 1) > 1)
+                           Rows Removed by Filter: 1
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=10.00 loops=1)
+                           Filter: ((((dev IS NOT NULL))::integer + 1) > 1)
+                           Rows Removed by Filter: 1
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=10.00 loops=1)
+                           Filter: ((((dev IS NOT NULL))::integer + 1) > 1)
+                           Rows Removed by Filter: 1
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=10.00 loops=1)
+                           Filter: ((((dev IS NOT NULL))::integer + 1) > 1)
+                           Rows Removed by Filter: 1
+
+reset enable_seqscan;
+-- Strict Index filters discard NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev * 2 < 8;
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:31: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=3.00 loops=1)
+   ->  Merge Append (actual rows=12.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=3.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=3.00 loops=1)
+                           Filter: ((dev * 2) < 8)
+                           Rows Removed by Filter: 7
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=3.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=3.00 loops=1)
+                           Filter: ((dev * 2) < 8)
+                           Rows Removed by Filter: 7
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=3.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=3.00 loops=1)
+                           Filter: ((dev * 2) < 8)
+                           Rows Removed by Filter: 7
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=3.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=3.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=3.00 loops=1)
+                           Filter: ((dev * 2) < 8)
+                           Rows Removed by Filter: 7
+
+-- OR is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev < 2 OR dev > 0;
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:34: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=10.00 loops=1)
+                           Filter: ((dev < 2) OR (dev > 0))
+                           Rows Removed by Filter: 1
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=10.00 loops=1)
+                           Filter: ((dev < 2) OR (dev > 0))
+                           Rows Removed by Filter: 1
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=10.00 loops=1)
+                           Filter: ((dev < 2) OR (dev > 0))
+                           Rows Removed by Filter: 1
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=10.00 loops=1)
+                           Filter: ((dev < 2) OR (dev > 0))
+                           Rows Removed by Filter: 1
+
+-- Coalesce is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,-1) < 1;
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:36: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=1.00 loops=1)
+                     Filter: (COALESCE(dev, '-1'::integer) < 1)
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=1.00 loops=1)
+                     Filter: (COALESCE(dev, '-1'::integer) < 1)
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=1.00 loops=1)
+                     Filter: (COALESCE(dev, '-1'::integer) < 1)
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+                     Filter: (COALESCE(dev, '-1'::integer) < 1)
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=11.00 loops=1)
+
+-- Strict non-index filters on relation discard NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100;
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:39: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+                     Filter: ((dev + "time") < 100)
+                     Rows Removed by Filter: 1555
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=10.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=0.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=0.00 loops=1)
+                     Filter: ((dev + "time") < 100)
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=10.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=0.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=0.00 loops=1)
+                     Filter: ((dev + "time") < 100)
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=10.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=0.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=0.00 loops=1)
+                     Filter: ((dev + "time") < 100)
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=10.00 loops=1)
+
+-- OR is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev + time < 100 OR dev > 0;
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:42: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+                     Filter: (((dev + "time") < 100) OR (dev > 0))
+                     Rows Removed by Filter: 5
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+                     Filter: (((dev + "time") < 100) OR (dev > 0))
+                     Rows Removed by Filter: 5
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+                     Filter: (((dev + "time") < 100) OR (dev > 0))
+                     Rows Removed by Filter: 5
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+                     Filter: (((dev + "time") < 100) OR (dev > 0))
+                     Rows Removed by Filter: 5
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=11.00 loops=1)
+
+-- Coalesce is non-strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100;
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:44: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Merge Append (actual rows=11.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=11.00 loops=1)
+                     Filter: ((COALESCE(dev, 20) + "time") < 100)
+                     Rows Removed by Filter: 1558
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=0.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=0.00 loops=1)
+                     Filter: ((COALESCE(dev, 20) + "time") < 100)
+                     Rows Removed by Filter: 2505
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=0.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=0.00 loops=1)
+                     Filter: ((COALESCE(dev, 20) + "time") < 100)
+                     Rows Removed by Filter: 2505
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=0.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=0.00 loops=1)
+                     Filter: ((COALESCE(dev, 20) + "time") < 100)
+                     Rows Removed by Filter: 2505
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=11.00 loops=1)
+
+-- If at least one filter is strict then it filters out NULLs
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE coalesce(dev,20) + time < 100 and dev + time < 100;
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:47: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=10.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+                     Filter: (((COALESCE(dev, 20) + "time") < 100) AND ((dev + "time") < 100))
+                     Rows Removed by Filter: 1555
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=10.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=0.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=0.00 loops=1)
+                     Filter: (((COALESCE(dev, 20) + "time") < 100) AND ((dev + "time") < 100))
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=10.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=0.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=0.00 loops=1)
+                     Filter: (((COALESCE(dev, 20) + "time") < 100) AND ((dev + "time") < 100))
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=10.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=0.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=0.00 loops=1)
+                     Filter: (((COALESCE(dev, 20) + "time") < 100) AND ((dev + "time") < 100))
+                     Rows Removed by Filter: 2500
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=10.00 loops=1)
+
+-- Index qual on a non-skip key: skip key can be NULL
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1';
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:50: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=9.00 loops=1)
+   ->  Merge Append (actual rows=36.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=9.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=9.00 loops=1)
+                           Index Cond: (dev_name > 'device_1'::text)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=9.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=9.00 loops=1)
+                           Index Cond: (dev_name > 'device_1'::text)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=9.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=9.00 loops=1)
+                           Index Cond: (dev_name > 'device_1'::text)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=9.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=9.00 loops=1)
+                           Index Cond: (dev_name > 'device_1'::text)
+
+-- Index quals on several keys including skip key
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE dev_name > 'device_1' and dev > 2;
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:53: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=8.00 loops=1)
+   ->  Merge Append (actual rows=32.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=8.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=8.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=8.00 loops=1)
+                           Index Cond: ((dev > 2) AND (dev_name > 'device_1'::text))
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=8.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=8.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=8.00 loops=1)
+                           Index Cond: ((dev > 2) AND (dev_name > 'device_1'::text))
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=8.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=8.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=8.00 loops=1)
+                           Index Cond: ((dev > 2) AND (dev_name > 'device_1'::text))
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=8.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=8.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=8.00 loops=1)
+                           Index Cond: ((dev > 2) AND (dev_name > 'device_1'::text))
+
+-- Index qual row comparison will filter out NULLs in skip key when skip key is a leading column
+-- But for compressed chunks ROW is not pushed into index quals, it is treated as a filter and is not strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev,dev_name) > row(1,'device_1');
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:57: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=9.00 loops=1)
+   ->  Merge Append (actual rows=36.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=9.00 loops=1)
+                     Filter: (ROW(dev, dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 255
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=9.00 loops=1)
+                     Filter: (ROW(dev, dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 255
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=9.00 loops=1)
+                     Filter: (ROW(dev, dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 255
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=9.00 loops=1)
+                     Filter: (ROW(dev, dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 255
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=11.00 loops=1)
+
+-- Satisfying (dev_name>'device_1') may allow NULLs into dev
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev_name,dev) > row('device_1',1);
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:60: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=9.00 loops=1)
+   ->  Merge Append (actual rows=36.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=9.00 loops=1)
+                     Filter: (ROW(dev_name, dev) > ROW('device_1'::text, 1))
+                     Rows Removed by Filter: 255
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=9.00 loops=1)
+                     Filter: (ROW(dev_name, dev) > ROW('device_1'::text, 1))
+                     Rows Removed by Filter: 255
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=9.00 loops=1)
+                     Filter: (ROW(dev_name, dev) > ROW('device_1'::text, 1))
+                     Rows Removed by Filter: 255
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=9.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=9.00 loops=1)
+                     Filter: (ROW(dev_name, dev) > ROW('device_1'::text, 1))
+                     Rows Removed by Filter: 255
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=11.00 loops=1)
+
+-- Non-index qual row comparison: row comparison in general is not strict
+:PREFIX SELECT DISTINCT dev FROM :TABLE WHERE row(dev+1,dev_name) > row(1,'device_1');
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+psql:include/skip_scan_notnull.sql:63: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=10.00 loops=1)
+   ->  Merge Append (actual rows=40.00 loops=1)
+         Sort Key: skip_scan_htc.dev
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=10.00 loops=1)
+                     Filter: (ROW((dev + 1), dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 5
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=10.00 loops=1)
+                     Filter: (ROW((dev + 1), dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 5
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=10.00 loops=1)
+                     Filter: (ROW((dev + 1), dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 5
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=10.00 loops=1)
+                     Filter: (ROW((dev + 1), dev_name) > ROW(1, 'device_1'::text))
+                     Rows Removed by Filter: 5
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=11.00 loops=1)
+
+-- Different SkipScan column
+:PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev=1 and dev_name IS NOT NULL;
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev_name NOT NULL)
+psql:include/skip_scan_notnull.sql:66: INFO:  SkipScan used on compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx(dev_name NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=4.00 loops=1)
+         Sort Key: skip_scan_htc.dev_name
+         ->  Custom Scan (SkipScan) on _hyper_3_5_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_5_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_17_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_17_chunk (actual rows=1.00 loops=1)
+                           Index Cond: ((dev = 1) AND (dev_name IS NOT NULL))
+         ->  Custom Scan (SkipScan) on _hyper_3_6_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_6_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_18_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_18_chunk (actual rows=1.00 loops=1)
+                           Index Cond: ((dev = 1) AND (dev_name IS NOT NULL))
+         ->  Custom Scan (SkipScan) on _hyper_3_7_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_7_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_19_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_19_chunk (actual rows=1.00 loops=1)
+                           Index Cond: ((dev = 1) AND (dev_name IS NOT NULL))
+         ->  Custom Scan (SkipScan) on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_3_8_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_4_20_chunk_dev_dev_name__ts_meta_min_1__ts_m_idx on compress_hyper_4_20_chunk (actual rows=1.00 loops=1)
+                           Index Cond: ((dev = 1) AND (dev_name IS NOT NULL))
+
+-- Boolean and NOT NULL constraint tests
+-- Boolean column index qual is strict
+:PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b;
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on compress_hyper_9_27_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on compress_hyper_9_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:71: INFO:  SkipScan used on compress_hyper_9_29_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=3.00 loops=1)
+         Sort Key: skip_scan_b.b
+         ->  Custom Scan (SkipScan) on _hyper_7_21_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_21_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_9_27_chunk_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_9_27_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (b = true)
+         ->  Custom Scan (SkipScan) on _hyper_7_22_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_22_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_9_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_9_28_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (b = true)
+         ->  Custom Scan (SkipScan) on _hyper_7_23_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_23_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_9_29_chunk_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_9_29_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (b = true)
+
+:PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b != true;
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on compress_hyper_9_27_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on compress_hyper_9_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+psql:include/skip_scan_notnull.sql:72: INFO:  SkipScan used on compress_hyper_9_29_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=1.00 loops=1)
+   ->  Merge Append (actual rows=3.00 loops=1)
+         Sort Key: skip_scan_b.b
+         ->  Custom Scan (SkipScan) on _hyper_7_21_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_21_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_9_27_chunk_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_9_27_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (b = false)
+         ->  Custom Scan (SkipScan) on _hyper_7_22_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_22_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_9_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_9_28_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (b = false)
+         ->  Custom Scan (SkipScan) on _hyper_7_23_chunk (actual rows=1.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_23_chunk (actual rows=1.00 loops=1)
+                     ->  Index Scan using compress_hyper_9_29_chunk_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_9_29_chunk (actual rows=1.00 loops=1)
+                           Index Cond: (b = false)
+
+-- Boolean column predicates could be non-strict filters, below filter can accept NULLs
+:PREFIX SELECT DISTINCT b FROM skip_scan_b WHERE b IS NOT true;
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on compress_hyper_9_27_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NULLS LAST)
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on compress_hyper_9_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NULLS LAST)
+psql:include/skip_scan_notnull.sql:74: INFO:  SkipScan used on compress_hyper_9_29_chunk_b__ts_meta_min_1__ts_meta_max_1_idx(b NULLS LAST)
+--- QUERY PLAN ---
+ Unique (actual rows=2.00 loops=1)
+   ->  Merge Append (actual rows=6.00 loops=1)
+         Sort Key: skip_scan_b.b
+         ->  Custom Scan (SkipScan) on _hyper_7_21_chunk (actual rows=2.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_21_chunk (actual rows=2.00 loops=1)
+                     Filter: (b IS NOT TRUE)
+                     Rows Removed by Filter: 1996
+                     ->  Index Scan using compress_hyper_9_27_chunk_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_9_27_chunk (actual rows=4.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_7_22_chunk (actual rows=2.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_22_chunk (actual rows=2.00 loops=1)
+                     Filter: (b IS NOT TRUE)
+                     Rows Removed by Filter: 2000
+                     ->  Index Scan using compress_hyper_9_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_9_28_chunk (actual rows=4.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_7_23_chunk (actual rows=2.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_7_23_chunk (actual rows=2.00 loops=1)
+                     Filter: (b IS NOT TRUE)
+                     Rows Removed by Filter: 4
+                     ->  Index Scan using compress_hyper_9_29_chunk_b__ts_meta_min_1__ts_meta_max_1_idx on compress_hyper_9_29_chunk (actual rows=3.00 loops=1)
+
+-- dev is declared NOT NULL
+:PREFIX SELECT DISTINCT dev FROM skip_scan_nn;
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on compress_hyper_10_30_chunk_dev__ts_meta_min_1__ts_meta_max__idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on compress_hyper_10_31_chunk_dev__ts_meta_min_1__ts_meta_max__idx(dev NOT NULL)
+psql:include/skip_scan_notnull.sql:77: INFO:  SkipScan used on compress_hyper_10_32_chunk_dev__ts_meta_min_1__ts_meta_max__idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=11.00 loops=1)
+   ->  Merge Append (actual rows=32.00 loops=1)
+         Sort Key: skip_scan_nn.dev
+         ->  Custom Scan (SkipScan) on _hyper_8_24_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_8_24_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan using compress_hyper_10_30_chunk_dev__ts_meta_min_1__ts_meta_max__idx on compress_hyper_10_30_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_8_25_chunk (actual rows=11.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_8_25_chunk (actual rows=11.00 loops=1)
+                     ->  Index Scan using compress_hyper_10_31_chunk_dev__ts_meta_min_1__ts_meta_max__idx on compress_hyper_10_31_chunk (actual rows=11.00 loops=1)
+         ->  Custom Scan (SkipScan) on _hyper_8_26_chunk (actual rows=10.00 loops=1)
+               ->  Custom Scan (ColumnarScan) on _hyper_8_26_chunk (actual rows=10.00 loops=1)
+                     ->  Index Scan using compress_hyper_10_32_chunk_dev__ts_meta_min_1__ts_meta_max__idx on compress_hyper_10_32_chunk (actual rows=10.00 loops=1)
+
+RESET timescaledb.debug_skip_scan_info;

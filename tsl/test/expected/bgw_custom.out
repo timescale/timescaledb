@@ -50,31 +50,26 @@ SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb, initial
  add_job 
 ---------
     1001
-(1 row)
 
 SELECT add_job('custom_proc','1h', config:='{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1002
-(1 row)
 
 SELECT add_job('custom_proc2','1h', config:= '{"type":"procedure"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1003
-(1 row)
 
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ);
  add_job 
 ---------
     1004
-(1 row)
 
 SELECT add_job('custom_func_definer', '1h', config:='{"type":"function"}'::jsonb, initial_start => :'time_zero'::TIMESTAMPTZ, job_name := 'custom_job_name');
  add_job 
 ---------
     1005
-(1 row)
 
 -- exclude internal jobs
 SELECT * FROM timescaledb_information.jobs WHERE job_id >= 1000 ORDER BY 1;
@@ -85,13 +80,11 @@ SELECT * FROM timescaledb_information.jobs WHERE job_id >= 1000 ORDER BY 1;
    1003 | User-Defined Action [1003] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_proc2        | default_perm_user | t         | t              | {"type": "procedure"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
    1004 | User-Defined Action [1004] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func         | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
    1005 | custom_job_name [1005]     | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func_definer | default_perm_user | t         | t              | {"type": "function"}  | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST |                   |                 |              | 
-(5 rows)
 
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE config->>'type' IN ('procedure', 'function');
  count 
 -------
      5
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- test bad input
@@ -114,7 +107,6 @@ SELECT * FROM custom_log ORDER BY job_id, extra;
    1003 | {"type": "procedure"} | custom_proc2 3 COMMIT procedure | default_perm_user
    1004 | {"type": "function"}  | custom_func                     | default_perm_user
    1005 | {"type": "function"}  | security definer                | default_perm_user
-(6 rows)
 
 \set ON_ERROR_STOP 0
 -- test bad input
@@ -122,7 +114,6 @@ SELECT delete_job(NULL);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(-1);
 ERROR:  job -1 not found
@@ -132,32 +123,27 @@ SELECT delete_job(1002);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(1003);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(1004);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(1005);
  delete_job 
 ------------
  
-(1 row)
 
 -- check jobs got removed
 SELECT count(*) FROM timescaledb_information.jobs WHERE job_id >= 1002;
  count 
 -------
      0
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- create a new job with longer id
@@ -166,13 +152,11 @@ SELECT setval('_timescaledb_config.bgw_job_id_seq', 2147483647, false);
    setval   
 ------------
  2147483647
-(1 row)
 
 SELECT add_job('custom_func', '1h', config:='{"type":"function"}'::jsonb, job_name := 'custom_job_name');
   add_job   
 ------------
  2147483647
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- test bad input
@@ -191,104 +175,88 @@ NOTICE:  job 0 not found, skipping
  alter_job 
 -----------
  
-(1 row)
 
 SELECT alter_job(-1, if_exists => true);
 NOTICE:  job -1 not found, skipping
  alter_job 
 -----------
  
-(1 row)
 
 -- test altering job with NULL config
 SELECT job_id FROM alter_job(1001,scheduled:=false);
  job_id 
 --------
    1001
-(1 row)
 
 SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
  scheduled |        config        
 -----------+----------------------
  f         | {"type": "function"}
-(1 row)
 
 -- test updating job settings
 SELECT job_id FROM alter_job(1001,config:='{"test":"test"}');
  job_id 
 --------
    1001
-(1 row)
 
 SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
  scheduled |      config      
 -----------+------------------
  f         | {"test": "test"}
-(1 row)
 
 SELECT job_id FROM alter_job(1001,scheduled:=true);
  job_id 
 --------
    1001
-(1 row)
 
 SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
  scheduled |      config      
 -----------+------------------
  t         | {"test": "test"}
-(1 row)
 
 SELECT job_id FROM alter_job(1001,scheduled:=false);
  job_id 
 --------
    1001
-(1 row)
 
 SELECT scheduled, config FROM timescaledb_information.jobs WHERE job_id = 1001;
  scheduled |      config      
 -----------+------------------
  f         | {"test": "test"}
-(1 row)
 
 -- test updating the job name
 SELECT job_id, application_name FROM alter_job(1001,job_name:='custom_name_2');
  job_id |   application_name   
 --------+----------------------
    1001 | custom_name_2 [1001]
-(1 row)
 
 SELECT job_id, application_name FROM alter_job(2147483647,job_name:='short_name_to_fit');
    job_id   |        application_name        
 ------------+--------------------------------
  2147483647 | short_name_to_fit [2147483647]
-(1 row)
 
 SELECT application_name FROM timescaledb_information.jobs WHERE job_id >= 1001;
         application_name        
 --------------------------------
  custom_name_2 [1001]
  short_name_to_fit [2147483647]
-(2 rows)
 
 -- Done with jobs now, so remove it.
 SELECT delete_job(1001);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(2147483647);
  delete_job 
 ------------
  
-(1 row)
 
 -- reset the sequence to its previous value
 SELECT setval('_timescaledb_config.bgw_job_id_seq', :nextval, false);
  setval 
 --------
    1006
-(1 row)
 
 --test for #2793
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -300,7 +268,6 @@ FROM timescaledb_information.jobs WHERE job_id > 1001;
  job_id |          next_start          | scheduled | schedule_interval 
 --------+------------------------------+-----------+-------------------
    1006 | Mon Jan 01 07:00:00 2018 PST | t         | @ 1 hour
-(1 row)
 
 \x
 SELECT * FROM timescaledb_information.job_stats WHERE job_id > 1001;
@@ -323,7 +290,6 @@ SELECT delete_job(:job_id_1);
  delete_job 
 ------------
  
-(1 row)
 
 -- tests for #3545
 TRUNCATE custom_log;
@@ -377,20 +343,17 @@ SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
 --------------------------
  t
-(1 row)
 
 -- Wait for jobs
 SELECT test.wait_for_job_to_run(:job_id_1, 1);
  wait_for_job_to_run 
 ---------------------
  t
-(1 row)
 
 SELECT test.wait_for_job_to_run(:job_id_2, 1);
  wait_for_job_to_run 
 ---------------------
  t
-(1 row)
 
 -- Check results
 SELECT * FROM custom_log ORDER BY job_id, extra;
@@ -400,44 +363,43 @@ SELECT * FROM custom_log ORDER BY job_id, extra;
    1000 | {"type": "procedure"} | custom_proc2 3 COMMIT procedure | default_perm_user
    1001 | {"type": "procedure"} | custom_proc_nested 1 COMMIT     | default_perm_user
    1001 | {"type": "procedure"} | custom_proc_nested 3 COMMIT     | default_perm_user
-(4 rows)
 
 -- Delete previous jobs
 SELECT delete_job(:job_id_1);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(:job_id_2);
  delete_job 
 ------------
  
-(1 row)
 
 TRUNCATE custom_log;
 -- Forced Exception
 SELECT add_job('custom_proc4', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_3 \gset
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+
 SELECT test.wait_for_job_to_run(:job_id_3, 1);
 INFO:  wait_for_job_to_run: job execution failed
  wait_for_job_to_run 
 ---------------------
  f
-(1 row)
 
 -- Check results
 SELECT * FROM custom_log ORDER BY job_id, extra;
  job_id |         args          |         extra         |   runner   
 --------+-----------------------+-----------------------+------------
    1002 | {"type": "procedure"} | custom_proc4 1 COMMIT | super_user
-(1 row)
 
 -- Delete previous jobs
 SELECT delete_job(:job_id_3);
  delete_job 
 ------------
  
-(1 row)
 
 CREATE TABLE conditions (
   time TIMESTAMP NOT NULL,
@@ -451,7 +413,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
-(1 row)
 
 ALTER TABLE conditions
   SET (
@@ -468,15 +429,18 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
  public            | conditions      | _timescaledb_internal | _hyper_1_1_chunk | Uncompressed       |                        |                         |                         |                         |                      |                       |                       |                      
  public            | conditions      | _timescaledb_internal | _hyper_1_2_chunk | Uncompressed       |                        |                         |                         |                         |                      |                       |                       |                      
  public            | conditions      | _timescaledb_internal | _hyper_1_3_chunk | Uncompressed       |                        |                         |                         |                         |                      |                       |                       |                      
-(3 rows)
 
 -- Compression policy
 SELECT add_compression_policy('conditions', interval '1 day') AS job_id_4 \gset
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+
 SELECT test.wait_for_job_to_run(:job_id_4, 1);
  wait_for_job_to_run 
 ---------------------
  t
-(1 row)
 
 -- Chunk compress stats
 SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
@@ -485,7 +449,6 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
  public            | conditions      | _timescaledb_internal | _hyper_1_1_chunk | Compressed         |                   8192 |                   16384 |                    8192 |                   32768 |                16384 |                 16384 |                  8192 |                 40960
  public            | conditions      | _timescaledb_internal | _hyper_1_2_chunk | Compressed         |                   8192 |                   16384 |                    8192 |                   32768 |                16384 |                 16384 |                  8192 |                 40960
  public            | conditions      | _timescaledb_internal | _hyper_1_3_chunk | Compressed         |                   8192 |                   16384 |                    8192 |                   32768 |                16384 |                 16384 |                  8192 |                 40960
-(3 rows)
 
 --TEST compression job after inserting data into previously compressed chunk
 INSERT INTO conditions
@@ -499,20 +462,22 @@ order by id;
   1 | _hyper_1_1_chunk |      9
   2 | _hyper_1_2_chunk |      9
   3 | _hyper_1_3_chunk |      9
-(3 rows)
 
 --running job second time, wait for it to complete
 select t.schedule_interval FROM alter_job(:job_id_4, next_start=> now() ) t;
  schedule_interval 
 -------------------
  @ 12 hours
-(1 row)
+
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
 
 SELECT test.wait_for_job_to_run(:job_id_4, 2);
  wait_for_job_to_run 
 ---------------------
  t
-(1 row)
 
 SELECT id, table_name, status from _timescaledb_catalog.chunk
 where hypertable_id = (select id from _timescaledb_catalog.hypertable
@@ -523,14 +488,12 @@ order by id;
   1 | _hyper_1_1_chunk |      1
   2 | _hyper_1_2_chunk |      1
   3 | _hyper_1_3_chunk |      1
-(3 rows)
 
 -- Drop the compression job
 SELECT delete_job(:job_id_4);
  delete_job 
 ------------
  
-(1 row)
 
 -- Decompress chunks before create the cagg
 SELECT decompress_chunk(c) FROM show_chunks('conditions') c;
@@ -539,7 +502,6 @@ SELECT decompress_chunk(c) FROM show_chunks('conditions') c;
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
-(3 rows)
 
 -- TEST Continuous Aggregate job
 CREATE MATERIALIZED VIEW conditions_summary_daily
@@ -554,31 +516,32 @@ GROUP BY location, bucket
 WITH NO DATA;
 -- Refresh Continous Aggregate by Job
 SELECT add_job('custom_proc5', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_5 \gset
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+
 SELECT test.wait_for_job_to_run(:job_id_5, 1);
  wait_for_job_to_run 
 ---------------------
  t
-(1 row)
 
 SELECT count(*) FROM conditions_summary_daily;
  count 
 -------
     62
-(1 row)
 
 -- TESTs for alter_job_set_hypertable_id API
 SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, NULL);
  alter_job_set_hypertable_id 
 -----------------------------
                         1004
-(1 row)
 
 SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
   id  |  proc_name   | hypertable_id 
 ------+--------------+---------------
  1004 | custom_proc5 |              
-(1 row)
 
 -- error case, try to associate with a PG relation
 \set ON_ERROR_STOP 0
@@ -590,14 +553,12 @@ SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, 'condition
  alter_job_set_hypertable_id 
 -----------------------------
                         1004
-(1 row)
 
 SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
   id  |  proc_name   | hypertable_id 
 ------+--------------+---------------
  1004 | custom_proc5 |             3
-(1 row)
 
 --verify that job is dropped when cagg is dropped
 DROP MATERIALIZED VIEW conditions_summary_daily;
@@ -606,7 +567,6 @@ SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
  id | proc_name | hypertable_id 
 ----+-----------+---------------
-(0 rows)
 
 -- Cleanup
 DROP TABLE conditions;
@@ -616,13 +576,11 @@ SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 SELECT _timescaledb_functions.restart_background_workers();
  restart_background_workers 
 ----------------------------
  t
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- add test for custom jobs with custom check functions
@@ -672,7 +630,6 @@ select add_job('test_proc_with_check', '5 secs', config => NULL, check_config =>
  add_job 
 ---------
     1005
-(1 row)
 
 select add_job('test_proc_with_check', '5 secs', config => '{"drop_after": "chicken"}', check_config => 'test_config_check_func'::regproc);
 ERROR:  invalid input syntax for type interval: "chicken"
@@ -685,7 +642,6 @@ select config from alter_job(:job_with_func_check_id, config => '{"drop_after":"
           config           
 ---------------------------
  {"drop_after": "5 years"}
-(1 row)
 
 -- test that jobs with an incorrect check function signature will not be registered
 -- these are all incorrect function signatures
@@ -733,7 +689,6 @@ NOTICE:  This message will get printed for both NULL and not NULL config
  add_job 
 ---------
     1007
-(1 row)
 
 -- check done
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func'::regproc) as job_id \gset
@@ -756,7 +711,6 @@ NOTICE:  This message will get printed for both NULL and not NULL config
  job_id | schedule_interval | config |    check_config     
 --------+-------------------+--------+---------------------
    1008 | @ 1 hour          | {}     | public.renamed_func
-(1 row)
 
 -- run alter again, should get a config check
 select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
@@ -764,7 +718,6 @@ NOTICE:  This message will get printed for both NULL and not NULL config
  job_id | schedule_interval | config |    check_config     
 --------+-------------------+--------+---------------------
    1008 | @ 1 hour          | {}     | public.renamed_func
-(1 row)
 
 -- drop the registered check function, verify that alter_job will work and print a warning that
 -- the check is being skipped due to the check function missing
@@ -774,7 +727,6 @@ WARNING:  function public.test_config_check_func_returns_int(config jsonb) not f
  job_id | schedule_interval |       config       |               check_config                
 --------+-------------------+--------------------+-------------------------------------------
    1009 | @ 5 secs          | {"field": "value"} | public.test_config_check_func_returns_int
-(1 row)
 
 -- do not drop the current check function but register a new one
 CREATE OR REPLACE FUNCTION substitute_check_func(config jsonb) RETURNS VOID
@@ -789,14 +741,12 @@ NOTICE:  This message is a substitute of the previously printed one
  job_id | schedule_interval | config |         check_config         
 --------+-------------------+--------+------------------------------
    1008 | @ 1 hour          | {}     | public.substitute_check_func
-(1 row)
 
 select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
 NOTICE:  This message is a substitute of the previously printed one
  job_id | schedule_interval | config |         check_config         
 --------+-------------------+--------+------------------------------
    1008 | @ 1 hour          | {}     | public.substitute_check_func
-(1 row)
 
 RESET client_min_messages;
 -- test an oid that doesn't exist
@@ -819,7 +769,6 @@ select has_function_privilege('user_noexec', 'test_schema.test_config_check_func
  has_function_privilege 
 ------------------------
  f
-(1 row)
 
 \c :TEST_DBNAME user_noexec
 -- user_noexec should not have exec permissions on this function
@@ -837,21 +786,18 @@ NOTICE:  This message will get printed for both NULL and not NULL config
  job_id | schedule_interval | config |    check_config     
 --------+-------------------+--------+---------------------
    1010 | @ 5 secs          | {}     | public.renamed_func
-(1 row)
 
 -- test that we can unregister the check function
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, check_config => 0);
  job_id | schedule_interval | config | check_config 
 --------+-------------------+--------+--------------
    1010 | @ 5 secs          | {}     | 
-(1 row)
 
 -- no message printed now
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_alter, config => '{}');
  job_id | schedule_interval | config | check_config 
 --------+-------------------+--------+--------------
    1010 | @ 5 secs          | {}     | 
-(1 row)
 
 -- test the case where we have a background job that registers jobs with a check fn
 CREATE OR REPLACE PROCEDURE add_scheduled_jobs_with_check(job_id int, config jsonb) LANGUAGE PLPGSQL AS
@@ -862,17 +808,20 @@ END
 $$;
 select add_job('add_scheduled_jobs_with_check', schedule_interval => '1 hour') as last_job_id \gset
 -- wait for enough time
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+
 SELECT test.wait_for_job_to_run(:last_job_id, 1);
  wait_for_job_to_run 
 ---------------------
  t
-(1 row)
 
 select total_runs, total_successes, last_run_status from timescaledb_information.job_stats where job_id = :last_job_id;
  total_runs | total_successes | last_run_status 
 ------------+-----------------+-----------------
           1 |               1 | Success
-(1 row)
 
 -- test coverage for alter_job
 -- registering an invalid oid
@@ -919,7 +868,6 @@ CREATE TABLE sensor_data
 );
 SELECT FROM create_hypertable('sensor_data','time');
 --
-(1 row)
 
 SELECT '2022-10-06 00:00:00+00' as start_date_sd \gset
 INSERT INTO sensor_data
@@ -960,7 +908,6 @@ SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _time
                                                                                                       alter_job                                                                                                      
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1014,"@ 12 hours","@ 0",-1,"@ 1 hour",t,"{""recompress"": true, ""hypertable_id"": 4, ""compress_after"": ""@ 1 min""}",-infinity,_timescaledb_functions.policy_compression_check,f,,,"Columnstore Policy [1014]")
-(1 row)
 
 -- verify that there are other uncompressed new chunks that need to be compressed
 SELECT count(*) > 1
@@ -969,7 +916,6 @@ SELECT count(*) > 1
  ?column? 
 ----------
  t
-(1 row)
 
 -- disable notice/warning as the new_uncompressed_chunk_name
 -- is dynamic and it will be printed in those messages.
@@ -982,7 +928,6 @@ SELECT status FROM _timescaledb_catalog.chunk where table_name = :'new_uncompres
  status 
 --------
       3
-(1 row)
 
 -- confirm all the other new chunks are now compressed despite
 -- facing an error when trying to compress :'new_uncompressed_chunk_name'
@@ -992,21 +937,18 @@ SELECT count(*) = 0
  ?column? 
 ----------
  t
-(1 row)
 
 -- cleanup
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 DROP TABLE sensor_data;
 SELECT _timescaledb_functions.restart_background_workers();
  restart_background_workers 
 ----------------------------
  t
-(1 row)
 
 -- Github issue #5537
 -- Proc that waits until the given job enters the expected state
@@ -1039,6 +981,11 @@ $$;
 -- before the first one by adjusting the initial_start values
 SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz + interval '2s') AS job_id_1 \gset
 SELECT add_job('proc_that_sleeps', '1h', initial_start => now()::timestamptz - interval '2s') AS job_id_2 \gset
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+
 -- wait for the jobs to start running job_2 will start running first
 CALL wait_for_job_status(:job_id_2, 'Running');
 CALL wait_for_job_status(:job_id_1, 'Running');
@@ -1056,21 +1003,18 @@ SELECT job_id, job_status, next_start,
    1015 | Running    | -infinity  |          1 |               0 |              0
    1016 | Running    | -infinity  |          1 |               0 |              0
    1017 | Running    | -infinity  |          1 |               0 |              0
-(3 rows)
 
 SELECT job_id, err_message
   FROM timescaledb_information.job_errors
   WHERE job_id IN (:job_id_1, :job_id_2, :job_id_3);
  job_id | err_message 
 --------+-------------
-(0 rows)
 
 -- cleanup
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 CALL wait_for_job_status(:job_id_1, 'Scheduled');
 CALL wait_for_job_status(:job_id_2, 'Scheduled');
@@ -1079,19 +1023,16 @@ SELECT delete_job(:job_id_1);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(:job_id_2);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(:job_id_3);
  delete_job 
 ------------
  
-(1 row)
 
 CREATE OR REPLACE FUNCTION ts_test_bgw_job_function_call_string(job_id INTEGER) RETURNS text
 AS :MODULE_PATHNAME LANGUAGE C STABLE STRICT;
@@ -1105,25 +1046,21 @@ SELECT ts_test_bgw_job_function_call_string(:job_func);
   ts_test_bgw_job_function_call_string   
 -----------------------------------------
  SELECT public.custom_func('1018', NULL)
-(1 row)
 
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
  ts_test_bgw_job_function_call_string  
 ---------------------------------------
  CALL public.custom_proc('1019', NULL)
-(1 row)
 
 SELECT delete_job(:job_func);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(:job_proc);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT add_job('custom_func', '1h', config => '{"type":"function"}'::jsonb) AS job_func \gset
 SELECT add_job('custom_proc', '1h', config => '{"type":"procedure"}'::jsonb) AS job_proc \gset
@@ -1131,13 +1068,11 @@ SELECT ts_test_bgw_job_function_call_string(:job_func);
            ts_test_bgw_job_function_call_string            
 -----------------------------------------------------------
  SELECT public.custom_func('1020', '{"type": "function"}')
-(1 row)
 
 SELECT ts_test_bgw_job_function_call_string(:job_proc);
            ts_test_bgw_job_function_call_string           
 ----------------------------------------------------------
  CALL public.custom_proc('1021', '{"type": "procedure"}')
-(1 row)
 
 -- Remove the procedure and let's check it fallingback to PROKIND_FUNCTION
 DROP PROCEDURE custom_proc(jobid int, args jsonb);
@@ -1145,7 +1080,6 @@ SELECT ts_test_bgw_job_function_call_string(:job_proc);
             ts_test_bgw_job_function_call_string            
 ------------------------------------------------------------
  SELECT public.custom_proc('1021', '{"type": "procedure"}')
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- Mess with pg catalog to don't identify the PROKIND
@@ -1159,11 +1093,9 @@ SELECT delete_job(:job_func);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT delete_job(:job_proc);
  delete_job 
 ------------
  
-(1 row)
 

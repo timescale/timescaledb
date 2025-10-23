@@ -5,11 +5,9 @@
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float, tag text);
 ALTER TABLE ht_metrics_compressed SET (autovacuum_enabled = false);
 SELECT create_hypertable('ht_metrics_compressed','time',create_default_indexes:=false);
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable          
 ------------------------------------
  (1,public,ht_metrics_compressed,t)
-(1 row)
 
 ALTER TABLE ht_metrics_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time');
 -- helper function: float -> pseudorandom float [0..1].
@@ -29,13 +27,11 @@ SELECT count(compress_chunk(c, true)) FROM show_chunks('ht_metrics_compressed') 
  count 
 -------
     52
-(1 row)
 
 select count(*) from ht_metrics_compressed;
  count  
 --------
  615168
-(1 row)
 
 -- Helper function that returns the amount of memory currently allocated in a
 -- given memory context.
@@ -53,7 +49,6 @@ select * from log
 ;
  n | b | decompress_chunk 
 ---+---+------------------
-(0 rows)
 
 -- Same as above but for compression.
 with log as materialized (
@@ -65,14 +60,12 @@ select * from log
 ;
  n | b | compress_chunk 
 ---+---+----------------
-(0 rows)
 
 -- Test recompression with small batches.
 select count(decompress_chunk(c, true)) from show_chunks('ht_metrics_compressed') c;
  count 
 -------
     52
-(1 row)
 
 alter table ht_metrics_compressed set (timescaledb.compress,
     timescaledb.compress_segmentby='time', timescaledb.compress_orderby='value');
@@ -80,7 +73,6 @@ select count(compress_chunk(c, true)) from show_chunks('ht_metrics_compressed') 
  count 
 -------
     52
-(1 row)
 
 update ht_metrics_compressed set value = 0 where value < 1 and value > -1;
 with
@@ -104,5 +96,4 @@ select * from log
 ;
  n | b 
 ---+---
-(0 rows)
 

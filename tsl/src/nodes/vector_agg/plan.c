@@ -18,8 +18,7 @@
 
 #include "exec.h"
 #include "import/list.h"
-#include "nodes/columnar_scan/columnar_scan.h"
-#include "nodes/decompress_chunk/vector_quals.h"
+#include "nodes/columnar_scan/vector_quals.h"
 #include "nodes/vector_agg.h"
 #include "utils.h"
 
@@ -93,10 +92,10 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 		/*
 		 * Reference into the output targetlist of the child scan node.
 		 */
-		TargetEntry *decompress_chunk_tentry =
+		TargetEntry *columnar_scan_tentry =
 			castNode(TargetEntry, list_nth(custom->scan.plan.targetlist, var->varattno - 1));
 
-		return resolve_outer_special_vars_mutator((Node *) decompress_chunk_tentry->expr, context);
+		return resolve_outer_special_vars_mutator((Node *) columnar_scan_tentry->expr, context);
 	}
 
 	if (var->varno == INDEX_VAR)
@@ -177,25 +176,6 @@ vector_agg_plan_create(Plan *childplan, Agg *agg, List *resolved_targetlist,
 	vector_agg->custom_private = ts_new_list(T_List, VASI_Count);
 	lfirst(list_nth_cell(vector_agg->custom_private, VASI_GroupingType)) =
 		makeInteger(grouping_type);
-
-	if (is_columnar_scan(childplan))
-	{
-		CustomScan *custom = castNode(CustomScan, childplan);
-
-		/*
-		 * ColumnarScan should not project when doing vectorized
-		 * aggregation. If it projects, it will turn the arrow slot into a set
-		 * of virtual slots and the vector data will not be passed up to
-		 * VectorAgg.
-		 *
-		 * To make ColumnarScan avoid projection, unset the custom scan node's
-		 * projection flag. Normally, it is to late to change this flag as
-		 * PostgreSQL already planned projection based on it. However,
-		 * ColumnarScan rechecks this flag before it begins execution and
-		 * ignores any projection if the flag is not set.
-		 */
-		custom->flags &= ~CUSTOMPATH_SUPPORT_PROJECTION;
-	}
 
 	return (Plan *) vector_agg;
 }
@@ -374,6 +354,12 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 		{
 			switch (typlen)
 			{
+				case 1:
+#ifdef TS_USE_UMASH
+					return VAGT_HashSerialized;
+#else
+					return VAGT_Invalid;
+#endif
 				case 2:
 					return VAGT_HashSingleFixed2;
 				case 4:
@@ -386,11 +372,14 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
 			}
 		}
 #ifdef TS_USE_UMASH
-		else
+		/*
+		 * We also have the UUID type which is by-reference and has a
+		 * columnar in-memory representation, but no specialized single-column
+		 * vectorized grouping support. It can use the serialized grouping
+		 * strategy.
+		 */
+		else if (single_grouping_var->vartype == TEXTOID)
 		{
-			Ensure(single_grouping_var->vartype == TEXTOID,
-				   "invalid vector type %d for grouping",
-				   single_grouping_var->vartype);
 			return VAGT_HashSingleText;
 		}
 #endif
@@ -411,19 +400,20 @@ get_vectorized_grouping_type(const VectorQualInfo *vqinfo, Agg *agg, List *resol
  * aggregation node in the plan tree. This is used for testing.
  */
 bool
-has_vector_agg_node(Plan *plan, bool *has_normal_agg)
+has_vector_agg_node(Plan *plan, bool *has_postgres_partial_agg)
 {
-	if (IsA(plan, Agg))
+	if (IsA(plan, Agg) && castNode(Agg, plan)->aggsplit == AGGSPLIT_INITIAL_SERIAL)
 	{
-		*has_normal_agg = true;
+		*has_postgres_partial_agg = true;
+		return false;
 	}
 
-	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_normal_agg))
+	if (plan->lefttree && has_vector_agg_node(plan->lefttree, has_postgres_partial_agg))
 	{
 		return true;
 	}
 
-	if (plan->righttree && has_vector_agg_node(plan->righttree, has_normal_agg))
+	if (plan->righttree && has_vector_agg_node(plan->righttree, has_postgres_partial_agg))
 	{
 		return true;
 	}
@@ -457,7 +447,7 @@ has_vector_agg_node(Plan *plan, bool *has_normal_agg)
 		ListCell *lc;
 		foreach (lc, append_plans)
 		{
-			if (has_vector_agg_node(lfirst(lc), has_normal_agg))
+			if (has_vector_agg_node(lfirst(lc), has_postgres_partial_agg))
 			{
 				return true;
 			}
@@ -500,22 +490,10 @@ vectoragg_plan_possible(Plan *childplan, const List *rtable, VectorQualInfo *vqi
 
 	CustomScan *customscan = castNode(CustomScan, childplan);
 
-	if (strcmp(customscan->methods->CustomName, "DecompressChunk") == 0)
+	if (strcmp(customscan->methods->CustomName, "ColumnarScan") == 0)
 	{
-		vectoragg_plan_decompress_chunk(childplan, vqi);
+		vectoragg_plan_columnar_scan(childplan, vqi);
 		return true;
-	}
-
-	/* We're looking for a baserel scan */
-	if (customscan->scan.scanrelid > 0)
-	{
-		RangeTblEntry *rte = rt_fetch(customscan->scan.scanrelid, rtable);
-
-		if (rte && ts_is_hypercore_am(ts_get_rel_am(rte->relid)))
-		{
-			vectoragg_plan_tam(childplan, rtable, vqi);
-			return true;
-		}
 	}
 
 	return false;

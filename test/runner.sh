@@ -26,6 +26,19 @@ TEST_DBNAME="db_${CURRENT_TEST%%-[0-9][0-9]}"
 read -r VERSION < ${CURRENT_DIR}/../version.config
 EXT_VERSION=${VERSION##version = }
 
+# on macos check if proper timeout is available
+if [ "$(uname)" == "Darwin" ]; then
+  if ! command -v gtimeout >/dev/null 2>&1
+    then
+      TIMEOUT_CMD=""
+    else
+      TIMEOUT_CMD="gtimeout -v 120s"
+  fi
+else
+  TIMEOUT_CMD="timeout -v 120s"
+fi
+
+
 #docker doesn't set user
 USER=${USER:-$(whoami)}
 
@@ -118,7 +131,7 @@ export TEST_DBNAME
 # we strip out any output between <exclude_from_test></exclude_from_test>
 # and the part about memory usage in EXPLAIN ANALYZE output of Sort nodes
 # also ignore the Postgres rehashing catalog debug messages from 'src/backend/utils/cache/catcache.c'
-${PSQL} -U ${TEST_PGUSER} \
+${TIMEOUT_CMD} ${PSQL} -U ${TEST_PGUSER} \
      -v ON_ERROR_STOP=1 \
      -v VERBOSITY=terse \
      -v ECHO=all \

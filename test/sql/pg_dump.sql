@@ -77,8 +77,7 @@ SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id, s
 SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
 
--- Show all index mappings
-SELECT * FROM _timescaledb_catalog.chunk_index;
+-- Show all constraints
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
@@ -105,14 +104,6 @@ SHOW timescaledb.restoring;
 SHOW timescaledb.restoring;
 
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
-
--- Inserting with restoring ON in current session causes tuples to be
--- inserted on main table, but this should be protected by the insert
--- blocking trigger.
-\set ON_ERROR_STOP 0
-INSERT INTO "test_schema"."two_Partitions"("timeCustom", device_id, series_0, series_1)
-VALUES (1357894000000000000, 'dev5', 1.5, 2);
-\set ON_ERROR_STOP 1
 
 -- Now run our post-restore function.
 SELECT timescaledb_post_restore();
@@ -149,7 +140,6 @@ SELECT * FROM "test_schema"."two_Partitions" ORDER BY "timeCustom", device_id, s
 SELECT * FROM _timescaledb_internal._hyper_1_1_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
 SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", device_id, series_0, series_1;
 
-SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
 --Chunk sizing function should have been restored

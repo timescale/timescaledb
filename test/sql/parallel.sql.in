@@ -6,7 +6,7 @@
 --so that we need to generate queries only once.
 
 -- output with analyze is not stable because it depends on worker assignment
-\set PREFIX 'EXPLAIN (costs off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off)'
 
 \set CHUNK1 _timescaledb_internal._hyper_1_1_chunk
 \set CHUNK2 _timescaledb_internal._hyper_1_2_chunk
@@ -24,13 +24,13 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost TO 0;
 
-EXPLAIN (costs off) SELECT first(i, j) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT first(i, j) FROM "test";
 SELECT first(i, j) FROM "test";
 
-EXPLAIN (costs off) SELECT last(i, j) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT last(i, j) FROM "test";
 SELECT last(i, j) FROM "test";
 
-EXPLAIN (costs off) SELECT time_bucket('1 second', ts) sec, last(i, j)
+EXPLAIN (buffers off, costs off) SELECT time_bucket('1 second', ts) sec, last(i, j)
 FROM "test"
 GROUP BY sec
 ORDER BY sec
@@ -51,19 +51,19 @@ ORDER BY sec
 LIMIT 5;
 
 --test variants of histogram
-EXPLAIN (costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT histogram(i, 1, 1000000, 2) FROM "test";
 SELECT histogram(i, 1, 1000000, 2) FROM "test";
 
-EXPLAIN (costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT histogram(i, 1,1000001,10) FROM "test";
 SELECT histogram(i, 1, 1000001, 10) FROM "test";
 
-EXPLAIN (costs off) SELECT histogram(i, 0,100000,5) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT histogram(i, 0,100000,5) FROM "test";
 SELECT histogram(i, 0, 100000, 5) FROM "test";
 
-EXPLAIN (costs off) SELECT histogram(i, 10,100000,5) FROM "test";
+EXPLAIN (buffers off, costs off) SELECT histogram(i, 10,100000,5) FROM "test";
 SELECT histogram(i, 10, 100000, 5) FROM "test";
 
-EXPLAIN (costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
+EXPLAIN (buffers off, costs off) SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
 SELECT histogram(NULL, 10,100000,5) FROM "test" WHERE  i = coalesce(-1,j);
 
 -- test parallel ChunkAppend

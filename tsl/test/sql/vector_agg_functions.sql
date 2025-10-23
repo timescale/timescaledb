@@ -4,9 +4,6 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
--- Uncomment to run this test with hypercore TAM
---set timescaledb.default_hypercore_use_access_method=true;
-
 -- helper function: float -> pseudorandom float [-0.5..0.5]
 CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
     SELECT hashfloat8(x::float8) / pow(2, 32)
@@ -133,7 +130,7 @@ select
             function, variable)
 from
     unnest(array[
-        'explain (costs off) ',
+        'explain (buffers off, costs off) ',
         null]) explain,
     unnest(array[
         't',

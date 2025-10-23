@@ -64,10 +64,8 @@ CALL refresh_continuous_aggregate('daily_temp', '2020-05-02', '2020-05-05 17:00'
 SELECT * FROM daily_temp
 ORDER BY day DESC, device;
 
--- Refresh the rest (and try DEBUG output)
-SET client_min_messages TO DEBUG1;
+-- Refresh the rest
 CALL refresh_continuous_aggregate('daily_temp', '2020-04-30', '2020-05-04');
-RESET client_min_messages;
 
 -- Compare the aggregate to the equivalent query on the source table
 SELECT * FROM daily_temp
@@ -419,3 +417,68 @@ INSERT INTO conditions_decompress_limit SELECT '2020-01-01','d' || i::text, 2.0 
 SET timescaledb.max_tuples_decompressed_per_dml_transaction TO 1;
 CALL refresh_continuous_aggregate('daily_temp_decompress_limit', NULL, NULL);
 SHOW timescaledb.max_tuples_decompressed_per_dml_transaction;
+
+-- More tests for forceful refreshment
+TRUNCATE conditions;
+
+INSERT INTO conditions
+VALUES
+  -- daily bucket 2025-07-04 10:00:00+00
+  ('2025-07-04 10:00:00+00', 1, 1),
+  ('2025-07-04 10:05:00+00', 1, 1),
+  -- daily bucket 2025-07-04 11:00:00+00
+  ('2025-07-04 11:00:00+00', 1, 1),
+  ('2025-07-04 11:05:00+00', 1, 1),
+  -- daily bucket 2025-07-04 12:00:00+00
+  ('2025-07-04 12:00:00+00', 1, 1),
+  ('2025-07-04 12:05:00+00', 1, 1);
+
+CREATE MATERIALIZED VIEW conditions_by_hour
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket(INTERVAL '1 hour', time) AS bucket, -- Fixed bucket size
+  device,
+  MAX(temp),
+  MIN(temp),
+  COUNT(*)
+FROM conditions
+GROUP BY 1, 2
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 10:00:00+00'::timestamptz, '2025-07-04 12:00:00+00'::timestamptz);
+-- It should return 2 buckets
+SELECT * FROM conditions_by_hour ORDER BY bucket;
+
+CALL refresh_continuous_aggregate('conditions_by_hour', '2025-07-04 10:00:00+00'::timestamptz, '2025-07-04 12:00:00+00'::timestamptz, force=>true);
+-- It should return the same 2 buckets of previous query
+SELECT * FROM conditions_by_hour ORDER BY bucket;
+
+-- Monthly buckets
+INSERT INTO conditions
+VALUES
+  -- monthly bucket 2025-05-01 00:00:00+00
+  ('2025-05-04 10:00:00+00', 1, 1),
+  ('2025-05-04 10:05:00+00', 1, 1),
+  -- monthly bucket 2025-06-01 00:00:00+00
+  ('2025-06-04 11:00:00+00', 1, 1),
+  ('2025-06-04 11:05:00+00', 1, 1);
+
+CREATE MATERIALIZED VIEW conditions_by_month
+WITH (timescaledb.continuous) AS
+SELECT
+  time_bucket(INTERVAL '1 month', time) AS bucket, -- Variable bucket size
+  device,
+  MAX(temp),
+  MIN(temp),
+  COUNT(*)
+FROM conditions
+GROUP BY 1, 2
+WITH NO DATA;
+
+CALL refresh_continuous_aggregate('conditions_by_month', '2025-05-01 00:00:00+00'::timestamptz, '2025-07-01 12:00:00+00'::timestamptz);
+-- It should return 2 buckets
+SELECT * FROM conditions_by_month ORDER BY bucket;
+
+CALL refresh_continuous_aggregate('conditions_by_month', '2025-05-01 00:00:00+00'::timestamptz, '2025-07-01 12:00:00+00'::timestamptz, force=>true);
+-- It should return the same 2 buckets of previous query
+SELECT * FROM conditions_by_month ORDER BY bucket;

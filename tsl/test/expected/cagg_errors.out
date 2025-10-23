@@ -18,7 +18,6 @@ select table_name from create_hypertable( 'conditions', 'timec');
  table_name 
 ------------
  conditions
-(1 row)
 
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.myfill = 1)
 as
@@ -26,6 +25,7 @@ select location , min(temperature)
 from conditions
 group by time_bucket('1d', timec), location WITH NO DATA;
 ERROR:  unrecognized parameter "timescaledb.myfill"
+HINT:  Valid timescaledb parameters are: continuous, create_group_indexes, materialized_only, columnstore, finalized, chunk_interval, segmentby, orderby, compress_chunk_interval
 --valid PG option
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false, check_option = LOCAL )
 as
@@ -59,7 +59,7 @@ Select location, count(*) from conditions
  group by time_bucket('1week', timec) , location)
 select * from m1 WITH NO DATA;
 ERROR:  invalid continuous aggregate query
-DETAIL:  CTEs, subqueries and set-returning functions are not supported by continuous aggregates.
+DETAIL:  CTEs and subqueries are not supported by continuous aggregates.
 --with DISTINCT ON
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 as
@@ -233,19 +233,15 @@ ERROR:  invalid bucket width for time bucket function
 -- row security on table
 create table rowsec_tab( a bigint, b integer, c integer);
 select table_name from create_hypertable( 'rowsec_tab', 'a', chunk_time_interval=>10);
-NOTICE:  adding not-null constraint to column "a"
-DETAIL:  Dimensions cannot have NULL values.
  table_name 
 ------------
  rowsec_tab
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0)::bigint FROM rowsec_tab $$;
 SELECT set_integer_now_func('rowsec_tab', 'integer_now_test');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 alter table rowsec_tab ENABLE ROW LEVEL SECURITY;
 create policy rowsec_tab_allview ON rowsec_tab FOR SELECT USING(true);
@@ -270,7 +266,6 @@ select table_name from create_hypertable( 'conditions', 'timec');
  table_name 
 ------------
  conditions
-(1 row)
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -319,14 +314,12 @@ select table_name from create_hypertable( 'conditions', 'timec', chunk_time_inte
  table_name 
 ------------
  conditions
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test_s() returns smallint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0)::smallint FROM conditions $$;
 SELECT set_integer_now_func('conditions', 'integer_now_test_s');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 create materialized view mat_with_test( timec, minl, sumt , sumh)
@@ -366,14 +359,12 @@ select table_name from create_hypertable( 'conditions', 'timec', chunk_time_inte
  table_name 
 ------------
  conditions
-(1 row)
 
 CREATE OR REPLACE FUNCTION integer_now_test_b() returns bigint LANGUAGE SQL STABLE as $$ SELECT coalesce(max(timec), 0)::bigint FROM conditions $$;
 SELECT set_integer_now_func('conditions', 'integer_now_test_b');
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
 create materialized view mat_with_test( timec, minl, sumt , sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -387,11 +378,9 @@ CREATE FUNCTION text_part_func(TEXT) RETURNS BIGINT
     LANGUAGE SQL IMMUTABLE;
 CREATE TABLE text_time(time TEXT);
     SELECT create_hypertable('text_time', 'time', chunk_time_interval => 10, time_partitioning_func => 'text_part_func');
-NOTICE:  adding not-null constraint to column "time"
    create_hypertable    
 ------------------------
  (9,public,text_time,t)
-(1 row)
 
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
@@ -420,7 +409,6 @@ SELECT create_hypertable('measurements', 'time');
      create_hypertable      
 ----------------------------
  (10,public,measurements,t)
-(1 row)
 
 INSERT INTO measurements VALUES ('2019-03-04 13:30', 1, 1.3);
 -- Add a continuous aggregate on the measurements table and a policy
@@ -503,14 +491,13 @@ select create_hypertable('i2980','time');
   create_hypertable  
 ---------------------
  (12,public,i2980,t)
-(1 row)
 
 create materialized view i2980_cagg with (timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
 NOTICE:  continuous aggregate "i2980_cagg" is already up-to-date
 select add_continuous_aggregate_policy('i2980_cagg',NULL,NULL,'4h') AS job_id \gset
 \set ON_ERROR_STOP 0
 select alter_job(:job_id,config:='{"end_offset": null, "start_offset": null, "mat_hypertable_id": 1000}');
-ERROR:  configuration materialization hypertable id 1000 not found
+ERROR:  invalid materialized hypertable ID: 1000
 --test creating continuous aggregate with compression enabled --
 CREATE MATERIALIZED VIEW  i2980_cagg2 with (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.compress)
 AS SELECT time_bucket('1h',time), avg(7) FROM i2980 GROUP BY 1;
@@ -535,7 +522,6 @@ SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_14_3_chunk
-(1 row)
 
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
 ERROR:  cannot disable columnstore on hypertable with columnstore chunks
@@ -549,7 +535,6 @@ select add_continuous_aggregate_policy('i2980_cagg2', interval '10 day', interva
  job_id 
 --------
    1002
-(1 row)
 
 SELECT add_compression_policy('i2980_cagg', '8 day'::interval);
 ERROR:  columnstore not enabled on continuous aggregate "i2980_cagg"
@@ -572,7 +557,6 @@ SELECT count(*) FROM (select decompress_chunk(ch) FROM show_chunks('i2980_cagg2'
  count 
 -------
      1
-(1 row)
 
 ALTER MATERIALIZED VIEW i2980_cagg2 SET (timescaledb.compress = 'false');
 SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
@@ -583,12 +567,8 @@ SELECT table_name FROM create_hypertable('comp_ht_test','time');
   table_name  
 --------------
  comp_ht_test
-(1 row)
 
 ALTER TABLE comp_ht_test SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "comp_ht_test" is set to ""
-NOTICE:  default order by for hypertable "comp_ht_test" is set to ""time" DESC"
 SELECT
   format('%I.%I', ht.schema_name, ht.table_name) AS "INTERNALTABLE"
 FROM

@@ -8,14 +8,12 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step Sc: COMMIT;
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter');
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step Rc: COMMIT;
 
@@ -27,7 +25,6 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step Sc: COMMIT;
@@ -35,7 +32,6 @@ step R1: <... completed>
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step Rc: COMMIT;
 
@@ -47,7 +43,6 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step R1: <... completed>
@@ -61,7 +56,6 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step Rc: COMMIT;
 step S1: SELECT * FROM ts_reorder_test;
@@ -70,7 +64,6 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step Sc: COMMIT;
 
@@ -80,7 +73,6 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step S1: SELECT * FROM ts_reorder_test; <waiting ...>
 step Rc: COMMIT;
@@ -90,7 +82,6 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step Sc: COMMIT;
 
@@ -100,7 +91,6 @@ step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1),
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step S1: SELECT * FROM ts_reorder_test; <waiting ...>
 step S1: <... completed>
@@ -116,7 +106,6 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step Bc: COMMIT;
 step R1: <... completed>
@@ -131,7 +120,6 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step Bc: COMMIT;
@@ -148,7 +136,6 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step Sc: COMMIT;
 step Bc: COMMIT;
@@ -156,7 +143,6 @@ step R1: <... completed>
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step Rc: COMMIT;
 
@@ -167,7 +153,6 @@ time|temp|location
    1|23.4|       1
   11|21.3|       2
   21|19.5|       3
-(3 rows)
 
 step R1: SELECT reorder_chunk_i((SELECT show_chunks('ts_reorder_test') LIMIT 1), 'ts_reorder_test_time_idx', wait_on => 'waiter'); <waiting ...>
 step Sc: COMMIT;
@@ -176,6 +161,5 @@ step R1: <... completed>
 reorder_chunk_i
 ---------------
                
-(1 row)
 
 step Rc: COMMIT;

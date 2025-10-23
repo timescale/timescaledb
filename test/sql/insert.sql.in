@@ -70,7 +70,7 @@ WITH insert_cte as (
 	RETURNING *)
 SELECT * FROM insert_cte;
 
-EXPLAIN (analyze, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
+EXPLAIN (analyze, buffers off, costs off, timing off) --can't turn summary off in 9.6 so instead grep it away at end.
 WITH insert_cte as (
 	INSERT INTO one_space_test VALUES
 		('2001-01-01 01:03:01', 1.0, 'device')
@@ -78,16 +78,16 @@ WITH insert_cte as (
 SELECT 1 \g | grep -v "Planning" | grep -v "Execution"
 
 -- INSERTs can exclude chunks based on constraints
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
-EXPLAIN (costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i < 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i = 1;
+EXPLAIN (buffers off, costs off) INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
 INSERT INTO chunk_assert_fail SELECT i, j FROM chunk_assert_fail WHERE i > 1;
 
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
+EXPLAIN (buffers off, costs off) INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time > '-infinity' LIMIT 1;
 INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time < 'infinity' LIMIT 1;
 INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time >= 'infinity' LIMIT 1;
 INSERT INTO one_space_test SELECT * FROM one_space_test WHERE time <= '-infinity' LIMIT 1;
@@ -98,13 +98,13 @@ SELECT create_hypertable('timestamp_inf', 'time');
 
 INSERT INTO timestamp_inf VALUES ('2018/01/02'), ('2019/01/02');
 
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time < 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time >= 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time <= '-infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
+EXPLAIN (buffers off, costs off) INSERT INTO timestamp_inf SELECT * FROM timestamp_inf
     WHERE time > '-infinity' LIMIT 1;
 
 CREATE TABLE date_inf(time DATE);
@@ -112,13 +112,13 @@ SELECT create_hypertable('date_inf', 'time');
 
 INSERT INTO date_inf VALUES ('2018/01/02'), ('2019/01/02');
 
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time < 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time >= 'infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time <= '-infinity' LIMIT 1;
-EXPLAIN (costs off) INSERT INTO date_inf SELECT * FROM date_inf
+EXPLAIN (buffers off, costs off) INSERT INTO date_inf SELECT * FROM date_inf
     WHERE time > '-infinity' LIMIT 1;
 
 -- test INSERT with cached plans / plpgsql functions
@@ -164,7 +164,7 @@ SELECT create_hypertable(
 	if_not_exists => TRUE,
 	migrate_data => TRUE
 );
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 INSERT INTO readings
 SELECT '2020-05-09 10:34:35.296288+00', 1, 0
 WHERE NOT EXISTS (
@@ -209,4 +209,49 @@ ALTER TABLE i3037 ADD COLUMN value float DEFAULT 0;
 
 INSERT INTO i3037 VALUES ('2000-01-01');
 INSERT INTO i3037 VALUES ('2000-01-01') ON CONFLICT(time) DO UPDATE SET value = EXCLUDED.value;
+
+-- test inserting into chunks directly
+CREATE TABLE direct_insert(time timestamptz, meta text) WITH (tsdb.hypertable);
+
+INSERT INTO direct_insert VALUES ('2020-01-01');
+SELECT show_chunks('direct_insert') AS "CHUNK" \gset
+
+--should have ModifyHyperable node
+EXPLAIN (costs off, timing off, summary off) INSERT INTO :CHUNK VALUES ('2020-01-01');
+
+-- correct time range should succeed
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+-- incorrect time range should fail
+\set ON_ERROR_STOP 0
+INSERT INTO :CHUNK VALUES ('2020-01-01'), ('2021-01-01') RETURNING *;
+INSERT INTO :CHUNK VALUES ('2025-01-01') RETURNING *;
+\set ON_ERROR_STOP 1
+
+-- test that triggers on chunks work
+CREATE FUNCTION test_trigger() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'trigger called';
+  NEW.meta = 'triggered';
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER test_trigger BEFORE INSERT ON direct_insert FOR EACH ROW EXECUTE PROCEDURE test_trigger();
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+
+-- test upsert
+DELETE FROM direct_insert;
+ALTER TABLE direct_insert ADD CONSTRAINT direct_insert_pkey PRIMARY KEY (time);
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+
+-- DO NOTHING should succeed
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT DO NOTHING RETURNING *;
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET meta = 'update' RETURNING *;
+
+\set ON_ERROR_STOP 0
+-- conflict should fail
+INSERT INTO :CHUNK VALUES ('2020-01-01') RETURNING *;
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = '2000-01-01' RETURNING *;
+INSERT INTO :CHUNK VALUES ('2020-01-01') ON CONFLICT (time) DO UPDATE SET time = EXCLUDED.time + '1 year' RETURNING *;
+\set ON_ERROR_STOP 1
 

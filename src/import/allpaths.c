@@ -195,8 +195,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 			 */
 			Assert(chunk != NULL);
 
-			if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk) &&
-				!ts_is_hypercore_am(chunk->amoid))
+			if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk))
 			{
 				child_rel->indexlist = NIL;
 			}
@@ -482,6 +481,12 @@ set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte
 		case RTE_RESULT:
 			/* RESULT RTEs, in themselves, are no problem. */
 			break;
+#if PG18_GE
+		case RTE_GROUP:
+			/* Shouldn't happen; we're only considering baserels here. */
+			Assert(false);
+			return;
+#endif
 	}
 
 	/*

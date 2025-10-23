@@ -15,7 +15,6 @@ ts_test_next_scheduled_execution_slot('10 year', :'finish_time'::timestamptz, :'
                 1 yr                 |            1 yr timezone            |                10 yr                |           10 yr timezone            
 -------------------------------------+-------------------------------------+-------------------------------------+-------------------------------------
  Tue Jan 02 01:53:14.059771 2024 PST | Tue Jan 02 01:53:14.059771 2024 PST | Sun Jan 02 01:53:14.059771 2033 PST | Sun Jan 02 01:53:14.059771 2033 PST
-(1 row)
 
 -- weeks
 select ts_test_next_scheduled_execution_slot('1 week', :'finish_time'::timestamptz, :'start_time'::timestamptz) as "1 week",
@@ -25,7 +24,6 @@ ts_test_next_scheduled_execution_slot('2 week', :'finish_time'::timestamptz, :'s
                1 week                |           1 week timezone           |               2 week                |           2 week timezone           
 -------------------------------------+-------------------------------------+-------------------------------------+-------------------------------------
  Mon Jan 09 01:53:14.059771 2023 PST | Mon Jan 09 01:53:14.059771 2023 PST | Mon Jan 16 01:53:14.059771 2023 PST | Mon Jan 16 01:53:14.059771 2023 PST
-(1 row)
 
 -- months
 select ts_test_next_scheduled_execution_slot('1 month', :'finish_time'::timestamptz, :'start_time'::timestamptz) as "1 month",
@@ -35,7 +33,6 @@ ts_test_next_scheduled_execution_slot('2 month', :'finish_time'::timestamptz, :'
                1 month               |          1 month timezone           |               2 month               |          2 month timezone           
 -------------------------------------+-------------------------------------+-------------------------------------+-------------------------------------
  Thu Feb 02 01:53:14.059771 2023 PST | Thu Feb 02 01:53:14.059771 2023 PST | Thu Mar 02 01:53:14.059771 2023 PST | Thu Mar 02 01:53:14.059771 2023 PST
-(1 row)
 
 -- timezone in Berlin changes between 1 and 2 am
 \set BUCKET_WIDTH_WINTER_SUMMER 'INTERVAL \'1 hour\''
@@ -63,13 +60,11 @@ select :START_TIME_BEFORE_SUMMER_SWITCH as initial_start_summer_switch, :FINISH_
  initial_start_summer_switch  | first_finish_time_summer_switch 
 ------------------------------+---------------------------------
  Sun Mar 27 01:00:00 2022 CET | Sun Mar 27 01:19:20 2022 CET
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Mar 27 03:00:00 2022 CEST | Sun Mar 27 03:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -77,7 +72,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Mar 27 04:00:00 2022 CEST | Sun Mar 27 04:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -85,7 +79,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Mar 27 05:00:00 2022 CEST | Sun Mar 27 05:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -93,7 +86,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Mar 27 06:00:00 2022 CEST | Sun Mar 27 06:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -101,7 +93,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Mar 27 07:00:00 2022 CEST | Sun Mar 27 07:00:00 2022 CEST
-(1 row)
 
 --------- and then +2 to +1
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :FINISH_TIME_AFTER_WINTER_SWITCH, :START_TIME_BEFORE_WINTER_SWITCH) as t1 \gset
@@ -111,13 +102,11 @@ select :START_TIME_BEFORE_WINTER_SWITCH as initial_start_winter_switch, :FINISH_
   initial_start_winter_switch  | first_finish_time_winter_switch 
 -------------------------------+---------------------------------
  Sun Oct 30 01:01:00 2022 CEST | Sun Oct 30 01:10:19 2022 CEST
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Oct 30 02:01:00 2022 CEST | Sun Oct 30 02:01:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -125,7 +114,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Oct 30 02:01:00 2022 CET | Sun Oct 30 02:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -133,7 +121,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Oct 30 03:01:00 2022 CET | Sun Oct 30 03:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -141,7 +128,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Oct 30 04:01:00 2022 CET | Sun Oct 30 04:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -149,7 +135,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Oct 30 05:00:00 2022 CET | Sun Oct 30 05:00:00 2022 CET
-(1 row)
 
 \set BUCKET_WIDTH_WINTER_SUMMER 'INTERVAL \'1 day\''
 \set BUCKET_WIDTH_SUMMER_WINTER 'INTERVAL \'1 day\''
@@ -172,13 +157,11 @@ select :START_TIME_BEFORE_SUMMER_SWITCH as initial_start_summer_switch, :FINISH_
  initial_start_summer_switch  | first_finish_time_summer_switch 
 ------------------------------+---------------------------------
  Sun Mar 27 01:00:00 2022 CET | Sun Mar 27 01:19:20 2022 CET
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Mon Mar 28 01:00:00 2022 CEST | Mon Mar 28 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -186,7 +169,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Tue Mar 29 01:00:00 2022 CEST | Tue Mar 29 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -194,7 +176,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Tue Mar 29 02:00:00 2022 CEST | Wed Mar 30 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -202,7 +183,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Wed Mar 30 02:00:00 2022 CEST | Thu Mar 31 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -210,7 +190,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Thu Mar 31 02:00:00 2022 CEST | Fri Apr 01 01:00:00 2022 CEST
-(1 row)
 
 --------- and then +2 to +1
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :FINISH_TIME_AFTER_WINTER_SWITCH, :START_TIME_BEFORE_WINTER_SWITCH) as t1 \gset
@@ -220,13 +199,11 @@ select :START_TIME_BEFORE_WINTER_SWITCH as initial_start_winter_switch, :FINISH_
   initial_start_winter_switch  | first_finish_time_winter_switch 
 -------------------------------+---------------------------------
  Sun Oct 30 01:01:00 2022 CEST | Sun Oct 30 01:10:19 2022 CEST
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Mon Oct 31 01:01:00 2022 CET | Mon Oct 31 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -234,7 +211,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Tue Nov 01 00:01:00 2022 CET | Tue Nov 01 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -242,7 +218,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Wed Nov 02 00:01:00 2022 CET | Wed Nov 02 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -250,7 +225,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Thu Nov 03 00:01:00 2022 CET | Thu Nov 03 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -258,7 +232,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Thu Nov 03 01:00:00 2022 CET | Fri Nov 04 01:00:00 2022 CET
-(1 row)
 
 \set BUCKET_WIDTH_WINTER_SUMMER 'INTERVAL \'1 week\''
 \set BUCKET_WIDTH_SUMMER_WINTER 'INTERVAL \'1 week\''
@@ -281,13 +254,11 @@ select :START_TIME_BEFORE_SUMMER_SWITCH as initial_start_summer_switch, :FINISH_
  initial_start_summer_switch  | first_finish_time_summer_switch 
 ------------------------------+---------------------------------
  Sun Mar 27 01:00:00 2022 CET | Sun Mar 27 01:19:20 2022 CET
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Apr 03 01:00:00 2022 CEST | Sun Apr 03 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -295,7 +266,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Apr 10 01:00:00 2022 CEST | Sun Apr 10 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -303,7 +273,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Apr 10 02:00:00 2022 CEST | Sun Apr 17 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -311,7 +280,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Apr 17 02:00:00 2022 CEST | Sun Apr 24 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -319,7 +287,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Apr 24 02:00:00 2022 CEST | Sun May 01 01:00:00 2022 CEST
-(1 row)
 
 --------- and then +2 to +1
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :FINISH_TIME_AFTER_WINTER_SWITCH, :START_TIME_BEFORE_WINTER_SWITCH) as t1 \gset
@@ -329,13 +296,11 @@ select :START_TIME_BEFORE_WINTER_SWITCH as initial_start_winter_switch, :FINISH_
   initial_start_winter_switch  | first_finish_time_winter_switch 
 -------------------------------+---------------------------------
  Sun Oct 30 01:01:00 2022 CEST | Sun Oct 30 01:10:19 2022 CEST
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Nov 06 01:01:00 2022 CET | Sun Nov 06 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -343,7 +308,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Nov 13 00:01:00 2022 CET | Sun Nov 13 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -351,7 +315,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Nov 20 00:01:00 2022 CET | Sun Nov 20 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -359,7 +322,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Nov 27 00:01:00 2022 CET | Sun Nov 27 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -367,7 +329,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Nov 27 01:00:00 2022 CET | Sun Dec 04 01:00:00 2022 CET
-(1 row)
 
 \set BUCKET_WIDTH_WINTER_SUMMER 'INTERVAL \'1 month\''
 \set BUCKET_WIDTH_SUMMER_WINTER 'INTERVAL \'1 month\''
@@ -390,13 +351,11 @@ select :START_TIME_BEFORE_SUMMER_SWITCH as initial_start_summer_switch, :FINISH_
  initial_start_summer_switch  | first_finish_time_summer_switch 
 ------------------------------+---------------------------------
  Sun Mar 27 01:00:00 2022 CET | Sun Mar 27 01:19:20 2022 CET
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Wed Apr 27 01:00:00 2022 CEST | Wed Apr 27 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -404,7 +363,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Fri May 27 01:00:00 2022 CEST | Fri May 27 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -412,7 +370,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Mon Jun 27 01:00:00 2022 CEST | Mon Jun 27 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -420,7 +377,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Wed Jul 27 01:00:00 2022 CEST | Wed Jul 27 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -428,7 +384,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sat Aug 27 01:00:00 2022 CEST | Sat Aug 27 01:00:00 2022 CEST
-(1 row)
 
 --------- and then +2 to +1
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :FINISH_TIME_AFTER_WINTER_SWITCH, :START_TIME_BEFORE_WINTER_SWITCH) as t1 \gset
@@ -438,13 +393,11 @@ select :START_TIME_BEFORE_WINTER_SWITCH as initial_start_winter_switch, :FINISH_
   initial_start_winter_switch  | first_finish_time_winter_switch 
 -------------------------------+---------------------------------
  Sun Oct 30 01:01:00 2022 CEST | Sun Oct 30 01:10:19 2022 CEST
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Wed Nov 30 01:01:00 2022 CET | Wed Nov 30 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -452,7 +405,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Fri Dec 30 01:01:00 2022 CET | Fri Dec 30 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -460,7 +412,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Mon Jan 30 01:01:00 2023 CET | Mon Jan 30 01:01:00 2023 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -468,7 +419,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Tue Feb 28 01:01:00 2023 CET | Tue Feb 28 01:01:00 2023 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -476,7 +426,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Mon Mar 27 01:00:00 2023 CEST | Mon Mar 27 01:00:00 2023 CEST
-(1 row)
 
 \set BUCKET_WIDTH_WINTER_SUMMER 'INTERVAL \'1 year\''
 \set BUCKET_WIDTH_SUMMER_WINTER 'INTERVAL \'1 year\''
@@ -499,13 +448,11 @@ select :START_TIME_BEFORE_SUMMER_SWITCH as initial_start_summer_switch, :FINISH_
  initial_start_summer_switch  | first_finish_time_summer_switch 
 ------------------------------+---------------------------------
  Sun Mar 27 01:00:00 2022 CET | Sun Mar 27 01:19:20 2022 CET
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Mon Mar 27 01:00:00 2023 CEST | Mon Mar 27 01:00:00 2023 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -513,7 +460,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Wed Mar 27 01:00:00 2024 CET | Wed Mar 27 01:00:00 2024 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -521,7 +467,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Thu Mar 27 01:00:00 2025 CET | Thu Mar 27 01:00:00 2025 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -529,7 +474,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Fri Mar 27 01:00:00 2026 CET | Fri Mar 27 01:00:00 2026 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -537,7 +481,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sat Mar 27 01:00:00 2027 CET | Sat Mar 27 01:00:00 2027 CET
-(1 row)
 
 --------- and then +2 to +1
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :FINISH_TIME_AFTER_WINTER_SWITCH, :START_TIME_BEFORE_WINTER_SWITCH) as t1 \gset
@@ -547,13 +490,11 @@ select :START_TIME_BEFORE_WINTER_SWITCH as initial_start_winter_switch, :FINISH_
   initial_start_winter_switch  | first_finish_time_winter_switch 
 -------------------------------+---------------------------------
  Sun Oct 30 01:01:00 2022 CEST | Sun Oct 30 01:10:19 2022 CEST
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Mon Oct 30 01:01:00 2023 CET | Mon Oct 30 01:01:00 2023 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -561,7 +502,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Wed Oct 30 01:01:00 2024 CET | Wed Oct 30 01:01:00 2024 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -569,7 +509,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Thu Oct 30 01:01:00 2025 CET | Thu Oct 30 01:01:00 2025 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -577,7 +516,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Fri Oct 30 01:01:00 2026 CET | Fri Oct 30 01:01:00 2026 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -585,7 +523,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sat Mar 27 01:00:00 2027 CET | Sat Mar 27 01:00:00 2027 CET
-(1 row)
 
 \set BUCKET_WIDTH_WINTER_SUMMER 'INTERVAL \'2 month\''
 \set BUCKET_WIDTH_SUMMER_WINTER 'INTERVAL \'2 month\''
@@ -608,13 +545,11 @@ select :START_TIME_BEFORE_SUMMER_SWITCH as initial_start_summer_switch, :FINISH_
  initial_start_summer_switch  | first_finish_time_summer_switch 
 ------------------------------+---------------------------------
  Sun Mar 27 01:00:00 2022 CET | Sun Mar 27 01:19:20 2022 CET
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Fri May 27 01:00:00 2022 CEST | Fri May 27 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -622,7 +557,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Wed Jul 27 01:00:00 2022 CEST | Wed Jul 27 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -630,7 +564,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Tue Sep 27 01:00:00 2022 CEST | Tue Sep 27 01:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -638,7 +571,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sun Nov 27 01:00:00 2022 CET | Sun Nov 27 01:00:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -646,7 +578,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Fri Jan 27 01:00:00 2023 CET | Fri Jan 27 01:00:00 2023 CET
-(1 row)
 
 --------- and then +2 to +1
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :FINISH_TIME_AFTER_WINTER_SWITCH, :START_TIME_BEFORE_WINTER_SWITCH) as t1 \gset
@@ -656,13 +587,11 @@ select :START_TIME_BEFORE_WINTER_SWITCH as initial_start_winter_switch, :FINISH_
   initial_start_winter_switch  | first_finish_time_winter_switch 
 -------------------------------+---------------------------------
  Sun Oct 30 01:01:00 2022 CEST | Sun Oct 30 01:10:19 2022 CEST
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Fri Dec 30 01:01:00 2022 CET | Fri Dec 30 01:01:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -670,7 +599,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Tue Feb 28 01:01:00 2023 CET | Tue Feb 28 01:01:00 2023 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -678,7 +606,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Sun Apr 30 01:01:00 2023 CEST | Sun Apr 30 01:01:00 2023 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -686,7 +613,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Fri Jun 30 01:01:00 2023 CEST | Fri Jun 30 01:01:00 2023 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -694,7 +620,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Thu Jul 27 01:00:00 2023 CEST | Thu Jul 27 01:00:00 2023 CEST
-(1 row)
 
 \set BUCKET_WIDTH_WINTER_SUMMER 'INTERVAL \'2 year\''
 \set BUCKET_WIDTH_SUMMER_WINTER 'INTERVAL \'2 year\''
@@ -717,13 +642,11 @@ select :START_TIME_BEFORE_SUMMER_SWITCH as initial_start_summer_switch, :FINISH_
  initial_start_summer_switch  | first_finish_time_summer_switch 
 ------------------------------+---------------------------------
  Sun Mar 27 01:00:00 2022 CET | Sun Mar 27 01:19:20 2022 CET
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Wed Mar 27 01:00:00 2024 CET | Wed Mar 27 01:00:00 2024 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -731,7 +654,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Fri Mar 27 01:00:00 2026 CET | Fri Mar 27 01:00:00 2026 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -739,7 +661,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Mon Mar 27 01:00:00 2028 CEST | Mon Mar 27 01:00:00 2028 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -747,7 +668,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Wed Mar 27 01:00:00 2030 CET | Wed Mar 27 01:00:00 2030 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -755,7 +675,6 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sat Mar 27 01:00:00 2032 CET | Sat Mar 27 01:00:00 2032 CET
-(1 row)
 
 --------- and then +2 to +1
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :FINISH_TIME_AFTER_WINTER_SWITCH, :START_TIME_BEFORE_WINTER_SWITCH) as t1 \gset
@@ -765,13 +684,11 @@ select :START_TIME_BEFORE_WINTER_SWITCH as initial_start_winter_switch, :FINISH_
   initial_start_winter_switch  | first_finish_time_winter_switch 
 -------------------------------+---------------------------------
  Sun Oct 30 01:01:00 2022 CEST | Sun Oct 30 01:10:19 2022 CEST
-(1 row)
 
 select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Wed Oct 30 01:01:00 2024 CET | Wed Oct 30 01:01:00 2024 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t2 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t1_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -779,7 +696,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Fri Oct 30 01:01:00 2026 CET | Fri Oct 30 01:01:00 2026 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t3 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t2_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -787,7 +703,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Mon Oct 30 01:01:00 2028 CET | Mon Oct 30 01:01:00 2028 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH) as t4 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_SUMMER_WINTER, :'t3_tz'::timestamptz, :START_TIME_BEFORE_WINTER_SWITCH, 'Europe/Berlin') as t4_tz \gset
@@ -795,7 +710,6 @@ select :'t4' as without_timezone, :'t4_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Wed Oct 30 01:01:00 2030 CET | Wed Oct 30 01:01:00 2030 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH) as t5 \gset
 select ts_test_next_scheduled_execution_slot(:BUCKET_WIDTH_WINTER_SUMMER, :'t4_tz'::timestamptz, :START_TIME_BEFORE_SUMMER_SWITCH, 'Europe/Berlin') as t5_tz \gset
@@ -803,5 +717,4 @@ select :'t5' as without_timezone, :'t5_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sat Mar 27 01:00:00 2032 CET | Sat Mar 27 01:00:00 2032 CET
-(1 row)
 

@@ -18,7 +18,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 
 #include "batch_metadata_builder_minmax.h"
 #include "hypertable.h"
-#include "nodes/decompress_chunk/detoaster.h"
+#include "nodes/columnar_scan/detoaster.h"
 #include "ts_catalog/compression_settings.h"
 
 /*
@@ -94,12 +94,12 @@ typedef struct SegmentInfo
 } SegmentInfo;
 
 /* this struct holds information about a segmentby column,
- * and additionally stores the mapping for this column in
- * the uncompressed chunk. */
+ * and additionally stores the offset for this column in
+ * the chunk. */
 typedef struct CompressedSegmentInfo
 {
 	SegmentInfo *segment_info;
-	int16 decompressed_chunk_offset;
+	int16 chunk_offset;
 } CompressedSegmentInfo;
 
 typedef struct PerCompressedColumn
@@ -195,6 +195,7 @@ typedef enum CompressionAlgorithm
 	COMPRESSION_ALGORITHM_DELTADELTA,
 	COMPRESSION_ALGORITHM_BOOL,
 	COMPRESSION_ALGORITHM_NULL,
+	COMPRESSION_ALGORITHM_UUID,
 
 	/* When adding an algorithm also add a static assert statement below */
 	/* end of real values */
@@ -229,6 +230,8 @@ typedef struct RowCompressor
 	/* memory context reset per-row is stored */
 	MemoryContext per_row_ctx;
 
+	/* The descriptor of the uncompressed tuple we're processing */
+	TupleDesc in_desc;
 	/* The descriptor of the compressed tuple we're generating */
 	TupleDesc out_desc;
 
@@ -265,6 +268,9 @@ typedef struct RowCompressor
 	/* Callback called on every flush. The ntuples argument is the number of
 	 * tuples flushed. Typically used for progress reporting. */
 	void (*on_flush)(struct RowCompressor *rowcompress, uint64 ntuples);
+
+	Tuplesortstate *sort_state;
+	int64 tuples_to_sort; /* number of tuples to sort with tuplesort */
 } RowCompressor;
 
 /*
@@ -314,13 +320,14 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 	StaticAssertStmt(COMPRESSION_ALGORITHM_DELTADELTA == 4, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_BOOL == 5, "algorithm index has changed");
 	StaticAssertStmt(COMPRESSION_ALGORITHM_NULL == 6, "algorithm index has changed");
+	StaticAssertStmt(COMPRESSION_ALGORITHM_UUID == 7, "algorithm index has changed");
 
 	/*
 	 * This should change when adding a new algorithm after adding the new
 	 * algorithm to the assert list above. This statement prevents adding a
 	 * new algorithm without updating the asserts above
 	 */
-	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 7,
+	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS == 8,
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
@@ -368,7 +375,7 @@ extern void row_compressor_init(RowCompressor *row_compressor, const Compression
 								const TupleDesc compressed_tupdesc);
 
 RowCompressor *row_compressor_alloc(void);
-extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer);
+extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
 									TupleTableSlot *slot);
 extern void tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer);
@@ -378,9 +385,10 @@ extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern HeapTuple row_compressor_build_tuple(RowCompressor *row_compressor);
 extern void row_compressor_clear_batch(RowCompressor *row_compressor, bool changed_groups);
+extern void row_compressor_append_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
-											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
-											  Relation in_rel, BulkWriter *writer);
+											  Tuplesortstate *sorted_rel, Relation in_rel,
+											  BulkWriter *writer);
 extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
 									  const CompressionSettings *settings);
 

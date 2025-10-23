@@ -10,7 +10,7 @@ CREATE SCHEMA IF NOT EXISTS "customSchema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER
 
 SELECT * FROM PUBLIC."Hypertable_1";
 SELECT * FROM ONLY PUBLIC."Hypertable_1";
-EXPLAIN (costs off) SELECT * FROM ONLY PUBLIC."Hypertable_1";
+EXPLAIN (buffers off, costs off) SELECT * FROM ONLY PUBLIC."Hypertable_1";
 
 SELECT * FROM test.show_columns('PUBLIC."Hypertable_1"');
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
@@ -39,7 +39,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_9_%chunk');
 -- metadata table
 SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
 
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT * FROM alter_test WHERE time > '2017-05-20T10:00:01';
 
 -- rename column and change its type
@@ -62,7 +62,7 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal._hyper_9_%chunk');
 SELECT * FROM _timescaledb_catalog.dimension WHERE hypertable_id = 9;
 
 -- constraint exclusion should still work with updated column
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT * FROM alter_test WHERE time_us > '2017-05-20T10:00:01';
 
 \set ON_ERROR_STOP 0
@@ -134,3 +134,36 @@ SELECT i4489('1'), i4489('1');
 -- should return 0 (zero) in all cases handled by the exception
 SELECT i4489(), i4489();
 SELECT i4489('a'), i4489('a');
+
+-- test ALTER TABLE ONLY for hypertables
+CREATE TABLE at_test(time timestamptz) WITH (tsdb.hypertable);
+
+-- adding column only on the parent table should be blocked
+\set ON_ERROR_STOP 0
+ALTER TABLE ONLY at_test ADD COLUMN value INT;
+\set ON_ERROR_STOP 1
+
+ALTER TABLE ONLY at_test SET (autovacuum_enabled = false);
+ALTER TABLE ONLY at_test RESET (autovacuum_enabled);
+
+-- test again after creating some chunks
+INSERT INTO at_test VALUES ('2025-01-01');
+INSERT INTO at_test VALUES ('2025-02-01');
+
+ALTER TABLE ONLY at_test SET (autovacuum_enabled = false);
+ALTER TABLE ONLY at_test RESET (autovacuum_enabled);
+
+-- test DDL inside function
+CREATE OR REPLACE FUNCTION ddl_function() RETURNS VOID LANGUAGE PLPGSQL AS $$
+BEGIN
+  DROP TABLE IF EXISTS func_table;
+  CREATE TABLE func_table(time timestamptz) WITH (tsdb.hypertable);
+END
+$$;
+
+SELECT ddl_function();
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+
+SELECT ddl_function();
+SELECT hypertable_name from timescaledb_information.hypertables WHERE hypertable_name='func_table';
+

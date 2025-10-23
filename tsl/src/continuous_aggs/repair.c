@@ -72,7 +72,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 		final_query = destroy_union_query(final_query);
 	}
 	FinalizeQueryInfo fqi;
-	MatTableColumnInfo mattblinfo;
+	MaterializationHypertableColumnInfo mattblinfo;
 	ObjectAddress mataddress = {
 		.classId = RelationRelationId,
 		.objectId = mat_ht->main_table_relid,
@@ -128,7 +128,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 			 NameStr(agg->data.user_view_schema),
 			 NameStr(agg->data.user_view_name));
 
-	CAggTimebucketInfo timebucket_exprinfo =
+	ContinuousAggTimeBucketInfo timebucket_exprinfo =
 		cagg_validate_query(direct_query,
 							finalized,
 							NameStr(agg->data.user_view_schema),

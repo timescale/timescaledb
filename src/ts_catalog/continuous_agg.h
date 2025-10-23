@@ -15,7 +15,7 @@
 #include "compat/compat.h"
 #include "with_clause/with_clause_parser.h"
 
-#define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
+#define TS_INVALIDATION_SLOT_NAME_MAX (32)
 
 /*switch to ts user for _timescaledb_internal access */
 #define SWITCH_TO_TS_USER(schemaname, newuid, saved_uid, saved_secctx)                             \
@@ -54,10 +54,17 @@ typedef enum ContinuousAggViewType
 	ContinuousAggAnyView
 } ContinuousAggViewType;
 
+typedef enum ContinuousAggInvalidateUsing
+{
+	ContinuousAggInvalidateUsingDefault = 0,
+	ContinuousAggInvalidateUsingTrigger,
+	ContinuousAggInvalidateUsingWal,
+} ContinuousAggInvalidateUsing;
+
 /*
  * Information about the bucketing function.
  */
-typedef struct ContinuousAggsBucketFunction
+typedef struct ContinuousAggBucketFunction
 {
 	/* Oid of the bucketing function. In the catalog table, the regprocedure is used. This ensures
 	 * that the Oid is mapped to a string when a backup is taken and the string is converted back to
@@ -94,14 +101,14 @@ typedef struct ContinuousAggsBucketFunction
 	int64 bucket_integer_width;
 	int64 bucket_integer_offset;
 
-} ContinuousAggsBucketFunction;
+} ContinuousAggBucketFunction;
 
 typedef struct ContinuousAgg
 {
 	FormData_continuous_agg data;
 
 	/* Info about the time bucketing function */
-	ContinuousAggsBucketFunction *bucket_function;
+	ContinuousAggBucketFunction *bucket_function;
 
 	/* Relid of the user-facing view */
 	Oid relid;
@@ -130,25 +137,25 @@ typedef enum ContinuousAggHypertableStatus
 	HypertableIsMaterializationAndRaw = HypertableIsMaterialization | HypertableIsRawTable,
 } ContinuousAggHypertableStatus;
 
-typedef struct CaggsInfoData
+typedef struct ContinuousAggInfo
 {
 	/* (int32) elements */
 	List *mat_hypertable_ids;
-	/* (const ContinuousAggsBucketFunction *) elements; stores NULL for fixed buckets */
+	/* (const ContinuousAggBucketFunction *) elements; stores NULL for fixed buckets */
 	List *bucket_functions;
-} CaggsInfo;
+} ContinuousAggInfo;
 
-typedef struct CaggPolicyOffset
+typedef struct ContinuousAggPolicyOffset
 {
 	Datum value;
 	Oid type;
 	bool isnull;
 	const char *name;
-} CaggPolicyOffset;
+} ContinuousAggPolicyOffset;
 
 extern TSDLLEXPORT Oid ts_cagg_permissions_check(Oid cagg_oid, Oid userid);
 
-extern TSDLLEXPORT CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
+extern TSDLLEXPORT ContinuousAggInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
 extern TSDLLEXPORT ContinuousAgg *
 ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id, bool missing_ok);
 
@@ -186,16 +193,17 @@ extern TSDLLEXPORT bool ts_continuous_agg_bucket_on_interval(Oid bucket_function
 
 extern TSDLLEXPORT void
 ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
-													  const ContinuousAggsBucketFunction *bf);
+													  const ContinuousAggBucketFunction *bf);
 extern TSDLLEXPORT void
 ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
-														  const ContinuousAggsBucketFunction *bf);
+														  const ContinuousAggBucketFunction *bf);
 extern TSDLLEXPORT int64 ts_compute_beginning_of_the_next_bucket_variable(
-	int64 timeval, const ContinuousAggsBucketFunction *bf);
+	int64 timeval, const ContinuousAggBucketFunction *bf);
 
 extern TSDLLEXPORT Query *ts_continuous_agg_get_query(ContinuousAgg *cagg);
 
 extern TSDLLEXPORT int64
-ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
+ts_continuous_agg_fixed_bucket_width(const ContinuousAggBucketFunction *bucket_function);
 extern TSDLLEXPORT int64
-ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function);
+ts_continuous_agg_bucket_width(const ContinuousAggBucketFunction *bucket_function);
+extern TSDLLEXPORT void ts_get_invalidation_replication_slot_name(char *slotname, Size szslot);

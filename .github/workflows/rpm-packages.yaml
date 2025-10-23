@@ -1,5 +1,5 @@
 # Test rpm package installation for latest version
-name: RPM packages
+name: "Packaging tests: RPM"
 "on":
   schedule:
     # run daily 0:00 on main branch
@@ -107,4 +107,15 @@ jobs:
         if [ "$prev_version" != "$installed_version" ];then
           false
         fi
+
+    - name: Install toolkit
+      if: matrix.pg != 17 && matrix.image != 'rockylinux:9' # timescaledb-toolkit currently not available for PG17 and Rocky9
+      run: |
+        yum install -y timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
+    - name: List available toolkit versions
+      if: matrix.pg != 17 && matrix.image != 'rockylinux:9' # timescaledb-toolkit currently not available for PG17 and Rocky9
+      run: |
+        yum --showduplicates list timescaledb-toolkit-postgresql-${{ matrix.pg }}
+
 

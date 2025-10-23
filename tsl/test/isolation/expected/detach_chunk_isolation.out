@@ -1,0 +1,188 @@
+Parsed test spec with 4 sessions
+
+starting permutation: s2_wait_before_lock s1b s1_detach s2_show_num_rows s3_insert s2_show_num_rows s2_release_lock s3_insert s1c s2_show_num_rows s2_show_num_chunks s2_show_chunk_rows
+step s2_wait_before_lock: SELECT debug_waitpoint_enable('chunk_detach_before_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1b: BEGIN;
+step s1_detach: CALL detach_chunk('chunk_to_detach'); <waiting ...>
+step s2_show_num_rows: SELECT count(*) FROM detach_test;
+count
+-----
+    1
+
+step s3_insert: INSERT INTO detach_test VALUES ('2025-06-02 10:30', 1, 31.5);
+step s2_show_num_rows: SELECT count(*) FROM detach_test;
+count
+-----
+    2
+
+step s2_release_lock: SELECT debug_waitpoint_release('chunk_detach_before_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_detach: <... completed>
+step s3_insert: INSERT INTO detach_test VALUES ('2025-06-02 10:30', 1, 31.5); <waiting ...>
+step s1c: COMMIT;
+step s3_insert: <... completed>
+ERROR:  chunk not found
+step s2_show_num_rows: SELECT count(*) FROM detach_test;
+count
+-----
+    0
+
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    0
+
+step s2_show_chunk_rows: SELECT count(*) FROM chunk_to_detach;
+count
+-----
+    2
+
+
+starting permutation: s2_wait_before_lock s1b s1_detach s2_show_num_rows s2_show_num_chunks s3_truncate s2_release_lock s1c s2_show_num_chunks s2_show_chunk_rows
+step s2_wait_before_lock: SELECT debug_waitpoint_enable('chunk_detach_before_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1b: BEGIN;
+step s1_detach: CALL detach_chunk('chunk_to_detach'); <waiting ...>
+step s2_show_num_rows: SELECT count(*) FROM detach_test;
+count
+-----
+    1
+
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    1
+
+step s3_truncate: TRUNCATE TABLE detach_test;
+step s2_release_lock: SELECT debug_waitpoint_release('chunk_detach_before_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_detach: <... completed>
+ERROR:  hypertable not found for the chunk
+step s1c: COMMIT;
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    0
+
+step s2_show_chunk_rows: SELECT count(*) FROM chunk_to_detach;
+ERROR:  relation "chunk_to_detach" does not exist
+
+starting permutation: s1b s2_show_num_chunks s2_show_num_rows s1_detach s3_truncate s1c s2_show_num_chunks s2_show_chunk_rows
+step s1b: BEGIN;
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    1
+
+step s2_show_num_rows: SELECT count(*) FROM detach_test;
+count
+-----
+    1
+
+step s1_detach: CALL detach_chunk('chunk_to_detach');
+step s3_truncate: TRUNCATE TABLE detach_test; <waiting ...>
+step s1c: COMMIT;
+step s3_truncate: <... completed>
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    0
+
+step s2_show_chunk_rows: SELECT count(*) FROM chunk_to_detach;
+count
+-----
+    1
+
+
+starting permutation: s2_wait_before_lock s1b s1_detach s2_show_num_chunks s3_drop_chunk s2_show_num_chunks s2_release_lock s1c s2_show_num_chunks s2_show_chunk_rows
+step s2_wait_before_lock: SELECT debug_waitpoint_enable('chunk_detach_before_lock');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1b: BEGIN;
+step s1_detach: CALL detach_chunk('chunk_to_detach'); <waiting ...>
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    1
+
+step s3_drop_chunk: SELECT count(*) FROM drop_chunks('detach_test', TIMESTAMPTZ '2025-07-01');
+count
+-----
+    1
+
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    0
+
+step s2_release_lock: SELECT debug_waitpoint_release('chunk_detach_before_lock');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_detach: <... completed>
+ERROR:  hypertable not found for the chunk
+step s1c: COMMIT;
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    0
+
+step s2_show_chunk_rows: SELECT count(*) FROM chunk_to_detach;
+ERROR:  relation "chunk_to_detach" does not exist
+
+starting permutation: s1b s1_detach s2_show_num_chunks s3_drop_chunk s2_show_num_chunks s1c s2_show_num_chunks s2_show_chunk_rows
+step s1b: BEGIN;
+step s1_detach: CALL detach_chunk('chunk_to_detach');
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    1
+
+step s3_drop_chunk: SELECT count(*) FROM drop_chunks('detach_test', TIMESTAMPTZ '2025-07-01'); <waiting ...>
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    1
+
+step s1c: COMMIT;
+step s3_drop_chunk: <... completed>
+count
+-----
+    0
+
+step s2_show_num_chunks: SELECT count(*) FROM show_chunks('detach_test');
+count
+-----
+    0
+
+step s2_show_chunk_rows: SELECT count(*) FROM chunk_to_detach;
+count
+-----
+    1
+
+
+starting permutation: s1b s4b s1_detach s4_detach s1c s4c
+step s1b: BEGIN;
+step s4b: BEGIN;
+step s1_detach: CALL detach_chunk('chunk_to_detach');
+step s4_detach: CALL detach_chunk('chunk_to_detach'); <waiting ...>
+step s1c: COMMIT;
+step s4_detach: <... completed>
+ERROR:  chunk not found
+step s4c: COMMIT;

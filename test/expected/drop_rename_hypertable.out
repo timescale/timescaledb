@@ -113,7 +113,6 @@ SELECT * FROM test.show_columnsp('_timescaledb_internal.%_hyper%');
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_2_idx"    | i    | series_2    | double precision | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx" | i    | timeCustom  | bigint           | f
  _timescaledb_internal."_hyper_1_4_chunk_two_Partitions_timeCustom_series_bool_idx" | i    | series_bool | boolean          | f
-(76 rows)
 
 -- Test that renaming hypertable works
 SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
@@ -125,7 +124,6 @@ SELECT * FROM test.show_columns('_timescaledb_internal._hyper_1_1_chunk');
  series_1    | double precision | f
  series_2    | double precision | f
  series_bool | boolean          | f
-(6 rows)
 
 ALTER TABLE "two_Partitions" RENAME TO "newname";
 SELECT * FROM "newname";
@@ -143,13 +141,11 @@ SELECT * FROM "newname";
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
  1257894000000000000 | dev2      |      1.5 |        1 |          | 
  1257894000000000000 | dev2      |      1.5 |        2 |          | 
-(12 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA "newschema" AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
@@ -170,61 +166,46 @@ SELECT * FROM "newschema"."newname";
  1257987600000000000 | dev1      |      1.5 |        2 |          | 
  1257894000000000000 | dev2      |      1.5 |        1 |          | 
  1257894000000000000 | dev2      |      1.5 |        2 |          | 
-(12 rows)
 
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
   1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |      0
-(1 row)
 
 DROP TABLE "newschema"."newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema | chunk_sizing_func_name | chunk_target_size | compression_state | compressed_hypertable_id | status 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+------------------------+-------------------+-------------------+--------------------------+--------
-(0 rows)
 
-\dt  "public".*
-      List of relations
- Schema | Name | Type | Owner 
---------+------+------+-------
-(0 rows)
-
-\dt  "_timescaledb_catalog".*
-                                      List of relations
-        Schema        |                       Name                       | Type  |   Owner    
-----------------------+--------------------------------------------------+-------+------------
- _timescaledb_catalog | chunk                                            | table | super_user
- _timescaledb_catalog | chunk_column_stats                               | table | super_user
- _timescaledb_catalog | chunk_constraint                                 | table | super_user
- _timescaledb_catalog | chunk_index                                      | table | super_user
- _timescaledb_catalog | compression_algorithm                            | table | super_user
- _timescaledb_catalog | compression_chunk_size                           | table | super_user
- _timescaledb_catalog | compression_settings                             | table | super_user
- _timescaledb_catalog | continuous_agg                                   | table | super_user
- _timescaledb_catalog | continuous_agg_migrate_plan                      | table | super_user
- _timescaledb_catalog | continuous_agg_migrate_plan_step                 | table | super_user
- _timescaledb_catalog | continuous_aggs_bucket_function                  | table | super_user
- _timescaledb_catalog | continuous_aggs_hypertable_invalidation_log      | table | super_user
- _timescaledb_catalog | continuous_aggs_invalidation_threshold           | table | super_user
- _timescaledb_catalog | continuous_aggs_materialization_invalidation_log | table | super_user
- _timescaledb_catalog | continuous_aggs_watermark                        | table | super_user
- _timescaledb_catalog | dimension                                        | table | super_user
- _timescaledb_catalog | dimension_slice                                  | table | super_user
- _timescaledb_catalog | hypertable                                       | table | super_user
- _timescaledb_catalog | metadata                                         | table | super_user
- _timescaledb_catalog | tablespace                                       | table | super_user
- _timescaledb_catalog | telemetry_event                                  | table | super_user
-(21 rows)
-
-\dt "_timescaledb_internal".*
-                          List of relations
-        Schema         |          Name          | Type  |   Owner    
------------------------+------------------------+-------+------------
- _timescaledb_internal | bgw_job_stat           | table | super_user
- _timescaledb_internal | bgw_job_stat_history   | table | super_user
- _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
-(3 rows)
+SELECT schema, name FROM test.relation WHERE schema IN ('public', '_timescaledb_catalog', '_timescaledb_internal');
+        schema         |                       name                       
+-----------------------+--------------------------------------------------
+ _timescaledb_catalog  | chunk
+ _timescaledb_catalog  | chunk_column_stats
+ _timescaledb_catalog  | chunk_constraint
+ _timescaledb_catalog  | compression_algorithm
+ _timescaledb_catalog  | compression_chunk_size
+ _timescaledb_catalog  | compression_settings
+ _timescaledb_catalog  | continuous_agg
+ _timescaledb_catalog  | continuous_agg_migrate_plan
+ _timescaledb_catalog  | continuous_agg_migrate_plan_step
+ _timescaledb_catalog  | continuous_aggs_bucket_function
+ _timescaledb_catalog  | continuous_aggs_hypertable_invalidation_log
+ _timescaledb_catalog  | continuous_aggs_invalidation_threshold
+ _timescaledb_catalog  | continuous_aggs_materialization_invalidation_log
+ _timescaledb_catalog  | continuous_aggs_materialization_ranges
+ _timescaledb_catalog  | continuous_aggs_watermark
+ _timescaledb_catalog  | dimension
+ _timescaledb_catalog  | dimension_slice
+ _timescaledb_catalog  | hypertable
+ _timescaledb_catalog  | metadata
+ _timescaledb_catalog  | tablespace
+ _timescaledb_catalog  | telemetry_event
+ _timescaledb_internal | bgw_job_stat
+ _timescaledb_internal | bgw_job_stat_history
+ _timescaledb_internal | bgw_policy_chunk_stats
+ _timescaledb_internal | compressed_chunk_stats
+ _timescaledb_internal | hypertable_chunk_local_size
 
 -- Test that renaming ordinary table works
 CREATE TABLE renametable (foo int);
@@ -232,5 +213,4 @@ ALTER TABLE "renametable" RENAME TO "newname_none_ht";
 SELECT * FROM "newname_none_ht";
  foo 
 -----
-(0 rows)
 

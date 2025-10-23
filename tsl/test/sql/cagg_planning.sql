@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 \set TEST_BASE_NAME cagg_planning
 SELECT
@@ -79,7 +79,7 @@ SELECT _timescaledb_functions.stop_background_workers();
 -- Repeat tests after restore
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-\set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 \set TEST_BASE_NAME cagg_planning
 SELECT

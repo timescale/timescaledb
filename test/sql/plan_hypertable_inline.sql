@@ -4,7 +4,7 @@
 
 -- test hypertable classification when query is in an inlineable function
 
-\set PREFIX 'EXPLAIN (costs off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off)'
 
 CREATE TABLE test (a int, b bigint NOT NULL);
 SELECT create_hypertable('public.test', 'b', chunk_time_interval=>10);

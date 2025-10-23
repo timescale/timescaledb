@@ -20,6 +20,7 @@
 #include <utils/typcache.h>
 
 #include <compat/compat.h>
+#include <chunk_insert_state.h>
 #include <compression/arrow_c_data_interface.h>
 #include <compression/compression.h>
 #include <compression/compression_dml.h>
@@ -27,10 +28,8 @@
 #include <compression/wal_utils.h>
 #include <expression_utils.h>
 #include <indexing.h>
-#include <nodes/chunk_dispatch/chunk_dispatch.h>
-#include <nodes/chunk_dispatch/chunk_insert_state.h>
-#include <nodes/decompress_chunk/vector_dict.h>
-#include <nodes/decompress_chunk/vector_predicates.h>
+#include <nodes/columnar_scan/vector_dict.h>
+#include <nodes/columnar_scan/vector_predicates.h>
 #include <nodes/modify_hypertable.h>
 #include <ts_catalog/array_utils.h>
 
@@ -58,8 +57,7 @@ static void process_predicates(Chunk *ch, CompressionSettings *settings, List *p
 							   List **heap_filters, List **index_filters, List **is_null);
 static Relation find_matching_index(Relation comp_chunk_rel, List **index_filters,
 									List **heap_filters);
-static tuple_filtering_constraints *
-get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation relation);
+static tuple_filtering_constraints *get_batch_keys_for_unique_constraints(Relation relation);
 static BatchFilter *make_batchfilter(char *column_name, StrategyNumber strategy, Oid collation,
 									 RegProcedure opcode, Const *value, bool is_null_check,
 									 bool is_null, bool is_array_op);
@@ -81,8 +79,8 @@ TupleDescGetAttrNumber(TupleDesc desc, const char *name)
 {
 	for (int i = 0; i < desc->natts; i++)
 	{
-		if (strcmp(name, NameStr(desc->attrs[i].attname)) == 0)
-			return desc->attrs[i].attnum;
+		if (strcmp(name, NameStr(TupleDescAttr(desc, i)->attname)) == 0)
+			return TupleDescAttr(desc, i)->attnum;
 	}
 
 	return InvalidAttrNumber;
@@ -109,8 +107,10 @@ init_decompress_state_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 
 	if (cdst->has_primary_or_unique_index)
 	{
-		tuple_filtering_constraints *constraints =
-			get_batch_keys_for_unique_constraints(cis, cis->rel);
+		tuple_filtering_constraints *constraints = get_batch_keys_for_unique_constraints(cis->rel);
+		if (constraints->covered)
+			constraints->on_conflict = cis->onConflictAction;
+
 		cdst->constraints = constraints;
 
 		CompressionSettings *compression_settings =
@@ -288,10 +288,11 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 	 * the index on the uncompressed chunks in order to do speculative insertion
 	 * which is always built from all tuples (even in higher levels of isolation).
 	 */
+	PushActiveSnapshot(GetLatestSnapshot());
 	stats = decompress_batches_scan(in_rel,
 									out_rel,
 									index_rel,
-									GetLatestSnapshot(),
+									GetActiveSnapshot(),
 									index_scankeys,
 									cdst->index_scankeys.num_scankeys,
 									heap_scankeys,
@@ -306,17 +307,17 @@ decompress_batches_for_insert(ChunkInsertState *cis, TupleTableSlot *slot)
 									NIL);
 	if (index_rel)
 		index_close(index_rel, AccessShareLock);
+	PopActiveSnapshot();
 
-	Assert(cis->cds != NULL);
 	if (skip_current_tuple)
 	{
-		cis->cds->skip_current_tuple = true;
+		cis->skip_current_tuple = true;
 	}
 
-	cis->cds->batches_deleted += stats.batches_deleted;
-	cis->cds->batches_filtered += stats.batches_filtered;
-	cis->cds->batches_decompressed += stats.batches_decompressed;
-	cis->cds->tuples_decompressed += stats.tuples_decompressed;
+	cis->counters->batches_deleted += stats.batches_deleted;
+	cis->counters->batches_filtered += stats.batches_filtered;
+	cis->counters->batches_decompressed += stats.batches_decompressed;
+	cis->counters->tuples_decompressed += stats.tuples_decompressed;
 
 	if (index_scankeys)
 		pfree(index_scankeys);
@@ -398,11 +399,11 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 		index_scankeys =
 			build_index_scankeys(matching_index_rel, index_filters, &num_index_scankeys);
 	}
-
+	PushActiveSnapshot(GetTransactionSnapshot());
 	stats = decompress_batches_scan(comp_chunk_rel,
 									chunk_rel,
 									matching_index_rel,
-									GetTransactionSnapshot(),
+									GetActiveSnapshot(),
 									index_scankeys,
 									num_index_scankeys,
 									scankeys,
@@ -418,6 +419,8 @@ decompress_batches_for_update_delete(ModifyHypertableState *ht_state, Chunk *chu
 	/* close the selected index */
 	if (matching_index_rel)
 		index_close(matching_index_rel, AccessShareLock);
+
+	PopActiveSnapshot();
 
 	/*
 	 * tuples from compressed chunk has been decompressed and moved
@@ -465,7 +468,8 @@ decompress_batch_beginscan(Relation in_rel, Relation index_rel, Snapshot snapsho
 
 	if (index_rel)
 	{
-		scan->index_scan = index_beginscan(in_rel, index_rel, snapshot, num_scankeys, 0);
+		scan->index_scan =
+			index_beginscan_compat(in_rel, index_rel, snapshot, NULL, num_scankeys, 0);
 		index_rescan(scan->index_scan, scankeys, num_scankeys, NULL, 0);
 		scan->scan = NULL;
 	}
@@ -1060,14 +1064,17 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 				 * data. To circumvent this issue, we change the internal scan state to use the
 				 * transaction snapshot and execute a rescan so the scan state is set correctly and
 				 * includes the new data.
+				 *
+				 * From PG17 this has changed since the scan state is not initialized with
+				 * the node.
 				 */
 				if (should_rescan)
 				{
 					ScanState *ss = ((ScanState *) ps);
 					if (ss && ss->ss_currentScanDesc)
 					{
-						ss->ss_currentScanDesc->rs_snapshot = GetTransactionSnapshot();
-						ExecReScan(ps);
+						ss->ss_currentScanDesc->rs_snapshot = GetActiveSnapshot();
+						table_rescan(ss->ss_currentScanDesc, NULL);
 					}
 				}
 			}
@@ -1091,7 +1098,7 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
  *
  */
 static tuple_filtering_constraints *
-get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation relation)
+get_batch_keys_for_unique_constraints(Relation relation)
 {
 	tuple_filtering_constraints *constraints = palloc0(sizeof(tuple_filtering_constraints));
 	constraints->on_conflict = ONCONFLICT_UPDATE;
@@ -1172,11 +1179,6 @@ get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation rela
 		 */
 		if (!constraints->key_columns)
 			return constraints;
-	}
-
-	if (constraints->covered && cis->cds->dispatch)
-	{
-		constraints->on_conflict = ts_chunk_dispatch_get_on_conflict_action(cis->cds->dispatch);
 	}
 
 	return constraints;
@@ -1314,7 +1316,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 																 var->varattno,
 																 settings->fd.compress_relid,
 																 "max");
-				if (min_attno == InvalidAttrNumber)
+				if (max_attno == InvalidAttrNumber)
 					continue;
 
 				/* Need both min and max metadata attributes to build heap filters */
@@ -1727,6 +1729,9 @@ can_delete_without_decompression(ModifyHypertableState *ht_state, CompressionSet
 	 * If there is a RETURNING clause we skip the optimization to delete compressed batches directly
 	 */
 	if (ht_state->mt->returningLists)
+		return false;
+
+	if (ts_hypertable_has_continuous_aggregates(ht_state->ht->fd.id))
 		return false;
 
 	/*

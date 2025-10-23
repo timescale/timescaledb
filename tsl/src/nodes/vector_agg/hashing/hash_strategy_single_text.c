@@ -13,7 +13,7 @@
 #include <common/hashfn.h>
 
 #include "compression/arrow_c_data_interface.h"
-#include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/columnar_scan/compressed_batch.h"
 #include "nodes/vector_agg/exec.h"
 #include "nodes/vector_agg/grouping_policy_hash.h"
 #include "template_helper.h"
@@ -89,9 +89,9 @@ single_text_key_hashing_get_key(BatchHashingParams params, int row, void *restri
 	}
 
 	DEBUG_PRINT("%p consider key row %d key index %d is %d bytes: ",
-				hashing,
+				params.hashing,
 				row,
-				hashing->last_used_key_index + 1,
+				params.hashing->last_used_key_index + 1,
 				output_key->len);
 	for (size_t i = 0; i < output_key->len; i++)
 	{

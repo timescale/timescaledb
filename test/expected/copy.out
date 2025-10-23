@@ -68,7 +68,6 @@ SELECT create_hypertable('hyper', 'time', chunk_time_interval => 100);
  create_hypertable  
 --------------------
  (2,public,hyper,t)
-(1 row)
 
 INSERT INTO "meta" ("id") values (1);
 \copy hyper (time, meta_id, value) FROM STDIN DELIMITER ',';
@@ -92,7 +91,6 @@ SELECT create_hypertable('hyper2', 'time', chunk_time_interval => 10);
   create_hypertable  
 ---------------------
  (3,public,hyper2,t)
-(1 row)
 
 \copy hyper2 from data/copy_data.csv with csv header ;
 -- test copy with blocking trigger
@@ -113,7 +111,6 @@ SELECT create_hypertable('trigger_test', 'time', chunk_time_interval => 10);
      create_hypertable     
 ---------------------------
  (4,public,trigger_test,t)
-(1 row)
 
 CREATE TRIGGER check_time BEFORE INSERT ON trigger_test
 FOR EACH ROW EXECUTE FUNCTION gt_10();
@@ -136,18 +133,15 @@ SELECT * FROM trigger_test ORDER BY time;
    23 |  0.333933369256556
    24 |  0.274582070298493
    25 |  0.602348630782217
-(15 rows)
 
 -- Test that if we copy from stdin to a hypertable and violate a null
 -- constraint, it does not crash and generate an appropriate error
 -- message.
 CREATE TABLE test(a INT NOT NULL, b TIMESTAMPTZ);
 SELECT create_hypertable('test', 'b');
-NOTICE:  adding not-null constraint to column "b"
  create_hypertable 
 -------------------
  (5,public,test,t)
-(1 row)
 
 \set ON_ERROR_STOP 0
 COPY TEST (a,b) FROM STDIN (delimiter ',', null 'N');
@@ -181,7 +175,6 @@ SELECT create_hypertable('hyper_copy', 'time', chunk_time_interval => 2);
     create_hypertable    
 -------------------------
  (6,public,hyper_copy,t)
-(1 row)
 
 -- First copy call with default client_min_messages, to get rid of the
 -- building index "_hyper_XXX_chunk_hyper_copy_time_idx" on table "_hyper_XXX_chunk" serially
@@ -194,7 +187,6 @@ SELECT count(*) FROM hyper_copy;
  count 
 -------
     50
-(1 row)
 
 -- Limit number of open chunks
 SET timescaledb.max_open_chunks_per_insert = 1;
@@ -204,7 +196,6 @@ SELECT count(*) FROM hyper_copy;
  count 
 -------
     75
-(1 row)
 
 -- Before trigger disable the multi-buffer optimization
 CREATE OR REPLACE FUNCTION empty_test_trigger()
@@ -227,7 +218,6 @@ SELECT count(*) FROM hyper_copy;
  count 
 -------
    100
-(1 row)
 
 -- Suppress 'DEBUG:  EventTriggerInvoke XXXX' messages
 RESET client_min_messages;
@@ -243,7 +233,6 @@ SELECT count(*) FROM hyper_copy;
  count 
 -------
    125
-(1 row)
 
 -- Insert data into the chunks in random order
 COPY hyper_copy FROM STDIN DELIMITER ',' NULL AS 'null';
@@ -252,7 +241,6 @@ SELECT count(*) FROM hyper_copy;
  count 
 -------
    154
-(1 row)
 
 RESET client_min_messages;
 RESET timescaledb.max_open_chunks_per_insert;
@@ -268,7 +256,6 @@ SELECT create_hypertable('hyper_copy_noindex', 'time', chunk_time_interval => 10
         create_hypertable        
 ---------------------------------
  (7,public,hyper_copy_noindex,t)
-(1 row)
 
 -- No trigger
 \copy hyper_copy_noindex FROM data/copy_data.csv WITH csv header;
@@ -280,7 +267,6 @@ SELECT count(*) FROM hyper_copy_noindex;
  count 
 -------
     50
-(1 row)
 
 -- Before trigger (CIM_SINGLE should be used)
 CREATE TRIGGER hyper_copy_trigger_insert_before
@@ -295,7 +281,6 @@ SELECT count(*) FROM hyper_copy_noindex;
  count 
 -------
    100
-(1 row)
 
 -- After trigger (CIM_MULTI_CONDITIONAL should be used)
 DROP TRIGGER hyper_copy_trigger_insert_before ON hyper_copy_noindex;
@@ -311,7 +296,6 @@ SELECT count(*) FROM hyper_copy_noindex;
  count 
 -------
    150
-(1 row)
 
 ----------------------------------------------------------------
 -- Testing multi-buffer optimization
@@ -333,7 +317,6 @@ SELECT COUNT(*) FROM hyper_copy_large;
  count 
 -------
    721
-(1 row)
 
 -- Migrate data to chunks by using copy
 SELECT create_hypertable('hyper_copy_large', 'time',
@@ -343,13 +326,11 @@ NOTICE:  migrating data to chunks
        create_hypertable       
 -------------------------------
  (8,public,hyper_copy_large,t)
-(1 row)
 
 SELECT COUNT(*) FROM hyper_copy_large;
  count 
 -------
    721
-(1 row)
 
 ----------------------------------------------------------------
 -- Testing multi-buffer optimization
@@ -380,7 +361,6 @@ SELECT create_hypertable('table_with_chunk_trigger', 'time', chunk_time_interval
            create_hypertable           
 ---------------------------------------
  (9,public,table_with_chunk_trigger,t)
-(1 row)
 
 -- Insert data to create all missing chunks
 \copy table_with_chunk_trigger from data/copy_data.csv with csv header;
@@ -388,7 +368,6 @@ SELECT count(*) FROM table_with_chunk_trigger;
  count 
 -------
     25
-(1 row)
 
 -- Chunk 1: 1-2, Chunk 2: 2-3, Chunk 3: 3-4, Chunk 4: 4-5
 SELECT chunk_schema, chunk_name FROM timescaledb_information.chunks
@@ -411,7 +390,6 @@ SELECT count(*) FROM table_with_chunk_trigger;
  count 
 -------
     50
-(1 row)
 
 DROP TRIGGER table_with_chunk_trigger_before_trigger ON :chunk_schema.:chunk_name;
 -- Create after trigger
@@ -430,7 +408,6 @@ SELECT count(*) FROM table_with_chunk_trigger;
  count 
 -------
     75
-(1 row)
 
 -- Hypertable with after row trigger and no index
 DROP TABLE table_with_chunk_trigger;
@@ -443,7 +420,6 @@ SELECT create_hypertable('table_with_chunk_trigger', 'time', chunk_time_interval
            create_hypertable            
 ----------------------------------------
  (10,public,table_with_chunk_trigger,t)
-(1 row)
 
 -- Insert data to create all missing chunks
 \copy table_with_chunk_trigger from data/copy_data.csv with csv header;
@@ -451,7 +427,6 @@ SELECT count(*) FROM table_with_chunk_trigger;
  count 
 -------
     25
-(1 row)
 
 -- Chunk 1: 1-2, Chunk 2: 2-3, Chunk 3: 3-4, Chunk 4: 4-5
 SELECT chunk_schema, chunk_name FROM timescaledb_information.chunks
@@ -466,7 +441,6 @@ SELECT count(*) FROM table_with_chunk_trigger;
  count 
 -------
     50
-(1 row)
 
 ----------------------------------------------------------------
 -- Testing multi-buffer optimization
@@ -480,10 +454,7 @@ SELECT create_hypertable('table_without_bf_trigger', 'time', chunk_time_interval
            create_hypertable            
 ----------------------------------------
  (11,public,table_without_bf_trigger,t)
-(1 row)
 
--- Drop the default insert block trigger
-DROP TRIGGER ts_insert_blocker ON table_without_bf_trigger;
 \copy table_without_bf_trigger from data/copy_data.csv with csv header;
 SET client_min_messages TO DEBUG1;
 \copy table_without_bf_trigger from data/copy_data.csv with csv header;
@@ -493,7 +464,6 @@ SELECT count(*) FROM table_without_bf_trigger;
  count 
 -------
     50
-(1 row)
 
 -- After trigger (CIM_MULTI_CONDITIONAL should be used)
 CREATE TRIGGER table_with_chunk_trigger_after_trigger
@@ -507,7 +477,6 @@ SELECT count(*) FROM table_without_bf_trigger;
  count 
 -------
     75
-(1 row)
 
 ----------------------------------------------------------------
 -- Testing multi-buffer optimization
@@ -526,7 +495,6 @@ SELECT create_hypertable('table_with_layout_change', 'time', chunk_time_interval
            create_hypertable            
 ----------------------------------------
  (12,public,table_with_layout_change,t)
-(1 row)
 
 -- Chunk 1 (time = 1)
 COPY table_with_layout_change FROM STDIN DELIMITER ',' NULL AS 'null';
@@ -534,7 +502,6 @@ SELECT * FROM table_with_layout_change;
  value1 | value2 | value3 | time | value4 | value5 
 --------+--------+--------+------+--------+--------
     100 |    200 |    300 |    1 |    400 |    500
-(1 row)
 
 -- Drop the first attribute
 ALTER TABLE table_with_layout_change DROP COLUMN value1;
@@ -542,7 +509,6 @@ SELECT * FROM table_with_layout_change;
  value2 | value3 | time | value4 | value5 
 --------+--------+------+--------+--------
     200 |    300 |    1 |    400 |    500
-(1 row)
 
 -- COPY into existing chunk (time = 1)
 COPY table_with_layout_change FROM STDIN DELIMITER ',' NULL AS 'null';
@@ -554,7 +520,6 @@ SELECT * FROM table_with_layout_change ORDER BY time, value2, value3, value4, va
     200 |    300 |    1 |    400 |    500
     201 |    301 |    1 |    401 |    501
     202 |    302 |    2 |    402 |    502
-(3 rows)
 
 -- Create new chunk (time = 2), insert in different order
 COPY table_with_layout_change (time, value5, value4, value3, value2) FROM STDIN DELIMITER ',' NULL AS 'null';
@@ -569,7 +534,6 @@ SELECT * FROM table_with_layout_change ORDER BY time, value2, value3, value4, va
     203 |    303 |    2 |    403 |    503
     204 |    304 |    2 |    404 |    504
     205 |    305 |    2 |    405 |    505
-(6 rows)
 
 -- Drop the last attribute and add a new one
 ALTER TABLE table_with_layout_change DROP COLUMN value5;
@@ -583,7 +547,6 @@ SELECT * FROM table_with_layout_change ORDER BY time, value2, value3, value4, va
     203 |    303 |    2 |    403 |    600
     204 |    304 |    2 |    404 |    600
     205 |    305 |    2 |    405 |    600
-(6 rows)
 
 -- COPY in first chunk (time = 1)
 COPY table_with_layout_change (time, value2, value3, value4, value6) FROM STDIN DELIMITER ',' NULL AS 'null';
@@ -608,7 +571,6 @@ SELECT * FROM table_with_layout_change ORDER BY time, value2, value3, value4, va
     210 |    310 |    2 |    410 |    610
     208 |    308 |    3 |    408 |    608
     209 |    309 |    3 |    409 |    609
-(12 rows)
 
 -- Drop first column
 ALTER TABLE table_with_layout_change DROP COLUMN value2;
@@ -627,7 +589,6 @@ SELECT * FROM table_with_layout_change ORDER BY time, value3, value4, value6;
     310 |    2 |    410 |    610
     308 |    3 |    408 |    608
     309 |    3 |    409 |    609
-(12 rows)
 
 -- COPY in all exiting chunks and create a new one (time 4)
 COPY table_with_layout_change (value3, value4, time, value6) FROM STDIN DELIMITER ',' NULL AS 'null';
@@ -650,7 +611,6 @@ SELECT * FROM table_with_layout_change ORDER BY time, value3, value4, value6;
     309 |    3 |    409 |    609
     312 |    3 |    412 |    612
     314 |    4 |    414 |    614
-(16 rows)
 
 -- Drop the last two columns
 ALTER TABLE table_with_layout_change DROP COLUMN value4;
@@ -681,7 +641,6 @@ SELECT * FROM table_with_layout_change ORDER BY time, value3;
     314 |    4
     320 |    4
     319 |    5
-(21 rows)
 
 -- Drop the last of the initial attributes and add a new one
 ALTER TABLE table_with_layout_change DROP COLUMN value3;
@@ -718,17 +677,14 @@ SELECT * FROM table_with_layout_change ORDER BY time, value7;
     5 |    700
     5 |    724
     6 |    725
-(27 rows)
 
 -- verify check constraints work
 CREATE TABLE test_check(a INT, b TIMESTAMPTZ);
 ALTER TABLE test_check ADD CONSTRAINT c1 CHECK (a > 7);
 SELECT table_name FROM create_hypertable('test_check', 'b');
-NOTICE:  adding not-null constraint to column "b"
  table_name 
 ------------
  test_check
-(1 row)
 
 COPY test_check(a,b) FROM STDIN (delimiter ',', null 'N');
 \set ON_ERROR_STOP 0

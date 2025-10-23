@@ -1,0 +1,1296 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test creation of multiple refresh policies
+SET timezone TO PST8PDT;
+SET timescaledb.current_timestamp_mock TO '2025-06-01 0:30:00+00';
+SELECT setseed(1);
+ setseed 
+---------
+ 
+
+-- test interval checking with bigint
+CREATE TABLE overlap_test_bigint (
+    time BIGINT NOT NULL,
+    a INTEGER,
+    b INTEGER
+);
+SELECT create_hypertable('overlap_test_bigint', 'time', chunk_time_interval => 100);
+        create_hypertable         
+----------------------------------
+ (1,public,overlap_test_bigint,t)
+
+CREATE OR REPLACE FUNCTION integer_now_overlap_test_bigint()
+RETURNS BIGINT LANGUAGE SQL STABLE AS
+$$ SELECT COALESCE(MAX(time), 0) FROM overlap_test_bigint $$;
+SELECT set_integer_now_func('overlap_test_bigint', 'integer_now_overlap_test_bigint');
+ set_integer_now_func 
+----------------------
+ 
+
+INSERT INTO overlap_test_bigint
+SELECT i, (i % 5), random() * 100
+FROM generate_series(1, 2000) i;
+CREATE MATERIALIZED VIEW mat_m1(time, counta)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket(10, time) AS bucket,
+    count(a),
+    sum(b)
+FROM overlap_test_bigint
+GROUP BY 1
+WITH NO DATA;
+/* Test interval checking when multiple policies are created on the same cagg */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 1000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1000
+
+SELECT add_continuous_aggregate_policy('mat_m1', 1000::bigint, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1001
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Creating policies in either order should work */
+SELECT add_continuous_aggregate_policy('mat_m1', 1000::bigint, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1002
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 1000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1003
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 3000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1004
+
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1005
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Test non-null offsets on both sides too */
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, 1000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1006
+
+SELECT add_continuous_aggregate_policy('mat_m1', 4000::bigint, 3000::bigint,'12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1007
+
+SELECT add_continuous_aggregate_policy('mat_m1', 3000::bigint, 2000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1008
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Check overlap is detected correctly */
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 1000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1009
+
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1010
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 1000::bigint, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', 5000::bigint, 1000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1011
+
+SELECT add_continuous_aggregate_policy('mat_m1', 4000::bigint, 2000::bigint, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', 4000::bigint, 2000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1012
+
+SELECT add_continuous_aggregate_policy('mat_m1', 5000::bigint, 1000::bigint, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 2000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1013
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 1000::bigint, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1014
+
+SELECT add_continuous_aggregate_policy('mat_m1', 1000::bigint, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/* Check behaviour when exact policy is already defined */
+\set ON_ERROR_STOP 0
+/*if_not_exists=false*/
+SELECT add_continuous_aggregate_policy('mat_m1', 4000::bigint, 2000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1015
+
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, 1000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1016
+
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, 1000::bigint, '12 h'::interval);
+ERROR:  continuous aggregate refresh policy already exists for "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1017
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '12 h'::interval);
+ERROR:  continuous aggregate refresh policy already exists for "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/*if_not_exists => true*/
+SELECT add_continuous_aggregate_policy('mat_m1', 4000::bigint, 2000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1018
+
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, 1000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1019
+
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, 1000::bigint, '12 h'::interval, if_not_exists => true);
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1020
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '12 h'::interval, if_not_exists => true);
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Throw an error if there is an overlap even if if_not_exists => true */
+SELECT add_continuous_aggregate_policy('mat_m1', 4000::bigint, 2000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1021
+
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', 3000::bigint, 1000::bigint, '12 h'::interval, if_not_exists => true);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+\set ON_ERROR_STOP 1
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Test `alter_job` changing the config */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 3000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1022
+
+SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1023
+
+/* Alter end offset but don't overlap */
+SELECT jsonb_set(:'config', '{end_offset}', '2000') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                               config                               | next_start |                           check_config                           | fixed_schedule | initial_start | timezone |              application_name              
+--------+-------------------+-------------+-------------+--------------+-----------+--------------------------------------------------------------------+------------+------------------------------------------------------------------+----------------+---------------+----------+--------------------------------------------
+   1022 | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | t         | {"end_offset": 2000, "start_offset": null, "mat_hypertable_id": 2} | -infinity  | _timescaledb_functions.policy_refresh_continuous_aggregate_check | f              |               |          | Refresh Continuous Aggregate Policy [1022]
+
+\set ON_ERROR_STOP 0
+/* Alter end offset to overlap with another job*/
+SELECT jsonb_set(:'config', '{end_offset}', '1000') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+/* Alter end offset to be null */
+SELECT jsonb_set(:'config', '{end_offset}', 'null') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+/* Alter job to be identical to existing job */
+SELECT jsonb_set(:'config', '{start_offset}', '2000') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ERROR:  continuous aggregate refresh policy already exists for "mat_m1"
+\set ON_ERROR_STOP 1
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', 2000::bigint, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1024
+
+SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 3000::bigint, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1025
+
+/* Alter end offset to null but no overlap */
+SELECT jsonb_set(:'config', '{end_offset}', 'null') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                               config                               | next_start |                           check_config                           | fixed_schedule | initial_start | timezone |              application_name              
+--------+-------------------+-------------+-------------+--------------+-----------+--------------------------------------------------------------------+------------+------------------------------------------------------------------+----------------+---------------+----------+--------------------------------------------
+   1024 | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | t         | {"end_offset": null, "start_offset": 2000, "mat_hypertable_id": 2} | -infinity  | _timescaledb_functions.policy_refresh_continuous_aggregate_check | f              |               |          | Refresh Continuous Aggregate Policy [1024]
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Test that refresh is done correctly even though multiple policies exist */
+/* We do this by creating two CAggs on the same hypertable */
+/* One will have a single policy while the other will have two policies with adjacent offsets */
+CREATE MATERIALIZED VIEW mat_m2(time, counta)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket(10, time) AS bucket,
+    count(a),
+    sum(b)
+FROM overlap_test_bigint
+GROUP BY 1
+WITH NO DATA;
+/* Create two policies on mat_m1 */
+SELECT add_continuous_aggregate_policy('mat_m1', 5000::bigint, 3000::bigint, '12 h'::interval) AS agg_m1_job_1 \gset
+SELECT add_continuous_aggregate_policy('mat_m1', 3000::bigint, 1000::bigint, '12 h'::interval) AS agg_m1_job_2 \gset
+/* Create single policy on mat_m2 */
+SELECT add_continuous_aggregate_policy('mat_m2', 5000::bigint, 1000::bigint, '12 h'::interval) AS agg_m2_job \gset
+/* Cleanup any existing data */
+TRUNCATE mat_m1;
+TRUNCATE mat_m2;
+/* Refresh both continuous aggs immediately */
+CALL run_job(:agg_m1_job_1);
+CALL run_job(:agg_m1_job_2);
+CALL run_job(:agg_m2_job);
+/* Compare both outputs */
+SELECT count(*) AS exp_row_count from mat_m1 \gset
+SELECT count(*) AS actual_row_count from (
+SELECT * from mat_m1 UNION SELECT * from mat_m2) union_q \gset
+/* Row counts should be the same */
+SELECT :exp_row_count = :actual_row_count, :exp_row_count, :actual_row_count;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ t        |      100 |      100
+
+SELECT * from mat_m2 EXCEPT SELECT * from mat_m1;
+ time | counta | sum 
+------+--------+-----
+
+SELECT * from mat_m1 EXCEPT SELECT * from mat_m2;
+ time | counta | sum 
+------+--------+-----
+
+DROP MATERIALIZED VIEW mat_m1;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_22_chunk
+DROP MATERIALIZED VIEW mat_m2;
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_23_chunk
+CREATE TABLE overlap_test_timestamptz (
+    time timestamptz NOT NULL,
+    a INTEGER,
+    b INTEGER
+);
+SELECT create_hypertable('overlap_test_timestamptz', 'time', chunk_time_interval => '1 day'::interval);
+           create_hypertable           
+---------------------------------------
+ (4,public,overlap_test_timestamptz,t)
+
+INSERT INTO overlap_test_timestamptz
+SELECT t, (i % 5), random() * 100
+FROM
+generate_series('2025-01-01T01:01:01+00', '2025-06-01T01:01:01+00', INTERVAL '1 days') t,
+generate_series(1, 10) i;
+CREATE MATERIALIZED VIEW mat_m1(time, counta)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 day', time) AS bucket,
+    count(a),
+    sum(b)
+FROM overlap_test_timestamptz
+GROUP BY 1
+WITH NO DATA;
+/* Test interval checking when multiple policies are created on the same cagg */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1029
+
+SELECT add_continuous_aggregate_policy('mat_m1', '29 days'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1030
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Creating policies in either order should work */
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1031
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1032
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1033
+
+SELECT add_continuous_aggregate_policy('mat_m1', '15 days'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1034
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Test non-null offsets on both sides too */
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval, '20 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1035
+
+SELECT add_continuous_aggregate_policy('mat_m1', '10 days'::interval, '5 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1036
+
+SELECT add_continuous_aggregate_policy('mat_m1', '19 days'::interval, '11 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1037
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Check overlap is detected correctly */
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1038
+
+SELECT add_continuous_aggregate_policy('mat_m1', '45 days'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '45 days'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1039
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval, '10 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1040
+
+SELECT add_continuous_aggregate_policy('mat_m1', '20 days'::interval, '15 days'::interval, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '20 days'::interval, '15 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1041
+
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval, '10 days'::interval, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1042
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '20 days'::interval, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1043
+
+SELECT add_continuous_aggregate_policy('mat_m1', '20 days'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/* Check behaviour when exact policy is already defined */
+\set ON_ERROR_STOP 0
+/*if_not_exists=false*/
+SELECT add_continuous_aggregate_policy('mat_m1', '45 days'::interval, '30 days', '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1044
+
+SELECT add_continuous_aggregate_policy('mat_m1', '31 days'::interval, '15 days', '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT add_continuous_aggregate_policy('mat_m1', '31 days'::interval, '15 days', '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL::interval, NULL::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1045
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL::interval, NULL::interval, '12 h'::interval);
+ERROR:  continuous aggregate refresh policy already exists for "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/*if_not_exists => true*/
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', '45 days', '30 days', '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1046
+
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval, '15 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1047
+
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval, '15 days'::interval, '12 h'::interval, if_not_exists => true);
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL::interval, NULL::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1048
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL::interval, NULL::interval, '12 h'::interval, if_not_exists => true);
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/* Throw an error if there is an overlap even if if_not_exists => true */
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval, '10 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1049
+
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', '15 days'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+\set ON_ERROR_STOP 1
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Mixing different interval units should also work correctly*/
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '1 month'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1050
+
+SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1051
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '1 year'::interval, '2 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1052
+
+SELECT add_continuous_aggregate_policy('mat_m1', '5 weeks'::interval, '-7 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1053
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1054
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '1 month'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1055
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 weeks'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1056
+
+SELECT add_continuous_aggregate_policy('mat_m1', '1 month'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/* Check overlap with negative offsets */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 weeks'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1057
+
+SELECT add_continuous_aggregate_policy('mat_m1', '-1 month'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1058
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '-2 weeks'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1059
+
+SELECT add_continuous_aggregate_policy('mat_m1', '1 month'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/* Test `alter_job` changing the config */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1060
+
+SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1061
+
+/* Alter end offset but don't overlap */
+SELECT jsonb_set(:'config', '{end_offset}', '"30 days"') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                                 config                                  | next_start |                           check_config                           | fixed_schedule | initial_start | timezone |              application_name              
+--------+-------------------+-------------+-------------+--------------+-----------+-------------------------------------------------------------------------+------------+------------------------------------------------------------------+----------------+---------------+----------+--------------------------------------------
+   1060 | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | t         | {"end_offset": "30 days", "start_offset": null, "mat_hypertable_id": 5} | -infinity  | _timescaledb_functions.policy_refresh_continuous_aggregate_check | f              |               |          | Refresh Continuous Aggregate Policy [1060]
+
+\set ON_ERROR_STOP 0
+/* Alter end offset to overlap with another job*/
+SELECT jsonb_set(:'config', '{end_offset}', '"1 week"') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+/* Alter end offset to be null */
+SELECT jsonb_set(:'config', '{end_offset}', 'null') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+/* Alter job to be identical to existing job */
+SELECT jsonb_set(:'config', '{start_offset}', '"2 weeks"') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ERROR:  continuous aggregate refresh policy already exists for "mat_m1"
+\set ON_ERROR_STOP 1
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1062
+
+SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1063
+
+/* Alter end offset to null but no overlap */
+SELECT jsonb_set(:'config', '{end_offset}', 'null') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                                  config                                   | next_start |                           check_config                           | fixed_schedule | initial_start | timezone |              application_name              
+--------+-------------------+-------------+-------------+--------------+-----------+---------------------------------------------------------------------------+------------+------------------------------------------------------------------+----------------+---------------+----------+--------------------------------------------
+   1062 | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | t         | {"end_offset": null, "start_offset": "@ 14 days", "mat_hypertable_id": 5} | -infinity  | _timescaledb_functions.policy_refresh_continuous_aggregate_check | f              |               |          | Refresh Continuous Aggregate Policy [1062]
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+CREATE MATERIALIZED VIEW mat_m2(time, counta)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 day', time) AS bucket,
+    count(a),
+    sum(b)
+FROM overlap_test_timestamptz
+GROUP BY 1
+WITH NO DATA;
+/* Create two policies on mat_m1 */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval) AS agg_m1_job_1 \gset
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval,  NULL, '12 h'::interval) AS agg_m1_job_2 \gset
+/* Create single policy on mat_m2 */
+SELECT add_continuous_aggregate_policy('mat_m2', NULL, NULL, '12 h'::interval) AS agg_m2_job \gset
+/* Cleanup any existing data */
+TRUNCATE mat_m1;
+TRUNCATE mat_m2;
+/* Refresh both continuous aggs immediately */
+CALL run_job(:agg_m1_job_1);
+CALL run_job(:agg_m1_job_2);
+CALL run_job(:agg_m2_job);
+/* Compare both outputs */
+SELECT count(*) AS exp_row_count from mat_m1 \gset
+SELECT count(*) AS actual_row_count from (
+SELECT * from mat_m1 UNION SELECT * from mat_m2) AS union_q \gset
+/* Row counts should be the same */
+SELECT :exp_row_count = :actual_row_count, :exp_row_count, :actual_row_count;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ t        |      152 |      152
+
+SELECT * from mat_m2 EXCEPT SELECT * from mat_m1;
+ time | counta | sum 
+------+--------+-----
+
+SELECT * from mat_m1 EXCEPT SELECT * from mat_m2;
+ time | counta | sum 
+------+--------+-----
+
+DROP MATERIALIZED VIEW mat_m1;
+NOTICE:  drop cascades to 17 other objects
+DROP MATERIALIZED VIEW mat_m2;
+NOTICE:  drop cascades to 17 other objects
+/* Test with variable sized buckets */
+CREATE TABLE overlap_test_timestamptz_var (
+    time timestamptz NOT NULL,
+    a INTEGER,
+    b INTEGER
+);
+SELECT create_hypertable('overlap_test_timestamptz_var', 'time', chunk_time_interval => '1 month'::interval);
+             create_hypertable             
+-------------------------------------------
+ (7,public,overlap_test_timestamptz_var,t)
+
+INSERT INTO overlap_test_timestamptz_var
+SELECT t, (i % 5), random() * 100
+FROM
+generate_series('2024-01-01T01:01:01+00', '2025-06-01T01:01:01+00', INTERVAL '1 day') t,
+generate_series(1, 10) i;
+CREATE MATERIALIZED VIEW mat_m1(time, counta)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 month', time) AS bucket,
+    count(a),
+    sum(b)
+FROM overlap_test_timestamptz_var
+GROUP BY 1
+WITH NO DATA;
+/* Test interval checking when multiple policies are created on the same cagg */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '3 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1067
+
+SELECT add_continuous_aggregate_policy('mat_m1', '3 months'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1068
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Creating policies in either order should work */
+SELECT add_continuous_aggregate_policy('mat_m1', '3 months'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1069
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '3 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1070
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '3 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1071
+
+SELECT add_continuous_aggregate_policy('mat_m1', '2 months'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1072
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Test non-null offsets on both sides too */
+SELECT add_continuous_aggregate_policy('mat_m1', '8 months'::interval, '6 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1073
+
+SELECT add_continuous_aggregate_policy('mat_m1', '6 months'::interval, '12 weeks'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1074
+
+SELECT add_continuous_aggregate_policy('mat_m1', '12 weeks'::interval, '1 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1075
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+/* Check overlap is detected correctly */
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1076
+
+SELECT add_continuous_aggregate_policy('mat_m1', '3 months'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '3 months'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1077
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '6 months'::interval, '1 week'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1078
+
+SELECT add_continuous_aggregate_policy('mat_m1', '4 months'::interval, '2 weeks'::interval, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '4 months'::interval, '2 weeks'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1079
+
+SELECT add_continuous_aggregate_policy('mat_m1', '6 months'::interval, '1 week'::interval, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1080
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '20 days'::interval, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1081
+
+SELECT add_continuous_aggregate_policy('mat_m1', '20 days'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/* Check behaviour when exact policy is already defined */
+\set ON_ERROR_STOP 0
+/*if_not_exists=false*/
+SELECT add_continuous_aggregate_policy('mat_m1', '1 year'::interval, '8 months', '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1082
+
+SELECT add_continuous_aggregate_policy('mat_m1', '8 months'::interval, '2 weeks', '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1083
+
+SELECT add_continuous_aggregate_policy('mat_m1', '8 months'::interval, '2 weeks', '12 h'::interval);
+ERROR:  continuous aggregate refresh policy already exists for "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL::interval, NULL::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1084
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL::interval, NULL::interval, '12 h'::interval);
+ERROR:  continuous aggregate refresh policy already exists for "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/*if_not_exists => true*/
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', '1 year'::interval, '8 months', '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1085
+
+SELECT add_continuous_aggregate_policy('mat_m1', '8 months'::interval, '2 weeks', '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1086
+
+SELECT add_continuous_aggregate_policy('mat_m1', '8 months'::interval, '2 weeks', '12 h'::interval, if_not_exists => true);
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL::interval, NULL::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1087
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL::interval, NULL::interval, '12 h'::interval, if_not_exists => true);
+NOTICE:  continuous aggregate refresh policy already exists for "mat_m1", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/* Mixing different interval units should also work correctly*/
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '1 month'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1088
+
+SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1089
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '1 year'::interval, '2 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1090
+
+SELECT add_continuous_aggregate_policy('mat_m1', '8 weeks'::interval, '-7 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1091
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1092
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '1 month'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1093
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 weeks'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1094
+
+SELECT add_continuous_aggregate_policy('mat_m1', '1 month'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/* Check overlap with negative offsets */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 weeks'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1095
+
+SELECT add_continuous_aggregate_policy('mat_m1', '-1 month'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1096
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '-2 weeks'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1097
+
+SELECT add_continuous_aggregate_policy('mat_m1', '1 month'::interval, NULL, '12 h'::interval);
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+\set ON_ERROR_STOP 1
+/* Test `alter_job` changing the config */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1098
+
+SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1099
+
+/* Alter end offset but don't overlap */
+SELECT jsonb_set(:'config', '{end_offset}', '"30 days"') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                                 config                                  | next_start |                           check_config                           | fixed_schedule | initial_start | timezone |              application_name              
+--------+-------------------+-------------+-------------+--------------+-----------+-------------------------------------------------------------------------+------------+------------------------------------------------------------------+----------------+---------------+----------+--------------------------------------------
+   1098 | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | t         | {"end_offset": "30 days", "start_offset": null, "mat_hypertable_id": 8} | -infinity  | _timescaledb_functions.policy_refresh_continuous_aggregate_check | f              |               |          | Refresh Continuous Aggregate Policy [1098]
+
+\set ON_ERROR_STOP 0
+/* Alter end offset to overlap with another job*/
+SELECT jsonb_set(:'config', '{end_offset}', '"1 week"') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+/* Alter end offset to be null */
+SELECT jsonb_set(:'config', '{end_offset}', 'null') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ERROR:  refresh interval overlaps with an existing continuous aggregate policy on "mat_m1"
+/* Alter job to be identical to existing job */
+SELECT jsonb_set(:'config', '{start_offset}', '"2 weeks"') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ERROR:  continuous aggregate refresh policy already exists for "mat_m1"
+\set ON_ERROR_STOP 1
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+SELECT add_continuous_aggregate_policy('mat_m1', '2 weeks'::interval, NULL, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1100
+
+SELECT id AS job_id, config AS config FROM _timescaledb_config.bgw_job WHERE proc_name = 'policy_refresh_continuous_aggregate' \gset
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '2 months'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1101
+
+/* Alter end offset to null but no overlap */
+SELECT jsonb_set(:'config', '{end_offset}', 'null') AS config \gset
+SELECT * FROM alter_job(:job_id, config := :'config');
+ job_id | schedule_interval | max_runtime | max_retries | retry_period | scheduled |                                  config                                   | next_start |                           check_config                           | fixed_schedule | initial_start | timezone |              application_name              
+--------+-------------------+-------------+-------------+--------------+-----------+---------------------------------------------------------------------------+------------+------------------------------------------------------------------+----------------+---------------+----------+--------------------------------------------
+   1100 | @ 12 hours        | @ 0         |          -1 | @ 12 hours   | t         | {"end_offset": null, "start_offset": "@ 14 days", "mat_hypertable_id": 8} | -infinity  | _timescaledb_functions.policy_refresh_continuous_aggregate_check | f              |               |          | Refresh Continuous Aggregate Policy [1100]
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+
+CREATE MATERIALIZED VIEW mat_m2(time, counta)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 month', time) AS bucket,
+    count(a),
+    sum(b)
+FROM overlap_test_timestamptz_var
+GROUP BY 1
+WITH NO DATA;
+/* Create two policies on mat_m1 */
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, '30 days'::interval, '12 h'::interval) AS agg_m1_job_1 \gset
+SELECT add_continuous_aggregate_policy('mat_m1', '30 days'::interval,  NULL, '12 h'::interval) AS agg_m1_job_2 \gset
+/* Create single policy on mat_m2 */
+SELECT add_continuous_aggregate_policy('mat_m2', NULL, NULL, '12 h'::interval) AS agg_m2_job \gset
+/* Cleanup any existing data */
+TRUNCATE mat_m1;
+TRUNCATE mat_m2;
+/* Refresh both continuous aggs immediately */
+CALL run_job(:agg_m1_job_1);
+CALL run_job(:agg_m1_job_2);
+CALL run_job(:agg_m2_job);
+/* Compare both outputs */
+SELECT count(*) AS exp_row_count from mat_m1 \gset
+SELECT count(*) AS actual_row_count from (
+SELECT * from mat_m1 UNION SELECT * from mat_m2) AS union_q \gset
+/* Row counts should be the same */
+SELECT :exp_row_count = :actual_row_count, :exp_row_count, :actual_row_count;
+ ?column? | ?column? | ?column? 
+----------+----------+----------
+ t        |       18 |       18
+
+SELECT * from mat_m2 EXCEPT SELECT * from mat_m1;
+ time | counta | sum 
+------+--------+-----
+
+SELECT * from mat_m1 EXCEPT SELECT * from mat_m2;
+ time | counta | sum 
+------+--------+-----
+
+DROP MATERIALIZED VIEW mat_m1;
+NOTICE:  drop cascades to 3 other objects
+DROP MATERIALIZED VIEW mat_m2;
+NOTICE:  drop cascades to 3 other objects
+/* Concurrent policies aren't allowed on hierarchical continuous aggs */
+CREATE MATERIALIZED VIEW mat_m1
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 day', time) AS bucket,
+    count(a) AS counta,
+    sum(b) AS sumb
+FROM overlap_test_timestamptz
+GROUP BY 1
+WITH NO DATA;
+CREATE MATERIALIZED VIEW mat_m1_rollup
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT
+    time_bucket('1 month', bucket) AS bucket,
+    sum(counta) AS counta,
+    sum(sumb) AS sumb
+FROM mat_m1
+GROUP BY 1
+WITH NO DATA;
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', NULL, '30 days'::interval, '12 h'::interval);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1105
+
+\set ON_ERROR_STOP 0
+-- Multiple policies on hierarchical cagg should not be allowed
+SELECT add_continuous_aggregate_policy('mat_m1_rollup', '29 days'::interval, NULL, '12 h'::interval);
+ERROR:  multiple refresh policies are not supported for hierarchical continuous aggregates
+\set ON_ERROR_STOP 1
