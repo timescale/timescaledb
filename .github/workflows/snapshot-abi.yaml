@@ -22,6 +22,7 @@ jobs:
       pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
+      pg18_abi_min: ${{ steps.config.outputs.pg18_abi_min }}
 
     steps:
     - name: Checkout source code
@@ -43,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 15, 16, 17 ]
+        pg: [ 15, 16, 17, 18 ]
         ignores:
           - 'net telemetry bgw_launcher'
         include:
@@ -53,6 +54,8 @@ jobs:
             abi_min: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
           - pg: 17
             abi_min: ${{ fromJson(needs.config.outputs.pg17_abi_min) }}
+          - pg: 18
+            abi_min: ${{ fromJson(needs.config.outputs.pg18_abi_min) }}
 
     steps:
 
