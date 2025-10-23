@@ -233,11 +233,12 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	 * 8: compressed_partial
 	 */
 	if (!ts_chunk_is_compressed(uncompressed_chunk) && ts_chunk_is_partial(uncompressed_chunk))
-		elog(ERROR,
-			 "unexpected chunk status %d in chunk %s.%s",
-			 uncompressed_chunk->fd.status,
-			 NameStr(uncompressed_chunk->fd.schema_name),
-			 NameStr(uncompressed_chunk->fd.table_name));
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("unexpected chunk status %d in chunk %s.%s",
+						uncompressed_chunk->fd.status,
+						NameStr(uncompressed_chunk->fd.schema_name),
+						NameStr(uncompressed_chunk->fd.table_name))));
 
 	/* need it to find the segby cols from the catalog */
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
