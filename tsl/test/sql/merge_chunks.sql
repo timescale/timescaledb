@@ -388,6 +388,8 @@ select
     n as new_chunk_id,
     (select count(indexrelid::regclass) from pg_index where indrelid=new_relid) as num_new_indexes
 from (select *, dense_rank() over (order by new_relid) as n from _timescaledb_catalog.chunk_rewrite) cr;
+grant select on chunks_being_merged to public;
+
 
 -- Concurrent merge cannot run in a transaction block
 \set ON_ERROR_STOP 0
@@ -399,17 +401,65 @@ select debug_waitpoint_enable('merge_chunks_fail');
 call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
 \set ON_ERROR_STOP 1
 
-select debug_waitpoint_release('merge_chunks_fail');
 select * from chunks_being_merged;
+reset role;
+
+-- Manually drop a temp heap to create a situation where the failed merge heap is already gone.
+select new_relid from _timescaledb_catalog.chunk_rewrite
+where chunk_relid = '_timescaledb_internal._hyper_1_1_chunk'::regclass \gset
+drop table :new_relid;
+
+-- Test that it is only possible to clean up own merges.
+set role :ROLE_1;
+create table mergeme_role1(time timestamptz not null, device int, temp float);
+select create_hypertable('mergeme_role1', 'time', chunk_time_interval => interval '1 day');
+
+insert into mergeme_role1 values ('2024-01-01', 1, 1.0), ('2024-01-02', 2, 2.0);
+select show_chunks('mergeme_role1');
+
+-- Fail merge to create multiple entries in chunk_rewrite with different owners
+\set ON_ERROR_STOP 0
+call merge_chunks('_timescaledb_internal._hyper_4_18_chunk', '_timescaledb_internal._hyper_4_19_chunk', concurrently => true);
+\set ON_ERROR_STOP 1
+select * from chunks_being_merged;
+
+set role :ROLE_DEFAULT_PERM_USER;
+-- Save non-cleaned information
 create table pre_cleaned_chunks as select * from _timescaledb_catalog.chunk_rewrite;
+
+-- Should only clean up its own failed merges
 call _timescaledb_functions.chunk_rewrite_cleanup();
 select * from chunks_being_merged;
 
+set role :ROLE_1;
+
+call _timescaledb_functions.chunk_rewrite_cleanup();
+-- Everything cleaned up
+select * from chunks_being_merged;
+
+set role :ROLE_DEFAULT_PERM_USER;
+
 -- None of the pre-cleaned chunks should remain after cleanup. Check by joining
--- the pre-cleaned relids with pg_class. The count should be zero if the
+-- the pre-cleaned relids with pg_class. The count of the join should be zero if the
 -- relations no longer exist in pg_class.
 select count(*) from pre_cleaned_chunks;
 select count(*) from pre_cleaned_chunks cc join pg_class c on (c.oid = cc.new_relid);
+
+-- Fail merges again to test superuser cleanup
+\set ON_ERROR_STOP 0
+call merge_chunks_concurrently(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+set role :ROLE_1;
+call merge_chunks('_timescaledb_internal._hyper_4_18_chunk', '_timescaledb_internal._hyper_4_19_chunk', concurrently => true);
+\set ON_ERROR_STOP 1
+set role :ROLE_DEFAULT_PERM_USER;
+select debug_waitpoint_release('merge_chunks_fail');
+
+select * from chunks_being_merged;
+-- Reset to superuser
+reset role;
+select current_user;
+call _timescaledb_functions.chunk_rewrite_cleanup();
+select * from chunks_being_merged;
 
 drop table pre_cleaned_chunks;
 drop view chunks_being_merged;

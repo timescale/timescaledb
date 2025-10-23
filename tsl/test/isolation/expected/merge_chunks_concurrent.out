@@ -602,15 +602,11 @@ debug_waitpoint_enable
 step s6_merge_3_4_concurrently: 
     call merge_chunks(getchunk('readings', 2), getchunk('readings', 3), concurrently => true);
  <waiting ...>
-s5: DEBUG:  chunk merge in progress for "_hyper_X_X_chunk", skipping
+s5: NOTICE:  cleaned up 2 orphaned rewrite relations, skipped 2
 step s5_merge_cleanup: 
-    set client_min_messages = DEBUG1;
     call _timescaledb_functions.chunk_rewrite_cleanup();
     select count(*) from _timescaledb_catalog.chunk_rewrite;
-    reset client_min_messages;
 
-s5: DEBUG:  chunk merge in progress for "_hyper_X_X_chunk", skipping
-s5: NOTICE:  cleaned up 2 orphaned rewrite relations, skipped 2
 count
 -----
     2

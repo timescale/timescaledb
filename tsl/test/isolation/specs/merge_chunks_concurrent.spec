@@ -215,10 +215,8 @@ step "s5_merge_1_2_concurrently" {
 }
 
 step "s5_merge_cleanup" {
-    set client_min_messages = DEBUG1;
     call _timescaledb_functions.chunk_rewrite_cleanup();
     select count(*) from _timescaledb_catalog.chunk_rewrite;
-    reset client_min_messages;
 }
 
 session "s6"

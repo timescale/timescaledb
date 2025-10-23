@@ -13,12 +13,15 @@
 #include <catalog/objectaddress.h>
 #include <catalog/pg_class_d.h>
 #include <executor/tuptable.h>
+#include <miscadmin.h>
 #include <nodes/lockoptions.h>
 #include <nodes/parsenodes.h>
 #include <storage/itemptr.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
+#include <utils/acl.h>
 #include <utils/lsyscache.h>
+#include <utils/syscache.h>
 
 #include "chunk_rewrite.h"
 #include "scan_iterator.h"
@@ -224,6 +227,7 @@ ts_chunk_rewrite_cleanup(PG_FUNCTION_ARGS)
 	ObjectAddresses *objaddrs = new_object_addresses();
 	unsigned int cleanup_count = 0;
 	unsigned int skipped_count = 0;
+	Oid userid = GetUserId();
 	CatalogSecurityContext sec_ctx;
 	ScanTupLock tuplock = {
 		.lockmode = LockTupleExclusive,
@@ -247,6 +251,7 @@ ts_chunk_rewrite_cleanup(PG_FUNCTION_ARGS)
 
 		if (ti->lockresult == TM_Ok)
 		{
+			Oid chunk_relid = DatumGetObjectId(chunk_relid_dat);
 			Oid new_relid = DatumGetObjectId(new_relid_dat);
 
 			/*
@@ -261,15 +266,41 @@ ts_chunk_rewrite_cleanup(PG_FUNCTION_ARGS)
 					.objectId = DatumGetObjectId(new_relid),
 					.classId = RelationRelationId,
 				};
+				/*
+				 * Check that the merge relation still exists and get its owner.
+				 */
+				HeapTuple tuple;
+				Oid ownerid = InvalidOid;
 
-				add_exact_object_address(&new_objaddr, objaddrs);
+				tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(chunk_relid));
 
-				ItemPointer tid = ts_scanner_get_tuple_tid(ti);
+				if (HeapTupleIsValid(tuple))
+					ownerid = ((Form_pg_class) GETSTRUCT(tuple))->relowner;
 
-				ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-				ts_catalog_delete_tid_only(it.ctx.tablerel, tid);
-				ts_catalog_restore_user(&sec_ctx);
-				entry_cleaned = true;
+				ReleaseSysCache(tuple);
+
+				/*
+				 * Only clean an entry if the user has the privileges of the owner of the relation.
+				 * Also clean up if the relation doesn't exist anymore (relowner is InvalidOid).
+				 */
+				if (!OidIsValid(ownerid) || has_privs_of_role(userid, ownerid))
+				{
+					/*
+					 * Check that the relation still exists. If it does, add to delete objects.
+					 * Otherwise release lock.
+					 */
+					if (SearchSysCacheExists1(RELOID, ObjectIdGetDatum(new_relid)))
+						add_exact_object_address(&new_objaddr, objaddrs);
+					else
+						UnlockRelationOid(new_relid, AccessExclusiveLock);
+
+					ItemPointer tid = ts_scanner_get_tuple_tid(ti);
+
+					ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+					ts_catalog_delete_tid_only(it.ctx.tablerel, tid);
+					ts_catalog_restore_user(&sec_ctx);
+					entry_cleaned = true;
+				}
 			}
 		}
 
@@ -286,7 +317,7 @@ ts_chunk_rewrite_cleanup(PG_FUNCTION_ARGS)
 	}
 
 	ts_scan_iterator_close(&it);
-	performMultipleDeletions(objaddrs, DROP_RESTRICT, 0);
+	performMultipleDeletions(objaddrs, DROP_RESTRICT, PERFORM_DELETION_INTERNAL);
 
 	elog(NOTICE,
 		 "cleaned up %u orphaned rewrite relations, skipped %u",

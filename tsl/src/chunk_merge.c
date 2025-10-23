@@ -410,7 +410,7 @@ chunk_update_constraints(const Chunk *chunk, const Hypercube *new_cube)
 														false),
 			};
 
-			performDeletion(&constrobj, DROP_RESTRICT, 0);
+			performDeletion(&constrobj, DROP_RESTRICT, PERFORM_DELETION_INTERNAL);
 
 			/* Create the new check constraint */
 			const Dimension *dim =
