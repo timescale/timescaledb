@@ -23,20 +23,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner:
-          - ubuntu-latest
-          - timescaledb-runner-arm64
-        image:
-          - ubuntu:22.04
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: timescaledb-runner-arm64
+            arch: ARM
         pg:
           - 17
         license:
           - "TSL"
         include:
-#          - license: Apache
-#            pkg_suffix: "-oss"
           - image: ubuntu:22.04
             image_friendly: ubuntu-22.04
+
     runs-on: ${{ matrix.runner }}
 
     steps:
@@ -99,7 +98,7 @@ jobs:
       if: always()
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
-        find . -name initdb.log -exec cat {} + > initdb.log
+        find ./* -name initdb.log -exec cat {} + > initdb.log
 
     - name: Show regression diffs
       if: always()
@@ -111,7 +110,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Installcheck logs ${{ matrix.image_friendly }} ${{ matrix.license }} ${{ matrix.pg }}
+        name: Installcheck logs ${{ matrix.runner }} ${{ matrix.image_friendly }} ${{ matrix.license }} ${{ matrix.pg }}
         path: |
             postmaster.*
             initdb.log
