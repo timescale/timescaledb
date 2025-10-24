@@ -326,6 +326,20 @@ CREATE INDEX ON :TABLE(dev_name);
                Rows Removed by Filter: 20
 
 CREATE INDEX ON :TABLE(dev);
+-- RowCompareExpr where some args are not in the index:
+-- we extract lossy "dev >=5" index condition which is strict and doesn't allow NULLs
+SET timescaledb.debug_skip_scan_info TO true;
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE (dev, time) > (5,100);
+psql:include/skip_scan_query.sql:74: INFO:  SkipScan used on skip_scan_dev_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=6.00 loops=1)
+   ->  Custom Scan (SkipScan) on skip_scan (actual rows=6.00 loops=1)
+         ->  Index Scan using skip_scan_dev_idx on skip_scan (actual rows=6.00 loops=1)
+               Index Cond: (dev >= 5)
+               Filter: (ROW(dev, "time") > ROW(5, 100))
+               Rows Removed by Filter: 100
+
+RESET timescaledb.debug_skip_scan_info;
 CREATE INDEX ON :TABLE(dev, time);
 CREATE INDEX ON :TABLE(time,dev);
 CREATE INDEX ON :TABLE(time,dev,val);
@@ -1659,6 +1673,37 @@ CREATE INDEX ON :TABLE(dev_name);
                      Rows Removed by Filter: 5
 
 CREATE INDEX ON :TABLE(dev);
+-- RowCompareExpr where some args are not in the index:
+-- we extract lossy "dev >=5" index condition which is strict and doesn't allow NULLs
+SET timescaledb.debug_skip_scan_info TO true;
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE (dev, time) > (5,100);
+psql:include/skip_scan_query.sql:74: INFO:  SkipScan used on _hyper_1_1_chunk_skip_scan_ht_dev_idx(dev NOT NULL)
+psql:include/skip_scan_query.sql:74: INFO:  SkipScan used on _hyper_1_2_chunk_skip_scan_ht_dev_idx(dev NOT NULL)
+psql:include/skip_scan_query.sql:74: INFO:  SkipScan used on _hyper_1_3_chunk_skip_scan_ht_dev_idx(dev NOT NULL)
+psql:include/skip_scan_query.sql:74: INFO:  SkipScan used on _hyper_1_4_chunk_skip_scan_ht_dev_idx(dev NOT NULL)
+--- QUERY PLAN ---
+ Unique (actual rows=6.00 loops=1)
+   ->  Merge Append (actual rows=24.00 loops=1)
+         Sort Key: skip_scan_ht.dev
+         ->  Custom Scan (SkipScan) on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+               ->  Index Scan using _hyper_1_1_chunk_skip_scan_ht_dev_idx on _hyper_1_1_chunk (actual rows=6.00 loops=1)
+                     Index Cond: (dev >= 5)
+                     Filter: (ROW(dev, "time") > ROW(5, 100))
+                     Rows Removed by Filter: 101
+         ->  Custom Scan (SkipScan) on _hyper_1_2_chunk (actual rows=6.00 loops=1)
+               ->  Index Scan using _hyper_1_2_chunk_skip_scan_ht_dev_idx on _hyper_1_2_chunk (actual rows=6.00 loops=1)
+                     Index Cond: (dev >= 5)
+                     Filter: (ROW(dev, "time") > ROW(5, 100))
+         ->  Custom Scan (SkipScan) on _hyper_1_3_chunk (actual rows=6.00 loops=1)
+               ->  Index Scan using _hyper_1_3_chunk_skip_scan_ht_dev_idx on _hyper_1_3_chunk (actual rows=6.00 loops=1)
+                     Index Cond: (dev >= 5)
+                     Filter: (ROW(dev, "time") > ROW(5, 100))
+         ->  Custom Scan (SkipScan) on _hyper_1_4_chunk (actual rows=6.00 loops=1)
+               ->  Index Scan using _hyper_1_4_chunk_skip_scan_ht_dev_idx on _hyper_1_4_chunk (actual rows=6.00 loops=1)
+                     Index Cond: (dev >= 5)
+                     Filter: (ROW(dev, "time") > ROW(5, 100))
+
+RESET timescaledb.debug_skip_scan_info;
 CREATE INDEX ON :TABLE(dev, time);
 CREATE INDEX ON :TABLE(time,dev);
 CREATE INDEX ON :TABLE(time,dev,val);

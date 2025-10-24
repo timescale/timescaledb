@@ -820,16 +820,15 @@ check_notnull_skipkey(SkipKeyInfo *skinfo, Path *child_path, IndexPath *index_pa
 		if (ic->indexcol > skinfo->scankey_attno - 1)
 			break;
 
-		/* Lossy index quals may not cover NULL values but BTree quals are never lossy  */
-		Assert(!ic->lossy);
-
 		/* We may have row comparison with skip key not being a leading col,
 		 * like (col, skipcol) > (3, 5), but it can allow NULL skipcols to pass if (col>3) is true,
 		 * so for row comparisons we will only look at leading "indexcol" and not at "indexcols".
 		 */
 		if (ic->indexcol == skinfo->scankey_attno - 1)
 		{
-			/* Any simple index clause but "isNull" filters out nulls */
+			/* Any simple index qual but "isNull" filters out nulls,
+			 * including "lossy" index quals extracted from index clauses.
+			 */
 			ListCell *lc;
 			foreach (lc, ic->indexquals)
 			{

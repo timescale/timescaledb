@@ -68,6 +68,12 @@ CREATE INDEX ON :TABLE(dev_name);
 :PREFIX SELECT DISTINCT dev_name FROM :TABLE WHERE dev_name IS NULL and dev = 1 ORDER BY 1;
 
 CREATE INDEX ON :TABLE(dev);
+-- RowCompareExpr where some args are not in the index:
+-- we extract lossy "dev >=5" index condition which is strict and doesn't allow NULLs
+SET timescaledb.debug_skip_scan_info TO true;
+:PREFIX SELECT DISTINCT ON (dev) * FROM :TABLE WHERE (dev, time) > (5,100);
+RESET timescaledb.debug_skip_scan_info;
+
 CREATE INDEX ON :TABLE(dev, time);
 CREATE INDEX ON :TABLE(time,dev);
 CREATE INDEX ON :TABLE(time,dev,val);
