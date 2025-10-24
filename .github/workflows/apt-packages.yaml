@@ -113,7 +113,12 @@ jobs:
         cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -C build installcheck
+
+    - name: Collect the logs
+      if: always() && steps.installcheck.conclusion != 'skipped'
+      run: |
         find . -name regression.diffs -exec cat {} + > regression.log
+        find . -name initdb.log -exec cat {} + > initdb.log
 
     - name: Save PostgreSQL log
       if: always() && steps.installcheck.conclusion != 'skipped'
