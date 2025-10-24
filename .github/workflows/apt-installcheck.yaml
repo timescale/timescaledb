@@ -82,10 +82,26 @@ jobs:
         grep PRETTY_NAME /etc/os-release >> $GITHUB_OUTPUT
         echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
 
+    - name: Test Installation
+      id: installation
+      run: |
+        set -xeu
+        pg_ctlcluster ${{ matrix.pg }} main start
+        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb" \
+          -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
+        installed_version=$(sudo -u postgres psql -X -t \
+          -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
+          false
+        fi
+        echo "commit_hash=$(sudo -u postgres psql -X -t
+          -c 'SELECT commit_hash FROM _timescaledb_functions.get_git_commit()')" \
+          >> $GITHUB_OUTPUT
+
     - name: Checkout the sources for version ${{ steps.versions.outputs.version }}
       uses: actions/checkout@v4
       with:
-        ref: ${{ steps.versions.outputs.version }}
+        ref: ${{ steps.installation.outputs.commit_hash }}
 
     - name: Run make installcheck
       id: installcheck
@@ -114,7 +130,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: Installcheck logs ${{ matrix.runner }} ${{ matrix.image_friendly }} ${{ matrix.license }} ${{ matrix.pg }}
+        name: Installcheck logs ${{ matrix.runner }} ${{ matrix.image_friendly }} PG ${{ matrix.pg }}
         path: |
             postmaster.*
             initdb.log
