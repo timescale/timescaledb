@@ -112,7 +112,7 @@ jobs:
         chown -R postgres:postgres .
         sudo -u postgres git log -1 .
         apt install -y postgresql-server-dev-${{ matrix.pg }}
-        cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        sudo -u postgres cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         set -o pipefail
         sudo -u postgres make -k -C build installcheck | tee installcheck.log
