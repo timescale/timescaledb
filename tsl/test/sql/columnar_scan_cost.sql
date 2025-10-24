@@ -135,9 +135,9 @@ from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
 ;
 
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
+vacuum analyze estimate_count;
 
 explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
-
 
 -- Test a high-cardinality orderby column
 create table highcard(ts int) with (tsdb.hypertable, tsdb.partition_column = 'ts',
