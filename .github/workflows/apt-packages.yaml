@@ -105,6 +105,12 @@ jobs:
           false
         fi
 
+    - name: Run make installcheck
+      if: matrix.image = 'ubuntu-22.04' && matrix.license = 'TSL' && matrix.pg = 17
+      run: |
+        cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        make -C build installcheck
+
     - name: Install toolkit
       run: |
         apt-get install -y --no-install-recommends \
