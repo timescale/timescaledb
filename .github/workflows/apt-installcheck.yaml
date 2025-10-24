@@ -95,7 +95,7 @@ jobs:
           false
         fi
 
-        sudo -u postgres psql -X -t -c "
+        sudo -u postgres psql -qtAX -c "
           select format(E'commit_hash=%s\ncommit_tag=%s', commit_hash, commit_tag)
           from _timescaledb_functions.get_git_commit();
         " | tee -a $GITHUB_OUTPUT
@@ -109,11 +109,11 @@ jobs:
       id: installcheck
       shell: bash
       run: |
+        chown -R postgres:postgres .
         git log -1
         apt install -y postgresql-server-dev-${{ matrix.pg }}
         cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        chown -R postgres:postgres .
         set -o pipefail
         sudo -u postgres make -k -C build installcheck | tee installcheck.log
 
