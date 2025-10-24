@@ -125,6 +125,7 @@ jobs:
     - name: Run make installcheck
       id: installcheck
       if: matrix.image == 'ubuntu:22.04' && matrix.license == 'TSL' && matrix.pg == 17
+      shell: bash
       run: |
         apt install -y cmake postgresql-server-dev-${{ matrix.pg }}
         cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
