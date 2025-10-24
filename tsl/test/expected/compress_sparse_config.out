@@ -223,7 +223,6 @@ select * from settings;
  _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
 
 select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_3_1_chunk"
  count 
 -------
      1
@@ -410,7 +409,6 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'minmax("x")');
 select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_5_4_chunk"
  count 
 -------
      1
@@ -448,7 +446,6 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'x');
 select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_5_4_chunk"
  count 
 -------
      1
@@ -486,7 +483,6 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = '');
 select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_5_4_chunk"
  count 
 -------
      1
@@ -524,7 +520,6 @@ alter table test_sparse_index reset (timescaledb.compress_segmentby,
     timescaledb.compress_orderby,
     timescaledb.compress_index);
 select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_5_4_chunk"
  count 
 -------
      1
