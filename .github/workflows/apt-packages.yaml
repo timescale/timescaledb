@@ -24,24 +24,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image:
-#          - debian:11-slim
-#          - debian:12-slim
-#          - debian:13-slim
-          - ubuntu:22.04
-#          - ubuntu:24.04
-        pg:
-#          - 15
-#          - 16
-          - 17
-        license:
-          - "TSL"
-#          - "Apache"
+        image: [ "debian:11-slim", "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04" ]
+        pg: [ 15, 16, 17 ]
+        license: [ "TSL", "Apache"]
         include:
-#          - license: Apache
-#            pkg_suffix: "-oss"
-          - image: ubuntu:22.04
-            image_friendly: ubuntu-22.04
+          - license: Apache
+            pkg_suffix: "-oss"
 
     steps:
     - name: Add repositories
@@ -116,46 +104,6 @@ jobs:
         if [ "$prev_version" != "$installed_version" ];then
           false
         fi
-
-    - name: Checkout the sources for version ${{ steps.versions.outputs.version }}
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ steps.versions.outputs.version }}
-
-    - name: Run make installcheck
-      id: installcheck
-      if: matrix.image == 'ubuntu:22.04' && matrix.license == 'TSL' && matrix.pg == 17
-      shell: bash
-      run: |
-        apt install -y cmake postgresql-server-dev-${{ matrix.pg }}
-        cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        chown -R postgres:postgres .
-        set -o pipefail
-        sudo -u postgres make -k -C build installcheck | tee installcheck.log
-
-    - name: Collect the logs
-      if: always() && steps.installcheck.conclusion != 'skipped'
-      run: |
-        find . -name regression.diffs -exec cat {} + > regression.log
-        find . -name initdb.log -exec cat {} + > initdb.log
-
-    - name: Show regression diffs
-      if: always() && steps.installcheck.conclusion != 'skipped'
-      run: |
-        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
-        cat regression.log
-
-    - name: Save the logs
-      if: always() && steps.installcheck.conclusion != 'skipped'
-      uses: actions/upload-artifact@v4
-      with:
-        name: Installcheck logs ${{ matrix.image_friendly }} ${{ matrix.license }} ${{ matrix.pg }}
-        path: |
-            postmaster.*
-            initdb.log
-            regression.log
-            installcheck.log
 
     - name: Install toolkit
       run: |
