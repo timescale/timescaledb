@@ -104,13 +104,12 @@ jobs:
       uses: actions/checkout@v4
       with:
         ref: ${{ steps.installation.outputs.commit_hash }}
-      run: |
-        git log -1
 
     - name: Run make installcheck
       id: installcheck
       shell: bash
       run: |
+        git log -1
         apt install -y cmake postgresql-server-dev-${{ matrix.pg }}
         cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
