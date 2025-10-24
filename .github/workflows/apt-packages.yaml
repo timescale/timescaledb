@@ -130,7 +130,8 @@ jobs:
         cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         chown -R postgres:postgres .
-        sudo -u postgres make -C build installcheck
+        set -o pipefail
+        sudo -u postgres make -k -C build installcheck | tee installcheck.log
 
     - name: Collect the logs
       if: always() && steps.installcheck.conclusion != 'skipped'
@@ -138,15 +139,22 @@ jobs:
         find . -name regression.diffs -exec cat {} + > regression.log
         find . -name initdb.log -exec cat {} + > initdb.log
 
-    - name: Save PostgreSQL log
+    - name: Show regression diffs
+      if: always() && steps.installcheck.conclusion != 'skipped'
+      run: |
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
+        cat regression.log
+
+    - name: Save the logs
       if: always() && steps.installcheck.conclusion != 'skipped'
       uses: actions/upload-artifact@v4
       with:
-        name: Installcheck log ${{ matrix.image_friendly }} ${{ matrix.license }} ${{ matrix.pg }}
+        name: Installcheck logs ${{ matrix.image_friendly }} ${{ matrix.license }} ${{ matrix.pg }}
         path: |
             postmaster.*
             initdb.log
             regression.log
+            installcheck.log
 
     - name: Install toolkit
       run: |
