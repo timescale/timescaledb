@@ -2,6 +2,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/array_utils.c
     ${CMAKE_CURRENT_SOURCE_DIR}/catalog.c
     ${CMAKE_CURRENT_SOURCE_DIR}/chunk_column_stats.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/chunk_rewrite.c
     ${CMAKE_CURRENT_SOURCE_DIR}/compression_chunk_size.c
     ${CMAKE_CURRENT_SOURCE_DIR}/compression_settings.c
     ${CMAKE_CURRENT_SOURCE_DIR}/continuous_agg.c

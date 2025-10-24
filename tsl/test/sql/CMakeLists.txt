@@ -58,7 +58,6 @@ set(TEST_FILES
     create_table_with.sql
     custom_hashagg.sql
     decompress_index.sql
-    merge_chunks.sql
     merge_compress.sql
     move.sql
     plan_skip_scan_notnull.sql
@@ -154,6 +153,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     read_only.sql
     tsl_tables.sql
     license_tsl.sql
+    merge_chunks.sql
     fixed_schedules.sql
     partialize_finalize.sql
     recompress_chunk_segmentwise.sql

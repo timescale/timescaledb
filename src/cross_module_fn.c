@@ -167,7 +167,7 @@ error_no_default_fn_pg_community(PG_FUNCTION_ARGS)
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 			 errmsg("function \"%s\" is not supported under the current \"%s\" license",
-					get_func_name(fcinfo->flinfo->fn_oid),
+					fcinfo->flinfo ? get_func_name(fcinfo->flinfo->fn_oid) : "unknown",
 					ts_guc_license),
 			 errhint("Upgrade your license to 'timescale' to use this free community feature.")));
 

@@ -855,7 +855,7 @@ update_chunk_stats_for_split(const SplitRelationInfo *split_relations,
 		double ntuples = sri->stats.tuples_alive;
 
 		rel = table_open(sri->relid, AccessShareLock);
-		update_relstats(relRelation, rel, ntuples);
+		update_relstats(relRelation, sri->relid, RelationGetNumberOfBlocks(rel), ntuples);
 		table_close(rel, NoLock);
 	}
 
