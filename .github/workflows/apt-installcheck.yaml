@@ -110,6 +110,7 @@ jobs:
       shell: bash
       run: |
         chown -R postgres:postgres .
+        chmod g+s .
         sudo -u postgres git log -1 .
         apt install -y postgresql-server-dev-${{ matrix.pg }}
         sudo -u postgres cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
