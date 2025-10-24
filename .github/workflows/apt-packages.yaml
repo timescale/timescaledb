@@ -32,14 +32,14 @@ jobs:
 #          - ubuntu:24.04
         pg:
 #          - 15
-          - 16
-#          - 17
+#          - 16
+          - 17
         license:
           - "TSL"
 #          - "Apache"
         include:
-          - license: Apache
-            pkg_suffix: "-oss"
+#          - license: Apache
+#            pkg_suffix: "-oss"
           - image: ubuntu:22.04
             image_friendly: ubuntu-22.04
 
