@@ -643,18 +643,16 @@ ON met.device_id = q.node and met.device_id_peer = q.device_id_peer
    and met.v0 = q.v0 and met.v0 > 2 and time = '2018-01-19 20:00:00-05';
 --- QUERY PLAN ---
  Nested Loop (actual rows=1.00 loops=1)
-   Join Filter: (met.device_id = nodetime.node)
+   Join Filter: (nodetime.node = "*VALUES*".column1)
    ->  Nested Loop (actual rows=1.00 loops=1)
-         Join Filter: (nodetime.node = "*VALUES*".column1)
-         Rows Removed by Join Filter: 1
-         ->  Seq Scan on nodetime (actual rows=1.00 loops=1)
          ->  Values Scan on "*VALUES*" (actual rows=2.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk met (actual rows=1.00 loops=1)
-         Filter: ("*VALUES*".column3 = v0)
-         Rows Removed by Filter: 47
-         Vectorized Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
-         ->  Index Scan using compress_hyper_2_9_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_9_chunk (actual rows=1.00 loops=1)
-               Index Cond: ((device_id = "*VALUES*".column1) AND (device_id_peer = "*VALUES*".column2) AND (_ts_meta_min_1 <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk met (actual rows=0.00 loops=2)
+               Filter: ("*VALUES*".column3 = v0)
+               Rows Removed by Filter: 24
+               Vectorized Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+               ->  Index Scan using compress_hyper_2_9_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_9_chunk (actual rows=0.00 loops=2)
+                     Index Cond: ((device_id = "*VALUES*".column1) AND (device_id_peer = "*VALUES*".column2) AND (_ts_meta_min_1 <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+   ->  Seq Scan on nodetime (actual rows=1.00 loops=1)
 
 -- filter on compressed attr (v0) with seqscan enabled and indexscan
 -- disabled. filters on compressed attr should be above the seq scan.
@@ -792,20 +790,29 @@ ORDER BY 1,
     2,
     3;
 --- QUERY PLAN ---
- Sort (actual rows=0.00 loops=1)
+ Incremental Sort (actual rows=0.00 loops=1)
    Sort Key: m.device_id, d.v0, (count(*))
-   Sort Method: quicksort 
-   ->  HashAggregate (actual rows=0.00 loops=1)
+   Presorted Key: m.device_id, d.v0
+   Full-sort Groups: 1  Sort Method: quicksort 
+   ->  GroupAggregate (actual rows=0.00 loops=1)
          Group Key: m.device_id, d.v0
-         ->  Hash Join (actual rows=0.00 loops=1)
-               Hash Cond: ((d.device_id = m.device_id) AND (d."time" = m."time"))
-               ->  Custom Scan (ConstraintAwareAppend) (actual rows=0.00 loops=1)
-                     Hypertable: metrics_ordered_idx
-                     Chunks excluded during startup: 2
-               ->  Hash (never executed)
-                     ->  Custom Scan (ConstraintAwareAppend) (never executed)
-                           Hypertable: metrics_ordered_idx
-                           Chunks excluded during startup: 2
+         ->  Incremental Sort (actual rows=0.00 loops=1)
+               Sort Key: m.device_id, d.v0
+               Presorted Key: m.device_id
+               Full-sort Groups: 1  Sort Method: quicksort 
+               ->  Merge Join (actual rows=0.00 loops=1)
+                     Merge Cond: ((d.device_id = m.device_id) AND (d."time" = m."time"))
+                     ->  Sort (actual rows=0.00 loops=1)
+                           Sort Key: d.device_id, d."time"
+                           Sort Method: quicksort 
+                           ->  Custom Scan (ConstraintAwareAppend) (actual rows=0.00 loops=1)
+                                 Hypertable: metrics_ordered_idx
+                                 Chunks excluded during startup: 2
+                     ->  Sort (never executed)
+                           Sort Key: m.device_id, m."time"
+                           ->  Custom Scan (ConstraintAwareAppend) (never executed)
+                                 Hypertable: metrics_ordered_idx
+                                 Chunks excluded during startup: 2
 
 --query with no results --
 :PREFIX
@@ -938,36 +945,49 @@ FROM device_tbl d
 WHERE m.device_id = 7
 ORDER BY m.v0;
 --- QUERY PLAN ---
- Sort (actual rows=1.00 loops=1)
-   Sort Key: m.v0
-   Sort Method: quicksort 
-   ->  Nested Loop Left Join (actual rows=1.00 loops=1)
-         Join Filter: ((m."time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (m."time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
-         ->  Append (actual rows=1.00 loops=1)
+ Nested Loop Left Join (actual rows=1.00 loops=1)
+   Join Filter: ((m."time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (m."time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
+   ->  Merge Append (actual rows=1.00 loops=1)
+         Sort Key: m.v0
+         ->  Sort (actual rows=0.00 loops=1)
+               Sort Key: m_1.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk m_1 (actual rows=0.00 loops=1)
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=0.00 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 5
+         ->  Sort (actual rows=0.00 loops=1)
+               Sort Key: m_2.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk m_2 (actual rows=0.00 loops=1)
                      ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=0.00 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 5
+         ->  Sort (actual rows=0.00 loops=1)
+               Sort Key: m_3.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk m_3 (actual rows=0.00 loops=1)
                      ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=0.00 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 1
+         ->  Sort (actual rows=0.00 loops=1)
+               Sort Key: m_4.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_4_chunk m_4 (actual rows=0.00 loops=1)
                      ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=0.00 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 1
+         ->  Sort (actual rows=1.00 loops=1)
+               Sort Key: m_5.v0
+               Sort Method: quicksort 
                ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk m_5 (actual rows=1.00 loops=1)
                      ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=1.00 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 4
-         ->  Materialize (actual rows=0.00 loops=1)
-               ->  Seq Scan on device_tbl d (actual rows=0.00 loops=1)
-                     Filter: (device_id = 7)
-                     Rows Removed by Filter: 7
+   ->  Materialize (actual rows=0.00 loops=1)
+         ->  Seq Scan on device_tbl d (actual rows=0.00 loops=1)
+               Filter: (device_id = 7)
+               Rows Removed by Filter: 7
 
 SET timescaledb.enable_chunk_append TO TRUE;
 -- github bug 2917 with UNION ALL that references compressed ht
