@@ -30,6 +30,8 @@ jobs:
         include:
           - license: Apache
             pkg_suffix: "-oss"
+          - image: ubuntu:22.04
+            image_friendly: ubuntu-22.04
 
     steps:
     - name: Add repositories
@@ -124,7 +126,7 @@ jobs:
       if: always() && steps.installcheck.conclusion != 'skipped'
       uses: actions/upload-artifact@v4
       with:
-        name: Installcheck log ${{ matrix.image }} ${{ matrix.license }} ${{ matrix.pg }}
+        name: Installcheck log ${{ matrix.image_friendly }} ${{ matrix.license }} ${{ matrix.pg }}
         path: |
             postmaster.*
             initdb.log
