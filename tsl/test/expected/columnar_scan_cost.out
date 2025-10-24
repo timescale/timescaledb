@@ -234,13 +234,14 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
 -------
      2
 
+vacuum analyze estimate_count;
 explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 --- QUERY PLAN ---
- Append  (cost=0.02..67308.80 rows=4480000 width=20) (actual rows=193000.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_21_chunk  (cost=0.02..22454.40 rows=2240000 width=20) (actual rows=64000.00 loops=1)
-         ->  Seq Scan on compress_hyper_4_23_chunk  (cost=0.00..54.40 rows=2240 width=88) (actual rows=1000.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_22_chunk  (cost=0.02..22454.40 rows=2240000 width=20) (actual rows=129000.00 loops=1)
-         ->  Seq Scan on compress_hyper_4_24_chunk  (cost=0.00..54.40 rows=2240 width=88) (actual rows=1000.00 loops=1)
+ Append  (cost=0.04..2974.00 rows=193000 width=20) (actual rows=193000.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_21_chunk  (cost=0.04..679.00 rows=64000 width=20) (actual rows=64000.00 loops=1)
+         ->  Seq Scan on compress_hyper_4_23_chunk  (cost=0.00..39.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_22_chunk  (cost=0.04..1330.00 rows=129000 width=20) (actual rows=129000.00 loops=1)
+         ->  Seq Scan on compress_hyper_4_24_chunk  (cost=0.00..40.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
 
 -- Test a high-cardinality orderby column
 create table highcard(ts int) with (tsdb.hypertable, tsdb.partition_column = 'ts',
