@@ -1225,12 +1225,12 @@ where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'C
 SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_1 DESC;
 ROLLBACK;
 
--- Test poor compression rate warning works as expected
+-- Test poor compression ratio warning works as expected
 
 -- Turn GUC on
 SET timescaledb.enable_compression_ratio_warnings TO ON;
 
--- Compressing a table with very few rows virtually guarantees a poor compression rate
+-- Compressing a table with very few rows virtually guarantees a poor compression ratio
 CREATE TABLE badly_compressed_ht (time timestamptz, device_id integer, a integer);
 SELECT create_hypertable('badly_compressed_ht', 'time');
 ALTER TABLE badly_compressed_ht set (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');
