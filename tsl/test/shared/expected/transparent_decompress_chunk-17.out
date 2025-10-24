@@ -995,27 +995,29 @@ FROM :TEST_TABLE m1
  Limit
    ->  Sort
          Sort Key: m1."time", m1.device_id
-         ->  Hash Join
-               Hash Cond: ((m2."time" = m1."time") AND (m2.device_id = m1.device_id))
-               ->  Append
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
-                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-                     ->  Seq Scan on _hyper_X_X_chunk m2
-               ->  Hash
-                     ->  Hash Join
-                           Hash Cond: (m1."time" = m3."time")
+         ->  Nested Loop
+               ->  Hash Join
+                     Hash Cond: (m3."time" = m1."time")
+                     ->  Append
+                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m3
+                                 Filter: (device_id = 3)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
+                                       Filter: (device_id = 3)
+                           ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m3
+                                 Index Cond: (device_id = 3)
+                     ->  Hash
                            ->  Append
                                  ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
                                        ->  Seq Scan on compress_hyper_X_X_chunk
                                  ->  Seq Scan on _hyper_X_X_chunk m1
-                           ->  Hash
-                                 ->  Append
-                                       ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m3
-                                             Filter: (device_id = 3)
-                                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
-                                                   Filter: (device_id = 3)
-                                       ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m3
-                                             Index Cond: (device_id = 3)
+               ->  Append
+                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
+                           Filter: (m1."time" = "time")
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_min_1__ts_meta_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                                 Index Cond: (device_id = m1.device_id)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk m2
+                           Index Cond: ("time" = m1."time")
+                           Filter: (m1.device_id = device_id)
 
 RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE
@@ -1031,29 +1033,25 @@ FROM :TEST_TABLE m1
     LIMIT 100;
 --- QUERY PLAN ---
  Limit
-   ->  Merge Join
-         Merge Cond: (m2."time" = m1."time")
-         ->  Merge Append
-               Sort Key: m2."time"
-               ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
-                     Filter: (device_id = 2)
-                     ->  Sort
-                           Sort Key: compress_hyper_X_X_chunk_1._ts_meta_min_1, compress_hyper_X_X_chunk_1._ts_meta_max_1
+   ->  Sort
+         Sort Key: m1."time"
+         ->  Hash Join
+               Hash Cond: (m2."time" = m1."time")
+               ->  Append
+                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
+                           Filter: (device_id = 2)
                            ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
                                  Filter: (device_id = 2)
-               ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m2
-                     Index Cond: (device_id = 2)
-         ->  Materialize
-               ->  Merge Append
-                     Sort Key: m1."time"
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
-                           Filter: (device_id = 1)
-                           ->  Sort
-                                 Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m2
+                           Index Cond: (device_id = 2)
+               ->  Hash
+                     ->  Append
+                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
+                                 Filter: (device_id = 1)
                                  ->  Seq Scan on compress_hyper_X_X_chunk
                                        Filter: (device_id = 1)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_time_idx on _hyper_X_X_chunk m1
-                           Filter: (device_id = 1)
+                           ->  Seq Scan on _hyper_X_X_chunk m1
+                                 Filter: (device_id = 1)
 
 :PREFIX_NO_VERBOSE
 SELECT *
@@ -1137,21 +1135,21 @@ LIMIT 100;
  Limit
    ->  Sort
          Sort Key: m1."time", m1.device_id, m2."time", m2.device_id
-         ->  Hash Left Join
-               Hash Cond: (m1."time" = m2."time")
+         ->  Hash Right Join
+               Hash Cond: (m2."time" = m1."time")
                Join Filter: (m1.device_id = 1)
                ->  Append
-                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
-                           ->  Seq Scan on compress_hyper_X_X_chunk
-                     ->  Seq Scan on _hyper_X_X_chunk m1
+                     ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
+                           Filter: (device_id = 2)
+                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                                 Filter: (device_id = 2)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m2
+                           Index Cond: (device_id = 2)
                ->  Hash
                      ->  Append
-                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m2
-                                 Filter: (device_id = 2)
-                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-                                       Filter: (device_id = 2)
-                           ->  Index Scan using _hyper_X_X_chunk_metrics_compressed_device_id_time_idx on _hyper_X_X_chunk m2
-                                 Index Cond: (device_id = 2)
+                           ->  Custom Scan (ColumnarScan) on _hyper_X_X_chunk m1
+                                 ->  Seq Scan on compress_hyper_X_X_chunk
+                           ->  Seq Scan on _hyper_X_X_chunk m1
 
 -- test implicit self-join
 :PREFIX_NO_VERBOSE
