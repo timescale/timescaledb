@@ -923,7 +923,7 @@ _guc_init(void)
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compressor_batch_limit"),
 							 "Enable compressor batch limit",
 							 "Enable compressor batch limit for compressors which "
-							 "can go over the allocation limit (1 GB). This feature will"
+							 "can go over the allocation limit (1 GB). This feature will "
 							 "limit those compressors by reducing the size of the batch and thus "
 							 "avoid hitting the limit.",
 							 &ts_guc_compression_enable_compressor_batch_limit,
