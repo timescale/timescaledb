@@ -28,13 +28,12 @@ jobs:
             arch: amd64
           - runner: timescaledb-runner-arm64
             arch: ARM
+          - image: ubuntu:22.04
+            image_friendly: ubuntu-22.04
         pg:
           - 17
         license:
           - "TSL"
-        include:
-          - image: ubuntu:22.04
-            image_friendly: ubuntu-22.04
 
     runs-on: ${{ matrix.runner }}
 
