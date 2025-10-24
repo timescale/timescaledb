@@ -1,2 +1,0 @@
-Implements: #8703 Allow set-returning functions in continuous aggregates
-Thanks: @ruideyllot for reporting set-returning functions not working in continuous aggregates

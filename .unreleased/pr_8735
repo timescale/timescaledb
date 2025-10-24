@@ -1,1 +1,0 @@
-Fixes: #8735 Fix ColumnarScan for UNION queries

@@ -1,2 +1,0 @@
-Fixes: #8739 Fix cached utility statements
-Thanks: @t-aistleitner for reporting an issue with utility statements in plpgsql functions

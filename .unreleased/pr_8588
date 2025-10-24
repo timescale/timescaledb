@@ -1,1 +1,0 @@
-Implements: #8588 Create columnstore policy when creating hypertables with columnstore enabled with CREATE TABLE WITH
