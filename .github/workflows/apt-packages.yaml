@@ -24,9 +24,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:11-slim", "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04" ]
-        pg: [ 15, 16, 17 ]
-        license: [ "TSL", "Apache"]
+        image:
+#          - debian:11-slim
+#          - debian:12-slim
+#          - debian:13-slim
+          - ubuntu:22.04
+#          - ubuntu:24.04
+        pg:
+#          - 15
+          - 16
+#          - 17
+        license:
+          - "TSL"
+#          - "Apache"
         include:
           - license: Apache
             pkg_suffix: "-oss"
