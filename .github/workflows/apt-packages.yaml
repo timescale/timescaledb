@@ -107,6 +107,11 @@ jobs:
           false
         fi
 
+    - name: Checkout the sources for version ${{ steps.version.outputs.version }}
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ steps.version.outputs.version }}
+
     - name: Run make installcheck
       id: installcheck
       if: matrix.image == 'ubuntu:22.04' && matrix.license == 'TSL' && matrix.pg == 17
