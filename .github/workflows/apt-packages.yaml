@@ -117,10 +117,10 @@ jobs:
           false
         fi
 
-    - name: Checkout the sources for version ${{ steps.version.outputs.version }}
+    - name: Checkout the sources for version ${{ steps.versions.outputs.version }}
       uses: actions/checkout@v4
       with:
-        ref: ${{ steps.version.outputs.version }}
+        ref: ${{ steps.versions.outputs.version }}
 
     - name: Run make installcheck
       id: installcheck
