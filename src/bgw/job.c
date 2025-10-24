@@ -1191,6 +1191,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	INSTR_TIME_SET_CURRENT(start);
 
 	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 
 	/* Grab a session lock on the job row to prevent concurrent deletes. Lock is released
 	 * when the job process exits */
@@ -1211,6 +1212,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	job->job_history.execution_start = params.job_history_execution_start;
 	ts_bgw_job_stat_history_update(JOB_STAT_HISTORY_UPDATE_PID, job, JOB_SUCCESS, NULL);
 
+	PopActiveSnapshot();
 	CommitTransactionCommand();
 
 	elog(DEBUG2, "job %d (%s) found", params.job_id, NameStr(job->fd.application_name));
@@ -1309,6 +1311,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	Assert(!IsTransactionState());
 
 	StartTransactionCommand();
+	PushActiveSnapshot(GetTransactionSnapshot());
 
 	/*
 	 * Note that the mark_start happens in the scheduler right before the job
@@ -1322,6 +1325,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		ts_end_tss_store_callback(stmt, -1, (int) strlen(stmt), 0, 0);
 	}
 
+	PopActiveSnapshot();
 	CommitTransactionCommand();
 
 	INSTR_TIME_SET_CURRENT(duration);
