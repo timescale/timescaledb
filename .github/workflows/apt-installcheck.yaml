@@ -15,7 +15,7 @@ name: "Packaging tests: Installcheck for APT"
   workflow_dispatch:
 jobs:
   apt_tests:
-    name: APT ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
+    name: APT ${{ matrix.runner }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
     container:
       image: ${{ matrix.image }}
       env:
@@ -27,18 +27,11 @@ jobs:
           - ubuntu-latest
           - timescaledb-runner-arm64
         image:
-#          - debian:11-slim
-#          - debian:12-slim
-#          - debian:13-slim
           - ubuntu:22.04
-#          - ubuntu:24.04
         pg:
-#          - 15
-#          - 16
           - 17
         license:
           - "TSL"
-#          - "Apache"
         include:
 #          - license: Apache
 #            pkg_suffix: "-oss"
@@ -83,6 +76,9 @@ jobs:
         fi
         echo "version=${version}" >>$GITHUB_OUTPUT
 
+        cat /etc/os-release >> $GITHUB_OUTPUT
+        echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
+
     - name: Checkout the sources for version ${{ steps.versions.outputs.version }}
       uses: actions/checkout@v4
       with:
@@ -90,7 +86,6 @@ jobs:
 
     - name: Run make installcheck
       id: installcheck
-      if: matrix.image == 'ubuntu:22.04' && matrix.license == 'TSL' && matrix.pg == 17
       shell: bash
       run: |
         apt install -y cmake postgresql-server-dev-${{ matrix.pg }}
@@ -101,19 +96,19 @@ jobs:
         sudo -u postgres make -k -C build installcheck | tee installcheck.log
 
     - name: Collect the logs
-      if: always() && steps.installcheck.conclusion != 'skipped'
+      if: always()
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
         find . -name initdb.log -exec cat {} + > initdb.log
 
     - name: Show regression diffs
-      if: always() && steps.installcheck.conclusion != 'skipped'
+      if: always()
       run: |
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
     - name: Save the logs
-      if: always() && steps.installcheck.conclusion != 'skipped'
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: Installcheck logs ${{ matrix.image_friendly }} ${{ matrix.license }} ${{ matrix.pg }}
