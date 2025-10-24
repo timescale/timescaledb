@@ -46,16 +46,12 @@ jobs:
     - name: Add repositories
       run: |
         apt-get update
-        apt-get install -y wget lsb-release gnupg apt-transport-https sudo postgresql-common git cmake
+        apt-get install -y wget lsb-release gnupg sudo postgresql-common git cmake
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
         echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
           > /etc/apt/sources.list.d/timescaledb.list
-        if [ "${image_type}" = "ubuntu" ]; then
-          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
-        else
-          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
-        fi
+        wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
 
     - name: Install timescaledb
       run: |
