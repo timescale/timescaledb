@@ -122,7 +122,7 @@ jobs:
       if: always()
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
-        find . -name initdb.log -mindepth 1 -exec cat {} + > initdb.log
+        find . -mindepth 2 -name initdb.log -exec cat {} + > initdb.log
 
     - name: Show regression diffs
       if: always()
