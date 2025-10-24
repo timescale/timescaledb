@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import random
 import re
 import string
 import subprocess
@@ -190,7 +191,7 @@ git_check(
 main_commits = [
     line.split("\t")
     for line in git_output(
-        f'log -{HISTORY_DEPTH} --pretty="format:%h\t%s" {source_remote}/{backport_target}..{source_remote}/main'
+        f'log -{HISTORY_DEPTH} --abbrev=12 --pretty="format:%h\t%s" {source_remote}/{backport_target}..{source_remote}/main'
     ).splitlines()
     if line
 ]
@@ -200,7 +201,7 @@ print(f"Have {len(main_commits)} new commits in the main branch.")
 branch_commits = [
     line.split("\t")
     for line in git_output(
-        f'log -{HISTORY_DEPTH} --pretty="format:%h\t%s" {source_remote}/main..{source_remote}/{backport_target}'
+        f'log -{HISTORY_DEPTH} --abbrev=12 --pretty="format:%h\t%s" {source_remote}/main..{source_remote}/{backport_target}'
     ).splitlines()
     if line
 ]
@@ -237,9 +238,7 @@ def should_backport_by_labels(number, title, labels):
         )
         return False
 
-    force_labels = labels.intersection(
-        ["bug", "force-auto-backport", "force-auto-backport-workflow"]
-    )
+    force_labels = labels.intersection(["bug", "force-auto-backport"])
     if force_labels:
         print(
             f"#{number} '{title}' is labeled as '{list(force_labels)[0]}' which requests automated backporting."
@@ -412,9 +411,12 @@ print(
 git_check(f"fetch {source_remote}")
 
 # Now, go over the list of PRs that we have collected, and try to backport
-# each of them.
+# each of them. Do it in randomized order to avoid getting stuck on a single
+# error.
 print(f"Have {len(prs_to_backport)} PRs to backport.")
-for index, pr_info in enumerate(prs_to_backport.values()):
+for index, pr_info in enumerate(
+    random.sample(list(prs_to_backport.values()), len(prs_to_backport))
+):
     print()
 
     # Don't want to have an endless loop that modifies the repository in an
@@ -472,29 +474,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
         report_backport_not_done(original_pr, "cherry-pick failed", details)
         continue
 
-    # We don't have the permission to modify workflows
     changed_files = {file.filename for file in original_pr.get_files()}
-    changed_workflow_files = {
-        filename
-        for filename in changed_files
-        if filename.startswith(".github/workflows/")
-    }
-
-    if changed_workflow_files:
-        pull_labels = {label.name for label in original_pr.labels}
-        force_workflow_label = pull_labels.intersection(
-            ["force-auto-backport-workflow"]
-        )
-        if not force_workflow_label:
-            details = (
-                f"The PR touches a workflow file '{list(changed_workflow_files)[0]}' "
-                " and cannot be backported automatically"
-            )
-            report_backport_not_done(original_pr, "backport failed", details)
-            continue
-        print(
-            f"PR #{original_pr.number} '{original_pr.title}' touches a workflow file, but will be backported anyway."
-        )
 
     # Push the backport branch.
     git_check(f"push {source_remote} @:refs/heads/{backport_branch}")
@@ -542,7 +522,7 @@ for index, pr_info in enumerate(prs_to_backport.values()):
     original_description = re.sub(
         r"((fix|clos|resolv)[esd]+)(\s+#[0-9]+)",
         r"`\1`\3",
-        original_pr.body,
+        original_pr.body or "",  # Match "" if pr_body is None
         flags=re.IGNORECASE,
     )
     backport_description += (

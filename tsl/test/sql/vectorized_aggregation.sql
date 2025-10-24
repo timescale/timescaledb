@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set EXPLAIN 'EXPLAIN (VERBOSE, COSTS OFF)'
+\set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 
 CREATE TABLE testtable (
 time timestamptz NOT NULL,
@@ -37,6 +37,7 @@ SELECT sum(segment_by_value), sum(int_value), sum(float_value) FROM testtable;
 -- Tests with some chunks compressed
 ---
 SELECT compress_chunk(ch) FROM show_chunks('testtable') ch LIMIT 3;
+VACUUM ANALYZE testtable;
 
 -- Vectorized aggregation possible
 SELECT sum(segment_by_value) FROM testtable;
@@ -99,6 +100,7 @@ SELECT sum(float_value) FROM testtable;
 -- Tests with all chunks compressed
 ---
 SELECT compress_chunk(ch, if_not_compressed => true) FROM show_chunks('testtable') ch;
+VACUUM ANALYZE testtable;
 
 -- Vectorized aggregation possible
 SELECT sum(segment_by_value) FROM testtable;
@@ -436,6 +438,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('testtable3') ch;
 
 VACUUM FULL ANALYZE testtable3;
 
-EXPLAIN (costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
+EXPLAIN (buffers off, costs off) SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id;
 
 SELECT (date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour')::timestamp as time, TT.location_id as location_id, TT.device_id as device_id, 0 as sensor_id, date_trunc('day', current_timestamp) as discovered_date FROM testtable3 TT WHERE time >= date_trunc('hour', '2024-01-09'::timestamptz) - interval '1 hour' GROUP BY TT.location_id, TT.device_id \g :TEST_OUTPUT_DIR/vectorized_aggregation_query_result.out

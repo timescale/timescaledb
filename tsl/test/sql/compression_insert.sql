@@ -4,8 +4,8 @@
 
 SET timezone TO 'America/Los_Angeles';
 
-\set PREFIX 'EXPLAIN (costs off, summary off, timing off) '
-\set ANALYZE  'EXPLAIN (analyze, costs off, summary off, timing off) '
+\set PREFIX 'EXPLAIN (buffers off, costs off, summary off, timing off) '
+\set ANALYZE  'EXPLAIN (analyze, buffers off, costs off, summary off, timing off) '
 CREATE TABLE test1 (timec timestamptz , i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');
@@ -537,10 +537,12 @@ INSERT INTO test_ordering VALUES (5),(4),(3);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
+VACUUM ANALYZE test_ordering;
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 INSERT INTO test_ordering SELECT 1;
+VACUUM ANALYZE test_ordering;
 
 -- should not be ordered append
 -- regression introduced by #5599:
@@ -552,6 +554,8 @@ INSERT INTO test_ordering SELECT 1;
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 
 INSERT INTO test_ordering VALUES (105),(104),(103);
+VACUUM ANALYZE test_ordering;
+
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
 
@@ -564,6 +568,7 @@ INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING *;
 INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING tableoid::regclass, *;
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
+VACUUM ANALYZE test_ordering;
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
@@ -880,3 +885,215 @@ INSERT INTO unique_all VALUES('2024-01-01 00:00', 1, true, 1.0, 1.0, 'first', 1,
 \set ON_ERROR_STOP 1
 
 DROP TABLE unique_all;
+
+-- test NULL compression algorithm
+
+CREATE TABLE unique_null(
+	time timestamptz NOT NULL,
+	device_id int,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_nulls ON unique_null(time, device_id, tag, tag2) NULLS NOT DISTINCT;
+SELECT table_name FROM create_hypertable('unique_null', 'time');
+ALTER TABLE unique_null SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+INSERT INTO unique_null VALUES
+('2024-01-01 00:00', 1, NULL, '1', 1),
+('2024-01-01 00:00', 1, NULL, '2', 2),
+('2024-01-01 00:00', 1, NULL, '3', 3);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1);
+\set ON_ERROR_STOP 1
+
+ALTER TABLE unique_null ADD COLUMN tag3 text DEFAULT 'default value';
+DROP INDEX unique_nulls;
+CREATE UNIQUE INDEX unique_nulls ON unique_null(time, device_id, tag, tag2, tag3) NULLS NOT DISTINCT;
+
+\set ON_ERROR_STOP 0
+INSERT INTO unique_null VALUES ('2024-01-01 00:00', 1, NULL, '1', 1, 'default value');
+\set ON_ERROR_STOP 1
+
+INSERT INTO unique_null VALUES
+	('2024-01-01 00:01', 1, NULL, '1', 1, 'default value'),
+	('2024-01-01 00:00', 2, NULL, '1', 1, 'default value');
+
+DROP TABLE unique_null;
+
+-- test NUMERIC data type
+
+CREATE TABLE unique_numeric(
+	time timestamptz NOT NULL,
+	device_id numeric(6,2) NOT NULL,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_numeric_idx ON unique_numeric(time, device_id, tag, tag2);
+SELECT table_name FROM create_hypertable('unique_numeric', 'time');
+ALTER TABLE unique_numeric SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+INSERT INTO unique_numeric VALUES
+('2024-01-01 00:00', 1.1, NULL, '1', 1),
+('2024-01-01 00:00', 1.2, NULL, '2', 2),
+('2024-01-01 00:00', 1.3, NULL, '3', 3);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_numeric') c;
+INSERT INTO unique_numeric VALUES ('2024-01-01 00:00', 1.4, NULL, '1', 1);
+
+DROP TABLE unique_numeric;
+
+-- test UUID data type
+
+CREATE TABLE unique_uuid(
+	time timestamptz NOT NULL,
+	device_id UUID NOT NULL,
+	tag text,
+	tag2 text,
+	value float
+);
+CREATE UNIQUE INDEX unique_uuid_idx ON unique_uuid(time, device_id, tag, tag2);
+SELECT table_name FROM create_hypertable('unique_uuid', 'time');
+ALTER TABLE unique_uuid SET (tsdb.compress, tsdb.compress_segmentby = 'device_id', tsdb.compress_orderby = 'time');
+INSERT INTO unique_uuid VALUES
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000000', NULL, '1', 1),
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000000', NULL, '1', 2),
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000001', NULL, '1', 1),
+('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000001', NULL, '1', 2);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_uuid') c;
+INSERT INTO unique_uuid VALUES ('2024-01-01 00:00', '018a0d1a-8e6a-7000-8000-000000000001', NULL, '1', 3);
+
+DROP TABLE unique_uuid;
+
+-- regression test for SDC 3006
+
+CREATE TABLE t_1sec(
+	"timestamp"                         timestamp with time zone NOT NULL,
+	device_id                           text,
+	speed                               double precision,
+	derived                             boolean
+);
+
+ALTER TABLE t_1sec ADD CONSTRAINT unique_device_timestamp_sensor_derived
+	UNIQUE (device_id, "timestamp", derived);
+
+CREATE INDEX t_1sec_timestamp_idx
+	ON t_1sec
+	USING btree ("timestamp" DESC);
+
+SELECT create_hypertable(
+	relation => 't_1sec',
+	time_column_name => 'timestamp',
+	chunk_time_interval => interval '06:00:00',
+	create_default_indexes => false
+);
+
+ALTER TABLE t_1sec SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = 'device_id',
+	timescaledb.compress_orderby='"timestamp"'
+);
+
+insert into t_1sec ( "timestamp", device_id, speed, derived) values
+( '2025-06-06 10:00:00', 'device_id_1', 100, true),
+( '2025-06-06 10:01:00', 'device_id_2', 100, true),
+( '2025-06-06 10:02:00', 'device_id_3', 100, true);
+
+SELECT compress_chunk(show_chunks('t_1sec'));
+
+insert into t_1sec ( "timestamp", device_id, speed, derived) values
+( '2025-06-06 10:03:00', 'device_id_1', 100, true),
+( '2025-06-06 10:00:00', 'device_id_1', 110, true),
+( '2025-06-06 10:00:00', 'device_id_1', 110, false)
+ON CONFLICT DO NOTHING;
+
+DROP TABLE t_1sec;
+
+-- regression test for SDC 3210
+
+CREATE TABLE gen_column(
+	"timestamp"                         timestamp with time zone NOT NULL,
+	device_id                           text,
+	device_id_generated 				text GENERATED ALWAYS AS (device_id) STORED,
+	speed                               double precision
+);
+
+ALTER TABLE gen_column ADD CONSTRAINT unique_device_timestamp_sensor
+	UNIQUE (device_id_generated, "timestamp");
+
+CREATE INDEX gen_column_timestamp_idx
+	ON gen_column
+	USING btree ("timestamp" DESC);
+
+SELECT create_hypertable(
+	relation => 'gen_column',
+	time_column_name => 'timestamp',
+	chunk_time_interval => interval '06:00:00',
+	create_default_indexes => false
+);
+
+ALTER TABLE gen_column SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = 'device_id_generated',
+	timescaledb.compress_orderby='"timestamp"'
+);
+
+insert into gen_column ( "timestamp", device_id, speed) values
+( '2025-06-06 10:00:00', 'device_id_1', 100),
+( '2025-06-06 10:01:00', 'device_id_2', 100),
+( '2025-06-06 10:02:00', 'device_id_3', 100);
+
+SELECT compress_chunk(show_chunks('gen_column'));
+
+insert into gen_column ( "timestamp", device_id, speed) values
+( '2025-06-06 10:03:00', 'device_id_1', 100),
+( '2025-06-06 10:00:00', 'device_id_1', 110),
+( '2025-06-06 10:00:00', 'device_id_1', 110)
+ON CONFLICT DO NOTHING;
+
+-- should contain 2 rows for device_1 and one per any other device
+SELECT device_id_generated, count(*)
+FROM gen_column
+GROUP BY 1
+ORDER BY 1;
+
+SELECT decompress_chunk(show_chunks('gen_column'));
+
+ALTER TABLE gen_column SET (
+	timescaledb.compress,
+	timescaledb.compress_segmentby = '',
+	timescaledb.compress_orderby='"timestamp"'
+);
+SELECT compress_chunk(show_chunks('gen_column'));
+
+insert into gen_column ( "timestamp", device_id, speed) values
+( '2025-06-06 10:04:00', 'device_id_1', 100),
+( '2025-06-06 10:00:00', 'device_id_1', 110),
+( '2025-06-06 10:00:00', 'device_id_1', 110)
+ON CONFLICT DO NOTHING;
+
+-- should contain 3 rows for device_1 and one per any other device
+SELECT device_id_generated, count(*)
+FROM gen_column
+GROUP BY 1
+ORDER BY 1;
+
+DROP TABLE gen_column;
+
+-- test insert into compressed chunk directly works
+-- to ensure maintenance operations work unhindered we dont
+-- want to block direct inserts into compressed chunks
+CREATE TABLE direct_compressed_insert (time timestamptz) WITH (tsdb.hypertable);
+
+INSERT INTO direct_compressed_insert SELECT generate_series('2024-01-01'::timestamptz, '2024-01-01 1:00:00'::timestamptz, '1 second');
+SELECT count(compress_chunk(c)) FROM show_chunks('direct_compressed_insert') c;
+SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk ORDER BY id DESC LIMIT 1 \gset
+
+CREATE TABLE compressed_batches AS SELECT * FROM :CHUNK;
+SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;
+
+-- should have not ModifyHypertable node
+EXPLAIN (costs off,timing off, summary off) INSERT INTO :CHUNK SELECT * FROM compressed_batches;
+INSERT INTO :CHUNK SELECT * FROM compressed_batches;
+
+SELECT _ts_meta_count, count(*) FROM :CHUNK GROUP BY _ts_meta_count ORDER BY 1 DESC;

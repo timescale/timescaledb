@@ -14,11 +14,9 @@ $$ LANGUAGE SQL;
 create table agggroup(t int, s int,
     cint2 int2, cint4 int4, cint8 int8);
 select create_hypertable('agggroup', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
-NOTICE:  adding not-null constraint to column "s"
    create_hypertable   
 -----------------------
  (1,public,agggroup,t)
-(1 row)
 
 create view source as
 select s * 10000 + t as t,
@@ -38,7 +36,6 @@ select count(compress_chunk(x)) from show_chunks('agggroup') x;
  count 
 -------
      1
-(1 row)
 
 alter table agggroup add column ss int default 11;
 alter table agggroup add column x text default '11';
@@ -62,7 +59,6 @@ select count(compress_chunk(x)) from show_chunks('agggroup') x;
  count 
 -------
      2
-(1 row)
 
 vacuum freeze analyze agggroup;
 set timescaledb.debug_require_vector_agg = 'require';
@@ -80,7 +76,7 @@ select
             function, variable)
 from
     unnest(array[
-        'explain (costs off) ',
+        'explain (buffers off, costs off) ',
         null]) explain,
     unnest(array[
         'cint2',
@@ -124,7 +120,6 @@ select cint4, cint2, count(*) from agggroup group by cint4, cint2 order by count
  -16382 |  -6061 |     1
  -16382 |  -4558 |     1
  -16382 |  -3173 |     1
-(10 rows)
 
 select cint4, cint8, count(*) from agggroup group by cint4, cint8 order by count(*), cint4, cint8 limit 10;
  cint4  | cint8 | count 
@@ -139,7 +134,6 @@ select cint4, cint8, count(*) from agggroup group by cint4, cint8 order by count
  -16382 |  -470 |     1
  -16382 |   411 |     1
  -16382 |   899 |     1
-(10 rows)
 
 select cint2, cint4, cint8, count(*) from agggroup group by cint2, cint4, cint8 order by count(*), cint2, cint4, cint8 limit 10;
  cint2  | cint4  | cint8  | count 
@@ -154,7 +148,6 @@ select cint2, cint4, cint8, count(*) from agggroup group by cint2, cint4, cint8 
  -16382 |  -8606 | -10357 |     1
  -16382 |  -3080 | -15609 |     1
  -16382 |   2223 |   9035 |     1
-(10 rows)
 
 select s, cint2, count(*) from agggroup group by s, cint2 order by count(*), s, cint2 limit 10;
  s | cint2  | count 
@@ -169,7 +162,6 @@ select s, cint2, count(*) from agggroup group by s, cint2 order by count(*), s, 
  0 | -16369 |     1
  0 | -16368 |     1
  0 | -16367 |     1
-(10 rows)
 
 select s, ss, count(*) from agggroup group by s, ss order by count(*), s, ss limit 10;
  s | ss | count 
@@ -184,7 +176,6 @@ select s, ss, count(*) from agggroup group by s, ss order by count(*), s, ss lim
  5 |  5 | 20000
  6 |  6 | 20000
  7 |  7 | 20000
-(10 rows)
 
 select s, x, count(*) from agggroup group by s, x order by count(*), s, x limit 10;
  s | x  | count 
@@ -199,7 +190,6 @@ select s, x, count(*) from agggroup group by s, x order by count(*), s, x limit 
  5 | 5  | 20000
  6 | 6  | 20000
  7 | 7  | 20000
-(10 rows)
 
 select ss, cint2, x, count(*) from agggroup group by ss, cint2, x order by count(*), ss, cint2, x limit 10;
  ss | cint2  | x | count 
@@ -214,7 +204,6 @@ select ss, cint2, x, count(*) from agggroup group by ss, cint2, x order by count
   0 | -16369 | 0 |     1
   0 | -16368 | 0 |     1
   0 | -16367 | 0 |     1
-(10 rows)
 
 select ss, s, count(*) from agggroup group by ss, s order by count(*), ss, s limit 10;
  ss | s | count 
@@ -229,7 +218,6 @@ select ss, s, count(*) from agggroup group by ss, s order by count(*), ss, s lim
   7 | 7 | 20000
   8 | 8 | 20000
   9 | 9 | 20000
-(10 rows)
 
 select ss, x, cint2, count(*) from agggroup group by ss, x, cint2 order by count(*), ss, x, cint2 limit 10;
  ss | x | cint2  | count 
@@ -244,7 +232,6 @@ select ss, x, cint2, count(*) from agggroup group by ss, x, cint2 order by count
   0 | 0 | -16369 |     1
   0 | 0 | -16368 |     1
   0 | 0 | -16367 |     1
-(10 rows)
 
 select t, s, ss, x, cint4, cint8, cint2, count(*) from agggroup group by t, s, ss, x, cint4, cint8, cint2 order by count(*), t, s, ss, x, cint4, cint8, cint2 limit 10;
  t  | s | ss | x | cint4  | cint8 | cint2  | count 
@@ -259,7 +246,6 @@ select t, s, ss, x, cint4, cint8, cint2, count(*) from agggroup group by t, s, s
   8 | 0 |  0 | 0 | -10427 |   876 | -12705 |     1
   9 | 0 |  0 | 0 | -14954 | -1593 |   2257 |     1
  10 | 0 |  0 | 0 |  10047 | -7626 |   3923 |     1
-(10 rows)
 
 select x, count(*) from agggroup group by x order by count(*), x limit 10;
  x  | count 
@@ -274,7 +260,6 @@ select x, count(*) from agggroup group by x order by count(*), x limit 10;
  9  | 20000
  11 | 20019
  $  | 20019
-(10 rows)
 
 select cint4, cint2, count(cint2) from agggroup group by cint4, cint2 order by count(cint2), cint4, cint2 limit 10;
  cint4  | cint2 | count 
@@ -289,7 +274,6 @@ select cint4, cint2, count(cint2) from agggroup group by cint4, cint2 order by c
  -14998 |     $ |     0
  -14949 |     $ |     0
  -14848 |     $ |     0
-(10 rows)
 
 select cint4, cint8, count(cint2) from agggroup group by cint4, cint8 order by count(cint2), cint4, cint8 limit 10;
  cint4  | cint8  | count 
@@ -304,7 +288,6 @@ select cint4, cint8, count(cint2) from agggroup group by cint4, cint8 order by c
  -14998 |  14464 |     0
  -14949 | -10395 |     0
  -14848 |   3110 |     0
-(10 rows)
 
 select cint2, cint4, cint8, count(cint2) from agggroup group by cint2, cint4, cint8 order by count(cint2), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | count 
@@ -319,7 +302,6 @@ select cint2, cint4, cint8, count(cint2) from agggroup group by cint2, cint4, ci
      $ | -14998 |  14464 |     0
      $ | -14949 | -10395 |     0
      $ | -14848 |   3110 |     0
-(10 rows)
 
 select s, cint2, count(cint2) from agggroup group by s, cint2 order by count(cint2), s, cint2 limit 10;
  s | cint2 | count 
@@ -334,7 +316,6 @@ select s, cint2, count(cint2) from agggroup group by s, cint2 order by count(cin
  7 |     $ |     0
  8 |     $ |     0
  9 |     $ |     0
-(10 rows)
 
 select s, ss, count(cint2) from agggroup group by s, ss order by count(cint2), s, ss limit 10;
  s | ss | count 
@@ -349,7 +330,6 @@ select s, ss, count(cint2) from agggroup group by s, ss order by count(cint2), s
  5 |  5 | 19981
  6 |  6 | 19981
  7 |  7 | 19981
-(10 rows)
 
 select s, x, count(cint2) from agggroup group by s, x order by count(cint2), s, x limit 10;
  s | x  | count 
@@ -364,7 +344,6 @@ select s, x, count(cint2) from agggroup group by s, x order by count(cint2), s, 
  5 | 5  | 19981
  6 | 6  | 19981
  7 | 7  | 19981
-(10 rows)
 
 select ss, cint2, x, count(cint2) from agggroup group by ss, cint2, x order by count(cint2), ss, cint2, x limit 10;
  ss | cint2 | x  | count 
@@ -379,7 +358,6 @@ select ss, cint2, x, count(cint2) from agggroup group by ss, cint2, x order by c
   9 |     $ | 9  |     0
  11 |     $ | 11 |     0
   $ |     $ | $  |     0
-(10 rows)
 
 select ss, s, count(cint2) from agggroup group by ss, s order by count(cint2), ss, s limit 10;
  ss | s | count 
@@ -394,7 +372,6 @@ select ss, s, count(cint2) from agggroup group by ss, s order by count(cint2), s
   7 | 7 | 19981
   8 | 8 | 19981
   9 | 9 | 19981
-(10 rows)
 
 select ss, x, cint2, count(cint2) from agggroup group by ss, x, cint2 order by count(cint2), ss, x, cint2 limit 10;
  ss | x  | cint2 | count 
@@ -409,7 +386,6 @@ select ss, x, cint2, count(cint2) from agggroup group by ss, x, cint2 order by c
   9 | 9  |     $ |     0
  11 | 11 |     $ |     0
   $ | $  |     $ |     0
-(10 rows)
 
 select t, s, ss, x, cint4, cint8, cint2, count(cint2) from agggroup group by t, s, ss, x, cint4, cint8, cint2 order by count(cint2), t, s, ss, x, cint4, cint8, cint2 limit 10;
    t   | s | ss | x | cint4  | cint8  | cint2 | count 
@@ -424,7 +400,6 @@ select t, s, ss, x, cint4, cint8, cint2, count(cint2) from agggroup group by t, 
   8408 | 0 |  0 | 0 |  15553 |   1743 |     $ |     0
   9459 | 0 |  0 | 0 | -14640 |  11933 |     $ |     0
  10510 | 0 |  0 | 0 | -14725 |   6531 |     $ |     0
-(10 rows)
 
 select x, count(cint2) from agggroup group by x order by count(cint2), x limit 10;
  x  | count 
@@ -439,7 +414,6 @@ select x, count(cint2) from agggroup group by x order by count(cint2), x limit 1
  9  | 19981
  11 | 20000
  $  | 20000
-(10 rows)
 
 select cint4, cint2, min(cint2) from agggroup group by cint4, cint2 order by min(cint2), cint4, cint2 limit 10;
  cint4  | cint2  |  min   
@@ -454,7 +428,6 @@ select cint4, cint2, min(cint2) from agggroup group by cint4, cint2 order by min
   -8606 | -16382 | -16382
   -3080 | -16382 | -16382
    2223 | -16382 | -16382
-(10 rows)
 
 select cint4, cint8, min(cint2) from agggroup group by cint4, cint8 order by min(cint2), cint4, cint8 limit 10;
  cint4  | cint8  |  min   
@@ -469,7 +442,6 @@ select cint4, cint8, min(cint2) from agggroup group by cint4, cint8 order by min
   -8606 | -10357 | -16382
   -3080 | -15609 | -16382
    2223 |   9035 | -16382
-(10 rows)
 
 select cint2, cint4, cint8, min(cint2) from agggroup group by cint2, cint4, cint8 order by min(cint2), cint2, cint4, cint8 limit 10;
  cint2  | cint4  | cint8  |  min   
@@ -484,7 +456,6 @@ select cint2, cint4, cint8, min(cint2) from agggroup group by cint2, cint4, cint
  -16382 |  -8606 | -10357 | -16382
  -16382 |  -3080 | -15609 | -16382
  -16382 |   2223 |   9035 | -16382
-(10 rows)
 
 select s, cint2, min(cint2) from agggroup group by s, cint2 order by min(cint2), s, cint2 limit 10;
  s | cint2  |  min   
@@ -499,7 +470,6 @@ select s, cint2, min(cint2) from agggroup group by s, cint2 order by min(cint2),
  2 | -16381 | -16381
  3 | -16381 | -16381
  4 | -16381 | -16381
-(10 rows)
 
 select s, ss, min(cint2) from agggroup group by s, ss order by min(cint2), s, ss limit 10;
  s | ss |  min   
@@ -514,7 +484,6 @@ select s, ss, min(cint2) from agggroup group by s, ss order by min(cint2), s, ss
  3 |  3 | -16381
  1 | 11 | -16378
  9 |  9 | -16375
-(10 rows)
 
 select s, x, min(cint2) from agggroup group by s, x order by min(cint2), s, x limit 10;
  s | x  |  min   
@@ -529,7 +498,6 @@ select s, x, min(cint2) from agggroup group by s, x order by min(cint2), s, x li
  3 | 3  | -16381
  1 | 11 | -16378
  9 | 9  | -16375
-(10 rows)
 
 select ss, cint2, x, min(cint2) from agggroup group by ss, cint2, x order by min(cint2), ss, cint2, x limit 10;
  ss | cint2  | x |  min   
@@ -544,7 +512,6 @@ select ss, cint2, x, min(cint2) from agggroup group by ss, cint2, x order by min
   3 | -16381 | 3 | -16381
   4 | -16381 | 4 | -16381
   5 | -16381 | 5 | -16381
-(10 rows)
 
 select ss, s, min(cint2) from agggroup group by ss, s order by min(cint2), ss, s limit 10;
  ss | s |  min   
@@ -559,7 +526,6 @@ select ss, s, min(cint2) from agggroup group by ss, s order by min(cint2), ss, s
   3 | 3 | -16381
  11 | 1 | -16378
   9 | 9 | -16375
-(10 rows)
 
 select ss, x, cint2, min(cint2) from agggroup group by ss, x, cint2 order by min(cint2), ss, x, cint2 limit 10;
  ss | x | cint2  |  min   
@@ -574,7 +540,6 @@ select ss, x, cint2, min(cint2) from agggroup group by ss, x, cint2 order by min
   3 | 3 | -16381 | -16381
   4 | 4 | -16381 | -16381
   5 | 5 | -16381 | -16381
-(10 rows)
 
 select t, s, ss, x, cint4, cint8, cint2, min(cint2) from agggroup group by t, s, ss, x, cint4, cint8, cint2 order by min(cint2), t, s, ss, x, cint4, cint8, cint2 limit 10;
    t   | s | ss | x | cint4  | cint8  | cint2  |  min   
@@ -589,7 +554,6 @@ select t, s, ss, x, cint4, cint8, cint2, min(cint2) from agggroup group by t, s,
  29858 | 2 |  $ | $ | -14012 |  -9888 | -16382 | -16382
  31516 | 2 |  $ | $ |   6193 |    206 | -16382 | -16382
  76781 | 7 |  7 | 7 |   9938 |   6519 | -16382 | -16382
-(10 rows)
 
 select x, min(cint2) from agggroup group by x order by min(cint2), x limit 10;
  x  |  min   
@@ -604,7 +568,6 @@ select x, min(cint2) from agggroup group by x order by min(cint2), x limit 10;
  3  | -16381
  11 | -16378
  9  | -16375
-(10 rows)
 
 select cint4, cint2, count(*) from agggroup where cint2 > 0 group by cint4, cint2 order by count(*), cint4, cint2 limit 10;
  cint4  | cint2 | count 
@@ -619,7 +582,6 @@ select cint4, cint2, count(*) from agggroup where cint2 > 0 group by cint4, cint
  -16382 | 15369 |     1
  -16380 |   448 |     1
  -16379 |   390 |     1
-(10 rows)
 
 select cint4, cint8, count(*) from agggroup where cint2 > 0 group by cint4, cint8 order by count(*), cint4, cint8 limit 10;
  cint4  | cint8 | count 
@@ -634,7 +596,6 @@ select cint4, cint8, count(*) from agggroup where cint2 > 0 group by cint4, cint
  -16382 | 15709 |     1
  -16380 |  1449 |     1
  -16379 |  1234 |     1
-(10 rows)
 
 select cint2, cint4, cint8, count(*) from agggroup where cint2 > 0 group by cint2, cint4, cint8 order by count(*), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | count 
@@ -649,7 +610,6 @@ select cint2, cint4, cint8, count(*) from agggroup where cint2 > 0 group by cint
      1 |  14078 |   9929 |     1
      1 |  15656 |  12597 |     1
      2 | -11410 |   6033 |     1
-(10 rows)
 
 select s, cint2, count(*) from agggroup where cint2 > 0 group by s, cint2 order by count(*), s, cint2 limit 10;
  s | cint2 | count 
@@ -664,7 +624,6 @@ select s, cint2, count(*) from agggroup where cint2 > 0 group by s, cint2 order 
  0 |    24 |     1
  0 |    28 |     1
  0 |    31 |     1
-(10 rows)
 
 select s, ss, count(*) from agggroup where cint2 > 0 group by s, ss order by count(*), s, ss limit 10;
  s | ss | count 
@@ -679,7 +638,6 @@ select s, ss, count(*) from agggroup where cint2 > 0 group by s, ss order by cou
  7 |  7 |  9973
  0 |  0 | 10012
  9 |  9 | 10018
-(10 rows)
 
 select s, x, count(*) from agggroup where cint2 > 0 group by s, x order by count(*), s, x limit 10;
  s | x  | count 
@@ -694,7 +652,6 @@ select s, x, count(*) from agggroup where cint2 > 0 group by s, x order by count
  7 | 7  |  9973
  0 | 0  | 10012
  9 | 9  | 10018
-(10 rows)
 
 select ss, cint2, x, count(*) from agggroup where cint2 > 0 group by ss, cint2, x order by count(*), ss, cint2, x limit 10;
  ss | cint2 | x | count 
@@ -709,7 +666,6 @@ select ss, cint2, x, count(*) from agggroup where cint2 > 0 group by ss, cint2, 
   0 |    24 | 0 |     1
   0 |    28 | 0 |     1
   0 |    31 | 0 |     1
-(10 rows)
 
 select ss, s, count(*) from agggroup where cint2 > 0 group by ss, s order by count(*), ss, s limit 10;
  ss | s | count 
@@ -724,7 +680,6 @@ select ss, s, count(*) from agggroup where cint2 > 0 group by ss, s order by cou
   7 | 7 |  9973
   0 | 0 | 10012
   9 | 9 | 10018
-(10 rows)
 
 select ss, x, cint2, count(*) from agggroup where cint2 > 0 group by ss, x, cint2 order by count(*), ss, x, cint2 limit 10;
  ss | x | cint2 | count 
@@ -739,7 +694,6 @@ select ss, x, cint2, count(*) from agggroup where cint2 > 0 group by ss, x, cint
   0 | 0 |    24 |     1
   0 | 0 |    28 |     1
   0 | 0 |    31 |     1
-(10 rows)
 
 select t, s, ss, x, cint4, cint8, cint2, count(*) from agggroup where cint2 > 0 group by t, s, ss, x, cint4, cint8, cint2 order by count(*), t, s, ss, x, cint4, cint8, cint2 limit 10;
  t  | s | ss | x | cint4  | cint8 | cint2 | count 
@@ -754,7 +708,6 @@ select t, s, ss, x, cint4, cint8, cint2, count(*) from agggroup where cint2 > 0 
  15 | 0 |  0 | 0 | -13009 | 14045 | 15101 |     1
  19 | 0 |  0 | 0 | -16257 |  4566 |  7684 |     1
  22 | 0 |  0 | 0 |  -6345 | -8658 | 11755 |     1
-(10 rows)
 
 select x, count(*) from agggroup where cint2 > 0 group by x order by count(*), x limit 10;
  x  | count 
@@ -769,7 +722,6 @@ select x, count(*) from agggroup where cint2 > 0 group by x order by count(*), x
  9  | 10018
  11 | 10105
  5  | 10110
-(10 rows)
 
 select cint4, cint2, count(cint2) from agggroup where cint2 > 0 group by cint4, cint2 order by count(cint2), cint4, cint2 limit 10;
  cint4  | cint2 | count 
@@ -784,7 +736,6 @@ select cint4, cint2, count(cint2) from agggroup where cint2 > 0 group by cint4, 
  -16382 | 15369 |     1
  -16380 |   448 |     1
  -16379 |   390 |     1
-(10 rows)
 
 select cint4, cint8, count(cint2) from agggroup where cint2 > 0 group by cint4, cint8 order by count(cint2), cint4, cint8 limit 10;
  cint4  | cint8 | count 
@@ -799,7 +750,6 @@ select cint4, cint8, count(cint2) from agggroup where cint2 > 0 group by cint4, 
  -16382 | 15709 |     1
  -16380 |  1449 |     1
  -16379 |  1234 |     1
-(10 rows)
 
 select cint2, cint4, cint8, count(cint2) from agggroup where cint2 > 0 group by cint2, cint4, cint8 order by count(cint2), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | count 
@@ -814,7 +764,6 @@ select cint2, cint4, cint8, count(cint2) from agggroup where cint2 > 0 group by 
      1 |  14078 |   9929 |     1
      1 |  15656 |  12597 |     1
      2 | -11410 |   6033 |     1
-(10 rows)
 
 select s, cint2, count(cint2) from agggroup where cint2 > 0 group by s, cint2 order by count(cint2), s, cint2 limit 10;
  s | cint2 | count 
@@ -829,7 +778,6 @@ select s, cint2, count(cint2) from agggroup where cint2 > 0 group by s, cint2 or
  0 |    24 |     1
  0 |    28 |     1
  0 |    31 |     1
-(10 rows)
 
 select s, ss, count(cint2) from agggroup where cint2 > 0 group by s, ss order by count(cint2), s, ss limit 10;
  s | ss | count 
@@ -844,7 +792,6 @@ select s, ss, count(cint2) from agggroup where cint2 > 0 group by s, ss order by
  7 |  7 |  9973
  0 |  0 | 10012
  9 |  9 | 10018
-(10 rows)
 
 select s, x, count(cint2) from agggroup where cint2 > 0 group by s, x order by count(cint2), s, x limit 10;
  s | x  | count 
@@ -859,7 +806,6 @@ select s, x, count(cint2) from agggroup where cint2 > 0 group by s, x order by c
  7 | 7  |  9973
  0 | 0  | 10012
  9 | 9  | 10018
-(10 rows)
 
 select ss, cint2, x, count(cint2) from agggroup where cint2 > 0 group by ss, cint2, x order by count(cint2), ss, cint2, x limit 10;
  ss | cint2 | x | count 
@@ -874,7 +820,6 @@ select ss, cint2, x, count(cint2) from agggroup where cint2 > 0 group by ss, cin
   0 |    24 | 0 |     1
   0 |    28 | 0 |     1
   0 |    31 | 0 |     1
-(10 rows)
 
 select ss, s, count(cint2) from agggroup where cint2 > 0 group by ss, s order by count(cint2), ss, s limit 10;
  ss | s | count 
@@ -889,7 +834,6 @@ select ss, s, count(cint2) from agggroup where cint2 > 0 group by ss, s order by
   7 | 7 |  9973
   0 | 0 | 10012
   9 | 9 | 10018
-(10 rows)
 
 select ss, x, cint2, count(cint2) from agggroup where cint2 > 0 group by ss, x, cint2 order by count(cint2), ss, x, cint2 limit 10;
  ss | x | cint2 | count 
@@ -904,7 +848,6 @@ select ss, x, cint2, count(cint2) from agggroup where cint2 > 0 group by ss, x, 
   0 | 0 |    24 |     1
   0 | 0 |    28 |     1
   0 | 0 |    31 |     1
-(10 rows)
 
 select t, s, ss, x, cint4, cint8, cint2, count(cint2) from agggroup where cint2 > 0 group by t, s, ss, x, cint4, cint8, cint2 order by count(cint2), t, s, ss, x, cint4, cint8, cint2 limit 10;
  t  | s | ss | x | cint4  | cint8 | cint2 | count 
@@ -919,7 +862,6 @@ select t, s, ss, x, cint4, cint8, cint2, count(cint2) from agggroup where cint2 
  15 | 0 |  0 | 0 | -13009 | 14045 | 15101 |     1
  19 | 0 |  0 | 0 | -16257 |  4566 |  7684 |     1
  22 | 0 |  0 | 0 |  -6345 | -8658 | 11755 |     1
-(10 rows)
 
 select x, count(cint2) from agggroup where cint2 > 0 group by x order by count(cint2), x limit 10;
  x  | count 
@@ -934,7 +876,6 @@ select x, count(cint2) from agggroup where cint2 > 0 group by x order by count(c
  9  | 10018
  11 | 10105
  5  | 10110
-(10 rows)
 
 select cint4, cint2, min(cint2) from agggroup where cint2 > 0 group by cint4, cint2 order by min(cint2), cint4, cint2 limit 10;
  cint4  | cint2 | min 
@@ -949,7 +890,6 @@ select cint4, cint2, min(cint2) from agggroup where cint2 > 0 group by cint4, ci
   14078 |     1 |   1
   15656 |     1 |   1
  -11410 |     2 |   2
-(10 rows)
 
 select cint4, cint8, min(cint2) from agggroup where cint2 > 0 group by cint4, cint8 order by min(cint2), cint4, cint8 limit 10;
  cint4  | cint8  | min 
@@ -964,7 +904,6 @@ select cint4, cint8, min(cint2) from agggroup where cint2 > 0 group by cint4, ci
   14078 |   9929 |   1
   15656 |  12597 |   1
  -11410 |   6033 |   2
-(10 rows)
 
 select cint2, cint4, cint8, min(cint2) from agggroup where cint2 > 0 group by cint2, cint4, cint8 order by min(cint2), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | min 
@@ -979,7 +918,6 @@ select cint2, cint4, cint8, min(cint2) from agggroup where cint2 > 0 group by ci
      1 |  14078 |   9929 |   1
      1 |  15656 |  12597 |   1
      2 | -11410 |   6033 |   2
-(10 rows)
 
 select s, cint2, min(cint2) from agggroup where cint2 > 0 group by s, cint2 order by min(cint2), s, cint2 limit 10;
  s | cint2 | min 
@@ -994,7 +932,6 @@ select s, cint2, min(cint2) from agggroup where cint2 > 0 group by s, cint2 orde
  3 |     2 |   2
  7 |     2 |   2
  9 |     2 |   2
-(10 rows)
 
 select s, ss, min(cint2) from agggroup where cint2 > 0 group by s, ss order by min(cint2), s, ss limit 10;
  s | ss | min 
@@ -1009,7 +946,6 @@ select s, ss, min(cint2) from agggroup where cint2 > 0 group by s, ss order by m
  6 |  6 |   3
  0 |  0 |   4
  4 |  4 |   4
-(10 rows)
 
 select s, x, min(cint2) from agggroup where cint2 > 0 group by s, x order by min(cint2), s, x limit 10;
  s | x  | min 
@@ -1024,7 +960,6 @@ select s, x, min(cint2) from agggroup where cint2 > 0 group by s, x order by min
  6 | 6  |   3
  0 | 0  |   4
  4 | 4  |   4
-(10 rows)
 
 select ss, cint2, x, min(cint2) from agggroup where cint2 > 0 group by ss, cint2, x order by min(cint2), ss, cint2, x limit 10;
  ss | cint2 | x  | min 
@@ -1039,7 +974,6 @@ select ss, cint2, x, min(cint2) from agggroup where cint2 > 0 group by ss, cint2
   7 |     2 | 7  |   2
   9 |     2 | 9  |   2
  11 |     2 | 11 |   2
-(10 rows)
 
 select ss, s, min(cint2) from agggroup where cint2 > 0 group by ss, s order by min(cint2), ss, s limit 10;
  ss | s | min 
@@ -1054,7 +988,6 @@ select ss, s, min(cint2) from agggroup where cint2 > 0 group by ss, s order by m
   6 | 6 |   3
   0 | 0 |   4
   4 | 4 |   4
-(10 rows)
 
 select ss, x, cint2, min(cint2) from agggroup where cint2 > 0 group by ss, x, cint2 order by min(cint2), ss, x, cint2 limit 10;
  ss | x  | cint2 | min 
@@ -1069,7 +1002,6 @@ select ss, x, cint2, min(cint2) from agggroup where cint2 > 0 group by ss, x, ci
   7 | 7  |     2 |   2
   9 | 9  |     2 |   2
  11 | 11 |     2 |   2
-(10 rows)
 
 select t, s, ss, x, cint4, cint8, cint2, min(cint2) from agggroup where cint2 > 0 group by t, s, ss, x, cint4, cint8, cint2 order by min(cint2), t, s, ss, x, cint4, cint8, cint2 limit 10;
    t   | s | ss | x  | cint4  | cint8  | cint2 | min 
@@ -1084,7 +1016,6 @@ select t, s, ss, x, cint4, cint8, cint2, min(cint2) from agggroup where cint2 > 
  86957 | 7 |  7 | 7  |  15656 |  12597 |     1 |   1
  89689 | 8 |  8 | 8  |  11189 |  -5168 |     1 |   1
  22147 | 1 | 11 | 11 |  -9569 |   9760 |     2 |   2
-(10 rows)
 
 select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2), x limit 10;
  x  | min 
@@ -1099,7 +1030,6 @@ select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2
  6  |   3
  0  |   4
  4  |   4
-(10 rows)
 
 select cint4, cint2, count(*) from agggroup where cint2 is null group by cint4, cint2 order by count(*), cint4, cint2 limit 10;
  cint4  | cint2 | count 
@@ -1114,7 +1044,6 @@ select cint4, cint2, count(*) from agggroup where cint2 is null group by cint4, 
  -14998 |     $ |     1
  -14949 |     $ |     1
  -14848 |     $ |     1
-(10 rows)
 
 select cint4, cint8, count(*) from agggroup where cint2 is null group by cint4, cint8 order by count(*), cint4, cint8 limit 10;
  cint4  | cint8  | count 
@@ -1129,7 +1058,6 @@ select cint4, cint8, count(*) from agggroup where cint2 is null group by cint4, 
  -14998 |  14464 |     1
  -14949 | -10395 |     1
  -14848 |   3110 |     1
-(10 rows)
 
 select cint2, cint4, cint8, count(*) from agggroup where cint2 is null group by cint2, cint4, cint8 order by count(*), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | count 
@@ -1144,7 +1072,6 @@ select cint2, cint4, cint8, count(*) from agggroup where cint2 is null group by 
      $ | -14998 |  14464 |     1
      $ | -14949 | -10395 |     1
      $ | -14848 |   3110 |     1
-(10 rows)
 
 select s, cint2, count(*) from agggroup where cint2 is null group by s, cint2 order by count(*), s, cint2 limit 10;
  s | cint2 | count 
@@ -1159,7 +1086,6 @@ select s, cint2, count(*) from agggroup where cint2 is null group by s, cint2 or
  7 |     $ |    19
  8 |     $ |    19
  9 |     $ |    19
-(10 rows)
 
 select s, ss, count(*) from agggroup where cint2 is null group by s, ss order by count(*), s, ss limit 10;
  s | ss | count 
@@ -1174,7 +1100,6 @@ select s, ss, count(*) from agggroup where cint2 is null group by s, ss order by
  7 |  7 |    19
  8 |  8 |    19
  9 |  9 |    19
-(10 rows)
 
 select s, x, count(*) from agggroup where cint2 is null group by s, x order by count(*), s, x limit 10;
  s | x  | count 
@@ -1189,7 +1114,6 @@ select s, x, count(*) from agggroup where cint2 is null group by s, x order by c
  7 | 7  |    19
  8 | 8  |    19
  9 | 9  |    19
-(10 rows)
 
 select ss, cint2, x, count(*) from agggroup where cint2 is null group by ss, cint2, x order by count(*), ss, cint2, x limit 10;
  ss | cint2 | x  | count 
@@ -1204,7 +1128,6 @@ select ss, cint2, x, count(*) from agggroup where cint2 is null group by ss, cin
   9 |     $ | 9  |    19
  11 |     $ | 11 |    19
   $ |     $ | $  |    19
-(10 rows)
 
 select ss, s, count(*) from agggroup where cint2 is null group by ss, s order by count(*), ss, s limit 10;
  ss | s | count 
@@ -1219,7 +1142,6 @@ select ss, s, count(*) from agggroup where cint2 is null group by ss, s order by
   9 | 9 |    19
  11 | 1 |    19
   $ | 2 |    19
-(10 rows)
 
 select ss, x, cint2, count(*) from agggroup where cint2 is null group by ss, x, cint2 order by count(*), ss, x, cint2 limit 10;
  ss | x  | cint2 | count 
@@ -1234,7 +1156,6 @@ select ss, x, cint2, count(*) from agggroup where cint2 is null group by ss, x, 
   9 | 9  |     $ |    19
  11 | 11 |     $ |    19
   $ | $  |     $ |    19
-(10 rows)
 
 select t, s, ss, x, cint4, cint8, cint2, count(*) from agggroup where cint2 is null group by t, s, ss, x, cint4, cint8, cint2 order by count(*), t, s, ss, x, cint4, cint8, cint2 limit 10;
    t   | s | ss | x | cint4  | cint8  | cint2 | count 
@@ -1249,7 +1170,6 @@ select t, s, ss, x, cint4, cint8, cint2, count(*) from agggroup where cint2 is n
   8408 | 0 |  0 | 0 |  15553 |   1743 |     $ |     1
   9459 | 0 |  0 | 0 | -14640 |  11933 |     $ |     1
  10510 | 0 |  0 | 0 | -14725 |   6531 |     $ |     1
-(10 rows)
 
 select x, count(*) from agggroup where cint2 is null group by x order by count(*), x limit 10;
  x  | count 
@@ -1264,7 +1184,6 @@ select x, count(*) from agggroup where cint2 is null group by x order by count(*
  8  |    19
  9  |    19
  $  |    19
-(10 rows)
 
 select cint4, cint2, count(cint2) from agggroup where cint2 is null group by cint4, cint2 order by count(cint2), cint4, cint2 limit 10;
  cint4  | cint2 | count 
@@ -1279,7 +1198,6 @@ select cint4, cint2, count(cint2) from agggroup where cint2 is null group by cin
  -14998 |     $ |     0
  -14949 |     $ |     0
  -14848 |     $ |     0
-(10 rows)
 
 select cint4, cint8, count(cint2) from agggroup where cint2 is null group by cint4, cint8 order by count(cint2), cint4, cint8 limit 10;
  cint4  | cint8  | count 
@@ -1294,7 +1212,6 @@ select cint4, cint8, count(cint2) from agggroup where cint2 is null group by cin
  -14998 |  14464 |     0
  -14949 | -10395 |     0
  -14848 |   3110 |     0
-(10 rows)
 
 select cint2, cint4, cint8, count(cint2) from agggroup where cint2 is null group by cint2, cint4, cint8 order by count(cint2), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | count 
@@ -1309,7 +1226,6 @@ select cint2, cint4, cint8, count(cint2) from agggroup where cint2 is null group
      $ | -14998 |  14464 |     0
      $ | -14949 | -10395 |     0
      $ | -14848 |   3110 |     0
-(10 rows)
 
 select s, cint2, count(cint2) from agggroup where cint2 is null group by s, cint2 order by count(cint2), s, cint2 limit 10;
  s | cint2 | count 
@@ -1324,7 +1240,6 @@ select s, cint2, count(cint2) from agggroup where cint2 is null group by s, cint
  7 |     $ |     0
  8 |     $ |     0
  9 |     $ |     0
-(10 rows)
 
 select s, ss, count(cint2) from agggroup where cint2 is null group by s, ss order by count(cint2), s, ss limit 10;
  s | ss | count 
@@ -1339,7 +1254,6 @@ select s, ss, count(cint2) from agggroup where cint2 is null group by s, ss orde
  7 |  7 |     0
  8 |  8 |     0
  9 |  9 |     0
-(10 rows)
 
 select s, x, count(cint2) from agggroup where cint2 is null group by s, x order by count(cint2), s, x limit 10;
  s | x  | count 
@@ -1354,7 +1268,6 @@ select s, x, count(cint2) from agggroup where cint2 is null group by s, x order 
  7 | 7  |     0
  8 | 8  |     0
  9 | 9  |     0
-(10 rows)
 
 select ss, cint2, x, count(cint2) from agggroup where cint2 is null group by ss, cint2, x order by count(cint2), ss, cint2, x limit 10;
  ss | cint2 | x  | count 
@@ -1369,7 +1282,6 @@ select ss, cint2, x, count(cint2) from agggroup where cint2 is null group by ss,
   9 |     $ | 9  |     0
  11 |     $ | 11 |     0
   $ |     $ | $  |     0
-(10 rows)
 
 select ss, s, count(cint2) from agggroup where cint2 is null group by ss, s order by count(cint2), ss, s limit 10;
  ss | s | count 
@@ -1384,7 +1296,6 @@ select ss, s, count(cint2) from agggroup where cint2 is null group by ss, s orde
   9 | 9 |     0
  11 | 1 |     0
   $ | 2 |     0
-(10 rows)
 
 select ss, x, cint2, count(cint2) from agggroup where cint2 is null group by ss, x, cint2 order by count(cint2), ss, x, cint2 limit 10;
  ss | x  | cint2 | count 
@@ -1399,7 +1310,6 @@ select ss, x, cint2, count(cint2) from agggroup where cint2 is null group by ss,
   9 | 9  |     $ |     0
  11 | 11 |     $ |     0
   $ | $  |     $ |     0
-(10 rows)
 
 select t, s, ss, x, cint4, cint8, cint2, count(cint2) from agggroup where cint2 is null group by t, s, ss, x, cint4, cint8, cint2 order by count(cint2), t, s, ss, x, cint4, cint8, cint2 limit 10;
    t   | s | ss | x | cint4  | cint8  | cint2 | count 
@@ -1414,7 +1324,6 @@ select t, s, ss, x, cint4, cint8, cint2, count(cint2) from agggroup where cint2 
   8408 | 0 |  0 | 0 |  15553 |   1743 |     $ |     0
   9459 | 0 |  0 | 0 | -14640 |  11933 |     $ |     0
  10510 | 0 |  0 | 0 | -14725 |   6531 |     $ |     0
-(10 rows)
 
 select x, count(cint2) from agggroup where cint2 is null group by x order by count(cint2), x limit 10;
  x  | count 
@@ -1429,7 +1338,6 @@ select x, count(cint2) from agggroup where cint2 is null group by x order by cou
  8  |     0
  9  |     0
  $  |     0
-(10 rows)
 
 select cint4, cint2, min(cint2) from agggroup where cint2 is null group by cint4, cint2 order by min(cint2), cint4, cint2 limit 10;
  cint4  | cint2 | min 
@@ -1444,7 +1352,6 @@ select cint4, cint2, min(cint2) from agggroup where cint2 is null group by cint4
  -14998 |     $ |   $
  -14949 |     $ |   $
  -14848 |     $ |   $
-(10 rows)
 
 select cint4, cint8, min(cint2) from agggroup where cint2 is null group by cint4, cint8 order by min(cint2), cint4, cint8 limit 10;
  cint4  | cint8  | min 
@@ -1459,7 +1366,6 @@ select cint4, cint8, min(cint2) from agggroup where cint2 is null group by cint4
  -14998 |  14464 |   $
  -14949 | -10395 |   $
  -14848 |   3110 |   $
-(10 rows)
 
 select cint2, cint4, cint8, min(cint2) from agggroup where cint2 is null group by cint2, cint4, cint8 order by min(cint2), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | min 
@@ -1474,7 +1380,6 @@ select cint2, cint4, cint8, min(cint2) from agggroup where cint2 is null group b
      $ | -14998 |  14464 |   $
      $ | -14949 | -10395 |   $
      $ | -14848 |   3110 |   $
-(10 rows)
 
 select s, cint2, min(cint2) from agggroup where cint2 is null group by s, cint2 order by min(cint2), s, cint2 limit 10;
  s | cint2 | min 
@@ -1489,7 +1394,6 @@ select s, cint2, min(cint2) from agggroup where cint2 is null group by s, cint2 
  7 |     $ |   $
  8 |     $ |   $
  9 |     $ |   $
-(10 rows)
 
 select s, ss, min(cint2) from agggroup where cint2 is null group by s, ss order by min(cint2), s, ss limit 10;
  s | ss | min 
@@ -1504,7 +1408,6 @@ select s, ss, min(cint2) from agggroup where cint2 is null group by s, ss order 
  7 |  7 |   $
  8 |  8 |   $
  9 |  9 |   $
-(10 rows)
 
 select s, x, min(cint2) from agggroup where cint2 is null group by s, x order by min(cint2), s, x limit 10;
  s | x  | min 
@@ -1519,7 +1422,6 @@ select s, x, min(cint2) from agggroup where cint2 is null group by s, x order by
  7 | 7  |   $
  8 | 8  |   $
  9 | 9  |   $
-(10 rows)
 
 select ss, cint2, x, min(cint2) from agggroup where cint2 is null group by ss, cint2, x order by min(cint2), ss, cint2, x limit 10;
  ss | cint2 | x  | min 
@@ -1534,7 +1436,6 @@ select ss, cint2, x, min(cint2) from agggroup where cint2 is null group by ss, c
   9 |     $ | 9  |   $
  11 |     $ | 11 |   $
   $ |     $ | $  |   $
-(10 rows)
 
 select ss, s, min(cint2) from agggroup where cint2 is null group by ss, s order by min(cint2), ss, s limit 10;
  ss | s | min 
@@ -1549,7 +1450,6 @@ select ss, s, min(cint2) from agggroup where cint2 is null group by ss, s order 
   9 | 9 |   $
  11 | 1 |   $
   $ | 2 |   $
-(10 rows)
 
 select ss, x, cint2, min(cint2) from agggroup where cint2 is null group by ss, x, cint2 order by min(cint2), ss, x, cint2 limit 10;
  ss | x  | cint2 | min 
@@ -1564,7 +1464,6 @@ select ss, x, cint2, min(cint2) from agggroup where cint2 is null group by ss, x
   9 | 9  |     $ |   $
  11 | 11 |     $ |   $
   $ | $  |     $ |   $
-(10 rows)
 
 select t, s, ss, x, cint4, cint8, cint2, min(cint2) from agggroup where cint2 is null group by t, s, ss, x, cint4, cint8, cint2 order by min(cint2), t, s, ss, x, cint4, cint8, cint2 limit 10;
    t   | s | ss | x | cint4  | cint8  | cint2 | min 
@@ -1579,7 +1478,6 @@ select t, s, ss, x, cint4, cint8, cint2, min(cint2) from agggroup where cint2 is
   8408 | 0 |  0 | 0 |  15553 |   1743 |     $ |   $
   9459 | 0 |  0 | 0 | -14640 |  11933 |     $ |   $
  10510 | 0 |  0 | 0 | -14725 |   6531 |     $ |   $
-(10 rows)
 
 select x, min(cint2) from agggroup where cint2 is null group by x order by min(cint2), x limit 10;
  x  | min 
@@ -1594,7 +1492,6 @@ select x, min(cint2) from agggroup where cint2 is null group by x order by min(c
  8  |   $
  9  |   $
  $  |   $
-(10 rows)
 
 select cint4, cint2, count(*) from agggroup where cint2 is null and x is null group by cint4, cint2 order by count(*), cint4, cint2 limit 10;
  cint4  | cint2 | count 
@@ -1609,7 +1506,6 @@ select cint4, cint2, count(*) from agggroup where cint2 is null and x is null gr
   -1217 |     $ |     1
    -166 |     $ |     1
    -119 |     $ |     1
-(10 rows)
 
 select cint4, cint8, count(*) from agggroup where cint2 is null and x is null group by cint4, cint8 order by count(*), cint4, cint8 limit 10;
  cint4  | cint8  | count 
@@ -1624,7 +1520,6 @@ select cint4, cint8, count(*) from agggroup where cint2 is null and x is null gr
   -1217 |   6383 |     1
    -166 | -10858 |     1
    -119 |   -231 |     1
-(10 rows)
 
 select cint2, cint4, cint8, count(*) from agggroup where cint2 is null and x is null group by cint2, cint4, cint8 order by count(*), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | count 
@@ -1639,43 +1534,36 @@ select cint2, cint4, cint8, count(*) from agggroup where cint2 is null and x is 
      $ |  -1217 |   6383 |     1
      $ |   -166 | -10858 |     1
      $ |   -119 |   -231 |     1
-(10 rows)
 
 select s, cint2, count(*) from agggroup where cint2 is null and x is null group by s, cint2 order by count(*), s, cint2 limit 10;
  s | cint2 | count 
 ---+-------+-------
  2 |     $ |    19
-(1 row)
 
 select s, ss, count(*) from agggroup where cint2 is null and x is null group by s, ss order by count(*), s, ss limit 10;
  s | ss | count 
 ---+----+-------
  2 |  $ |    19
-(1 row)
 
 select s, x, count(*) from agggroup where cint2 is null and x is null group by s, x order by count(*), s, x limit 10;
  s | x | count 
 ---+---+-------
  2 | $ |    19
-(1 row)
 
 select ss, cint2, x, count(*) from agggroup where cint2 is null and x is null group by ss, cint2, x order by count(*), ss, cint2, x limit 10;
  ss | cint2 | x | count 
 ----+-------+---+-------
   $ |     $ | $ |    19
-(1 row)
 
 select ss, s, count(*) from agggroup where cint2 is null and x is null group by ss, s order by count(*), ss, s limit 10;
  ss | s | count 
 ----+---+-------
   $ | 2 |    19
-(1 row)
 
 select ss, x, cint2, count(*) from agggroup where cint2 is null and x is null group by ss, x, cint2 order by count(*), ss, x, cint2 limit 10;
  ss | x | cint2 | count 
 ----+---+-------+-------
   $ | $ |     $ |    19
-(1 row)
 
 select t, s, ss, x, cint4, cint8, cint2, count(*) from agggroup where cint2 is null and x is null group by t, s, ss, x, cint4, cint8, cint2 order by count(*), t, s, ss, x, cint4, cint8, cint2 limit 10;
    t   | s | ss | x | cint4  | cint8  | cint2 | count 
@@ -1690,13 +1578,11 @@ select t, s, ss, x, cint4, cint8, cint2, count(*) from agggroup where cint2 is n
  28408 | 2 |  $ | $ |  -7170 |   7723 |     $ |     1
  29459 | 2 |  $ | $ | -14443 | -12710 |     $ |     1
  30510 | 2 |  $ | $ |  12536 |   8350 |     $ |     1
-(10 rows)
 
 select x, count(*) from agggroup where cint2 is null and x is null group by x order by count(*), x limit 10;
  x | count 
 ---+-------
  $ |    19
-(1 row)
 
 select cint4, cint2, count(cint2) from agggroup where cint2 is null and x is null group by cint4, cint2 order by count(cint2), cint4, cint2 limit 10;
  cint4  | cint2 | count 
@@ -1711,7 +1597,6 @@ select cint4, cint2, count(cint2) from agggroup where cint2 is null and x is nul
   -1217 |     $ |     0
    -166 |     $ |     0
    -119 |     $ |     0
-(10 rows)
 
 select cint4, cint8, count(cint2) from agggroup where cint2 is null and x is null group by cint4, cint8 order by count(cint2), cint4, cint8 limit 10;
  cint4  | cint8  | count 
@@ -1726,7 +1611,6 @@ select cint4, cint8, count(cint2) from agggroup where cint2 is null and x is nul
   -1217 |   6383 |     0
    -166 | -10858 |     0
    -119 |   -231 |     0
-(10 rows)
 
 select cint2, cint4, cint8, count(cint2) from agggroup where cint2 is null and x is null group by cint2, cint4, cint8 order by count(cint2), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | count 
@@ -1741,43 +1625,36 @@ select cint2, cint4, cint8, count(cint2) from agggroup where cint2 is null and x
      $ |  -1217 |   6383 |     0
      $ |   -166 | -10858 |     0
      $ |   -119 |   -231 |     0
-(10 rows)
 
 select s, cint2, count(cint2) from agggroup where cint2 is null and x is null group by s, cint2 order by count(cint2), s, cint2 limit 10;
  s | cint2 | count 
 ---+-------+-------
  2 |     $ |     0
-(1 row)
 
 select s, ss, count(cint2) from agggroup where cint2 is null and x is null group by s, ss order by count(cint2), s, ss limit 10;
  s | ss | count 
 ---+----+-------
  2 |  $ |     0
-(1 row)
 
 select s, x, count(cint2) from agggroup where cint2 is null and x is null group by s, x order by count(cint2), s, x limit 10;
  s | x | count 
 ---+---+-------
  2 | $ |     0
-(1 row)
 
 select ss, cint2, x, count(cint2) from agggroup where cint2 is null and x is null group by ss, cint2, x order by count(cint2), ss, cint2, x limit 10;
  ss | cint2 | x | count 
 ----+-------+---+-------
   $ |     $ | $ |     0
-(1 row)
 
 select ss, s, count(cint2) from agggroup where cint2 is null and x is null group by ss, s order by count(cint2), ss, s limit 10;
  ss | s | count 
 ----+---+-------
   $ | 2 |     0
-(1 row)
 
 select ss, x, cint2, count(cint2) from agggroup where cint2 is null and x is null group by ss, x, cint2 order by count(cint2), ss, x, cint2 limit 10;
  ss | x | cint2 | count 
 ----+---+-------+-------
   $ | $ |     $ |     0
-(1 row)
 
 select t, s, ss, x, cint4, cint8, cint2, count(cint2) from agggroup where cint2 is null and x is null group by t, s, ss, x, cint4, cint8, cint2 order by count(cint2), t, s, ss, x, cint4, cint8, cint2 limit 10;
    t   | s | ss | x | cint4  | cint8  | cint2 | count 
@@ -1792,13 +1669,11 @@ select t, s, ss, x, cint4, cint8, cint2, count(cint2) from agggroup where cint2 
  28408 | 2 |  $ | $ |  -7170 |   7723 |     $ |     0
  29459 | 2 |  $ | $ | -14443 | -12710 |     $ |     0
  30510 | 2 |  $ | $ |  12536 |   8350 |     $ |     0
-(10 rows)
 
 select x, count(cint2) from agggroup where cint2 is null and x is null group by x order by count(cint2), x limit 10;
  x | count 
 ---+-------
  $ |     0
-(1 row)
 
 select cint4, cint2, min(cint2) from agggroup where cint2 is null and x is null group by cint4, cint2 order by min(cint2), cint4, cint2 limit 10;
  cint4  | cint2 | min 
@@ -1813,7 +1688,6 @@ select cint4, cint2, min(cint2) from agggroup where cint2 is null and x is null 
   -1217 |     $ |   $
    -166 |     $ |   $
    -119 |     $ |   $
-(10 rows)
 
 select cint4, cint8, min(cint2) from agggroup where cint2 is null and x is null group by cint4, cint8 order by min(cint2), cint4, cint8 limit 10;
  cint4  | cint8  | min 
@@ -1828,7 +1702,6 @@ select cint4, cint8, min(cint2) from agggroup where cint2 is null and x is null 
   -1217 |   6383 |   $
    -166 | -10858 |   $
    -119 |   -231 |   $
-(10 rows)
 
 select cint2, cint4, cint8, min(cint2) from agggroup where cint2 is null and x is null group by cint2, cint4, cint8 order by min(cint2), cint2, cint4, cint8 limit 10;
  cint2 | cint4  | cint8  | min 
@@ -1843,43 +1716,36 @@ select cint2, cint4, cint8, min(cint2) from agggroup where cint2 is null and x i
      $ |  -1217 |   6383 |   $
      $ |   -166 | -10858 |   $
      $ |   -119 |   -231 |   $
-(10 rows)
 
 select s, cint2, min(cint2) from agggroup where cint2 is null and x is null group by s, cint2 order by min(cint2), s, cint2 limit 10;
  s | cint2 | min 
 ---+-------+-----
  2 |     $ |   $
-(1 row)
 
 select s, ss, min(cint2) from agggroup where cint2 is null and x is null group by s, ss order by min(cint2), s, ss limit 10;
  s | ss | min 
 ---+----+-----
  2 |  $ |   $
-(1 row)
 
 select s, x, min(cint2) from agggroup where cint2 is null and x is null group by s, x order by min(cint2), s, x limit 10;
  s | x | min 
 ---+---+-----
  2 | $ |   $
-(1 row)
 
 select ss, cint2, x, min(cint2) from agggroup where cint2 is null and x is null group by ss, cint2, x order by min(cint2), ss, cint2, x limit 10;
  ss | cint2 | x | min 
 ----+-------+---+-----
   $ |     $ | $ |   $
-(1 row)
 
 select ss, s, min(cint2) from agggroup where cint2 is null and x is null group by ss, s order by min(cint2), ss, s limit 10;
  ss | s | min 
 ----+---+-----
   $ | 2 |   $
-(1 row)
 
 select ss, x, cint2, min(cint2) from agggroup where cint2 is null and x is null group by ss, x, cint2 order by min(cint2), ss, x, cint2 limit 10;
  ss | x | cint2 | min 
 ----+---+-------+-----
   $ | $ |     $ |   $
-(1 row)
 
 select t, s, ss, x, cint4, cint8, cint2, min(cint2) from agggroup where cint2 is null and x is null group by t, s, ss, x, cint4, cint8, cint2 order by min(cint2), t, s, ss, x, cint4, cint8, cint2 limit 10;
    t   | s | ss | x | cint4  | cint8  | cint2 | min 
@@ -1894,24 +1760,20 @@ select t, s, ss, x, cint4, cint8, cint2, min(cint2) from agggroup where cint2 is
  28408 | 2 |  $ | $ |  -7170 |   7723 |     $ |   $
  29459 | 2 |  $ | $ | -14443 | -12710 |     $ |   $
  30510 | 2 |  $ | $ |  12536 |   8350 |     $ |   $
-(10 rows)
 
 select x, min(cint2) from agggroup where cint2 is null and x is null group by x order by min(cint2), x limit 10;
  x | min 
 ---+-----
  $ |   $
-(1 row)
 
 reset timescaledb.debug_require_vector_agg;
 -- Test long text columns. Also make one of them a segmentby, so that we can
 -- test the long scalar values.
 create table long(t int, a text, b text, c text, d text);
 select create_hypertable('long', 't');
-NOTICE:  adding not-null constraint to column "t"
  create_hypertable 
 -------------------
  (3,public,long,t)
-(1 row)
 
 insert into long select n, a, x, x, x from (
     select n, 'short' || m a, repeat('1', 100 * 4 + n) x
@@ -1926,7 +1788,6 @@ select count(compress_chunk(x)) from show_chunks('long') x;
  count 
 -------
      2
-(1 row)
 
 set timescaledb.debug_require_vector_agg = 'require';
 -- Uncomment to generate reference.
@@ -1945,7 +1806,6 @@ select sum(t) from long group by a, b, c, d order by 1 limit 10;
    2
    2
    2
-(10 rows)
 
 select sum(t) from long group by d, b, c, a order by 1 limit 10;
  sum 
@@ -1960,7 +1820,6 @@ select sum(t) from long group by d, b, c, a order by 1 limit 10;
    2
    2
    2
-(10 rows)
 
 select sum(t) from long group by d, b, a, c order by 1 limit 10;
  sum 
@@ -1975,7 +1834,6 @@ select sum(t) from long group by d, b, a, c order by 1 limit 10;
    2
    2
    2
-(10 rows)
 
 -- Just the scalar column
 select sum(t) from long group by a order by 1;
@@ -1987,7 +1845,6 @@ select sum(t) from long group by a order by 1;
   10
   10
   10
-(6 rows)
 
 -- No scalar columns
 select sum(t) from long group by b, c, d order by 1 limit 10;
@@ -1998,18 +1855,15 @@ select sum(t) from long group by b, c, d order by 1 limit 10;
    8
   12
   16
-(5 rows)
 
 reset timescaledb.debug_require_vector_agg;
 -- Test various serialized key lengths. We want to touch the transition from short
 -- to long varlena header for the serialized key.
 create table keylength(t int, a text, b text);
 select create_hypertable('keylength', 't');
-NOTICE:  adding not-null constraint to column "t"
    create_hypertable    
 ------------------------
  (5,public,keylength,t)
-(1 row)
 
 insert into keylength select t, 'a', repeat('b', t) from generate_series(1, 1000) t;
 insert into keylength values (-1, '', ''); -- second chunk
@@ -2019,7 +1873,6 @@ select count(compress_chunk(x)) from show_chunks('keylength') x;
  count 
 -------
      2
-(1 row)
 
 set timescaledb.debug_require_vector_agg = 'require';
 -- Uncomment to generate reference.
@@ -2037,7 +1890,6 @@ select sum(t) from keylength group by a, b order by 1 desc limit 10;
   993
   992
   991
-(10 rows)
 
 select sum(t) from keylength group by b, a order by 1 desc limit 10;
  sum  
@@ -2052,18 +1904,15 @@ select sum(t) from keylength group by b, a order by 1 desc limit 10;
   993
   992
   991
-(10 rows)
 
 reset timescaledb.debug_require_vector_agg;
 -- Add a very simple test for NULLs. We also have some null values in the general
 -- grouping test above.
 create table groupnull(t int, a text, b text);
 select create_hypertable('groupnull', 't');
-NOTICE:  adding not-null constraint to column "t"
    create_hypertable    
 ------------------------
  (7,public,groupnull,t)
-(1 row)
 
 insert into groupnull values (1, '1', null), (2, null, '2'), (3000000, '3', '3');
 alter table groupnull set (timescaledb.compress, timescaledb.compress_segmentby = '',
@@ -2072,7 +1921,6 @@ select count(compress_chunk(x)) from show_chunks('groupnull') x;
  count 
 -------
      2
-(1 row)
 
 set timescaledb.debug_require_vector_agg = 'require';
 -- Uncomment to generate reference.
@@ -2083,7 +1931,6 @@ select sum(t), a, b from groupnull group by a, b order by 1;
        1 | 1 | $
        2 | $ | 2
  3000000 | 3 | 3
-(3 rows)
 
 select sum(t), a, b from groupnull group by b, a order by 1;
    sum   | a | b 
@@ -2091,6 +1938,5 @@ select sum(t), a, b from groupnull group by b, a order by 1;
        1 | 1 | $
        2 | $ | 2
  3000000 | 3 | 3
-(3 rows)
 
 reset timescaledb.debug_require_vector_agg;

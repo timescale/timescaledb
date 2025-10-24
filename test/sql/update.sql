@@ -19,12 +19,12 @@ END;
 $BODY$;
 
 -- ConstraintAwareAppend applied for SELECT
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 SELECT FROM "one_Partition"
 WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
 
 -- ConstraintAwareAppend NOT applied for UPDATE
-EXPLAIN (costs off)
+EXPLAIN (buffers off, costs off)
 UPDATE "one_Partition"
 SET series_1 = 8
 WHERE series_1 IN (SELECT series_1 FROM "one_Partition" WHERE series_1 > series_val());
@@ -38,3 +38,23 @@ SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series
 UPDATE "one_Partition" SET series_1 = 47;
 UPDATE "one_Partition" SET series_bool = true;
 SELECT * FROM "one_Partition" ORDER BY "timeCustom", device_id, series_0, series_1, series_2;
+
+-- test update on chunks directly
+CREATE TABLE direct_update(time timestamptz) WITH (tsdb.hypertable);
+
+INSERT INTO direct_update VALUES ('2020-01-01');
+SELECT show_chunks('direct_update') AS "CHUNK" \gset
+
+--should have ModifyHyperable node
+EXPLAIN (costs off, timing off, summary off) UPDATE :CHUNK SET time = time + INTERVAL '1 minute';
+EXPLAIN (costs off, timing off, summary off) UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 minute';
+
+-- correct time range should succeed
+UPDATE :CHUNK SET time = time + INTERVAL '1 minute' RETURNING *;
+UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 minute' RETURNING *;
+-- crossing chunk boundary should fail
+\set ON_ERROR_STOP 0
+UPDATE :CHUNK SET time = time + INTERVAL '1 month' RETURNING *;
+UPDATE ONLY :CHUNK SET time = time + INTERVAL '1 month' RETURNING *;
+\set ON_ERROR_STOP 1
+

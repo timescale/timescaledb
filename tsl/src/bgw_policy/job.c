@@ -5,6 +5,8 @@
  */
 
 #include <postgres.h>
+#include "bgw_policy/policies_v2.h"
+#include "cache.h"
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
@@ -33,10 +35,13 @@
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/compression_api.h"
 #include "bgw_policy/continuous_aggregate_api.h"
+#include "bgw_policy/policy_config.h"
 #include "bgw_policy/policy_utils.h"
+#include "bgw_policy/process_hyper_inval_api.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
 #include "compression/api.h"
+#include "continuous_aggs/invalidation_threshold.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/refresh.h"
 #include "ts_catalog/continuous_agg.h"
@@ -50,10 +55,9 @@
 #include "config.h"
 #include "dimension.h"
 #include "dimension_slice.h"
-#include "dimension_vector.h"
-#include "errors.h"
 #include "guc.h"
 #include "job.h"
+#include "jsonb_utils.h"
 #include "reorder.h"
 #include "utils.h"
 
@@ -62,23 +66,13 @@
 static void
 log_retention_boundary(int elevel, PolicyRetentionData *policy_data, const char *message)
 {
-	char *relname;
-	Datum boundary;
-	Oid outfuncid = InvalidOid;
-	bool isvarlena;
-
-	getTypeOutputInfo(policy_data->boundary_type, &outfuncid, &isvarlena);
-
-	relname = get_rel_name(policy_data->object_relid);
-	boundary = policy_data->boundary;
-
-	if (OidIsValid(outfuncid))
+	if (OidIsValid(policy_data->boundary_type))
 		elog(elevel,
 			 "%s \"%s\": dropping data %s %s",
 			 message,
-			 relname,
+			 get_rel_name(policy_data->object_relid),
 			 policy_data->use_creation_time ? "created before" : "older than",
-			 DatumGetCString(OidFunctionCall1(outfuncid, boundary)));
+			 ts_datum_to_string(policy_data->boundary, policy_data->boundary_type));
 }
 
 static void
@@ -266,7 +260,7 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 void
 policy_reorder_read_and_validate_config(Jsonb *config, PolicyReorderData *policy)
 {
-	int32 htid = policy_reorder_get_hypertable_id(config);
+	int32 htid = policy_config_get_hypertable_id(config);
 	Hypertable *ht = ts_hypertable_get_by_id(htid);
 
 	if (!ht)
@@ -313,13 +307,13 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	Cache *hcache;
 	const Dimension *open_dim;
 	Datum boundary;
-	Datum boundary_type;
+	Oid boundary_type;
 	ContinuousAgg *cagg;
 	Interval *(*interval_getter)(const Jsonb *);
 	interval_getter = policy_retention_get_drop_after_interval;
 	bool use_creation_time = false;
 
-	object_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config), false);
+	object_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
 	hypertable = ts_hypertable_cache_get_cache_and_entry(object_relid, CACHE_FLAG_NONE, &hcache);
 
 	open_dim = get_open_dimension_for_hypertable(hypertable, false);
@@ -378,6 +372,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 	JsonbToCStringIndent(str, &config->root, VARSIZE(config));
 
 	policy_refresh_cagg_read_and_validate_config(config, &policy_data);
+	bool extend_last_bucket = !policy_refresh_cagg_check_if_last_policy(&policy_data);
 
 	bool enable_osm_reads_old = ts_guc_enable_osm_reads;
 
@@ -389,7 +384,7 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 						PGC_S_SESSION);
 	}
 
-	CaggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
+	ContinuousAggRefreshContext context = { .callctx = CAGG_REFRESH_POLICY };
 
 	/* Try to split window range into a list of ranges */
 	List *refresh_window_list =
@@ -421,7 +416,10 @@ policy_refresh_cagg_execute(int32 job_id, Jsonb *config)
 										context,
 										refresh_window->start_isnull,
 										refresh_window->end_isnull,
-										false);
+										(context.callctx != CAGG_REFRESH_POLICY_BATCHED),
+										false, /* force */
+										policy_data.process_hypertable_invalidations,
+										extend_last_bucket);
 		if (processing_batch >= policy_data.max_batches_per_execution &&
 			processing_batch < context.number_of_batches &&
 			policy_data.max_batches_per_execution > 0)
@@ -507,6 +505,11 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 
 	refresh_newest_first = policy_refresh_cagg_get_refresh_newest_first(config);
 
+	bool process_hypertable_invalidations_found;
+	bool process_hypertable_invalidations =
+		ts_jsonb_get_bool_field(config,
+								POL_REFRESH_CONF_KEY_PROCESS_HYPERTABLE_INVALIDATIONS,
+								&process_hypertable_invalidations_found);
 	if (policy_data)
 	{
 		policy_data->refresh_window.type = dim_type;
@@ -520,6 +523,8 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->buckets_per_batch = buckets_per_batch;
 		policy_data->max_batches_per_execution = max_batches_per_execution;
 		policy_data->refresh_newest_first = refresh_newest_first;
+		policy_data->process_hypertable_invalidations =
+			!process_hypertable_invalidations_found || process_hypertable_invalidations;
 	}
 }
 
@@ -527,8 +532,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 void
 policy_compression_read_and_validate_config(Jsonb *config, PolicyCompressionData *policy_data)
 {
-	Oid table_relid =
-		ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config), false);
+	Oid table_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
 	Cache *hcache;
 	Hypertable *hypertable =
 		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
@@ -542,8 +546,7 @@ policy_compression_read_and_validate_config(Jsonb *config, PolicyCompressionData
 void
 policy_recompression_read_and_validate_config(Jsonb *config, PolicyCompressionData *policy_data)
 {
-	Oid table_relid =
-		ts_hypertable_id_to_relid(policy_compression_get_hypertable_id(config), false);
+	Oid table_relid = ts_hypertable_id_to_relid(policy_config_get_hypertable_id(config), false);
 	Cache *hcache;
 	Hypertable *hypertable =
 		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
@@ -620,6 +623,51 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	}
 
 	elog(DEBUG1, "job %d completed recompressing chunk", job_id);
+	return true;
+}
+
+void
+policy_process_hyper_inval_read_and_validate_config(Jsonb *config,
+													PolicyMoveHyperInvalData *policy_data)
+{
+	int32 hypertable_id = policy_config_get_hypertable_id(config);
+	Oid table_relid = ts_hypertable_id_to_relid(hypertable_id, true);
+
+	if (!OidIsValid(table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("configuration hypertable id %d not found", hypertable_id)));
+
+	Cache *hcache;
+	Hypertable *hypertable =
+		ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
+	if (policy_data)
+	{
+		policy_data->hypertable = hypertable;
+		policy_data->hcache = hcache;
+	}
+	else
+	{
+		ts_cache_release(&hcache);
+	}
+}
+
+bool
+policy_process_hyper_inval_execute(int32 job_id, Jsonb *config)
+{
+	PolicyMoveHyperInvalData policy_data;
+
+	policy_process_hyper_inval_read_and_validate_config(config, &policy_data);
+
+	const Dimension *dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
+	Oid dimtype = ts_dimension_get_partition_type(dim);
+	int32 hypertable_id = policy_data.hypertable->fd.id;
+
+	/* We serialized on the invalidation threshold, so we get and lock it. */
+	invalidation_threshold_get(hypertable_id, dimtype);
+	invalidation_process_hypertable_log(hypertable_id, dimtype);
+	ts_cache_release(&policy_data.hcache);
+
 	return true;
 }
 

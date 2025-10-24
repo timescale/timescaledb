@@ -10,7 +10,7 @@ name: Regression Linux i386
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
@@ -50,24 +50,32 @@ jobs:
         # reference and currently it cannot be used for vectorized hash grouping.
         # vector_agg_text and vector_agg_groupagg use the UMASH hashing library
         # that we can't compile on i386.
+        # For the same reason of different hashing, we ignore the results of
+        # several bloom filter tests as well.
         IGNORES: >-
           append-*
           bgw_db_scheduler*
+          columnar_scan_cost
+          compress_bloom_sparse_compat
           compress_bloom_sparse_debug
-          hypercore_parallel
-          hypercore_vacuum
-          hypercore_vectoragg
+          compress_qualpushdown_saop
+          compression_allocation
+          merge_append_partially_compressed
+          net
           pg_dump
           telemetry
           transparent_decompress_chunk-*
           transparent_decompression-*
+          vector_agg_byte
+          vector_agg_filter
           vector_agg_groupagg
           vector_agg_grouping
           vector_agg_text
-          vector_agg_uuid_segmentby
+          vector_agg_uuid
           vectorized_aggregation
+          ${{ matrix.pg < 16 && 'columnar_scan_cost' || '' }}
         SKIPS: chunk_adaptive histogram_test-*
-        EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
+        EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
@@ -182,12 +190,15 @@ jobs:
         export LANG=C.UTF-8
         #
         # Even disabling parallel plans the Sort Method on 32bits
-        # is always 'still in progress' for PG17. So for now added
+        # is always 'still in progress' for PG17 and PG18. So for now added
         # those tests to SKIPS.
         #
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         if [ ${PG_MAJOR} -eq 17 ]; then
-          SKIPS="${SKIPS} constraint_exclusion_prepared ordered_append*"
+          SKIPS="${SKIPS} constraint_exclusion_prepared-17 ordered_append*"
+        fi
+        if [ ${PG_MAJOR} -eq 18 ]; then
+          SKIPS="${SKIPS} constraint_exclusion_prepared-18 ordered_append*"
         fi
         # PostgreSQL cannot be run as root. So, switch to postgres user.
         runuser -u postgres -- \

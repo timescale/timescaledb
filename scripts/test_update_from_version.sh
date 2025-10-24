@@ -12,7 +12,7 @@ FROM_VERSION=${FROM_VERSION:-$(grep '^previous_version ' version.config | awk '{
 TO_VERSION=${TO_VERSION:-$(grep '^version ' version.config | awk '{ print $3 }')}
 
 TEST_REPAIR=${TEST_REPAIR:-false}
-TEST_VERSION=${TEST_VERSION:-v8}
+TEST_VERSION=${TEST_VERSION:-v10}
 
 OUTPUT_DIR=${OUTPUT_DIR:-update_test/${FROM_VERSION}_to_${TO_VERSION}}
 PGDATA="${OUTPUT_DIR}/data"
@@ -59,7 +59,7 @@ UNIX_SOCKET_DIR=$(readlink -f "${OUTPUT_DIR}")
 initdb > "${OUTPUT_DIR}/initdb.log" 2>&1
 
 # Don't try to wrap the settings, pg_ctl can't handle newlines there.
-pg_ctl -l "${OUTPUT_DIR}/postgres.log" start -o "-c unix_socket_directories=${UNIX_SOCKET_DIR} -c timezone=GMT -c client_min_messages=warning -c port=${PGPORT} -c max_prepared_transactions=100 -c shared_preload_libraries=timescaledb -c timescaledb.telemetry_level=off -c max_worker_processes=0 -c log_statement=all"
+pg_ctl -l "${OUTPUT_DIR}/postgres.log" start -o "-c unix_socket_directories=${UNIX_SOCKET_DIR} -c timezone=GMT -c client_min_messages=warning -c port=${PGPORT} -c max_prepared_transactions=100 -c shared_preload_libraries=timescaledb -c timescaledb.telemetry_level=off -c timescaledb.enable_compression_ratio_warnings=off -c max_worker_processes=0 -c log_statement=all"
 
 pg_isready -t 30 > /dev/null
 
@@ -135,5 +135,3 @@ if [ -f "${OUTPUT_DIR}/baseline_vs_updated.diff" ] || [ -f "${OUTPUT_DIR}/baseli
   echo "Update test for ${FROM_VERSION} -> ${TO_VERSION} failed"
   exit 1
 fi
-
-

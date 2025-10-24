@@ -10,13 +10,17 @@
  */
 
 #include <postgres.h>
+
 #include <access/htup_details.h>
 #include <catalog/dependency.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
 #include <commands/trigger.h>
+#include <executor/spi.h>
 #include <fmgr.h>
+#include <lib/stringinfo.h>
 #include <nodes/makefuncs.h>
+#include <replication/slot.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
@@ -45,6 +49,17 @@
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
 #define CHECK_NAME_MATCH(name1, name2) (namestrcmp(name1, name2) == 0)
+
+TS_FUNCTION_INFO_V1(ts_invalidation_plugin_name);
+
+/*
+ * Return the full name of the invalidation plugin, with version and all.
+ */
+Datum
+ts_invalidation_plugin_name(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_TEXT_P(cstring_to_text(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_PLUGIN_NAME));
+}
 
 static void
 init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
@@ -194,6 +209,12 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 }
 
 void
+ts_get_invalidation_replication_slot_name(char *slotname, Size szslot)
+{
+	snprintf(slotname, szslot, "ts_%u_cagg", MyDatabaseId);
+}
+
+void
 ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id)
 {
 	ScanIterator iterator =
@@ -309,7 +330,7 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
  * Fill the fields of a integer based bucketing function
  */
 static void
-cagg_fill_bucket_function_integer_based(ContinuousAggsBucketFunction *bf, bool *isnull,
+cagg_fill_bucket_function_integer_based(ContinuousAggBucketFunction *bf, bool *isnull,
 										Datum *values)
 {
 	/* Bucket width */
@@ -340,7 +361,7 @@ cagg_fill_bucket_function_integer_based(ContinuousAggsBucketFunction *bf, bool *
  * Fill the fields of a time based bucketing function
  */
 static void
-cagg_fill_bucket_function_time_based(ContinuousAggsBucketFunction *bf, bool *isnull, Datum *values)
+cagg_fill_bucket_function_time_based(ContinuousAggBucketFunction *bf, bool *isnull, Datum *values)
 {
 	/*
 	 * bucket_width
@@ -388,7 +409,7 @@ cagg_fill_bucket_function_time_based(ContinuousAggsBucketFunction *bf, bool *isn
 }
 
 static void
-continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucketFunction *bf)
+continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggBucketFunction *bf)
 {
 	ScanIterator iterator;
 	int count = 0;
@@ -472,14 +493,14 @@ continuous_agg_init(ContinuousAgg *cagg, const Form_continuous_agg fd)
 	Assert(OidIsValid(cagg->relid));
 	Assert(OidIsValid(cagg->partition_type));
 
-	cagg->bucket_function = palloc0(sizeof(ContinuousAggsBucketFunction));
+	cagg->bucket_function = palloc0(sizeof(ContinuousAggBucketFunction));
 	continuous_agg_fill_bucket_function(cagg->data.mat_hypertable_id, cagg->bucket_function);
 }
 
-TSDLLEXPORT CaggsInfo
+TSDLLEXPORT ContinuousAggInfo
 ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 {
-	CaggsInfo all_caggs_info;
+	ContinuousAggInfo all_caggs_info;
 
 	List *caggs = ts_continuous_aggs_find_by_raw_table_id(raw_hypertable_id);
 	ListCell *lc;
@@ -802,7 +823,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	ObjectAddress user_view = { 0 };
 	ObjectAddress partial_view = { 0 };
 	ObjectAddress direct_view = { 0 };
-	ObjectAddress raw_hypertable_trig = { 0 };
 	ObjectAddress raw_hypertable = { 0 };
 	ObjectAddress mat_hypertable = { 0 };
 	bool raw_hypertable_has_other_caggs;
@@ -829,6 +849,10 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	 *
 	 * AccessExclusiveLock is needed to drop triggers and also prevent
 	 * concurrent DML commands.
+	 *
+	 * It is needed also in the case that we are using WAL-based invalidation
+	 * collection since we want to serialize create and drop of continuous
+	 * aggregates.
 	 */
 	if (drop_user_view)
 		user_view = get_and_lock_rel_by_name(&cadata->user_view_schema,
@@ -855,20 +879,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 						RowExclusiveLock);
 		LockRelationOid(catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
 						RowExclusiveLock);
-
-		/* The trigger will be dropped if the hypertable still exists and no other
-		 * caggs attached. */
-		if (OidIsValid(raw_hypertable.objectId))
-		{
-			ObjectAddressSet(raw_hypertable_trig,
-							 TriggerRelationId,
-							 get_trigger_oid(raw_hypertable.objectId,
-											 CAGGINVAL_TRIGGER_NAME,
-											 false));
-
-			/* Raw hypertable is locked above */
-			LockRelationOid(raw_hypertable_trig.objectId, AccessExclusiveLock);
-		}
 	}
 
 	/*
@@ -919,9 +929,20 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	if (OidIsValid(user_view.objectId))
 		performDeletion(&user_view, DROP_RESTRICT, 0);
 
-	if (OidIsValid(raw_hypertable_trig.objectId))
+	/*
+	 * Drop invalidation slot if there are no hypertables using WAL-based
+	 * invalidation collection.
+	 *
+	 * This is important since there is no actor that reads the slot, which
+	 * means that the WAL cannot be pruned.
+	 */
+	if (ts_guc_enable_cagg_wal_based_invalidation)
 	{
-		ts_hypertable_drop_trigger(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME);
+		char slot_name[TS_INVALIDATION_SLOT_NAME_MAX];
+		ts_get_invalidation_replication_slot_name(slot_name, sizeof(slot_name));
+		if (ts_guc_enable_cagg_wal_based_invalidation &&
+			SearchNamedReplicationSlot(slot_name, true) != NULL)
+			ts_hypertable_drop_invalidation_replication_slot(slot_name);
 	}
 
 	if (OidIsValid(mat_hypertable.objectId))
@@ -1297,11 +1318,11 @@ ts_continuous_agg_bucket_on_interval(Oid bucket_function)
 
 /*
  * Calls the desired time bucket function depending on the arguments. If the experimental flag is
- * set on ContinuousAggsBucketFunction, one of time_bucket_ng() versions is used. This is a common
+ * set on ContinuousAggBucketFunction, one of time_bucket_ng() versions is used. This is a common
  * procedure used by ts_compute_* below.
  */
 static Datum
-generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
+generic_time_bucket(const ContinuousAggBucketFunction *bf, Datum timestamp)
 {
 	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bf->bucket_function);
 	Ensure(func_info != NULL, "unable to get bucket function for Oid %d", bf->bucket_function);
@@ -1395,7 +1416,7 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
  * Otherwise, it happens in UTC.
  */
 static Datum
-generic_add_interval(const ContinuousAggsBucketFunction *bf, Datum timestamp)
+generic_add_interval(const ContinuousAggBucketFunction *bf, Datum timestamp)
 {
 	Datum tzname = 0;
 	bool has_timezone = (bf->bucket_time_timezone != NULL);
@@ -1436,7 +1457,7 @@ generic_add_interval(const ContinuousAggsBucketFunction *bf, Datum timestamp)
  */
 void
 ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
-													  const ContinuousAggsBucketFunction *bf)
+													  const ContinuousAggBucketFunction *bf)
 {
 	Datum start_old, end_old, start_aligned, end_aliged;
 
@@ -1474,7 +1495,7 @@ ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
  */
 void
 ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
-														  const ContinuousAggsBucketFunction *bf)
+														  const ContinuousAggBucketFunction *bf)
 {
 	Datum start_old, end_old, start_new, end_new;
 
@@ -1505,7 +1526,7 @@ ts_compute_circumscribed_bucketed_refresh_window_variable(int64 *start, int64 *e
  */
 int64
 ts_compute_beginning_of_the_next_bucket_variable(int64 timeval,
-												 const ContinuousAggsBucketFunction *bf)
+												 const ContinuousAggBucketFunction *bf)
 {
 	Datum val_new;
 	Datum val_old;
@@ -1574,7 +1595,7 @@ ts_continuous_agg_get_query(ContinuousAgg *cagg)
  * Get the width of a fixed size bucket
  */
 int64
-ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_function)
+ts_continuous_agg_fixed_bucket_width(const ContinuousAggBucketFunction *bucket_function)
 {
 	Assert(bucket_function->bucket_fixed_interval == true);
 
@@ -1594,7 +1615,7 @@ ts_continuous_agg_fixed_bucket_width(const ContinuousAggsBucketFunction *bucket_
  * Get the width of a bucket
  */
 int64
-ts_continuous_agg_bucket_width(const ContinuousAggsBucketFunction *bucket_function)
+ts_continuous_agg_bucket_width(const ContinuousAggBucketFunction *bucket_function)
 {
 	int64 bucket_width;
 

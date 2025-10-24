@@ -1,0 +1,24 @@
+Parsed test spec with 3 sessions
+
+starting permutation: lock_enable s1_refresh s2_refresh lock_show lock_release
+step lock_enable: SELECT debug_waitpoint_enable('multi_invalidation_process_invalidations');
+debug_waitpoint_enable
+----------------------
+                      
+
+step s1_refresh: CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['temperature']); <waiting ...>
+step s2_refresh: CALL _timescaledb_functions.process_hypertable_invalidations(ARRAY['temperature']); <waiting ...>
+step lock_show: SELECT locktype, granted, application_name, objtyp, objid FROM my_locks WHERE locktype in ('object', 'advisory');
+locktype|granted|application_name|objtyp  |objid                                                                
+--------+-------+----------------+--------+---------------------------------------------------------------------
+advisory|f      |s1              |-       |1465306080                                                           
+object  |t      |s1              |pg_class|_timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+object  |f      |s2              |pg_class|_timescaledb_catalog.continuous_aggs_materialization_invalidation_log
+
+step lock_release: SELECT debug_waitpoint_release('multi_invalidation_process_invalidations');
+debug_waitpoint_release
+-----------------------
+                       
+
+step s1_refresh: <... completed>
+step s2_refresh: <... completed>

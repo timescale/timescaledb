@@ -28,7 +28,6 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
-(1 row)
 
 INSERT INTO conditions
 SELECT generate_series('2021-10-10 00:00'::timestamp, '2021-10-11 00:00'::timestamp, '1 day'), 'POR', 55, 75;
@@ -42,7 +41,6 @@ SELECT * FROM t, LATERAL show_columns_ext(r) WHERE "Column" = 'location' ORDER B
  conditions                             | location | text | t       | 
  _timescaledb_internal._hyper_1_1_chunk | location | text | t       | 
  _timescaledb_internal._hyper_1_2_chunk | location | text | t       | 
-(3 rows)
 
 ALTER TABLE conditions ALTER COLUMN location SET COMPRESSION pglz;
 SELECT * FROM t, LATERAL show_columns_ext(r) WHERE "Column" = 'location' ORDER BY 1, 2;
@@ -51,7 +49,6 @@ SELECT * FROM t, LATERAL show_columns_ext(r) WHERE "Column" = 'location' ORDER B
  conditions                             | location | text | t       | pglz
  _timescaledb_internal._hyper_1_1_chunk | location | text | t       | pglz
  _timescaledb_internal._hyper_1_2_chunk | location | text | t       | pglz
-(3 rows)
 
 INSERT INTO conditions VALUES ('2021-10-12 00:00'::timestamp, 'BRA', 66, 77);
 SELECT * FROM t, LATERAL show_columns_ext(r) WHERE "Column" = 'location' ORDER BY 1, 2;
@@ -61,7 +58,6 @@ SELECT * FROM t, LATERAL show_columns_ext(r) WHERE "Column" = 'location' ORDER B
  _timescaledb_internal._hyper_1_1_chunk | location | text | t       | pglz
  _timescaledb_internal._hyper_1_2_chunk | location | text | t       | pglz
  _timescaledb_internal._hyper_1_3_chunk | location | text | t       | pglz
-(4 rows)
 
 ALTER TABLE conditions ALTER COLUMN location SET COMPRESSION default;
 SELECT * FROM t, LATERAL show_columns_ext(r) WHERE "Column" = 'location' ORDER BY 1, 2;
@@ -71,7 +67,6 @@ SELECT * FROM t, LATERAL show_columns_ext(r) WHERE "Column" = 'location' ORDER B
  _timescaledb_internal._hyper_1_1_chunk | location | text | t       | 
  _timescaledb_internal._hyper_1_2_chunk | location | text | t       | 
  _timescaledb_internal._hyper_1_3_chunk | location | text | t       | 
-(4 rows)
 
 \set ON_ERROR_STOP 0
 -- failing test because compression is not allowed in "non-TOASTable" datatypes
@@ -84,5 +79,4 @@ SELECT * FROM t, LATERAL show_columns_ext(r) WHERE "Column" = 'temperature' ORDE
  _timescaledb_internal._hyper_1_1_chunk | temperature | double precision | f       | 
  _timescaledb_internal._hyper_1_2_chunk | temperature | double precision | f       | 
  _timescaledb_internal._hyper_1_3_chunk | temperature | double precision | f       | 
-(4 rows)
 

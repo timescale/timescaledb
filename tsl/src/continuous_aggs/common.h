@@ -38,6 +38,7 @@
 
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
 #define CAGG_INVALIDATION_THRESHOLD_NAME "invalidation threshold watermark"
+#define CAGG_INVALIDATION_WRONG_GREATEST_VALUE ((int64) -210866803200000001)
 
 typedef struct FinalizeQueryInfo
 {
@@ -47,7 +48,7 @@ typedef struct FinalizeQueryInfo
 	bool finalized;			/* finalized form? */
 } FinalizeQueryInfo;
 
-typedef struct MatTableColumnInfo
+typedef struct MaterializationHypertableColumnInfo
 {
 	List *matcollist;		 /* column defns for materialization tbl*/
 	List *partial_seltlist;	 /* tlist entries for populating the materialization table columns */
@@ -58,9 +59,9 @@ typedef struct MatTableColumnInfo
 									matpartcolname */
 	int matpartcolno;			 /*index of partitioning column in matcollist */
 	char *matpartcolname;		 /*name of the partition column */
-} MatTableColumnInfo;
+} MaterializationHypertableColumnInfo;
 
-typedef struct CAggTimebucketInfo
+typedef struct ContinuousAggTimeBucketInfo
 {
 	int32 htid;						/* hypertable id */
 	int32 parent_mat_hypertable_id; /* parent materialization hypertable id */
@@ -72,23 +73,23 @@ typedef struct CAggTimebucketInfo
 	int64 htpartcol_interval_len;	/* interval length setting for primary partitioning column */
 
 	/* General bucket information */
-	ContinuousAggsBucketFunction *bf;
-} CAggTimebucketInfo;
+	ContinuousAggBucketFunction *bf;
+} ContinuousAggTimeBucketInfo;
 
-typedef enum CaggRefreshCallContext
+typedef enum ContinuousAggRefreshCallContext
 {
 	CAGG_REFRESH_CREATION,
 	CAGG_REFRESH_WINDOW,
 	CAGG_REFRESH_POLICY,
 	CAGG_REFRESH_POLICY_BATCHED
-} CaggRefreshCallContext;
+} ContinuousAggRefreshCallContext;
 
-typedef struct CaggRefreshContext
+typedef struct ContinuousAggRefreshContext
 {
-	CaggRefreshCallContext callctx;
+	ContinuousAggRefreshCallContext callctx;
 	int32 processing_batch;
 	int32 number_of_batches;
-} CaggRefreshContext;
+} ContinuousAggRefreshContext;
 
 #define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_function)                                            \
 	(bucket_function->bucket_width_type == INTERVALOID)
@@ -108,14 +109,16 @@ typedef struct CaggRefreshContext
 		(selquery)->rtable = NULL;                                                                 \
 	} while (0);
 
-extern CAggTimebucketInfo cagg_validate_query(const Query *query, const bool finalized,
-											  const char *cagg_schema, const char *cagg_name,
-											  const bool is_cagg_create);
+extern ContinuousAggTimeBucketInfo cagg_validate_query(const Query *query, const bool finalized,
+													   const char *cagg_schema,
+													   const char *cagg_name,
+													   const bool is_cagg_create);
 extern Query *destroy_union_query(Query *q);
 extern void RemoveRangeTableEntries(Query *query);
-extern Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
-								int materialize_htid);
-extern void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist);
+extern Query *build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpartcolno, Query *q1,
+								Query *q2, int materialize_htid);
+extern void mattablecolumninfo_init(MaterializationHypertableColumnInfo *matcolinfo,
+									List *grouplist);
 extern bool function_allowed_in_cagg_definition(Oid funcid);
 extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
@@ -148,4 +151,4 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 	return ts_time_get_min(cagg->partition_type);
 }
 
-ContinuousAggsBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
+ContinuousAggBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);

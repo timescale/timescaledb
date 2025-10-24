@@ -26,6 +26,8 @@ insert into compressed_collation_ht values ('2021-01-01 01:01:01', 'á', '1'),
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('compressed_collation_ht') ch;
 
+vacuum analyze compressed_collation_ht;
+
 SELECT format('%I.%I',ch.schema_name, ch.table_name) AS "CHUNK"
 FROM _timescaledb_catalog.hypertable ht
     INNER JOIN _timescaledb_catalog.chunk ch
@@ -36,7 +38,7 @@ create index on :CHUNK (name);
 
 set enable_seqscan to off;
 
-explain (costs off)
+explain (buffers off, costs off)
 select * from compressed_collation_ht order by name;
 
 select * from compressed_collation_ht order by name;

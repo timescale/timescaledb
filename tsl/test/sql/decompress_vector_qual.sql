@@ -223,6 +223,10 @@ select count(*) from vectorqual where metric2 = all(array[null::int]) /* all wit
 select count(*) from vectorqual where metric2 = all(array[22, null]) /* all with null element */;
 select count(*) from vectorqual where metric2 = all(array[null, 32]) /* all with null element */;
 select count(*) from vectorqual where metric2 = all(array[22, null, 32]) /* all with null element */;
+select count(*) from vectorqual where metric2 = all(array[]::int[]);
+select count(*) from vectorqual where metric2 = any(array[]::int[]);
+select count(*) from vectorqual where metric2 = all(null::int[]);
+select count(*) from vectorqual where metric2 = any(null::int[]);
 
 -- Check early exit.
 reset timescaledb.debug_require_vector_qual;
@@ -542,13 +546,122 @@ from
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
 
+-- Test predicates on UUID columns can be vectorized
+-- if UUID compression is _disabled_. With the new changes
+-- vectorized decompression should be supported, regardless of
+-- whether the UUID compression is enabled or not.
+set timescaledb.enable_uuid_compression = off;
+
+-- Generate reference results with uncommenting the next two lines
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+
+create table uuid_table(ts int, u uuid);
+select count(*) from create_hypertable('uuid_table', 'ts');
+alter table uuid_table set (timescaledb.compress);
+insert into uuid_table values
+	(1, '0197a7a9-b48b-7c70-be05-e376afc66ee1'), (2, '0197a7a9-b48b-7c71-92cb-eb724822bb0f'), (3, '0197a7a9-b48b-7c72-bd57-49f981f064fd'), (4, '0197a7a9-b48b-7c73-b521-91172c2e770a'),
+	(5, '0197a7a9-b48b-7c74-a2a4-dcdbce635d11'), (6, '0197a7a9-b48b-7c75-a810-8acf630e634f'), (7, '0197a7a9-b48b-7c76-b616-69e64a802b5c'), (8, '0197a7a9-b48b-7c77-b54f-c5f3d64d68d0'),
+	(9, '0197a7a9-b48b-7c78-ab14-78b3dd81dbbc'), (10, '0197a7a9-b48b-7c79-92c7-7dde3bea6252'), (11, '0197a7a9-b48b-7c7a-8d9e-5afc3bf15234'), (12, '0197a7a9-b48b-7c7b-bc49-7150f16d8d63'),
+	(13, '0197a7a9-b48b-7c7c-aa7a-60d47bf04ff8'), (14, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (15, '0197a7a9-b48b-7c7e-9ebb-acf63f5b625e'), (16, '0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a'),
+    (17, '01941f29-7c00-706a-bea9-105dad841304'), (18, '01941f2a-665f-7722-b4b5-cf4e70e666d0'),
+	(19, NULL::uuid), (20, NULL::uuid), (21, NULL::uuid);
+select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
+
+-- With the new changes bulk decompression and vectorized filtering
+-- will be supported regardless of whether the UUID compression is
+-- enabled or not.
+
+set timescaledb.debug_require_vector_qual to 'require';
+select * from uuid_table where u = '01941f29-7c00-706a-bea9-105dad841304'::uuid;
+select * from uuid_table where u in (
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid)
+order by 1, 2;
+select * from uuid_table where u = any(array[
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid
+]) order by 1, 2;
+select * from uuid_table where u not in (
+	'0197a7a9-b48b-7c70-be05-e376afc66ee1'::uuid,
+	'0197a7a9-b48b-7c71-92cb-eb724822bb0f'::uuid)
+order by 1, 2;
+select * from uuid_table where u is not null order by 1, 2;
+
+-- Modify the data to make sure dictionary compression is used as well.
+update uuid_table set u = '0197a7a9-b48b-7c70-be05-e376afc66ee1' where ts in (1, 2, 3, 4);
+update uuid_table set u = '0197a7a9-b48b-7c71-92cb-eb724822bb0f' where ts in (5, 6, 7, 8);
+update uuid_table set u = '0197a7a9-b48b-7c72-bd57-49f981f064fd' where ts in (9, 10, 11, 12);
+update uuid_table set u = '0197a7a9-b48b-7c73-b521-91172c2e770a' where ts in (13, 14, 15, 16);
+select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
+
+-- Generate reference results with uncommenting the next two lines
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+
+select * from uuid_table where u = '01941f29-7c00-706a-bea9-105dad841304'::uuid;
+select * from uuid_table where u in (
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid)
+order by 1, 2;
+select * from uuid_table where u = any(array[
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid
+]) order by 1, 2;
+select * from uuid_table where u not in (
+	'0197a7a9-b48b-7c70-be05-e376afc66ee1'::uuid,
+	'0197a7a9-b48b-7c71-92cb-eb724822bb0f'::uuid)
+order by 1, 2;
+select * from uuid_table where u is not null order by 1, 2;
+
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.debug_require_vector_qual;
+
+-- Test predicates on UUID columns can be vectorized
+-- if UUID compression is _enabled_
+set timescaledb.enable_uuid_compression = on;
+
+-- Generate reference results with uncommenting the next two lines
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+
+delete from uuid_table;
+insert into uuid_table values
+	(1, '0197a7a9-b48b-7c70-be05-e376afc66ee1'), (2, '0197a7a9-b48b-7c71-92cb-eb724822bb0f'), (3, '0197a7a9-b48b-7c72-bd57-49f981f064fd'), (4, '0197a7a9-b48b-7c73-b521-91172c2e770a'),
+	(5, '0197a7a9-b48b-7c74-a2a4-dcdbce635d11'), (6, '0197a7a9-b48b-7c75-a810-8acf630e634f'), (7, '0197a7a9-b48b-7c76-b616-69e64a802b5c'), (8, '0197a7a9-b48b-7c77-b54f-c5f3d64d68d0'),
+	(9, '0197a7a9-b48b-7c78-ab14-78b3dd81dbbc'), (10, '0197a7a9-b48b-7c79-92c7-7dde3bea6252'), (11, '0197a7a9-b48b-7c7a-8d9e-5afc3bf15234'), (12, '0197a7a9-b48b-7c7b-bc49-7150f16d8d63'),
+	(13, '0197a7a9-b48b-7c7c-aa7a-60d47bf04ff8'), (14, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (15, '0197a7a9-b48b-7c7e-9ebb-acf63f5b625e'), (16, '0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a'),
+    (17, '01941f29-7c00-706a-bea9-105dad841304'), (18, '01941f2a-665f-7722-b4b5-cf4e70e666d0'),
+	(19, NULL::uuid), (20, NULL::uuid), (21, NULL::uuid);
+select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
+
+set timescaledb.debug_require_vector_qual to 'require';
+select * from uuid_table where u = '01941f29-7c00-706a-bea9-105dad841304'::uuid;
+select * from uuid_table where u in (
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid)
+order by 1, 2;
+select * from uuid_table where u = any(array[
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid
+]) order by 1, 2;
+select * from uuid_table where u not in (
+	'0197a7a9-b48b-7c70-be05-e376afc66ee1'::uuid,
+	'0197a7a9-b48b-7c71-92cb-eb724822bb0f'::uuid)
+order by 1, 2;
+select * from uuid_table where u is not null order by 1, 2;
+
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_uuid_compression;
+
 -- Test predicates on boolean columns can be vectorized
 -- with the bool compression enabled.
 set timescaledb.enable_bulk_decompression to on;
 set timescaledb.enable_bool_compression = on;
 
 create table bool_table(ts int, b bool);
-select create_hypertable('bool_table', 'ts');
+select count(*) from create_hypertable('bool_table', 'ts');
 alter table bool_table set (timescaledb.compress);
 insert into bool_table values (100, true), (101, false), (102, null);
 
@@ -696,6 +809,67 @@ select * from bool_table where b is null or b is not null order by 1;
 select * from bool_table where b is null and b is not null order by 1;
 select * from bool_table where b is not null order by 1;
 
+-- Verify that NULL compression with bools is vectorized
+set timescaledb.debug_require_vector_qual to 'require';
+update bool_table set b = NULL;
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+select * from bool_table where b is null order by 1;
+select * from bool_table where b is not null order by 1;
+select * from bool_table where b is null or b is not null order by 1;
+select * from bool_table where b is null and b is not null order by 1;
+select * from bool_table where b is not true order by 1;
+select * from bool_table where b is not false order by 1;
+select * from bool_table where b is unknown order by 1;
+select * from bool_table where b is not unknown order by 1;
+
+-- Verify that NULL compression with ints is vectorized
+create table int_table(ts int, b int);
+select count(*) from create_hypertable('int_table', 'ts');
+alter table int_table set (timescaledb.compress);
+insert into int_table values (100, NULL), (101, NULL), (102, NULL);
+
+select count(compress_chunk(x, true)) from show_chunks('int_table') x;
+select * from int_table where b is null order by 1;
+select * from int_table where b is not null order by 1;
+select * from int_table where b is null or b is not null order by 1;
+select * from int_table where b is null and b is not null order by 1;
+
+-- check the compression algorithm for the compressed chunks
+set timescaledb.enable_transparent_decompression='off';
+DO $$
+DECLARE
+	comp_regclass REGCLASS;
+	rec RECORD;
+BEGIN
+	FOR comp_regclass IN
+		SELECT
+			format('%I.%I', comp.schema_name, comp.table_name)::regclass as comp_regclass
+		FROM
+			_timescaledb_catalog.chunk uncomp,
+			_timescaledb_catalog.chunk comp,
+			(SELECT show_chunks('bool_table') as c UNION SELECT show_chunks('int_table') as c) as x
+		WHERE
+			uncomp.dropped IS FALSE AND uncomp.compressed_chunk_id IS NOT NULL AND
+			comp.id = uncomp.compressed_chunk_id AND
+			x.c = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass
+	LOOP
+		FOR rec IN
+			EXECUTE format('SELECT b, _timescaledb_functions.compressed_data_info(b) FROM %s', comp_regclass)
+		LOOP
+			RAISE NOTICE 'Compressed info results: %', rec;
+		END LOOP;
+
+		FOR rec IN
+			EXECUTE format('SELECT b, _timescaledb_functions.compressed_data_has_nulls(b) FROM %s', comp_regclass)
+		LOOP
+			RAISE NOTICE 'Has nulls results: %', rec;
+		END LOOP;
+
+	END LOOP;
+END;
+$$;
+
+reset timescaledb.enable_transparent_decompression;
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;
 

@@ -48,18 +48,25 @@ jobs:
 
           folder=".unreleased"
 
-          # Get the number of modified files excluding the workflows. These
-          # don't require a changelog.
-          modified_files=$(gh pr view $PR_NUMBER --json files --jq '[.files.[].path | select(startswith(".github") | not)] | length')
+          # Get the list of modified files as a bash array. Exclude the
+          # development-related files because they don't require a changelog.
+          mapfile -t modified_files < <(gh pr view $PR_NUMBER --json files --jq '
+            [.files.[].path | select(
+                    (startswith(".github") or startswith("test")
+                        or startswith("tsl/test") or startswith("scripts"))
+                | not)] | .[]')
+          echo "Modified files: ${modified_files[@]}"
 
           # Get the changelog files as a bash array
-          mapfile -t changelog_files < <(gh pr view $PR_NUMBER --json files --jq "[.files.[].path | select(startswith(\"${folder}\"))] | .[]")
+          mapfile -t changelog_files < <(gh pr view $PR_NUMBER --json files --jq "
+            [.files.[].path | select(startswith(\"${folder}\"))] | .[]")
+          echo "Changelog files: ${changelog_files[@]}"
 
           if echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"
           then
             # skip changelog checks if forced
             :
-          elif (( $modified_files > 0 && ${#changelog_files[@]} == 0 ))
+          elif (( ${#modified_files[@]} > 0 && ${#changelog_files[@]} == 0 ))
           then
             # if no changelog files found, and the PR does not have the force disable check option
             echo "PR does not add a change log file in .unreleased/ folder"

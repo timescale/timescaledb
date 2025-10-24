@@ -1,6 +1,10 @@
 name: Check for unsafe catalog updates
 "on":
   pull_request:
+  push:
+    branches:
+      - main
+      - ?.*.x
 jobs:
   check_catalog_correctly_updated:
     name: Check updates to latest-dev and reverse-dev are properly handled by PR

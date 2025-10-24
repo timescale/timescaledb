@@ -7,11 +7,9 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 --- code coverage tests : add policy for timestamp and date based table ---
 CREATE TABLE continuous_agg_max_mat_date(time DATE);
 SELECT create_hypertable('continuous_agg_max_mat_date', 'time');
-NOTICE:  adding not-null constraint to column "time"
             create_hypertable             
 ------------------------------------------
  (1,public,continuous_agg_max_mat_date,t)
-(1 row)
 
 CREATE MATERIALIZED VIEW max_mat_view_date
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -24,7 +22,6 @@ WHERE id = :job_id;
                                     config                                     
 -------------------------------------------------------------------------------
  {"end_offset": "@ 1 day", "start_offset": "@ 3 days", "mat_hypertable_id": 2}
-(1 row)
 
 INSERT INTO continuous_agg_max_mat_date
     SELECT generate_series('2019-09-01'::date, '2019-09-10'::date, '1 day');
@@ -37,7 +34,6 @@ SELECT * FROM max_mat_view_date order by 1;
 -------------+-------
  09-07-2019  |     1
  09-08-2019  |     1
-(2 rows)
 
 RESET client_min_messages ;
 DROP MATERIALIZED VIEW max_mat_view_date;
@@ -45,11 +41,9 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
 CREATE TABLE continuous_agg_timestamp(time TIMESTAMP);
 SELECT create_hypertable('continuous_agg_timestamp', 'time');
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
-NOTICE:  adding not-null constraint to column "time"
            create_hypertable           
 ---------------------------------------
  (3,public,continuous_agg_timestamp,t)
-(1 row)
 
 CREATE MATERIALIZED VIEW max_mat_view_timestamp
     WITH (timescaledb.continuous, timescaledb.materialized_only=true)
@@ -67,6 +61,5 @@ SELECT * FROM max_mat_view_timestamp;
        time_bucket        | count 
 --------------------------+-------
  Mon Sep 02 00:00:00 2019 |     7
-(1 row)
 
 RESET client_min_messages ;

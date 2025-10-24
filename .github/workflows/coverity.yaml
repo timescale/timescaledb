@@ -2,10 +2,13 @@ name: Coverity
 "on":
   schedule:
     # run at 22:00 on every saturday
-    - cron: '0 22 * * SAT'
+    - cron: '0 22 * * TUE,SAT'
   push:
     branches:
       - coverity_scan
+      - trigger/coverity
+  pull_request:
+    paths: .github/workflows/coverity.yaml
   workflow_dispatch:
 jobs:
 
@@ -16,7 +19,7 @@ jobs:
       fail-fast: false
       matrix:
         # run only on the 3 latest PG versions as we have rate limit on coverity
-        pg: [15, 16, 17]
+        pg: [16, 17, 18]
         os: [ubuntu-22.04]
     steps:
     - name: Install Dependencies

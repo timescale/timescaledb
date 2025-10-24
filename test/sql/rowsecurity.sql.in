@@ -143,16 +143,16 @@ SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle) ORDER BY did;
 SELECT * FROM document TABLESAMPLE BERNOULLI(50) REPEATABLE(0)
   WHERE f_leak(dtitle) ORDER BY did;
 
-EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
 
 -- viewpoint from regress_rls_dave
 SET SESSION AUTHORIZATION regress_rls_dave;
 SELECT * FROM document WHERE f_leak(dtitle) ORDER BY did;
 SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle) ORDER BY did;
 
-EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
 
 -- 44 would technically fail for both p2r and p1r, but we should get an error
 -- back from p1r for this because it sorts first
@@ -177,8 +177,8 @@ SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM document WHERE f_leak(dtitle) ORDER BY did;
 SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle) ORDER by did;
 
-EXPLAIN (COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
-EXPLAIN (COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM document NATURAL JOIN category WHERE f_leak(dtitle);
 
 -- interaction of FK/PK constraints
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -287,41 +287,41 @@ ALTER TABLE t2 ENABLE ROW LEVEL SECURITY;
 SET SESSION AUTHORIZATION regress_rls_bob;
 
 SELECT * FROM t1;
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
 
 SELECT * FROM t1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
 
 -- reference to system column
 SELECT ctid, * FROM t1;
-EXPLAIN (COSTS OFF) SELECT *, t1 FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT *, t1 FROM t1;
 
 -- reference to whole-row reference
 SELECT *, t1 FROM t1;
-EXPLAIN (COSTS OFF) SELECT *, t1 FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT *, t1 FROM t1;
 
 -- for share/update lock
 SELECT * FROM t1 FOR SHARE;
-EXPLAIN (COSTS OFF) SELECT * FROM t1 FOR SHARE;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 FOR SHARE;
 
 SELECT * FROM t1 WHERE f_leak(b) FOR SHARE;
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b) FOR SHARE;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b) FOR SHARE;
 
 -- union all query
 SELECT a, b, ctid FROM t2 UNION ALL SELECT a, b, ctid FROM t3;
-EXPLAIN (COSTS OFF) SELECT a, b, ctid FROM t2 UNION ALL SELECT a, b, ctid FROM t3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT a, b, ctid FROM t2 UNION ALL SELECT a, b, ctid FROM t3;
 
 -- superuser is allowed to bypass RLS checks
 RESET SESSION AUTHORIZATION;
 SET row_security TO OFF;
 SELECT * FROM t1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
 
 -- non-superuser with bypass privilege can bypass RLS policy when disabled
 SET SESSION AUTHORIZATION regress_rls_exempt_user;
 SET row_security TO OFF;
 SELECT * FROM t1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
 
 --
 -- Hyper Tables
@@ -372,17 +372,17 @@ SELECT * FROM pg_policies WHERE schemaname = 'regress_rls_schema' AND tablename 
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO ON;
 SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- viewpoint from regress_rls_dave
 SET SESSION AUTHORIZATION regress_rls_dave;
 SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did;
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- pp1 ERROR
 INSERT INTO hyper_document VALUES (1, 11, 5, 'regress_rls_dave', 'testing pp1'); -- fail
@@ -412,12 +412,12 @@ SELECT * FROM _timescaledb_internal._hyper_2_9_chunk WHERE f_leak(dtitle) ORDER 
 -- The parent looks same as before
 -- viewpoint from regress_rls_dave
 SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did, cid;
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- viewpoint from regress_rls_carol
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did, cid;
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- only owner can change policies
 ALTER POLICY pp1 ON hyper_document USING (true);    --fail
@@ -434,7 +434,7 @@ SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did, cid;
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM hyper_document WHERE f_leak(dtitle) ORDER BY did, cid;
 
-EXPLAIN (COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM hyper_document WHERE f_leak(dtitle);
 
 -- database superuser does bypass RLS policy when enabled
 RESET SESSION AUTHORIZATION;
@@ -487,7 +487,7 @@ DROP TABLE dependee; -- Should fail without CASCADE due to dependency on row sec
 
 DROP TABLE dependee CASCADE;
 
-EXPLAIN (COSTS OFF) SELECT * FROM dependent; -- After drop, should be unqualified
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM dependent; -- After drop, should be unqualified
 
 -----   RECURSION    ----
 
@@ -579,16 +579,16 @@ ALTER POLICY p2 ON s2 USING (x % 2 = 0);
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 SELECT * FROM s1 WHERE f_leak(b);	-- OK
-EXPLAIN (COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM only s1 WHERE f_leak(b);
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 ALTER POLICY p1 ON s1 USING (a in (select x from v2)); -- using VIEW in RLS policy
 SET SESSION AUTHORIZATION regress_rls_bob;
 SELECT * FROM s1 WHERE f_leak(b);	-- OK
-EXPLAIN (COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM s1 WHERE f_leak(b);
 
 SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
-EXPLAIN (COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT (SELECT x FROM s1 LIMIT 1) xx, * FROM s2 WHERE y like '%28%';
 
 SET SESSION AUTHORIZATION regress_rls_alice;
 ALTER POLICY p2 ON s2 USING (x in (select a from s1 where b like '%d2%'));
@@ -598,36 +598,36 @@ SELECT * FROM s1 WHERE f_leak(b);	-- fail (infinite recursion via view)
 -- prepared statement with regress_rls_alice privilege
 PREPARE p1(int) AS SELECT * FROM t1 WHERE a <= $1;
 EXECUTE p1(2);
-EXPLAIN (COSTS OFF) EXECUTE p1(2);
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1(2);
 
 -- superuser is allowed to bypass RLS checks
 RESET SESSION AUTHORIZATION;
 SET row_security TO OFF;
 SELECT * FROM t1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1 WHERE f_leak(b);
 
 -- plan cache should be invalidated
 EXECUTE p1(2);
-EXPLAIN (COSTS OFF) EXECUTE p1(2);
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p1(2);
 
 PREPARE p2(int) AS SELECT * FROM t1 WHERE a = $1;
 EXECUTE p2(2);
-EXPLAIN (COSTS OFF) EXECUTE p2(2);
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p2(2);
 
 -- also, case when privilege switch from superuser
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO ON;
 EXECUTE p2(2);
-EXPLAIN (COSTS OFF) EXECUTE p2(2);
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE p2(2);
 
 --
 -- UPDATE / DELETE and Row-level security
 --
 SET SESSION AUTHORIZATION regress_rls_bob;
-EXPLAIN (COSTS OFF) UPDATE t1 SET b = b || b WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t1 SET b = b || b WHERE f_leak(b);
 UPDATE t1 SET b = b || b WHERE f_leak(b);
 
-EXPLAIN (COSTS OFF) UPDATE only t1 SET b = b || '_updt' WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE only t1 SET b = b || '_updt' WHERE f_leak(b);
 UPDATE only t1 SET b = b || '_updt' WHERE f_leak(b);
 
 -- returning clause with system column
@@ -636,26 +636,26 @@ UPDATE t1 SET b = b WHERE f_leak(b) RETURNING *;
 UPDATE t1 SET b = b WHERE f_leak(b) RETURNING ctid, *, t1;
 
 -- updates with from clause
-EXPLAIN (COSTS OFF) UPDATE t2 SET b=t2.b FROM t3
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t2 SET b=t2.b FROM t3
 WHERE t2.a = 3 and t3.a = 2 AND f_leak(t2.b) AND f_leak(t3.b);
 
 UPDATE t2 SET b=t2.b FROM t3
 WHERE t2.a = 3 and t3.a = 2 AND f_leak(t2.b) AND f_leak(t3.b);
 
-EXPLAIN (COSTS OFF) UPDATE t1 SET b=t1.b FROM t2
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t1 SET b=t1.b FROM t2
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
 
 UPDATE t1 SET b=t1.b FROM t2
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
 
-EXPLAIN (COSTS OFF) UPDATE t2 SET b=t2.b FROM t1
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t2 SET b=t2.b FROM t1
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
 
 UPDATE t2 SET b=t2.b FROM t1
 WHERE t1.a = 3 and t2.a = 3 AND f_leak(t1.b) AND f_leak(t2.b);
 
 -- updates with from clause self join
-EXPLAIN (COSTS OFF) UPDATE t2 t2_1 SET b = t2_2.b FROM t2 t2_2
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t2 t2_1 SET b = t2_2.b FROM t2 t2_2
 WHERE t2_1.a = 3 AND t2_2.a = t2_1.a AND t2_2.b = t2_1.b
 AND f_leak(t2_1.b) AND f_leak(t2_2.b) RETURNING *, t2_1, t2_2;
 
@@ -663,7 +663,7 @@ UPDATE t2 t2_1 SET b = t2_2.b FROM t2 t2_2
 WHERE t2_1.a = 3 AND t2_2.a = t2_1.a AND t2_2.b = t2_1.b
 AND f_leak(t2_1.b) AND f_leak(t2_2.b) RETURNING *, t2_1, t2_2;
 
-EXPLAIN (COSTS OFF) UPDATE t1 t1_1 SET b = t1_2.b FROM t1 t1_2
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE t1 t1_1 SET b = t1_2.b FROM t1 t1_2
 WHERE t1_1.a = 4 AND t1_2.a = t1_1.a AND t1_2.b = t1_1.b
 AND f_leak(t1_1.b) AND f_leak(t1_2.b) RETURNING *, t1_1, t1_2;
 
@@ -677,8 +677,8 @@ SELECT * FROM t1 ORDER BY a,b;
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO ON;
-EXPLAIN (COSTS OFF) DELETE FROM only t1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) DELETE FROM t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) DELETE FROM only t1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) DELETE FROM t1 WHERE f_leak(b);
 
 DELETE FROM only t1 WHERE f_leak(b) RETURNING ctid, *, t1;
 DELETE FROM t1 WHERE f_leak(b) RETURNING ctid, *, t1;
@@ -701,17 +701,17 @@ GRANT ALL ON bv1 TO regress_rls_carol;
 
 SET SESSION AUTHORIZATION regress_rls_carol;
 
-EXPLAIN (COSTS OFF) SELECT * FROM bv1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM bv1 WHERE f_leak(b);
 SELECT * FROM bv1 WHERE f_leak(b);
 
 INSERT INTO bv1 VALUES (-1, 'xxx'); -- should fail view WCO
 INSERT INTO bv1 VALUES (11, 'xxx'); -- should fail RLS check
 INSERT INTO bv1 VALUES (12, 'xxx'); -- ok
 
-EXPLAIN (COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 UPDATE bv1 SET b = 'yyy' WHERE a = 4 AND f_leak(b);
 
-EXPLAIN (COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
 DELETE FROM bv1 WHERE a = 6 AND f_leak(b);
 
 SET SESSION AUTHORIZATION regress_rls_alice;
@@ -855,58 +855,58 @@ ALTER TABLE z1 ENABLE ROW LEVEL SECURITY;
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 SELECT * FROM z1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
 
 PREPARE plancache_test AS SELECT * FROM z1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
 
 PREPARE plancache_test2 AS WITH q AS MATERIALIZED (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
 
 PREPARE plancache_test4 AS WITH q AS (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
 
 PREPARE plancache_test6 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z1 WHERE f_leak(b)) SELECT * FROM q,z2;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test6;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test6;
 
 PREPARE plancache_test3 AS WITH q AS MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
 
 PREPARE plancache_test5 AS WITH q AS (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
-EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
 
 PREPARE plancache_test7 AS WITH q AS NOT MATERIALIZED (SELECT * FROM z2) SELECT * FROM q,z1 WHERE f_leak(z1.b);
-EXPLAIN (COSTS OFF) EXECUTE plancache_test7;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test7;
 
 SET ROLE regress_rls_group1;
 SELECT * FROM z1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
 
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM z1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
 
 SET ROLE regress_rls_group2;
 SELECT * FROM z1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
 
-EXPLAIN (COSTS OFF) EXECUTE plancache_test;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test2;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test4;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test3;
-EXPLAIN (COSTS OFF) EXECUTE plancache_test5;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test4;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test3;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE plancache_test5;
 
 --
 -- Views should follow policy for view owner.
@@ -919,12 +919,12 @@ GRANT SELECT ON rls_view TO regress_rls_bob;
 -- Query as role that is not owner of view or table.  Should return all records.
 SET SESSION AUTHORIZATION regress_rls_bob;
 SELECT * FROM rls_view;
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
 
 -- Query as view/table owner.  Should return all records.
 SET SESSION AUTHORIZATION regress_rls_alice;
 SELECT * FROM rls_view;
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
 DROP VIEW rls_view;
 
 -- View and Table owners are different.
@@ -936,24 +936,24 @@ GRANT SELECT ON rls_view TO regress_rls_alice;
 -- Should return records based on view owner policies.
 SET SESSION AUTHORIZATION regress_rls_alice;
 SELECT * FROM rls_view;
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
 
 -- Query as role that is not owner of table but is owner of view.
 -- Should return records based on view owner policies.
 SET SESSION AUTHORIZATION regress_rls_bob;
 SELECT * FROM rls_view;
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
 
 -- Query as role that is not the owner of the table or view without permissions.
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM rls_view; --fail - permission denied.
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view; --fail - permission denied.
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view; --fail - permission denied.
 
 -- Query as role that is not the owner of the table or view with permissions.
 SET SESSION AUTHORIZATION regress_rls_bob;
 GRANT SELECT ON rls_view TO regress_rls_carol;
 SELECT * FROM rls_view;
-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_view;
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 DROP VIEW rls_view;
@@ -1021,14 +1021,14 @@ ALTER TABLE y2 ENABLE ROW LEVEL SECURITY;
 SET SESSION AUTHORIZATION regress_rls_alice;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
 DROP VIEW rls_sbv;
 
 -- Create view as role that does not own table.  RLS should be applied.
 SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE VIEW rls_sbv WITH (security_barrier) AS
     SELECT * FROM y1 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
 DROP VIEW rls_sbv;
 
 --
@@ -1041,13 +1041,13 @@ CREATE POLICY p3 ON y2 USING (a % 4 = 0);
 
 SET SESSION AUTHORIZATION regress_rls_bob;
 SELECT * FROM y2 WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM y2 WHERE f_leak(b);
 
 --
 -- Qual push-down of leaky functions, when not referring to table
 --
 SELECT * FROM y2 WHERE f_leak('abc');
-EXPLAIN (COSTS OFF) SELECT * FROM y2 WHERE f_leak('abc');
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM y2 WHERE f_leak('abc');
 
 CREATE TABLE test_qual_pushdown (
     abc text
@@ -1056,10 +1056,10 @@ CREATE TABLE test_qual_pushdown (
 INSERT INTO test_qual_pushdown VALUES ('abc'),('def');
 
 SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(abc);
-EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(abc);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(abc);
 
 SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(b);
-EXPLAIN (COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(b);
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM y2 JOIN test_qual_pushdown ON (b = abc) WHERE f_leak(b);
 
 DROP TABLE test_qual_pushdown;
 
@@ -1086,17 +1086,17 @@ ALTER TABLE t1 ENABLE ROW LEVEL SECURITY;
 SET ROLE regress_rls_bob;
 PREPARE role_inval AS SELECT * FROM t1;
 -- Check plan
-EXPLAIN (COSTS OFF) EXECUTE role_inval;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE role_inval;
 
 -- Change to regress_rls_carol
 SET ROLE regress_rls_carol;
 -- Check plan- should be different
-EXPLAIN (COSTS OFF) EXECUTE role_inval;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE role_inval;
 
 -- Change back to regress_rls_bob
 SET ROLE regress_rls_bob;
 -- Check plan- should be back to original
-EXPLAIN (COSTS OFF) EXECUTE role_inval;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE role_inval;
 
 --
 -- CTE and RLS
@@ -1116,7 +1116,7 @@ INSERT INTO t1 (SELECT x, md5(x::text) FROM generate_series(0,20) x);
 SET SESSION AUTHORIZATION regress_rls_bob;
 
 WITH cte1 AS (SELECT * FROM t1 WHERE f_leak(b)) SELECT * FROM cte1;
-EXPLAIN (COSTS OFF) WITH cte1 AS (SELECT * FROM t1 WHERE f_leak(b)) SELECT * FROM cte1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) WITH cte1 AS (SELECT * FROM t1 WHERE f_leak(b)) SELECT * FROM cte1;
 
 WITH cte1 AS (UPDATE t1 SET a = a + 1 RETURNING *) SELECT * FROM cte1; --fail
 WITH cte1 AS (UPDATE t1 SET a = a RETURNING *) SELECT * FROM cte1; --ok
@@ -1149,9 +1149,9 @@ SET SESSION AUTHORIZATION regress_rls_bob;
 CREATE TABLE t2 (a integer, b text);
 SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
 INSERT INTO t2 (SELECT * FROM t1);
-EXPLAIN (COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
+EXPLAIN (BUFFERS OFF, COSTS OFF) INSERT INTO t2 (SELECT * FROM t1);
 SELECT * FROM t2;
-EXPLAIN (COSTS OFF) SELECT * FROM t2;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t2;
 CREATE TABLE t3 AS SELECT * FROM t1;
 SELECT public.create_hypertable('t2', 'a', chunk_time_interval=>2);
 SELECT * FROM t3;
@@ -1218,21 +1218,21 @@ ALTER TABLE t1 OWNER TO regress_rls_alice;
 -- Check that default deny does not apply to superuser.
 RESET SESSION AUTHORIZATION;
 SELECT * FROM t1;
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
 
 -- Check that default deny does not apply to table owner.
 SET SESSION AUTHORIZATION regress_rls_alice;
 SELECT * FROM t1;
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
 
 -- Check that default deny applies to non-owner/non-superuser when RLS on.
 SET SESSION AUTHORIZATION regress_rls_bob;
 SET row_security TO ON;
 SELECT * FROM t1;
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
 SET SESSION AUTHORIZATION regress_rls_bob;
 SELECT * FROM t1;
-EXPLAIN (COSTS OFF) SELECT * FROM t1;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM t1;
 
 --
 -- COPY TO/FROM
@@ -1408,7 +1408,7 @@ FETCH RELATIVE 1 FROM current_check_cursor;
 UPDATE current_check SET payload = payload || '_new' WHERE CURRENT OF current_check_cursor RETURNING *;
 SELECT * FROM current_check;
 -- Plan should be a subquery TID scan
-EXPLAIN (COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF current_check_cursor;
+EXPLAIN (BUFFERS OFF, COSTS OFF) UPDATE current_check SET payload = payload WHERE CURRENT OF current_check_cursor;
 -- Similarly can only delete row 4
 FETCH ABSOLUTE 1 FROM current_check_cursor;
 DELETE FROM current_check WHERE CURRENT OF current_check_cursor RETURNING *;

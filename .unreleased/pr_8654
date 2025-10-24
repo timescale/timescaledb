@@ -1,0 +1,1 @@
+Fixes: #8654 Fix approximate_row_count for compressed chunks

@@ -32,18 +32,15 @@ SELECT ts_bgw_params_create();
  ts_bgw_params_create 
 ----------------------
  
-(1 row)
 
 -----------------------------------
 -- test retention policy runs for compressed hypertables --
 -----------------------------------
 CREATE TABLE test_retention_table(time timestamptz, drop_order int);
 SELECT create_hypertable('test_retention_table', 'time', chunk_time_interval => INTERVAL '1 week');
-NOTICE:  adding not-null constraint to column "time"
          create_hypertable         
 -----------------------------------
  (1,public,test_retention_table,t)
-(1 row)
 
 -- These inserts should create 5 different chunks
 INSERT INTO test_retention_table VALUES (now() - INTERVAL '2 month',  4);
@@ -59,38 +56,32 @@ SELECT show_chunks('test_retention_table');
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
-(5 rows)
 
 SELECT COUNT(*) FROM _timescaledb_catalog.chunk as c, _timescaledb_catalog.hypertable as ht where c.hypertable_id = ht.id and ht.table_name='test_retention_table';
  count 
 -------
      5
-(1 row)
 
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
  count 
 -------
      0
-(1 row)
 
 SELECT add_retention_policy('test_retention_table', INTERVAL '4 months') as retention_job_id \gset
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE proc_schema = '_timescaledb_functions' AND proc_name = 'policy_retention';
  count 
 -------
      1
-(1 row)
 
 SELECT alter_job(:retention_job_id, schedule_interval => INTERVAL '1 second');
                                                                                         alter_job                                                                                         
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  (1000,"@ 1 sec","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""hypertable_id"": 1}",-infinity,_timescaledb_functions.policy_retention_check,f,,,"Retention Policy [1000]")
-(1 row)
 
 SELECT * FROM _timescaledb_config.bgw_job where id=:retention_job_id;
   id  |    application_name     | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |    proc_name     |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                     config                     |      check_schema      |       check_name       | timezone 
 ------+-------------------------+-------------------+-------------+-------------+--------------+------------------------+------------------+-------------------+-----------+----------------+---------------+---------------+------------------------------------------------+------------------------+------------------------+----------
  1000 | Retention Policy [1000] | @ 1 sec           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention | default_perm_user | t         | f              |               |             1 | {"drop_after": "@ 4 mons", "hypertable_id": 1} | _timescaledb_functions | policy_retention_check | 
-(1 row)
 
 --turn on compression and compress all chunks
 ALTER TABLE test_retention_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
@@ -98,7 +89,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_retention_table') ch;
  count 
 -------
      5
-(1 row)
 
 --make sure same # of compressed and uncompressed chunks before policy
 SELECT count(*) as count_chunks_uncompressed
@@ -108,7 +98,6 @@ WHERE hypertable.table_name like 'test_retention_table';
  count_chunks_uncompressed 
 ---------------------------
                          5
-(1 row)
 
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
@@ -118,7 +107,6 @@ WHERE uncomp_hyper.table_name like 'test_retention_table';
  count_chunks_compressed 
 -------------------------
                        5
-(1 row)
 
 SELECT show_chunks('test_retention_table');
               show_chunks               
@@ -128,13 +116,11 @@ SELECT show_chunks('test_retention_table');
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_1_5_chunk
-(5 rows)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000000);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT show_chunks('test_retention_table');
               show_chunks               
@@ -142,7 +128,6 @@ SELECT show_chunks('test_retention_table');
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(3 rows)
 
 --make sure same # of compressed and uncompressed chunks after policy, reduced by 2
 SELECT count(*) as count_chunks_uncompressed
@@ -152,7 +137,6 @@ WHERE hypertable.table_name like 'test_retention_table';
  count_chunks_uncompressed 
 ---------------------------
                          3
-(1 row)
 
 SELECT count(*) as count_chunks_compressed
 FROM _timescaledb_catalog.chunk chunk
@@ -162,7 +146,6 @@ WHERE uncomp_hyper.table_name like 'test_retention_table';
  count_chunks_compressed 
 -------------------------
                        3
-(1 row)
 
 ------------------------------
 -- Test reorder policy runs on compressed tables. Reorder policy job must skip compressed chunks
@@ -175,7 +158,6 @@ SELECT create_hypertable('test_reorder_chunks_table', 'time', chunk_time_interva
            create_hypertable            
 ----------------------------------------
  (3,public,test_reorder_chunks_table,t)
-(1 row)
 
 -- These inserts should create 6 different chunks
 INSERT INTO test_reorder_chunks_table VALUES (1, 1);
@@ -192,7 +174,6 @@ SELECT compress_chunk(show_chunks('test_reorder_chunks_table', newer_than => 2, 
 -----------------------------------------
  _timescaledb_internal._hyper_3_12_chunk
  _timescaledb_internal._hyper_3_13_chunk
-(2 rows)
 
 -- make sure we have total of 6 chunks:
 SELECT count(*) as count_chunks_uncompressed
@@ -202,7 +183,6 @@ WHERE hypertable.table_name like 'test_reorder_chunks_table';
  count_chunks_uncompressed 
 ---------------------------
                          6
-(1 row)
 
 -- and 2 compressed ones:
 SELECT count(*) as count_chunks_compressed
@@ -213,7 +193,6 @@ WHERE uncomp_hyper.table_name like 'test_reorder_chunks_table';
  count_chunks_compressed 
 -------------------------
                        2
-(1 row)
 
 -- enable reorder policy
 SELECT add_reorder_policy('test_reorder_chunks_table', 'test_reorder_chunks_table_time_idx') AS reorder_job_id \gset
@@ -223,14 +202,12 @@ SELECT indexrelid::regclass, indisclustered
     WHERE indisclustered = true ORDER BY 1;
  indexrelid | indisclustered 
 ------------+----------------
-(0 rows)
 
 -- run first time
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
@@ -238,7 +215,6 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
  job_id | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+------------------+------------+-----------------+----------------+---------------
    1001 | t                |          1 |               1 |              0 |             0
-(1 row)
 
 -- first chunk reordered
 SELECT indexrelid::regclass, indisclustered
@@ -247,14 +223,12 @@ SELECT indexrelid::regclass, indisclustered
                                  indexrelid                                 | indisclustered 
 ----------------------------------------------------------------------------+----------------
  _timescaledb_internal._hyper_3_11_chunk_test_reorder_chunks_table_time_idx | t
-(1 row)
 
 -- second call to scheduler
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
     FROM _timescaledb_internal.bgw_job_stat
@@ -262,7 +236,6 @@ SELECT job_id, last_run_success, total_runs, total_successes, total_failures, to
  job_id | last_run_success | total_runs | total_successes | total_failures | total_crashes 
 --------+------------------+------------+-----------------+----------------+---------------
    1001 | t                |          2 |               2 |              0 |             0
-(1 row)
 
 -- two chunks clustered, skips the compressed chunks
 SELECT indexrelid::regclass, indisclustered
@@ -272,5 +245,4 @@ SELECT indexrelid::regclass, indisclustered
 ----------------------------------------------------------------------------+----------------
  _timescaledb_internal._hyper_3_11_chunk_test_reorder_chunks_table_time_idx | t
  _timescaledb_internal._hyper_3_14_chunk_test_reorder_chunks_table_time_idx | t
-(2 rows)
 

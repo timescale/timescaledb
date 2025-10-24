@@ -57,7 +57,6 @@ psql:include/cagg_on_cagg_setup.sql:24: NOTICE:  table "devices" does not exist,
  table_name 
 ------------
  conditions
-(1 row)
 
 \endif
 \if :IS_TIME_DIMENSION
@@ -75,7 +74,6 @@ psql:include/cagg_on_cagg_setup.sql:24: NOTICE:  table "devices" does not exist,
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
     INSERT INTO conditions ("time", temperature, device_id) VALUES (1, 10, 1);
     INSERT INTO conditions ("time", temperature, device_id) VALUES (2,  5, 2);
@@ -164,24 +162,20 @@ WITH NO DATA;
  conditions_summary_1_1  |            100
  conditions_summary_2_5  |            100
  conditions_summary_3_10 |            100
-(4 rows)
 
 \endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
 --------+-------------+-----------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -194,7 +188,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       1 |          10 |         1
       2 |           5 |         2
       5 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -202,7 +195,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -210,7 +202,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -227,7 +218,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       1 |          10 |         1
       2 |           5 |         2
       5 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -235,7 +225,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -243,7 +232,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -263,7 +251,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       1 |          10 |         1
       2 |           5 |         2
       5 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -271,7 +258,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -279,7 +265,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -293,7 +278,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       2 |           5 |         2
       5 |          20 |         3
      10 |           2 |          
-(4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -301,7 +285,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -309,7 +292,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -328,7 +310,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       2 |           5 |         2
       5 |          20 |         3
      10 |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -336,7 +317,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -344,7 +324,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -354,12 +333,10 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
@@ -371,7 +348,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -379,7 +355,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -414,12 +389,10 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       2 |           5 |         2
       5 |          20 |         3
      10 |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
@@ -438,7 +411,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       2 |           5 |         2
       5 |          20 |         3
      10 |           2 |          
-(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
@@ -483,7 +455,6 @@ DROP TABLE IF EXISTS conditions CASCADE;
  table_name 
 ------------
  conditions
-(1 row)
 
 \endif
 \if :IS_TIME_DIMENSION
@@ -501,7 +472,6 @@ DROP TABLE IF EXISTS conditions CASCADE;
  set_integer_now_func 
 ----------------------
  
-(1 row)
 
     INSERT INTO conditions ("time", temperature, device_id) VALUES (1, 10, 1);
     INSERT INTO conditions ("time", temperature, device_id) VALUES (2,  5, 2);
@@ -590,24 +560,20 @@ WITH NO DATA;
  conditions_summary_1_1  |            100
  conditions_summary_2_5  |            100
  conditions_summary_3_10 |            100
-(4 rows)
 
 \endif
 -- No data because the CAGGs are just for materialized data
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
 --------+-------------+-----------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -620,7 +586,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       1 |          10 |         1
       2 |           5 |         2
       5 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -628,7 +593,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -636,7 +600,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -653,7 +616,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       1 |          10 |         1
       2 |           5 |         2
       5 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -661,7 +623,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -669,7 +630,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -689,7 +649,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       1 |          10 |         1
       2 |           5 |         2
       5 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -697,7 +656,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -705,7 +663,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -719,7 +676,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       2 |           5 |         2
       5 |          20 |         3
      10 |           2 |          
-(4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -727,7 +683,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -735,7 +690,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -754,7 +708,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       2 |           5 |         2
       5 |          20 |         3
      10 |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id |   name   
@@ -762,7 +715,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -770,7 +722,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -780,12 +731,10 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
@@ -797,7 +746,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
       0 |           5 |         2 | thermo_2
       0 |          10 |         1 | thermo_1
       5 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id |   name   | location 
@@ -805,7 +753,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
       0 |           5 |         2 | thermo_2 | Berlin
       0 |          10 |         1 | thermo_1 | Moscow
       0 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -840,12 +787,10 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       2 |           5 |         2
       5 |          20 |         3
      10 |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
@@ -864,7 +809,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
       2 |           5 |         2
       5 |          20 |         3
      10 |           2 |          
-(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
@@ -1241,7 +1185,6 @@ psql:include/cagg_on_cagg_setup.sql:30: WARNING:  column type "timestamp without
  table_name 
 ------------
  conditions
-(1 row)
 
 \else
   SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
@@ -1334,7 +1277,6 @@ WITH NO DATA;
  conditions_summary_1_hourly | @ 70 days
  conditions_summary_2_daily  | @ 70 days
  conditions_summary_3_weekly | @ 70 days
-(4 rows)
 
 \else
   SELECT h.table_name AS name, d.interval_length AS chunk_interval
@@ -1352,17 +1294,14 @@ WITH NO DATA;
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
 --------+-------------+-----------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -1375,7 +1314,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 |          10 |         1
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1383,7 +1321,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1391,7 +1328,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -1408,7 +1344,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 |          10 |         1
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1416,7 +1351,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1424,7 +1358,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -1444,7 +1377,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 |          10 |         1
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1452,7 +1384,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1460,7 +1391,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -1474,7 +1404,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
  Mon Jan 03 01:00:00 2022 |           2 |          
-(4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1482,7 +1411,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1490,7 +1418,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -1509,7 +1436,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
  Mon Jan 03 01:00:00 2022 |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1517,7 +1443,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1525,7 +1450,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -1535,12 +1459,10 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
@@ -1552,7 +1474,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1560,7 +1481,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -1595,12 +1515,10 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
  Mon Jan 03 01:00:00 2022 |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
@@ -1619,7 +1537,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
  Mon Jan 03 01:00:00 2022 |           2 |          
-(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
@@ -1662,7 +1579,6 @@ psql:include/cagg_on_cagg_setup.sql:30: WARNING:  column type "timestamp without
  table_name 
 ------------
  conditions
-(1 row)
 
 \else
   SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
@@ -1755,7 +1671,6 @@ WITH NO DATA;
  conditions_summary_1_hourly | @ 70 days
  conditions_summary_2_daily  | @ 70 days
  conditions_summary_3_weekly | @ 70 days
-(4 rows)
 
 \else
   SELECT h.table_name AS name, d.interval_length AS chunk_interval
@@ -1773,17 +1688,14 @@ WITH NO DATA;
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
 --------+-------------+-----------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -1796,7 +1708,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 |          10 |         1
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1804,7 +1715,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1812,7 +1722,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -1829,7 +1738,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 |          10 |         1
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1837,7 +1745,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1845,7 +1752,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -1865,7 +1771,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 |          10 |         1
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1873,7 +1778,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1881,7 +1785,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -1895,7 +1798,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
  Mon Jan 03 01:00:00 2022 |           2 |          
-(4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1903,7 +1805,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1911,7 +1812,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -1930,7 +1830,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
  Mon Jan 03 01:00:00 2022 |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
           bucket          | temperature | device_id |   name   
@@ -1938,7 +1837,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1946,7 +1844,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -1956,12 +1853,10 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
@@ -1973,7 +1868,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
           bucket          | temperature | device_id |   name   | location 
@@ -1981,7 +1875,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -2016,12 +1909,10 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
  Mon Jan 03 01:00:00 2022 |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
@@ -2040,7 +1931,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 |           5 |         2
  Sun Jan 02 01:00:00 2022 |          20 |         3
  Mon Jan 03 01:00:00 2022 |           2 |          
-(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
@@ -2518,7 +2408,6 @@ DROP TABLE IF EXISTS conditions CASCADE;
  table_name 
 ------------
  conditions
-(1 row)
 
 \else
   SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
@@ -2611,7 +2500,6 @@ WITH NO DATA;
  conditions_summary_1_hourly | @ 70 days
  conditions_summary_2_daily  | @ 70 days
  conditions_summary_3_weekly | @ 70 days
-(4 rows)
 
 \else
   SELECT h.table_name AS name, d.interval_length AS chunk_interval
@@ -2629,17 +2517,14 @@ WITH NO DATA;
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
 --------+-------------+-----------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -2652,7 +2537,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -2660,7 +2544,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -2668,7 +2551,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -2685,7 +2567,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -2693,7 +2574,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -2701,7 +2581,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -2721,7 +2600,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -2729,7 +2607,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -2737,7 +2614,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -2751,7 +2627,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
  Mon Jan 03 01:00:00 2022 UTC |           2 |          
-(4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -2759,7 +2634,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -2767,7 +2641,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -2786,7 +2659,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
  Mon Jan 03 01:00:00 2022 UTC |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -2794,7 +2666,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -2802,7 +2673,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -2812,12 +2682,10 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
@@ -2829,7 +2697,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -2837,7 +2704,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -2872,12 +2738,10 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
  Mon Jan 03 01:00:00 2022 UTC |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
@@ -2896,7 +2760,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
  Mon Jan 03 01:00:00 2022 UTC |           2 |          
-(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
@@ -2939,7 +2802,6 @@ DROP TABLE IF EXISTS conditions CASCADE;
  table_name 
 ------------
  conditions
-(1 row)
 
 \else
   SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
@@ -3032,7 +2894,6 @@ WITH NO DATA;
  conditions_summary_1_hourly | @ 70 days
  conditions_summary_2_daily  | @ 70 days
  conditions_summary_3_weekly | @ 70 days
-(4 rows)
 
 \else
   SELECT h.table_name AS name, d.interval_length AS chunk_interval
@@ -3050,17 +2911,14 @@ WITH NO DATA;
 SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  bucket | temperature | device_id 
 --------+-------------+-----------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -3073,7 +2931,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -3081,7 +2938,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -3089,7 +2945,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -3106,7 +2961,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -3114,7 +2968,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -3122,7 +2975,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 \if :IS_TIME_DIMENSION
 -- Invalidate an old region
@@ -3142,7 +2994,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -3150,7 +3001,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -3158,7 +3008,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into Realtime
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=false);
@@ -3172,7 +3021,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
  Mon Jan 03 01:00:00 2022 UTC |           2 |          
-(4 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -3180,7 +3028,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -3188,7 +3035,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- Turn CAGGs into materialized only again
 ALTER MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL SET (timescaledb.materialized_only=true);
@@ -3207,7 +3053,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
  Mon Jan 03 01:00:00 2022 UTC |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
             bucket            | temperature | device_id |   name   
@@ -3215,7 +3060,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -3223,7 +3067,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- TRUNCATE tests
 TRUNCATE :CAGG_NAME_2TH_LEVEL;
@@ -3233,12 +3076,10 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_3TH_LEVEL', NULL, NULL);
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  bucket | temperature | device_id | name | location 
 --------+-------------+-----------+------+----------
-(0 rows)
 
 -- If we have all the data in the bottom levels caggs we can rebuild
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
@@ -3250,7 +3091,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  Sat Jan 01 00:00:00 2022 UTC |           5 |         2 | thermo_2
  Sat Jan 01 00:00:00 2022 UTC |          10 |         1 | thermo_1
  Sun Jan 02 00:00:00 2022 UTC |          20 |         3 | thermo_3
-(3 rows)
 
 SELECT * FROM :CAGG_NAME_3TH_LEVEL;
             bucket            | temperature | device_id |   name   | location 
@@ -3258,7 +3098,6 @@ SELECT * FROM :CAGG_NAME_3TH_LEVEL;
  Mon Dec 27 00:00:00 2021 UTC |           5 |         2 | thermo_2 | Berlin
  Mon Dec 27 00:00:00 2021 UTC |          10 |         1 | thermo_1 | Moscow
  Mon Dec 27 00:00:00 2021 UTC |          20 |         3 | thermo_3 | London
-(3 rows)
 
 -- DROP tests
 \set ON_ERROR_STOP 0
@@ -3293,12 +3132,10 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
  Mon Jan 03 01:00:00 2022 UTC |           2 |          
-(5 rows)
 
 SELECT * FROM :CAGG_NAME_2TH_LEVEL;
  bucket | temperature | device_id | name 
 --------+-------------+-----------+------
-(0 rows)
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
@@ -3317,7 +3154,6 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL;
  Sat Jan 01 01:00:00 2022 UTC |           5 |         2
  Sun Jan 02 01:00:00 2022 UTC |          20 |         3
  Mon Jan 03 01:00:00 2022 UTC |           2 |          
-(5 rows)
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;

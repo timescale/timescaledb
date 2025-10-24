@@ -10,7 +10,7 @@ name: Regression
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
@@ -194,7 +194,7 @@ jobs:
       run: ./build/scripts/export_prefix_check.sh
 
     - name: make installcheck
-      id: installcheck
+      if: matrix.installcheck
       run: |
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \

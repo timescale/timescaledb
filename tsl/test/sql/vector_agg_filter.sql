@@ -4,9 +4,6 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
--- Uncomment to run this test with hypercore TAM
---set timescaledb.default_hypercore_use_access_method=true;
-
 -- helper function: float -> pseudorandom float [-0.5..0.5]
 CREATE OR REPLACE FUNCTION mix(x anyelement) RETURNS float8 AS $$
     SELECT hashfloat8(x::float8) / pow(2, 32)
@@ -94,7 +91,7 @@ select
             function, variable)
 from
     unnest(array[
-        'explain (costs off) ',
+        'explain (buffers off, costs off) ',
         null]) explain,
     unnest(array[
         's',
@@ -145,4 +142,33 @@ group by ss
 order by 2, 3;
 
 reset timescaledb.debug_require_vector_agg;
+
+
+-- Grouping with a scalar UUID column (segmentby or default).
+create table uuid_default(ts int, value int4)
+    with (tsdb.hypertable, tsdb.partition_column = 'ts', tsdb.compress,
+        tsdb.chunk_interval = 1000);
+
+insert into uuid_default select generate_series(0, 999), 1;
+
+select count(compress_chunk(x)) from show_chunks('uuid_default') x;
+
+alter table uuid_default add column id uuid default '842ab294-923a-4f50-be7d-af6c51903a5f';
+
+alter table uuid_default set (tsdb.compress_segmentby = 'id');
+
+insert into uuid_default select generate_series(1000, 1999), 2, '5dd0565f-1ddf-4a6c-9e96-9b2b8c8c3993';
+
+select count(compress_chunk(x)) from show_chunks('uuid_default') x;
+
+set timescaledb.debug_require_vector_agg = 'require';
+
+select id, sum(value) from uuid_default group by id;
+
+select sum(value) filter (where id = '5dd0565f-1ddf-4a6c-9e96-9b2b8c8c3993') from uuid_default;
+
+select sum(value) filter (where id = '842ab294-923a-4f50-be7d-af6c51903a5f') from uuid_default;
+
+reset timescaledb.debug_require_vector_agg;
+
 reset max_parallel_workers_per_gather;

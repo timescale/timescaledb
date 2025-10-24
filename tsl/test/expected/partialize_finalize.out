@@ -6,7 +6,6 @@ SHOW enable_partitionwise_aggregate;
  enable_partitionwise_aggregate 
 --------------------------------
  off
-(1 row)
 
 SET enable_partitionwise_aggregate = on;
 create table foo (a integer, b integer, c integer);
@@ -30,7 +29,6 @@ group by a order by a ;
  1 |            5
  2 |            3
  3 |            1
-(3 rows)
 
 insert into t1 select * from t1;
 select a, _timescaledb_functions.finalize_agg( 'count("any")', null, null, null, partial, cast('1' as int8) ) from t1
@@ -40,7 +38,6 @@ group by a order by a ;
  1 |           10
  2 |            6
  3 |            2
-(3 rows)
 
 --TEST2 sum numeric and min on float--
 drop table t1;
@@ -66,7 +63,6 @@ select a, _timescaledb_functions.finalize_agg( 'sum(numeric)', null, null, null,
  1 |  150 |  -10
  2 |   60 |   20
  3 |   40 |    0
-(3 rows)
 
 insert into foo values( 3, 0, -1);
 insert into foo values( 5, 40, 10);
@@ -81,7 +77,6 @@ select a, _timescaledb_functions.finalize_agg( 'sum(numeric)', null, null, null,
  2 |   60 |   20
  3 |   80 |   -1
  5 |   80 |    0
-(4 rows)
 
 SET enable_partitionwise_aggregate = off;
 --TEST3 sum with expressions
@@ -123,7 +118,6 @@ select a, _timescaledb_functions.finalize_agg( 'sum(double precision)', null, nu
  10 |       |     
  11 |       |     
  12 |    30 |   20
-(7 rows)
 
 insert into t1 select * from v1;
 select a, _timescaledb_functions.finalize_agg( 'sum(double precision)', null, null, null, partialb, null::float8 ) sumcd, _timescaledb_functions.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
@@ -136,7 +130,6 @@ select a, _timescaledb_functions.finalize_agg( 'sum(double precision)', null, nu
  10 |       |     
  11 |       |     
  12 |    60 |   20
-(7 rows)
 
 -- TEST4 with collation (text), NULLS and timestamp --
 drop table t1;
@@ -189,7 +182,6 @@ SELECT * FROM vfinal;
   3 |   90 |       |                              |  7.0710678118654752 |  7.0710678118654752
  11 |      | hello | Sat Jan 02 06:00:00 2010 PST |                     |                    
  12 |   10 | hello | Sat Jan 02 06:00:00 2010 PST |                     |                    
-(5 rows)
 
 CREATE TABLE vfinal_res AS SELECT * FROM vfinal;
 --with having clause --
@@ -204,7 +196,6 @@ select a, b ,  _timescaledb_functions.finalize_agg( 'min(text)', 'pg_catalog', '
   2 | 20 | hello | Fri Jan 01 09:00:00 2010 PST
   2 | 30 | hello | Fri Jan 01 09:00:00 2010 PST
  12 | 10 | hello | Sat Jan 02 06:00:00 2010 PST
-(8 rows)
 
 --TEST5 test with TOAST data
 drop view vfinal;
@@ -216,24 +207,21 @@ create table foo( a integer, b timestamptz, toastval TEXT);
 -- easily compressable string and instead store it with TOAST
 ALTER TABLE foo ALTER COLUMN toastval SET STORAGE EXTERNAL;
 SELECT count(*) FROM create_hypertable('foo', 'b');
-NOTICE:  adding not-null constraint to column "b"
  count 
 -------
      1
-(1 row)
 
 INSERT INTO foo VALUES( 1,  '2004-10-19 10:23:54', repeat('this must be over 2k. ', 1100));
 INSERT INTO foo VALUES(1,  '2005-10-19 10:23:54', repeat('I am a tall big giraffe in the zoo.  ', 1100));
 INSERT INTO foo values( 1, '2005-01-01 00:00:00+00', NULL);
 INSERT INTO foo values( 2, '2005-01-01 00:00:00+00', NULL);
 create or replace  view v1(a, partialb, partialtv) as select a, _timescaledb_functions.partialize_agg( max(b) ), _timescaledb_functions.partialize_agg( min(toastval)) from foo group by a;
-EXPLAIN (VERBOSE, COSTS OFF)
+EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)
 create table t1 as select * from v1;
-                                                                                     QUERY PLAN                                                                                      
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Partial HashAggregate
-   Output: _hyper_1_1_chunk.a, _timescaledb_functions.partialize_agg(PARTIAL max(_hyper_1_1_chunk.b)), _timescaledb_functions.partialize_agg(PARTIAL min(_hyper_1_1_chunk.toastval))
-   Group Key: _hyper_1_1_chunk.a
+   Output: foo.a, _timescaledb_functions.partialize_agg(PARTIAL max(foo.b)), _timescaledb_functions.partialize_agg(PARTIAL min(foo.toastval))
+   Group Key: foo.a
    ->  Append
          ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
                Output: _hyper_1_1_chunk.a, _hyper_1_1_chunk.b, _hyper_1_1_chunk.toastval
@@ -241,7 +229,6 @@ create table t1 as select * from v1;
                Output: _hyper_1_2_chunk.a, _hyper_1_2_chunk.b, _hyper_1_2_chunk.toastval
          ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
                Output: _hyper_1_3_chunk.a, _hyper_1_3_chunk.b, _hyper_1_3_chunk.toastval
-(10 rows)
 
 create table t1 as select * from v1;
 insert into t1 select * from v1;
@@ -252,7 +239,6 @@ from t1 group by a order by a;
 ---+------------------------------+-------------
  1 | Wed Oct 19 10:23:54 2005 PDT | t
  2 | Fri Dec 31 16:00:00 2004 PST | 
-(2 rows)
 
 --non top-level partials
 with cte as (
@@ -263,20 +249,17 @@ select length(tp) from cte;
 --------
   40700
        
-(2 rows)
 
 select length(_timescaledb_functions.partialize_agg( min(toastval))) from foo group by a;
  length 
 --------
   40700
        
-(2 rows)
 
 select length(_timescaledb_functions.partialize_agg(min(a+1))) from foo;
  length 
 --------
       4
-(1 row)
 
 \set ON_ERROR_STOP 0
 select length(_timescaledb_functions.partialize_agg(1+min(a))) from foo;
@@ -303,7 +286,6 @@ group by b, toastval
 having toastval LIKE 'does not exist';
  b | toastval | partialize_agg 
 ---+----------+----------------
-(0 rows)
 
 --
 -- TEST FINALIZEFUNC_EXTRA
@@ -337,7 +319,6 @@ WARNING:  type text
  aggregate_to_test_ffunc_extra 
 -------------------------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 --errors on wrong input type array
@@ -372,7 +353,6 @@ WARNING:  type text
  ?column? 
 ----------
  t
-(1 row)
 
 with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 1::bigint)) as part)
 select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['pg_catalog'::name, 'int4'::name], array['pg_catalog', 'int8']], part, null::text) is null from cte;
@@ -380,7 +360,6 @@ WARNING:  type bigint
  ?column? 
 ----------
  t
-(1 row)
 
 -- Issue 4922
 CREATE TABLE issue4922 (
@@ -391,7 +370,6 @@ SELECT create_hypertable('issue4922', 'time');
    create_hypertable    
 ------------------------
  (2,public,issue4922,t)
-(1 row)
 
 -- helper function: integer -> pseudorandom integer [0..100].
 CREATE OR REPLACE FUNCTION mix(x INTEGER) RETURNS INTEGER AS $$ SELECT (((hashint4(x) / (pow(2, 31) - 1) + 1) / 2) * 100)::INTEGER $$ LANGUAGE SQL;
@@ -402,11 +380,10 @@ SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 
  set_config 
 ------------
  on
-(1 row)
 
 SET parallel_setup_cost = 0;
 -- Materialize partials from execution of parallel query plan
-EXPLAIN (VERBOSE, COSTS OFF)
+EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)
   SELECT
     _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
     _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,
@@ -414,12 +391,11 @@ EXPLAIN (VERBOSE, COSTS OFF)
     _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
     _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
-                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Partial Aggregate
-   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL min(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL max(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
+   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL min(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL max(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
    ->  Gather
-         Output: (PARTIAL sum(_hyper_2_4_chunk.value)), (PARTIAL avg(_hyper_2_4_chunk.value)), (PARTIAL min(_hyper_2_4_chunk.value)), (PARTIAL max(_hyper_2_4_chunk.value)), (PARTIAL count(*))
+         Output: (PARTIAL sum(issue4922.value)), (PARTIAL avg(issue4922.value)), (PARTIAL min(issue4922.value)), (PARTIAL max(issue4922.value)), (PARTIAL count(*))
          Workers Planned: 2
          ->  Parallel Append
                ->  Partial Aggregate
@@ -826,7 +802,6 @@ EXPLAIN (VERBOSE, COSTS OFF)
                      Output: PARTIAL sum(_hyper_2_104_chunk.value), PARTIAL avg(_hyper_2_104_chunk.value), PARTIAL min(_hyper_2_104_chunk.value), PARTIAL max(_hyper_2_104_chunk.value), PARTIAL count(*)
                      ->  Parallel Seq Scan on _timescaledb_internal._hyper_2_104_chunk
                            Output: _hyper_2_104_chunk.value
-(410 rows)
 
 CREATE MATERIALIZED VIEW issue4922_partials_parallel AS
   SELECT
@@ -838,7 +813,7 @@ CREATE MATERIALIZED VIEW issue4922_partials_parallel AS
   FROM public.issue4922;
 -- Materialize partials from execution of non-parallel query plan
 SET max_parallel_workers_per_gather = 0;
-EXPLAIN (VERBOSE, COSTS OFF)
+EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)
   SELECT
     _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
     _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,
@@ -846,10 +821,9 @@ EXPLAIN (VERBOSE, COSTS OFF)
     _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
     _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
-                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Partial Aggregate
-   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL min(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL max(_hyper_2_4_chunk.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
+   Output: _timescaledb_functions.partialize_agg(PARTIAL sum(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL avg(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL min(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL max(issue4922.value)), _timescaledb_functions.partialize_agg(PARTIAL count(*))
    ->  Append
          ->  Seq Scan on _timescaledb_internal._hyper_2_4_chunk
                Output: _hyper_2_4_chunk.value
@@ -1053,7 +1027,6 @@ EXPLAIN (VERBOSE, COSTS OFF)
                Output: _hyper_2_103_chunk.value
          ->  Seq Scan on _timescaledb_internal._hyper_2_104_chunk
                Output: _hyper_2_104_chunk.value
-(205 rows)
 
 CREATE MATERIALIZED VIEW issue4922_partials_non_parallel AS
   SELECT
@@ -1069,13 +1042,11 @@ SELECT * FROM issue4922_partials_parallel;
     partial_sum     |                                        partial_avg                                         | partial_min | partial_max |   partial_count    
 --------------------+--------------------------------------------------------------------------------------------+-------------+-------------+--------------------
  \x00000000004c4fa9 | \x00000001000000000000001400000002000000010000000800000000000186a00000000800000000004c4fa9 | \x00000000  | \x00000064  | \x00000000000186a0
-(1 row)
 
 SELECT * FROM issue4922_partials_non_parallel;
     partial_sum     |                                        partial_avg                                         | partial_min | partial_max |   partial_count    
 --------------------+--------------------------------------------------------------------------------------------+-------------+-------------+--------------------
  \x00000000004c4fa9 | \x00000001000000000000001400000002000000010000000800000000000186a00000000800000000004c4fa9 | \x00000000  | \x00000064  | \x00000000000186a0
-(1 row)
 
 -- Compare results from partial and non-partial query execution
 SELECT
@@ -1088,7 +1059,6 @@ FROM issue4922;
    sum   |         avg         | min | max | count  
 ---------+---------------------+-----+-----+--------
  5001129 | 50.0112900000000000 |   0 | 100 | 100000
-(1 row)
 
 -- The results should be the EQUAL TO the previous query
 SELECT
@@ -1101,7 +1071,6 @@ FROM issue4922_partials_parallel;
    sum   |         avg         | min | max | count  
 ---------+---------------------+-----+-----+--------
  5001129 | 50.0112900000000000 |   0 | 100 | 100000
-(1 row)
 
 -- Test that a "soft" error causes an attempt to repair the row
 -- We don't care about the result here (but it is the sum of the b
@@ -1125,9 +1094,6 @@ LOG:  statement: WITH
   broken AS (SELECT decode(left(part, -32), 'hex') partialb FROM sample)
 SELECT _timescaledb_functions.finalize_agg('sum(numeric)', null, null, null, broken.partialb, null::numeric) sumb
   FROM broken;
-DEBUG:  capture_ExecutorStart - rtable #0: (null)
-DEBUG:  capture_ExecutorStart - rtable #1: (null)
-DEBUG:  capture_ExecutorStart - rtable #2: saved_partials
 DEBUG:  inner_agg_deserialize - deserializing partial
 DETAIL:  mcxt: ExprContext
 DEBUG:  inner_agg_deserialize - attempting repair of serialized partial
@@ -1156,7 +1122,6 @@ DEBUG:  sanitize_serialized_partial - zero-filling serialized numeric type
  sumb 
 ------
   150
-(1 row)
 
 RESET client_min_messages;
 LOG:  statement: RESET client_min_messages;

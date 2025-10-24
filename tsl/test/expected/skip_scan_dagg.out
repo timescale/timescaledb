@@ -28,7 +28,6 @@ SELECT create_hypertable('skip_scan_ht', 'time', chunk_time_interval => 250, cre
      create_hypertable     
 ---------------------------
  (1,public,skip_scan_ht,t)
-(1 row)
 
 INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
 ALTER TABLE skip_scan_ht DROP COLUMN f1;
@@ -46,7 +45,6 @@ SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, cr
      create_hypertable      
 ----------------------------
  (3,public,skip_scan_htc,t)
-(1 row)
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -84,7 +82,6 @@ SELECT create_hypertable('skip_scan_htcl', 'time', chunk_time_interval => 250, c
       create_hypertable      
 -----------------------------
  (5,public,skip_scan_htcl,t)
-(1 row)
 
 ALTER TABLE skip_scan_htcl SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -93,7 +90,6 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_5_9_chunk
-(1 row)
 
 ALTER TABLE skip_scan_htcl DROP COLUMN f1;
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
@@ -110,7 +106,6 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch order by 1 desc 
  _timescaledb_internal._hyper_5_13_chunk
  _timescaledb_internal._hyper_5_12_chunk
  _timescaledb_internal._hyper_5_11_chunk
-(3 rows)
 
 ANALYZE skip_scan_htcl;
 -- adjust statistics so we get skipscan plans
@@ -136,20 +131,28 @@ SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS
 CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev  NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 GROUP BY dev;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL GROUP BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -207,6 +210,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT count(DISTINCT dev), dev, tableoid::regclass, 'q2_11' FROM :TABLE GROUP BY dev, tableoid ORDER BY dev, tableoid;
 -- DISTINCT aggs grouped on their TEXT args
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_11' FROM :TABLE WHERE dev_name IS NOT NULL GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_2', NULL FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev_name;
@@ -319,20 +324,28 @@ SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS
 CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev  NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 GROUP BY dev;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL GROUP BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -390,6 +403,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT count(DISTINCT dev), dev, tableoid::regclass, 'q2_11' FROM :TABLE GROUP BY dev, tableoid ORDER BY dev, tableoid;
 -- DISTINCT aggs grouped on their TEXT args
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_11' FROM :TABLE WHERE dev_name IS NOT NULL GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_2', NULL FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev_name;
@@ -497,7 +512,6 @@ RESET timescaledb.enable_skipscan_for_distinct_aggregates;
  ----------------------
 - off
 + on
- (1 row)
  
   count 
 -- run tests on hypertable and diff results
@@ -517,20 +531,28 @@ SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS
 CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev  NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 GROUP BY dev;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL GROUP BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -588,6 +610,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT count(DISTINCT dev), dev, tableoid::regclass, 'q2_11' FROM :TABLE GROUP BY dev, tableoid ORDER BY dev, tableoid;
 -- DISTINCT aggs grouped on their TEXT args
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_11' FROM :TABLE WHERE dev_name IS NOT NULL GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_2', NULL FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev_name;
@@ -700,20 +724,28 @@ SELECT current_setting('timescaledb.enable_skipscan_for_distinct_aggregates') AS
 CREATE INDEX skip_scan_idx_dev_nulls_last ON :TABLE(dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_nulls_last;
 -- NULLS FIRST index on dev
 CREATE INDEX skip_scan_idx_dev_nulls_first ON :TABLE(dev NULLS FIRST);
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev  NULLS FIRST;
 DROP INDEX skip_scan_idx_dev_nulls_first;
 -- multicolumn index with dev as leading column
 CREATE INDEX skip_scan_idx_dev_time_idx ON :TABLE(dev, time);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 DROP INDEX skip_scan_idx_dev_time_idx;
 -- multicolumn index with dev as non-leading column
 CREATE INDEX skip_scan_idx_time_dev_idx ON :TABLE(time, dev);
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE WHERE time = 100;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 GROUP BY dev;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time = 100 AND dev IS NOT NULL GROUP BY dev;
 DROP INDEX skip_scan_idx_time_dev_idx;
 -- hash index is not ordered so can't use skipscan
 CREATE INDEX skip_scan_idx_hash ON :TABLE USING hash(dev_name);
@@ -771,6 +803,8 @@ CREATE INDEX ON :TABLE(time,dev,val);
 :PREFIX SELECT count(DISTINCT dev), dev, tableoid::regclass, 'q2_11' FROM :TABLE GROUP BY dev, tableoid ORDER BY dev, tableoid;
 -- DISTINCT aggs grouped on their TEXT args
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_11' FROM :TABLE WHERE dev_name IS NOT NULL GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_2', NULL FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev_name;
@@ -878,7 +912,6 @@ RESET timescaledb.enable_skipscan_for_distinct_aggregates;
  ----------------------
 - off
 + on
- (1 row)
  
   count 
 -- run tests on compressed hypertable and diff results
@@ -902,6 +935,9 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC NULLS FIRST;
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev;
 -- NULLS FIRST doesn't match segmentby NULL direction
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev NULLS FIRST;
 -- multicolumn "segmentby = 'dev, dev_name'"
@@ -911,6 +947,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- multicolumn compressed index with dev as leading column
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 -- multicolumn compressed index with dev as leading column and with extra distinct column pinned
 -- TODO: should be able to apply SkipScan here, issue created: #7998
 :PREFIX SELECT count(DISTINCT dev), count(DISTINCT dev_name) FROM :TABLE WHERE dev_name = 'device_1';
@@ -982,6 +1020,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT count(DISTINCT length(dev_name)), 'q1_13' FROM :TABLE;
 -- DISTINCT aggs grouped on their TEXT args
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_11' FROM :TABLE WHERE dev_name IS NOT NULL GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_2', NULL FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev_name;
@@ -1099,6 +1139,9 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC NULLS FIRST;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC NULLS FIRST;
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev;
 -- NULLS FIRST doesn't match segmentby NULL direction
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev NULLS FIRST;
 -- multicolumn "segmentby = 'dev, dev_name'"
@@ -1108,6 +1151,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 -- multicolumn compressed index with dev as leading column
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE dev IS NOT NULL GROUP BY dev ORDER BY dev DESC;
 -- multicolumn compressed index with dev as leading column and with extra distinct column pinned
 -- TODO: should be able to apply SkipScan here, issue created: #7998
 :PREFIX SELECT count(DISTINCT dev), count(DISTINCT dev_name) FROM :TABLE WHERE dev_name = 'device_1';
@@ -1179,6 +1224,8 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htc') ch;
 :PREFIX SELECT count(DISTINCT length(dev_name)), 'q1_13' FROM :TABLE;
 -- DISTINCT aggs grouped on their TEXT args
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_1' FROM :TABLE GROUP BY dev_name;
+-- Test not-NULL mode
+:PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_11' FROM :TABLE WHERE dev_name IS NOT NULL GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_2', NULL FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_3', length(md5(now()::text)) FROM :TABLE GROUP BY dev_name;
 :PREFIX SELECT count(DISTINCT dev_name), dev_name, 'q3_4', length(md5(random()::text)) FROM :TABLE GROUP BY dev_name;
@@ -1288,7 +1335,6 @@ RESET timescaledb.enable_compressed_skipscan;
  ----------------------------
 - off
 + on
- (1 row)
  
               compress_chunk             
 -- run tests on compressed hypertable with different layouts of compressed chunks
@@ -1304,10 +1350,6 @@ SELECT format('include/%s_dagg_load_comp_query.sql', :'TEST_BASE_NAME') AS "TEST
 SELECT current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
 -- To avoid ambiguity in test EXPLAIN outputs due to mixing of chunk plans with no SkipScan
 SET max_parallel_workers_per_gather = 0;
--- To avoid choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
--- as cost of scanning and sorting a small dataset can be less than scanning an index
--- TODO: address an issue of not preserving IndexPaths under DecompressChunks in "add_path"
-SET enable_seqscan = false;
 -- Run SkipScan queries on the provided compression layout
 -- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
 -- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
@@ -1341,9 +1383,11 @@ SET enable_seqscan = false;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev LIMIT 3;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC LIMIT 3;
 \qecho range queries on :TABLE
+set enable_seqscan to off;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time BETWEEN 100 AND 300 GROUP BY dev;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time < 200 GROUP BY dev;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time > 800 GROUP BY dev;
+reset enable_seqscan;
 -- Various tests for "segmentby = 'dev'"
 ---------------------------------------
 \qecho SUBSELECTS on :TABLE
@@ -1353,6 +1397,12 @@ SET enable_seqscan = false;
 \qecho ORDER BY
 :PREFIX SELECT c, dev, 'q5_1' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev ORDER BY dev) a;
 :PREFIX SELECT c, dev, 'q5_2' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev ORDER BY dev DESC) a;
+-- Force not choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
+-- as cost of scanning and sorting a small dataset can be less than scanning an index, including startup cost.
+-- After the fix in #8056 we take startup costs into account,
+-- but even startup costs for scanning and sorting can be smaller for seqscan if we also have a filter on the index columns.
+-- So for below queries with filters on "dev" we still need to disable SeqScan to choose IndexScan+SkipScan.
+SET enable_seqscan = false;
 \qecho WHERE CLAUSES
 :PREFIX SELECT c, dev, 'q6_1' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE WHERE dev > 5 GROUP BY dev) a;
 :PREFIX SELECT c, dev, 'q6_2' FROM (SELECT sum(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev HAVING sum(DISTINCT dev)>2) a;
@@ -1414,10 +1464,6 @@ SET timescaledb.enable_compressed_skipscan TO false;
 SELECT current_setting('timescaledb.enable_compressed_skipscan') AS enable_compressed_skipscan;
 -- To avoid ambiguity in test EXPLAIN outputs due to mixing of chunk plans with no SkipScan
 SET max_parallel_workers_per_gather = 0;
--- To avoid choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
--- as cost of scanning and sorting a small dataset can be less than scanning an index
--- TODO: address an issue of not preserving IndexPaths under DecompressChunks in "add_path"
-SET enable_seqscan = false;
 -- Run SkipScan queries on the provided compression layout
 -- compressed index on "segmentby='dev'" has default "dev ASC, NULLS LAST" sort order
 -- SkipScan used when sort order on distinct column "dev" matches "segmentby" sort order
@@ -1451,9 +1497,11 @@ SET enable_seqscan = false;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev LIMIT 3;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE GROUP BY dev ORDER BY dev DESC LIMIT 3;
 \qecho range queries on :TABLE
+set enable_seqscan to off;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time BETWEEN 100 AND 300 GROUP BY dev;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time < 200 GROUP BY dev;
 :PREFIX SELECT count(DISTINCT dev), dev FROM :TABLE WHERE time > 800 GROUP BY dev;
+reset enable_seqscan;
 -- Various tests for "segmentby = 'dev'"
 ---------------------------------------
 \qecho SUBSELECTS on :TABLE
@@ -1463,6 +1511,12 @@ SET enable_seqscan = false;
 \qecho ORDER BY
 :PREFIX SELECT c, dev, 'q5_1' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev ORDER BY dev) a;
 :PREFIX SELECT c, dev, 'q5_2' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev ORDER BY dev DESC) a;
+-- Force not choosing SeqScan under DecompressChunks before SkipScan can evaluate it,
+-- as cost of scanning and sorting a small dataset can be less than scanning an index, including startup cost.
+-- After the fix in #8056 we take startup costs into account,
+-- but even startup costs for scanning and sorting can be smaller for seqscan if we also have a filter on the index columns.
+-- So for below queries with filters on "dev" we still need to disable SeqScan to choose IndexScan+SkipScan.
+SET enable_seqscan = false;
 \qecho WHERE CLAUSES
 :PREFIX SELECT c, dev, 'q6_1' FROM (SELECT count(DISTINCT dev) as c, dev FROM :TABLE WHERE dev > 5 GROUP BY dev) a;
 :PREFIX SELECT c, dev, 'q6_2' FROM (SELECT sum(DISTINCT dev) as c, dev FROM :TABLE GROUP BY dev HAVING sum(DISTINCT dev)>2) a;
@@ -1524,6 +1578,5 @@ RESET timescaledb.enable_compressed_skipscan;
  ----------------------------
 - off
 + on
- (1 row)
  
   count 

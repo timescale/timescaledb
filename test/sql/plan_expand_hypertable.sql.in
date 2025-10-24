@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-\set PREFIX 'EXPLAIN (costs off) '
+\set PREFIX 'EXPLAIN (buffers off, costs off) '
 \ir include/plan_expand_hypertable_load.sql
 \ir include/plan_expand_hypertable_query.sql
 
@@ -30,7 +30,7 @@ SET timescaledb.enable_optimizations TO false;
 :DIFF_CMD
 \set ECHO queries
 
-\set PREFIX 'EXPLAIN (costs off)'
+\set PREFIX 'EXPLAIN (buffers off, costs off)'
 RESET timescaledb.enable_optimizations;
 
 -- test enable_qual_propagation GUC

@@ -3,23 +3,26 @@ set(TEST_FILES_SHARED
     chunkwise_agg_gather_sort.sql
     classify_relation.sql
     compat.sql
+    compress_bloom_sparse_compat.sql
     compress_unique_index.sql
     compression_dml.sql
     compression_nulls_not_distinct.sql
-    constify_timestamptz_op_interval.sql
     constraint_aware_append.sql
-    constraint_exclusion_prepared.sql
     decompress_join.sql
     decompress_placeholdervar.sql
     decompress_tracking.sql
+    gapfill_bug.sql
     generated_columns.sql
     memoize.sql
     security_barrier.sql
-    space_constraint.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
-    gapfill.sql.in ordered_append.sql.in ordered_append_join.sql.in
+    gapfill.sql.in
+    ordered_append_join.sql.in
+    constify_timestamptz_op_interval.sql.in
+    constraint_exclusion_prepared.sql.in
+    space_constraint.sql.in
     transparent_decompress_chunk.sql.in)
 
 set(SOLO_TESTS merge_dml.sql)
@@ -27,7 +30,7 @@ set(SOLO_TESTS merge_dml.sql)
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED extension.sql timestamp_limits.sql
        with_clause_parser.sql)
-  list(APPEND TEST_FILES_SHARED constify_now.sql)
+  list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Regression tests that vary with PostgreSQL version. Generated test files are

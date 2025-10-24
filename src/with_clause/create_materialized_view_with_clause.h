@@ -14,12 +14,12 @@ typedef enum CreateMaterializedViewFlags
 	CreateMaterializedViewFlagContinuous = 0,
 	CreateMaterializedViewFlagCreateGroupIndexes,
 	CreateMaterializedViewFlagMaterializedOnly,
-	CreateMaterializedViewFlagCompress,
+	CreateMaterializedViewFlagColumnstore,
 	CreateMaterializedViewFlagFinalized,
 	CreateMaterializedViewFlagChunkTimeInterval,
-	CreateMaterializedViewFlagCompressSegmentBy,
-	CreateMaterializedViewFlagCompressOrderBy,
-	CreateMaterializedViewFlagCompressChunkTimeInterval
+	CreateMaterializedViewFlagSegmentBy,
+	CreateMaterializedViewFlagOrderBy,
+	CreateMaterializedViewFlagCompressChunkTimeInterval,
 } CreateMaterializedViewFlags;
 
 extern TSDLLEXPORT WithClauseResult *

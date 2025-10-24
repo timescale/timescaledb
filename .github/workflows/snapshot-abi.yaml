@@ -9,7 +9,7 @@ name: ABI Test Against Snapshot
     - cron: '0 20 * * *'
   push:
     branches:
-      - prerelease_test
+      - ?.*.x
       - trigger/snapshot-abi
   pull_request:
     paths: .github/workflows/snapshot-abi.yaml
@@ -22,6 +22,7 @@ jobs:
       pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg17_abi_min: ${{ steps.config.outputs.pg17_abi_min }}
+      pg18_abi_min: ${{ steps.config.outputs.pg18_abi_min }}
 
     steps:
     - name: Checkout source code
@@ -38,12 +39,14 @@ jobs:
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
-      PG_EXTENSIONS: postgres_fdw test_decoding pageinspect pgstattuple
+      PG_EXTENSIONS: postgres_fdw test_decoding
 
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 15, 16, 17 ]
+        pg: [ 15, 16, 17, 18 ]
+        ignores:
+          - 'net telemetry bgw_launcher'
         include:
           - pg: 15
             abi_min: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
@@ -51,6 +54,8 @@ jobs:
             abi_min: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
           - pg: 17
             abi_min: ${{ fromJson(needs.config.outputs.pg17_abi_min) }}
+          - pg: 18
+            abi_min: ${{ fromJson(needs.config.outputs.pg18_abi_min) }}
 
     steps:
 
@@ -136,7 +141,7 @@ jobs:
       id: regresscheck
       run: |
           set -o pipefail
-          make -k -C build_snapshot installcheck IGNORES=bgw_launcher | tee installcheck.log
+          make -k -C build_snapshot installcheck IGNORES="${{ matrix.ignores }}" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()

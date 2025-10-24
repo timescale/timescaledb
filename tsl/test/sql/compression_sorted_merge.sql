@@ -7,7 +7,7 @@
 -- still faster than sort.
 SET work_mem to '16MB';
 
-\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 
 CREATE TABLE test1 (
 time timestamptz NOT NULL,
@@ -75,6 +75,8 @@ ANALYZE test_with_defined_null;
 -- Tests based on ordering
 ------
 
+set timescaledb.debug_require_batch_sorted_merge to 'force';
+
 -- Should be optimized (implicit NULLS first)
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC;
@@ -82,10 +84,6 @@ SELECT * FROM test1 ORDER BY time DESC;
 -- Should be optimized
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST;
-
--- Should not be optimized (NULL order wrong)
-:PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS LAST;
 
 -- Should be optimized (implicit NULLS last)
 :PREFIX
@@ -95,10 +93,6 @@ SELECT * FROM test1 ORDER BY time ASC;
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
 
--- Should not be optimized (NULL order wrong)
-:PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
-
 -- Should be optimized
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
@@ -106,10 +100,6 @@ SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
 -- Should be optimized
 :PREFIX
 SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 ASC NULLS LAST;
-
--- Should not be optimized (wrong order for x4)
-:PREFIX
-SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST;
 
 -- Should be optimized (backward scan)
 :PREFIX
@@ -123,10 +113,6 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST;
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC NULLS FIRST;
 
--- Should not be optimized (wrong order for x4 in backward scan)
-:PREFIX
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
-
 -- Should be optimized
 :PREFIX
 SELECT * FROM test2 ORDER BY time ASC;
@@ -138,14 +124,6 @@ SELECT * FROM test2 ORDER BY time ASC, x3 DESC;
 -- Should be optimized
 :PREFIX
 SELECT * FROM test2 ORDER BY time ASC, x3 DESC, x4 DESC;
-
--- Should not be optimized (wrong order for x3)
-:PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC;
-
--- Should not be optimized (wrong order for x3)
-:PREFIX
-SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC;
 
 -- Should be optimized (backward scan)
 :PREFIX
@@ -159,14 +137,6 @@ SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST;
 :PREFIX
 SELECT * FROM test2 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 NULLS LAST;
 
--- Should not be optimized (wrong order for x3 in backward scan)
-:PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS FIRST;
-
--- Should not be optimized (wrong order for x3 in backward scan)
-:PREFIX
-SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS FIRST;
-
 -- Should be optimized
 :PREFIX
 SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
@@ -175,6 +145,39 @@ SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
 :PREFIX
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
 
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+
+-- Should not be optimized (wrong order for x3 in backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS FIRST, x4 NULLS FIRST;
+
+-- Should not be optimized (wrong order for x3 in backward scan)
+:PREFIX
+SELECT * FROM test2 ORDER BY time DESC NULLS LAST, x3 DESC NULLS LAST, x4 NULLS FIRST;
+
+-- Should not be optimized (NULL order wrong)
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS LAST;
+
+-- Should not be optimized (NULL order wrong)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
+
+-- Should not be optimized (wrong order for x4)
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC NULLS FIRST, x3 ASC NULLS LAST, x4 DESC NULLS FIRST;
+
+-- Should not be optimized (wrong order for x4 in backward scan)
+:PREFIX
+SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
+
+-- Should not be optimized (wrong order for x3)
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS LAST, x4 DESC;
+
+-- Should not be optimized (wrong order for x3)
+:PREFIX
+SELECT * FROM test2 ORDER BY time ASC, x3 ASC NULLS FIRST, x4 DESC;
 -- Should not be optimized
 :PREFIX
 SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
@@ -187,6 +190,8 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 ------
 -- Tests based on attributes
 ------
+
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 
 -- Should be optimized (some batches qualify by pushed down filter on _ts_meta_max_3)
 :PREFIX
@@ -208,6 +213,8 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x3;
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x3, x4, x3, x4;
 
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+
 -- Should not be optimized
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3;
@@ -216,27 +223,27 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3;
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4;
 
--- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
-SET enable_sort TO OFF;
-:PREFIX
-SELECT * FROM test1 ORDER BY time DESC;
-RESET enable_sort;
-
 ------
 -- Tests based on results
 ------
 
+set timescaledb.debug_require_batch_sorted_merge to 'force';
+
 -- Forward scan
 SELECT * FROM test1 ORDER BY time DESC;
-
--- Backward scan
-SELECT * FROM test1 ORDER BY time ASC NULLS FIRST;
 
 -- Forward scan
 SELECT * FROM test2 ORDER BY time ASC;
 
+set timescaledb.debug_require_batch_sorted_merge to 'force';
+
 -- Backward scan
-SELECT * FROM test2 ORDER BY time DESC NULLS LAST;
+SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
+
+-- Backward scan
+SELECT * FROM test2 ORDER BY time DESC NULLS FIRST;
+
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 
 -- With selection on compressed column (value larger as max value for all batches, so no batch has to be opened)
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC;
@@ -268,15 +275,17 @@ SELECT x3,time FROM test1 ORDER BY time DESC;
 SELECT time,x3 FROM test1 ORDER BY time DESC;
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
 
 -- Test with projection and constants
-EXPLAIN (verbose, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
+EXPLAIN (verbose, buffers off, costs off) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
 SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
 
 -- With projection and selection on compressed column (value smaller as max value for some batches, so batches are opened and filter has to be applied)
 SELECT x4 FROM test1 WHERE x4 > 2 ORDER BY time DESC;
+
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 
 -- Aggregation with count
 SELECT count(*) FROM test1;
@@ -284,6 +293,7 @@ SELECT count(*) FROM test1;
 -- Test with default values
 ALTER TABLE test1 ADD COLUMN c1 int;
 ALTER TABLE test1 ADD COLUMN c2 int NOT NULL DEFAULT 42;
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 SELECT * FROM test1 ORDER BY time DESC;
 
 -- Recompress
@@ -324,6 +334,8 @@ SELECT 1 as one, 2 as two, 3 as three, x2, x1, c2, time FROM test1 ORDER BY time
 -- Test with null values
 SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
+
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
 SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
 SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 
@@ -332,6 +344,7 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
 ------
 
 -- Should be optimized
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS LAST;
 
@@ -351,6 +364,8 @@ ROLLBACK;
 ------
 -- Tests on a larger relation
 ------
+
+set timescaledb.debug_require_batch_sorted_merge to 'allow';
 
 CREATE TABLE sensor_data (
 time timestamptz NOT NULL,
@@ -377,6 +392,8 @@ ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_segmentb
 SELECT add_compression_policy('sensor_data','1 minute'::INTERVAL);
 
 SELECT compress_chunk(i) FROM show_chunks('sensor_data') i;
+
+VACUUM ANALYZE sensor_data;
 
 -- Ensure the optimization is used for queries on this table
 :PREFIX
@@ -453,14 +470,14 @@ ALTER TABLE test_costs SET (timescaledb.compress, timescaledb.compress_segmentby
 -- Create 100 segments
 INSERT INTO test_costs
 SELECT
-'2000-01-01 02:01:00-00'::timestamptz AS time,
+time,
 segment_by,
 random() as x1
 FROM
-generate_series(1, 100, 1) AS g2(segment_by)
+generate_series(1, 100, 1) AS g2(segment_by),
+generate_series('2000-01-01 02:01:00-00', '2000-01-06 00:00:00+00', interval '1 hour') time
 ORDER BY time;
 
-SELECT add_compression_policy('test_costs','1 minute'::INTERVAL);
 
 SELECT compress_chunk(i) FROM show_chunks('test_costs') i;
 ANALYZE test_costs;
@@ -478,11 +495,12 @@ SELECT decompress_chunk(i) FROM show_chunks('test_costs') i;
 -- Add 900 segments (1000 segments total)
 INSERT INTO test_costs
 SELECT
-'2000-01-01 02:01:00-00'::timestamptz AS time,
+time,
 segment_by,
 random() as x1
 FROM
-generate_series(100, 1000, 1) AS g2(segment_by)
+generate_series(100, 1000, 1) AS g2(segment_by),
+generate_series('2000-01-01 02:01:00-00', '2000-01-06 00:00:00+00', interval '1 hour') time
 ORDER BY time;
 
 -- Recompress chunk
@@ -493,10 +511,14 @@ ANALYZE test_costs;
 SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS s;
 
 -- Test query plan (should not be optimized due to 1000 different segments)
+set timescaledb.debug_require_batch_sorted_merge to 'forbid';
+
 :PREFIX
 SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
 
 -- Test query plan with predicate (query should be optimized due to ~100 segments)
+set timescaledb.debug_require_batch_sorted_merge to 'require';
+
 :PREFIX
 SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_by < 999 ORDER BY time DESC;
 
@@ -525,6 +547,8 @@ SELECT chunk_schema || '.' || chunk_name AS "chunk_table_bugtab"
 SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
 
 ANALYZE bugtab;
+
+set timescaledb.debug_require_batch_sorted_merge to 'force';
 
 :PREFIX
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
@@ -636,3 +660,13 @@ VALUES  (109288, '2023-05-25 23:12:13.000000', 130, 14499, 13, 0.132165698840012
 SELECT compress_chunk(show_chunks('test', older_than => INTERVAL '1 week'), true);
 
 SELECT t.dttm FROM test t WHERE t.dttm > '2023-05-25T14:23:12' ORDER BY t.dttm;
+
+-- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
+SET enable_sort TO OFF;
+set timescaledb.debug_require_batch_sorted_merge = 'require';
+:PREFIX
+SELECT t.dttm FROM test t ORDER BY t.dttm LIMIT 1;
+RESET enable_sort;
+
+reset timescaledb.debug_require_batch_sorted_merge;
+

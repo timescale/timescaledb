@@ -1,0 +1,1 @@
+Fixes: #8704 Fix direct DELETE on compressed chunk

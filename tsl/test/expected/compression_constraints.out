@@ -6,7 +6,6 @@ SELECT create_hypertable('metrics','time');
   create_hypertable   
 ----------------------
  (1,public,metrics,t)
-(1 row)
 
 ALTER TABLE metrics SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
 -- test all variations without data
@@ -34,7 +33,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
  count 
 -------
      1
-(1 row)
 
 \set ON_ERROR_STOP 0
 BEGIN;
@@ -95,7 +93,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
  count 
 -------
      1
-(1 row)
 
 \set ON_ERROR_STOP 0
 ALTER TABLE metrics ADD CONSTRAINT metrics_pk PRIMARY KEY(time);
@@ -118,7 +115,6 @@ SELECT table_name FROM create_hypertable('dist_null','time',chunk_time_interval:
  table_name 
 ------------
  dist_null
-(1 row)
 
 ALTER TABLE dist_null SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
 -- test behaviour without compression
@@ -140,7 +136,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('dist_null') ch;
  count 
 -------
      1
-(1 row)
 
 CREATE UNIQUE INDEX dist_null_idx ON dist_null(time,device) NULLS DISTINCT;
 DROP INDEX dist_null_idx;
@@ -156,7 +151,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('dist_null') ch;
  count 
 -------
      1
-(1 row)
 
 INSERT INTO dist_null SELECT '2025-01-01', NULL, 0.1;
 CREATE UNIQUE INDEX dist_null_idx ON dist_null(time,device) NULLS DISTINCT;
@@ -198,7 +192,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('dist_null') ch;
  count 
 -------
      1
-(1 row)
 
 \set ON_ERROR_STOP 0
 CREATE UNIQUE INDEX dist_null_idx ON dist_null(time,device) NULLS DISTINCT;
@@ -215,7 +208,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('dist_null') ch;
  count 
 -------
      1
-(1 row)
 
 \set ON_ERROR_STOP 0
 CREATE UNIQUE INDEX dist_null_idx ON dist_null(time,device) NULLS NOT DISTINCT;
@@ -231,7 +223,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('dist_null') ch;
  count 
 -------
      1
-(1 row)
 
 INSERT INTO dist_null SELECT '2025-01-02', 'd', 0.1;
 \set ON_ERROR_STOP 0
@@ -248,7 +239,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('dist_null') ch;
  count 
 -------
      1
-(1 row)
 
 INSERT INTO dist_null SELECT '2025-01-02', 'd', 0.1;
 \set ON_ERROR_STOP 0
@@ -263,7 +253,6 @@ SELECT create_hypertable('metrics','time');
   create_hypertable   
 ----------------------
  (5,public,metrics,t)
-(1 row)
 
 INSERT INTO metrics SELECT '2025-01-01','d1',0.1;
 INSERT INTO metrics SELECT '2025-01-01','d2',0.1;
@@ -300,7 +289,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
  count 
 -------
      1
-(1 row)
 
 \set ON_ERROR_STOP 0
 ALTER TABLE metrics ADD CONSTRAINT device_fk FOREIGN KEY(device) REFERENCES device(device);
@@ -335,7 +323,6 @@ SELECT create_hypertable('metrics','time');
   create_hypertable   
 ----------------------
  (7,public,metrics,t)
-(1 row)
 
 ALTER TABLE metrics SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
 INSERT INTO metrics SELECT '2025-01-01','d1',1;
@@ -359,7 +346,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
  count 
 -------
      1
-(1 row)
 
 \set ON_ERROR_STOP 0
 ALTER TABLE metrics ADD CONSTRAINT metrics_check CHECK (value > 9000);
@@ -383,7 +369,6 @@ SELECT create_hypertable('metrics','time');
   create_hypertable   
 ----------------------
  (9,public,metrics,t)
-(1 row)
 
 ALTER TABLE metrics SET (tsdb.compress, tsdb.compress_segmentby='device', tsdb.compress_orderby='time');
 INSERT INTO metrics SELECT '2025-01-01','d1',1;
@@ -405,7 +390,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
  count 
 -------
      1
-(1 row)
 
 -- should fail in validation since the new column will be NULL for existing tuples
 \set ON_ERROR_STOP 0
@@ -419,5 +403,33 @@ INSERT INTO metrics SELECT '2025-01-01','d1',1,23;
 \set ON_ERROR_STOP 0
 INSERT INTO metrics SELECT '2025-01-01','d1',1,42;
 ERROR:  new row for relation "_hyper_9_32_chunk" violates check constraint "metrics_c1_check"
+\set ON_ERROR_STOP 1
+ROLLBACK;
+-- test unique expression indexes
+BEGIN;
+-- should succeed since no conflict
+CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
+ROLLBACK;
+BEGIN;
+INSERT INTO metrics SELECT '2025-01-01','d1',1;
+-- partially compressed chunk
+-- should fail because there is conflict
+\set ON_ERROR_STOP 0
+CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
+ERROR:  duplicate key value violates unique constraint
+\set ON_ERROR_STOP 1
+ROLLBACK;
+BEGIN;
+INSERT INTO metrics SELECT '2025-01-01','d1',1;
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+ count 
+-------
+     1
+
+-- fully compressed chunk
+-- should fail because there is conflict
+\set ON_ERROR_STOP 0
+CREATE UNIQUE INDEX metrics_unique ON metrics(time, device, md5(value::text));
+ERROR:  duplicate key value violates unique constraint
 \set ON_ERROR_STOP 1
 ROLLBACK;

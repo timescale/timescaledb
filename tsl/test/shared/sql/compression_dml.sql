@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set ANALYZE 'EXPLAIN (analyze, costs off, timing off, summary off)'
+\set ANALYZE 'EXPLAIN (analyze, buffers off, costs off, timing off, summary off)'
 
 -- test constraint exclusion with prepared statements and generic plans
 CREATE TABLE i3719 (time timestamptz NOT NULL,data text);
@@ -83,7 +83,7 @@ SELECT count(compress_chunk(:'chunk_table'));
 -- insert a row into first compressed chunk
 INSERT INTO mytab SELECT '2022-10-07 05:30:10+05:30'::timestamp with time zone, 3, 3;
 -- should not crash
-EXPLAIN (costs off) SELECT * FROM :chunk_table;
+EXPLAIN (buffers off, costs off) SELECT * FROM :chunk_table;
 DROP TABLE mytab CASCADE;
 
 -- test varchar segmentby
@@ -111,19 +111,19 @@ SELECT count(compress_chunk(c)) FROM show_chunks('comp_seg_varchar') c;
 
 
 -- all tuples should come from compressed chunks
-EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+EXPLAIN (analyze,buffers off, costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 
 INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', 'test', 'test', '{}'::jsonb)
 ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 
 -- no tuples should be moved into uncompressed
-EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+EXPLAIN (analyze,buffers off, costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 
 INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', '1', '2', '{}'::jsonb)
 ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 
 -- 1 batch should be moved into uncompressed
-EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+EXPLAIN (analyze,buffers off, costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 
 DROP TABLE comp_seg_varchar;
 
@@ -287,6 +287,7 @@ BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1'; ROLLBACK;
 DROP TRIGGER direct_delete_trigger ON direct_delete;
 
 DROP TABLE direct_delete;
+DROP FUNCTION trigger_function;
 
 -- test DML on metadata columns
 CREATE TABLE compress_dml(time timestamptz NOT NULL, device text, reading text, value float);
@@ -306,7 +307,7 @@ INSERT INTO compress_dml VALUES
 ('2025-01-01','d6','r2',0.01),
 ('2025-01-01','d6',NULL,0.01);
 
-SELECT compress_chunk(show_chunks('compress_dml'));
+SELECT count(compress_chunk(ch)) FROM show_chunks('compress_dml') ch;
 
 BEGIN;
 :ANALYZE DELETE FROM compress_dml WHERE reading = 'r1';
@@ -350,3 +351,46 @@ ROLLBACK;
 
 DROP TABLE compress_dml;
 
+-- Test issue #8241: invalidate generic plans for prepared statements
+-- when partial chunk is created from compressed chunk via UPDATE/DELETE
+CREATE TABLE t8241(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('t8241', 'time');
+
+INSERT INTO t8241(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO t8241(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+
+ALTER TABLE t8241 SET(timescaledb.compress, timescaledb.compress_segmentby='device');
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('t8241') ch;
+
+PREPARE prep AS SELECT * FROM t8241;
+-- Should only see compressed chunk in the plan, this generic plan is now cached
+EXECUTE prep;
+EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
+
+-- Test Update
+BEGIN;
+-- This will add decompressed row to the compressed chunk
+UPDATE t8241 SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+-- generic plan created for compressed chunk should be invalidated even though we didn't commit
+-- we should get correct result and the plan should have both compressed and decompressed parts
+EXECUTE prep;
+EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
+ROLLBACK;
+
+-- Should see the compressed chunk only
+EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
+
+-- Test Insert
+BEGIN;
+-- This will add decompressed row to the compressed chunk
+INSERT INTO t8241(time, device, value) VALUES ('2020-01-01 00:30:00', 'd1', 1.0);
+-- generic plan created for compressed chunk should be invalidated even though we didn't commit
+-- we should get correct result and the plan should have both compressed and decompressed parts
+EXECUTE prep;
+EXPLAIN (buffers off, costs off, timing off, summary off) EXECUTE prep;
+ROLLBACK;
+
+DEALLOCATE prep;
+DROP TABLE t8241 cascade;
+RESET plan_cache_mode;

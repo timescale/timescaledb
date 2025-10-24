@@ -21,10 +21,12 @@ alter table dvagg add column c int default 7;
 insert into dvagg select x, x % 5, 11 from generate_series(1001, 1999) x;
 select compress_chunk(show_chunks('dvagg'));
 
+vacuum analyze dvagg;
+
 
 -- Just the most basic vectorized aggregation query on a table with default
 -- compressed column.
-explain (costs off) select sum(c) from dvagg;
+explain (buffers off, costs off) select sum(c) from dvagg;
 select sum(c) from dvagg;
 
 
@@ -46,17 +48,17 @@ select count(*) from dvagg where b in (0, 1);
 select count(*) from dvagg where b in (0, 1, 3);
 select count(*) from dvagg where b > 10;
 
-explain (costs off) select sum(c) from dvagg where b in (0, 1, 3);
+explain (buffers off, costs off) select sum(c) from dvagg where b in (0, 1, 3);
 
 select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
 
-explain (costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
+explain (buffers off, costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
 
 reset timescaledb.enable_vectorized_aggregation;
 
 
 -- The runtime chunk exclusion should work.
-explain (costs off) select sum(c) from dvagg where a < stable_abs(1000);
+explain (buffers off, costs off) select sum(c) from dvagg where a < stable_abs(1000);
 
 -- The case with HAVING can still be vectorized because it is applied after
 -- final aggregation.
@@ -66,7 +68,7 @@ select sum(c) from dvagg having sum(c) > 0;
 -- Some negative cases.
 set timescaledb.debug_require_vector_agg to 'forbid';
 
-explain (costs off) select sum(c) from dvagg group by grouping sets ((), (a));
+explain (buffers off, costs off) select sum(c) from dvagg group by grouping sets ((), (a));
 
 
 

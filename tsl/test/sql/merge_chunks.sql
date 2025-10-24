@@ -6,6 +6,11 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE ACCESS METHOD testam TYPE TABLE HANDLER heap_tableam_handler;
 set role :ROLE_DEFAULT_PERM_USER;
+-- A limitation in the tuple routing cache can lead to routing errors
+-- when multi-dimensional time partitions are not aligned. Therefore,
+-- multi-dimensional merges are disabled by default until the routing
+-- is fixed. However, allow it in this test.
+set timescaledb.enable_merge_multidim_chunks = true;
 
 ------------------
 -- Helper views --
@@ -178,7 +183,6 @@ select * from mergeme;
 rollback;
 
 -- Test mixing hypercore TAM with compression without TAM
-alter table _timescaledb_internal._hyper_1_1_chunk set access method hypercore;
 select * from chunk_info;
 
 begin;
@@ -193,7 +197,6 @@ rollback;
 select * from chunk_info;
 
 -- Only Hypercore TAM and non-compressed chunks
-alter table _timescaledb_internal._hyper_1_3_chunk set access method hypercore;
 
 begin;
 select sum(temp) from mergeme;
@@ -206,7 +209,7 @@ select sum(temp) from mergeme;
 set timescaledb.enable_columnarscan = false;
 set enable_seqscan = false;
 analyze mergeme;
-explain (costs off)
+explain (buffers off, costs off)
 select * from mergeme where device = 1;
 select * from mergeme where device = 1;
 select * from _timescaledb_internal._hyper_1_1_chunk where device = 1;
@@ -290,7 +293,6 @@ from generate_series('2024-01-01'::timestamptz, '2024-01-04', '0.5s') t;
 
 -- Compress two chunks, one using access method
 select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-alter table _timescaledb_internal._hyper_1_2_chunk set access method hypercore;
 
 -- Show partitions before merge
 select * from partitions;
@@ -339,6 +341,13 @@ select
     round(ccs.numrows_frozen_immediately::numeric / :total_numrows_frozen_immediately, 1) as numrows_frozen_immediately_fraction
 from _timescaledb_catalog.compression_chunk_size ccs
 order by chunk_id;
+
+\set ON_ERROR_STOP 0
+-- Test blocked multi-dimensional merges
+set timescaledb.enable_merge_multidim_chunks = false;
+call merge_chunks(ARRAY['_timescaledb_internal._hyper_1_1_chunk', '_timescaledb_internal._hyper_1_4_chunk','_timescaledb_internal._hyper_1_5_chunk', '_timescaledb_internal._hyper_1_12_chunk']);
+set timescaledb.enable_merge_multidim_chunks = true;
+\set ON_ERROR_STOP 1
 
 --
 -- Merge all chunks until only 1 remains.  Also check that metadata is

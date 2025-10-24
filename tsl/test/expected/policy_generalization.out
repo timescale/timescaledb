@@ -8,18 +8,15 @@ DROP TABLE IF EXISTS test;
 NOTICE:  table "test" does not exist, skipping
 CREATE TABLE test(time INTEGER, device INTEGER, temp FLOAT);
 SELECT create_hypertable('test', 'time', chunk_time_interval => 10);
-NOTICE:  adding not-null constraint to column "time"
  create_hypertable 
 -------------------
  (1,public,test,t)
-(1 row)
 
 INSERT INTO test SELECT i, i %10, 0.10 FROM generate_series(1, 100, 1) i;
 select count(*) from timescaledb_information.chunks where hypertable_name='test';
  count 
 -------
     11
-(1 row)
 
 -- Validate that show_chunks/drop chunks doesn't work with existing arguments
 \set ON_ERROR_STOP 0
@@ -34,44 +31,37 @@ SELECT count(*) from show_chunks('test', created_after => INTERVAL '1 hour');
  count 
 -------
     11
-(1 row)
 
 SELECT count(*) from show_chunks('test', created_before => now());
  count 
 -------
     11
-(1 row)
 
 SELECT count(*) from drop_chunks('test', created_before => now());
  count 
 -------
     11
-(1 row)
 
 select count(*) from timescaledb_information.chunks where hypertable_name='test';
  count 
 -------
      0
-(1 row)
 
 INSERT INTO test SELECT i, i %10, 0.10 FROM generate_series(1, 100, 1) i;
 select count(*) from timescaledb_information.chunks where hypertable_name='test';
  count 
 -------
     11
-(1 row)
 
 SELECT count(*) from drop_chunks('test', created_after => INTERVAL '1 hour');
  count 
 -------
     11
-(1 row)
 
 select count(*) from timescaledb_information.chunks where hypertable_name='test';
  count 
 -------
      0
-(1 row)
 
 -- retention policy
 INSERT INTO test SELECT i, i %10, 0.10 FROM generate_series(1, 100, 1) i;
@@ -95,20 +85,17 @@ select count(*) from timescaledb_information.chunks where hypertable_name='test'
  count 
 -------
     11
-(1 row)
 
 SELECT pg_sleep(3);
  pg_sleep 
 ----------
  
-(1 row)
 
 CALL run_job(:drop_chunks_job_id);
 select count(*) from timescaledb_information.chunks where hypertable_name='test';
  count 
 -------
      0
-(1 row)
 
 -- check for WARNING/NOTICE if policy already exists
 SELECT add_retention_policy('test', drop_created_before => INTERVAL '2 seconds',
@@ -117,7 +104,6 @@ NOTICE:  retention policy already exists for hypertable "test", skipping
  add_retention_policy 
 ----------------------
                    -1
-(1 row)
 
 SELECT add_retention_policy('test', drop_created_before => INTERVAL '20 seconds',
     if_not_exists => true);
@@ -125,26 +111,20 @@ WARNING:  retention policy already exists for hypertable "test"
  add_retention_policy 
 ----------------------
                    -1
-(1 row)
 
 SELECT remove_retention_policy('test');
  remove_retention_policy 
 -------------------------
  
-(1 row)
 
 -- compression policy
 ALTER TABLE test SET (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test" is set to ""
-NOTICE:  default order by for hypertable "test" is set to ""time" DESC"
 INSERT INTO test SELECT i, i %10, 0.10 FROM generate_series(1, 100, 1) i;
 -- Chunk compression status
 SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_stats;
  compression_status 
 --------------------
  Uncompressed
-(1 row)
 
 -- Compression policy
 SELECT add_compression_policy('test', compress_created_before => INTERVAL '1 hour') AS compress_chunks_job_id \gset
@@ -152,7 +132,6 @@ SELECT pg_sleep(3);
  pg_sleep 
 ----------
  
-(1 row)
 
 CALL run_job(:compress_chunks_job_id);
 -- Chunk compression status
@@ -160,13 +139,11 @@ SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_s
  compression_status 
 --------------------
  Uncompressed
-(1 row)
 
 SELECT remove_compression_policy('test');
  remove_compression_policy 
 ---------------------------
  t
-(1 row)
 
 SELECT add_compression_policy('test', compress_created_before => INTERVAL '2 seconds') AS compress_chunks_job_id \gset
 CALL run_job(:compress_chunks_job_id);
@@ -175,7 +152,6 @@ SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_s
  compression_status 
 --------------------
  Compressed
-(1 row)
 
 -- check for WARNING/NOTICE if policy already exists
 SELECT add_compression_policy('test', compress_created_before => INTERVAL '2 seconds',
@@ -184,7 +160,6 @@ NOTICE:  columnstore policy already exists for hypertable "test", skipping
  add_compression_policy 
 ------------------------
                      -1
-(1 row)
 
 SELECT add_compression_policy('test', compress_created_before => INTERVAL '20 seconds',
     if_not_exists => true);
@@ -192,12 +167,10 @@ WARNING:  columnstore policy already exists for hypertable "test"
  add_compression_policy 
 ------------------------
                      -1
-(1 row)
 
 SELECT remove_compression_policy('test');
  remove_compression_policy 
 ---------------------------
  t
-(1 row)
 
 DROP TABLE test;

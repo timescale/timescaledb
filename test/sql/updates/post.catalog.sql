@@ -2,13 +2,22 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+SELECT NOT (extversion >= '2.19.0' AND extversion <= '2.20.3') AS has_fixed_compression_algorithms
+  FROM pg_extension
+ WHERE extname = 'timescaledb' \gset
+
 \d+ _timescaledb_catalog.hypertable
 \d+ _timescaledb_catalog.chunk
 \d+ _timescaledb_catalog.dimension
 \d+ _timescaledb_catalog.dimension_slice
 \d+ _timescaledb_catalog.chunk_constraint
-\d+ _timescaledb_catalog.chunk_index
 \d+ _timescaledb_catalog.tablespace
+
+-- since we forgot to add bool and null compression with 2.19.0 to the preinstall
+-- script fresh installations of 2.19+ won't have these compression algorithms
+\if :has_fixed_compression_algorithms
+SELECT * from _timescaledb_catalog.compression_algorithm algo ORDER BY algo;
+\endif
 
 SELECT nspname AS Schema,
        relname AS Name,
@@ -116,8 +125,6 @@ JOIN _timescaledb_catalog.chunk ON chunk.id = chunk_constraint.chunk_id
 WHERE NOT chunk.dropped
 ORDER BY chunk_constraint.chunk_id, chunk_constraint.dimension_slice_id, chunk_constraint.constraint_name;
 
-SELECT index_name FROM _timescaledb_catalog.chunk_index ORDER BY index_name;
-
 -- Show attnum of all regclass objects belonging to our extension
 -- if those are not the same between fresh install/update our update scripts are broken
 SELECT
@@ -135,3 +142,5 @@ SELECT conrelid::regclass::text, conname, pg_get_constraintdef(oid)
 FROM pg_constraint
 WHERE conrelid::regclass::text ~ '^_timescaledb_'
 ORDER BY 1, 2, 3;
+
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;

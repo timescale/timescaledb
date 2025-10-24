@@ -99,13 +99,17 @@ compression_hypertable_create(Hypertable *ht, Oid owner, Oid tablespace_oid)
 }
 
 Oid
-compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid tablespace_oid)
+compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid tablespace_oid,
+						 CompressionSettings *settings)
 {
 	ObjectAddress tbladdress;
 	CatalogSecurityContext sec_ctx;
 	Datum toast_options;
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
-	CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
+#if PG18_LT
+	char *validnsps[] = HEAP_RELOPT_NAMESPACES;
+#else
+	const char *const validnsps[] = HEAP_RELOPT_NAMESPACES;
+#endif
 
 	Oid owner = ts_rel_get_owner(chunk->hypertable_relid);
 
@@ -131,6 +135,9 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 	compress_rel = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
 
 	create->relation = compress_rel;
+	/* Inherit the persistence (LOGGED or UNLOGGED) from the uncompressed chunk */
+	create->relation->relpersistence = get_rel_persistence(src_chunk->table_id);
+
 	tbladdress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
 	CommandCounterIncrement();
 	chunk->table_id = tbladdress.objectId;

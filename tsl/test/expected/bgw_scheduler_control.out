@@ -20,7 +20,6 @@ SELECT ts_bgw_params_create();
  ts_bgw_params_create 
 ----------------------
  
-(1 row)
 
 -- Test scheduler automatically writes to this table by name, so
 -- create it.
@@ -44,21 +43,18 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 --
 -- We change user to make sure that granting SET and ALTER SYSTEM
 -- privileges to the default user actually works.
---
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'DEBUG1';
 SELECT pg_reload_conf();
  pg_reload_conf 
 ----------------
  t
-(1 row)
 
 RESET ROLE;
 SELECT ts_bgw_params_reset_time(0, false);
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 INSERT INTO _timescaledb_config.bgw_job(
        application_name,
@@ -87,7 +83,6 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
 
 SELECT * FROM cleaned_bgw_log;
  msg_no | application_name |                                   msg                                   
@@ -100,39 +95,83 @@ SELECT * FROM cleaned_bgw_log;
       0 | test_job_1b      | Execute job 1
       1 | test_job_1b      | job 1000 (test_job_1b) exiting with success: execution time (RANDOM) ms
       5 | DB Scheduler     | scheduler for database (RANDOM) exiting with exit status 0
-(8 rows)
 
-ALTER DATABASE :TEST_DBNAME RESET timescaledb.bgw_log_level;
+-- We test that we can set it to FATAL, which removed LOG level
+-- entries from the log.
+ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'FATAL';
 SELECT pg_reload_conf();
  pg_reload_conf 
 ----------------
  t
-(1 row)
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
 SELECT ts_bgw_params_reset_time(0, false);
  ts_bgw_params_reset_time 
 --------------------------
  
-(1 row)
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
  
-(1 row)
+
+SELECT * FROM cleaned_bgw_log;
+ msg_no | application_name | msg 
+--------+------------------+-----
+
+-- We test that we can set it to ERROR.
+ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'ERROR';
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+SELECT ts_bgw_params_reset_time(0, false);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+
+SELECT * FROM cleaned_bgw_log;
+ msg_no | application_name | msg 
+--------+------------------+-----
+
+-- Reset the log level and check that normal entries are showing up
+-- again.
+ALTER DATABASE :TEST_DBNAME RESET timescaledb.bgw_log_level;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+SELECT ts_bgw_params_reset_time(0, false);
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
 
 SELECT * FROM cleaned_bgw_log;
  msg_no | application_name |                        msg                         
 --------+------------------+----------------------------------------------------
       0 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
-(1 row)
 
 SELECT delete_job(:job_id);
  delete_job 
 ------------
  
-(1 row)
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Make sure we can set the variable using ALTER SYSTEM using the

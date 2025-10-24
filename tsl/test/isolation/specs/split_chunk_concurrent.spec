@@ -4,7 +4,6 @@
 
 setup
 {
-    create extension if not exists pageinspect;
     create table readings (time timestamptz, device int, temp float) with (fillfactor = 30);
     select create_hypertable('readings', 'time', chunk_time_interval => interval '1 week');
     insert into readings values ('2024-01-04 01:00', 1, 1.0), ('2024-01-05 02:00', 2, 2.0), ('2024-01-08 02:00', 3, 3.0), ('2024-01-11 01:01', 4, 4.0), ('2024-01-15 02:00', 5, 5.0);

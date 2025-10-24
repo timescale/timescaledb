@@ -9,7 +9,7 @@ CREATE INDEX ON :TABLE(time);
 SET timescaledb.enable_compressed_skipscan TO false;
 
 -- IndexPath without pathkeys doesnt use SkipScan
-EXPLAIN (costs off, timing off, summary off) SELECT count(DISTINCT 1) FROM pg_rewrite;
+EXPLAIN (buffers off, costs off, timing off, summary off) SELECT count(DISTINCT 1) FROM pg_rewrite;
 :PREFIX SELECT count(DISTINCT dev) FROM :TABLE where dev=1;
 
 -- SkipScan with ordered append

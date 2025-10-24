@@ -20,25 +20,21 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | hyper_ts   | t
-(1 row)
 
 SELECT * FROM create_hypertable('hyper_tstz', 'time');
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | public      | hyper_tstz | t
-(1 row)
 
 SELECT * FROM create_hypertable('hyper_no_cagg', 'time');
  hypertable_id | schema_name |  table_name   | created 
 ---------------+-------------+---------------+---------
              3 | public      | hyper_no_cagg | t
-(1 row)
 
 SELECT * FROM create_hypertable('hyper_multi', 'time', 'device', 4);
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
              4 | public      | hyper_multi | t
-(1 row)
 
 INSERT INTO hyper_ts
   SELECT time, ceil(random() * 100)::int
@@ -89,7 +85,6 @@ SELECT table_name, get_materialization_info(table_name)
 -----------------------+--------------------------
  tstz_temperature_15m  | (8,"@ 15 mins")
  multi_temperature_15m | (9,"@ 15 mins")
-(2 rows)
 
 \set ON_ERROR_STOP 0
 SELECT get_materialization_info('hyper_no_cagg');
@@ -103,7 +98,6 @@ SELECT materialization_id,
   FROM get_raw_materialization_ranges('timestamptz');
  materialization_id | to_timestamp | to_timestamp 
 --------------------+--------------+--------------
-(0 rows)
 
 -- Here are tests of the API
 SELECT *
@@ -148,7 +142,6 @@ LEFT JOIN before rhs ON row(lhs.*) = row(rhs.*)
 ----------------------+------------------------+------------------------
  ts_temperature_15m   | 2025-04-25 11:00:00+02 | 2025-04-26 11:15:00+02
  tstz_temperature_15m | 2025-04-25 11:00:00+02 | 2025-04-26 11:15:00+02
-(2 rows)
 
 SELECT materialization_id,
        to_timestamp(lowest_modified_value),
@@ -158,7 +151,6 @@ SELECT materialization_id,
 --------------------+------------------------+------------------------
                   6 | 2025-04-25 11:00:00+02 | 2025-04-26 11:15:00+02
                   8 | 2025-04-25 11:00:00+02 | 2025-04-26 11:15:00+02
-(2 rows)
 
 SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
        'ts_temperature_15m'::regclass,
@@ -167,7 +159,6 @@ SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
                   invalidations                  
 -------------------------------------------------
  {["2025-04-25 09:00:00","2025-04-26 00:00:00")}
-(1 row)
 
 CALL custom_refresh('ts_temperature_15m', '["2025-04-25","2025-04-26"]'::tsrange);
 NOTICE:  Updating range ["2025-04-25 09:00:00","2025-04-26 00:00:00")
@@ -178,7 +169,6 @@ SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
                      invalidations                      
 --------------------------------------------------------
  {["2025-04-25 00:00:00","2025-04-25 08:59:59.999999")}
-(1 row)
 
 SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
        'tstz_temperature_15m'::regclass,
@@ -187,7 +177,6 @@ SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
                      invalidations                     
 -------------------------------------------------------
  {["2025-04-25 11:00:00+02","2025-04-26 00:00:00+02")}
-(1 row)
 
 CALL custom_refresh('tstz_temperature_15m', '["2025-04-25","2025-04-26"]'::tsrange);
 NOTICE:  Updating range ["2025-04-25 09:00:00","2025-04-26 00:00:00")
@@ -198,7 +187,6 @@ SELECT * FROM _timescaledb_functions.get_materialization_invalidations(
                         invalidations                         
 --------------------------------------------------------------
  {["2025-04-25 00:00:00+02","2025-04-25 10:59:59.999999+02")}
-(1 row)
 
 -- Generate some invalidations. These new values need to be before the
 -- invalidation threshold, which is set to end time of the insertion
@@ -222,12 +210,16 @@ SELECT hypertable_id,
              1 | 2025-04-26 00:00:00
              2 | 2025-04-26 00:00:00
              4 | 4714-11-24 00:00:00 BC
-(3 rows)
 
 -- Check that there indeed is something in the hypertable invalidation
 -- log. If not, this will fail anyway. We show the "raw" timestamps,
 -- which is in UTC if it was originally a timestamp with timezone.
-SELECT hypertable_id,
+--
+-- We ignore duplicates since those will be merged when moving
+-- invalidations and hence does not affect correctness and can cause
+-- test flakiness otherwise.
+SELECT DISTINCT
+       hypertable_id,
        _timescaledb_functions.to_timestamp_without_timezone(lowest_modified_value) AS start,
        _timescaledb_functions.to_timestamp_without_timezone(greatest_modified_value) AS finish
   FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
@@ -236,7 +228,6 @@ SELECT hypertable_id,
 ---------------+---------------------+---------------------
              1 | 2025-01-04 10:00:00 | 2025-01-04 11:12:00
              2 | 2025-01-04 11:00:00 | 2025-01-04 12:12:00
-(2 rows)
 
 \set VERBOSITY default
 -- Check that we can handle hypertables with single and multiple
@@ -246,19 +237,16 @@ SELECT _timescaledb_functions.get_hypertable_id('hyper_ts', 'timestamp');
  get_hypertable_id 
 -------------------
                  1
-(1 row)
 
 SELECT _timescaledb_functions.get_hypertable_id('hyper_tstz', 'timestamptz');
  get_hypertable_id 
 -------------------
                  2
-(1 row)
 
 SELECT _timescaledb_functions.get_hypertable_id('hyper_multi', 'timestamptz');
  get_hypertable_id 
 -------------------
                  4
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- Not a hypertable
@@ -297,7 +285,6 @@ SELECT bucket_width, invalidations FROM saved_invalidations_1;
 --------------+-------------------------------------------------
  @ 15 mins    | {["2025-01-04 10:00:00","2025-01-04 11:15:00")}
  @ 1 hour     | {["2025-01-04 10:00:00","2025-01-04 12:00:00")}
-(2 rows)
 
 -- Calling it twice should return same invalidations since we haven't
 -- inserted anything between.
@@ -308,7 +295,6 @@ SELECT * FROM saved_invalidations_2 s1
         WHERE s1.token IS NULL OR s2.token IS NULL;
  bucket_width | token | invalidations | bucket_width | token | invalidations 
 --------------+-------+---------------+--------------+-------+---------------
-(0 rows)
 
 SELECT token FROM saved_invalidations_1 LIMIT 1 \gset
 -- Test some error cases
@@ -336,7 +322,6 @@ SELECT bucket_width, invalidations
   );
  bucket_width | invalidations 
 --------------+---------------
-(0 rows)
 
 -- Check that the invalidations associated with the token are removed
 -- when there are inserts in between.
@@ -382,7 +367,6 @@ ORDER BY 1, 2;
  @ 15 mins    | ["2025-01-03 10:00:00","2025-01-03 11:15:00")
  @ 1 hour     | ["2025-01-02 10:00:00","2025-01-02 12:00:00")
  @ 1 hour     | ["2025-01-03 10:00:00","2025-01-03 12:00:00")
-(4 rows)
 
 -- Accept the original invalidations
 CALL _timescaledb_functions.accept_hypertable_invalidations('hyper_ts', :'token');
@@ -400,5 +384,4 @@ ORDER BY 1, 2;
  @ 15 mins    | ["2025-01-03 10:30:00","2025-01-03 11:00:00")
  @ 1 hour     | ["2025-01-02 10:00:00","2025-01-02 12:00:00")
  @ 1 hour     | ["2025-01-03 10:00:00","2025-01-03 11:00:00")
-(4 rows)
 

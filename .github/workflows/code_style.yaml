@@ -3,7 +3,7 @@ name: Code style
   push:
     branches:
       - main
-      - prerelease_test
+      - ?.*.x
   pull_request:
 
 jobs:
@@ -108,7 +108,10 @@ jobs:
           pip install --upgrade pip
           pip install black prospector pylint dodgy \
             mccabe pycodestyle pyflakes \
-            psutil pygithub pglast testgres
+            psutil pygithub pglast testgres more_itertools
+          # pinning snowballstemmer to version 2.2.0 due to:
+          # https://github.com/prospector-dev/prospector/issues/763
+          pip install --force-reinstall --no-deps snowballstemmer==2.2.0
           pip list
           pip list --user
 
@@ -147,5 +150,8 @@ jobs:
         ./scripts/check_missing_gitignore_for_template_tests.sh
     - name: Check for unnecessary template test files
       if: always()
-      run: ./scripts/check_unecessary_template_tests.sh
+      run: ./scripts/check_unnecessary_template_tests.sh
+    - name: Check for orphaned output test files
+      if: always()
+      run: ./scripts/check_orphaned_test_output_files.sh
 

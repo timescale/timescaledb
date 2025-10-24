@@ -26,6 +26,8 @@ ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
 
+VACUUM FULL ANALYZE test1;
+
 
 --make sure allowed ddl still work
 ALTER TABLE test1 CLUSTER ON "test1_Time_idx";
@@ -49,7 +51,7 @@ ALTER TABLE test1 REPLICA IDENTITY DEFAULT;
 --test adding boolean columns with default and not null
 CREATE TABLE records (time timestamp NOT NULL);
 SELECT create_hypertable('records', 'time');
-ALTER TABLE records SET (timescaledb.compress = true);
+ALTER TABLE records SET (timescaledb.compress = true, timescaledb.compress_orderby='"time" DESC');
 ALTER TABLE records ADD COLUMN col1 boolean DEFAULT false NOT NULL;
 -- NULL constraints are useless and it is safe allow adding this
 -- column with NULL constraint to a compressed hypertable (Issue #5151)
@@ -375,6 +377,8 @@ SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) W
 
 SELECT count(decompress_chunk(ch)) FROM show_chunks('test1') ch;
 
+VACUUM FULL ANALYZE test1;
+
 select add_compression_policy('test1', interval '1 day');
 \set ON_ERROR_STOP 0
 ALTER table test1 set (timescaledb.compress='f');
@@ -406,6 +410,8 @@ ALTER TABLESPACE tablespace2 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = '"Time" DESC');
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
+
+VACUUM FULL ANALYZE test1;
 
 DROP TABLE test1 CASCADE;
 DROP TABLESPACE tablespace1;
@@ -448,7 +454,7 @@ INSERT INTO i2844 SELECT generate_series('2000-01-01'::timestamptz, '2000-01-02'
 
 CREATE MATERIALIZED VIEW test_agg WITH (timescaledb.continuous) AS SELECT time_bucket('1 hour', created_at) AS bucket, AVG(c1) AS avg_c1 FROM i2844 GROUP BY bucket;
 
-ALTER TABLE i2844 SET (timescaledb.compress);
+ALTER TABLE i2844 SET (timescaledb.compress, timescaledb.compress_orderby = 'created_at DESC');
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='i2844'::regclass;
 
@@ -627,6 +633,8 @@ FROM compression_insert
 WHERE time >= '2000-01-01 0:00:00+0'
 AND time <= '2000-01-05 23:55:00+0';
 
+VACUUM ANALYZE compression_insert;
+
 -- force index scans to check index mapping
 -- this verifies that we are actually using compressed chunk index scans
 -- previously we could not use indexes on uncompressed chunks due to a bug:
@@ -635,7 +643,7 @@ AND time <= '2000-01-05 23:55:00+0';
 -- this check basically makes sure that the indexes are built properly
 -- and there are no issues in attribute mappings while building them
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -674,9 +682,11 @@ FROM compression_insert
 WHERE time >= '2000-01-07 0:00:00+0'
 AND time <= '2000-01-11 23:55:00+0';
 
+VACUUM ANALYZE compression_insert;
+
 -- force index scans to check index mapping
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -714,9 +724,11 @@ FROM compression_insert
 WHERE time >= '2000-01-15 0:00:00+0'
 AND time <= '2000-01-19 23:55:00+0';
 
+VACUUM ANALYZE compression_insert;
+
 -- force index scans to check index mapping
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -755,9 +767,11 @@ FROM compression_insert
 WHERE time >= '2000-01-22 0:00:00+0'
 AND time <= '2000-01-26 23:55:00+0';
 
+VACUUM ANALYZE compression_insert;
+
 -- force index scans to check index mapping
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -794,9 +808,11 @@ FROM compression_insert
 WHERE time >= '2000-01-28 0:00:00+0'
 AND time <= '2000-02-01 23:55:00+0';
 
+VACUUM ANALYZE compression_insert;
+
 -- force index scans to check index mapping
 SET enable_seqscan = off;
-EXPLAIN (costs off) SELECT device_id, count(*)
+EXPLAIN (buffers off, costs off) SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
@@ -826,34 +842,67 @@ VALUES -- chunk1
   ('2020-01-01 00:00'::timestamptz, 1, 2),
   ('2020-01-01 00:01'::timestamptz, 2, 2),
   ('2020-01-01 00:04'::timestamptz, 1, 2),
+  ('2020-01-01 00:05'::timestamptz, 3, 1),
+  ('2020-01-01 00:06'::timestamptz, 3, 2),
+  ('2020-01-01 00:07'::timestamptz, 3, 3),
+  ('2020-01-01 00:08'::timestamptz, 4, 1),
   -- chunk2
   ('2021-01-01 00:00'::timestamptz, 1, 2),
   ('2021-01-01 00:04'::timestamptz, 1, 2),
+  ('2021-01-01 00:05'::timestamptz, 3, 1),
+  ('2021-01-01 00:06'::timestamptz, 3, 2),
+  ('2021-01-01 00:07'::timestamptz, 3, 3),
   -- chunk3
   ('2022-01-01 00:00'::timestamptz, 1, 2),
-  ('2022-01-01 00:04'::timestamptz, 1, 2);
+  ('2022-01-01 00:04'::timestamptz, 1, 2),
+  ('2022-01-01 00:05'::timestamptz, 3, 1);
 -- enable compression, compress all chunks
-ALTER TABLE test_partials SET (timescaledb.compress);
+ALTER TABLE test_partials SET (timescaledb.compress,
+    timescaledb.compress_segmentby = 'a', timescaledb.compress_orderby = 'time desc');
 SELECT compress_chunk(show_chunks('test_partials'));
 VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
 -- fully compressed
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
+
+
 -- test P, F, F
 INSERT INTO test_partials VALUES ('2020-01-01 00:03', 1, 2);
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+vacuum analyze test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
+
+
 -- make second chunk partially compressed
 -- P, P, F
 INSERT INTO test_partials VALUES ('2021-01-01 00:03', 1, 2);
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify correct results
 SELECT * FROM test_partials ORDER BY time;
+
+
 -- third chunk partially compressed and add new chunk
 -- P, P, P, U
 INSERT INTO test_partials VALUES ('2022-01-01 00:03', 1, 2);
 INSERT INTO test_partials VALUES ('2023-01-01 00:03', 1, 2);
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+INSERT INTO test_partials VALUES ('2023-01-01 00:05', 3, 1);
+VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
+
+
 -- F, F, P, U
 -- recompress all chunks
 DO $$
@@ -863,6 +912,7 @@ BEGIN
   FOR chunk IN
   SELECT format('%I.%I', schema_name, table_name)::regclass
     FROM _timescaledb_catalog.chunk WHERE status = 9 and compressed_chunk_id IS NOT NULL AND NOT dropped
+    ORDER BY id
   LOOP
     EXECUTE format('select decompress_chunk(''%s'');', chunk::text);
     EXECUTE format('select compress_chunk(''%s'');', chunk::text);
@@ -870,13 +920,25 @@ BEGIN
 END
 $$;
 INSERT INTO test_partials VALUES ('2022-01-01 00:02', 1, 2);
-EXPLAIN (COSTS OFF) SELECT * FROM test_partials ORDER BY time;
+VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM test_partials ORDER BY time;
+
 -- F, F, P, F, F
 INSERT INTO test_partials VALUES ('2024-01-01 00:02', 1, 2);
 SELECT compress_chunk(c) FROM show_chunks('test_partials', newer_than => '2022-01-01') c;
-EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+VACUUM ANALYZE test_partials;
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
+
+EXPLAIN (buffers off, costs off) SELECT * FROM test_partials ORDER BY time;
 -- verify result correctness
 SELECT * FROM test_partials ORDER BY time;
+
+-- Chunks must be different size for plan stability
+select count(*) from test_partials group by tableoid order by count(*) desc;
 
 -- add test for space partioning with partial chunks
 CREATE TABLE space_part (time timestamptz, a int, b int, c int);
@@ -895,18 +957,19 @@ INSERT INTO space_part values
 ('2021-01-01 00:03', 1, 1, 1),
 ('2021-01-01 00:03', 2, 1, 1);
 -- compress them
-ALTER TABLE space_part SET (timescaledb.compress);
+ALTER TABLE space_part SET (timescaledb.compress, timescaledb.orderby='"time" desc');
 SELECT compress_chunk(show_chunks('space_part'));
 -- make first chunk partial
 INSERT INTO space_part VALUES
 -- chunk1
 ('2020-01-01 00:01', 1, 1, 1),
 ('2020-01-01 00:01', 2, 1, 1);
+VACUUM ANALYZE space_part;
 
 -------- now enable the space partitioning, this will take effect for chunks created subsequently
 SELECT add_dimension('space_part', 'a', number_partitions => 5);
 -- plan is still the same
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
 
 -- now add more chunks that do adhere to the new space partitioning
 -- chunks 3,4
@@ -915,21 +978,25 @@ INSERT INTO space_part VALUES
 ('2022-01-01 00:00', 2, 1, 1),
 ('2022-01-01 00:03', 1, 1, 1),
 ('2022-01-01 00:03', 2, 1, 1);
+VACUUM ANALYZE space_part;
 -- plan still ok
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
 -- compress them
 SELECT compress_chunk(c, if_not_compressed=>true) FROM show_chunks('space_part') c;
+VACUUM ANALYZE space_part;
 -- plan still ok
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
 -- make second one of them partial
 insert into space_part values
 ('2022-01-01 00:02', 2, 1, 1),
 ('2022-01-01 00:02', 2, 1, 1);
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+VACUUM ANALYZE space_part;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
 -- make other one partial too
 INSERT INTO space_part VALUES
 ('2022-01-01 00:02', 1, 1, 1);
-EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+VACUUM ANALYZE space_part;
+EXPLAIN (BUFFERS OFF, COSTS OFF) SELECT * FROM space_part ORDER BY time;
 
 -- test creation of unique expression index does not interfere with enabling compression
 -- github issue 6205
@@ -951,8 +1018,9 @@ values ('meter1', 1, 2.3, '2022-01-01'::timestamptz, '2022-01-01'::timestamptz),
 select compress_chunk(show_chunks('mytab'));
 REINDEX TABLE mytab; -- should update index
 select decompress_chunk(show_chunks('mytab'));
-\set EXPLAIN 'EXPLAIN (costs off,timing off,summary off)'
-\set EXPLAIN_ANALYZE 'EXPLAIN (analyze,costs off,timing off,summary off)'
+vacuum analyze mytab;
+\set EXPLAIN 'EXPLAIN (buffers off, costs off,timing off,summary off)'
+\set EXPLAIN_ANALYZE 'EXPLAIN (analyze,buffers off, costs off,timing off,summary off)'
 -- do index scan on uncompressed, should give correct results
 set enable_seqscan = off;
 set enable_indexscan = on;
@@ -1156,6 +1224,16 @@ ALTER TABLE alias SET (tsdb.compress, tsdb.compress_orderby='time DESC',tsdb.com
 INSERT INTO alias SELECT '2025-01-01';
 SELECT count(compress_chunk(ch)) FROM show_chunks('alias') ch;
 
+-- test mixing postgres and timescaledb options
+CREATE TABLE mix_pg_ts(time timestamptz, device text) WITH (tsdb.hypertable,tsdb.partition_column='time',fillfactor=90);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
+ALTER TABLE mix_pg_ts SET (timescaledb.compress, fillfactor=70, tsdb.orderby='time', timescaledb.compress_segmentby='device', autovacuum_enabled=true);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
 
-
+-- test resetting options
+ALTER TABLE mix_pg_ts RESET (fillfactor, tsdb.segmentby);
+SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
+SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
 

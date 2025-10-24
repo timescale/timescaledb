@@ -101,20 +101,13 @@ if(VERSION_CONFIG
   endif()
 endif()
 
-# fallback for < 2.20 downgrade can be removed after we release 2.20
-if(VERSION_CONFIG
-   MATCHES
-   ".*downgrade_to_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
-)
-  set(UPDATE_FROM_VERSION ${CMAKE_MATCH_1})
-  set(DOWNGRADE_TO_VERSION ${CMAKE_MATCH_1})
-  set(PREVIOUS_VERSION ${CMAKE_MATCH_1})
-endif()
-
 if(VERSION_CONFIG MATCHES
    ".*previous_version[\t ]*=[\t ]*([0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+[0-9]*)?).*"
 )
   set(PREVIOUS_VERSION ${CMAKE_MATCH_1})
+else()
+  message(
+    FATAL_ERROR "Could not determine previous version from version.config")
 endif()
 
 # a hack to avoid change of SQL extschema variable
@@ -198,12 +191,6 @@ option(EXPERIMENTAL "Skip postgres version compatibility check" OFF)
 option(GENERATE_DOWNGRADE_SCRIPT
        "Generate downgrade script. Defaults to not generate a downgrade script."
        OFF)
-cmake_dependent_option(
-  GENERATE_OLD_DOWNGRADE_SCRIPTS
-  "Generate downgrade scripts for old versions. Requires setting GENERATE_DOWNGRADE_SCRIPT to ON. Defaults to OFF."
-  OFF
-  "GENERATE_DOWNGRADE_SCRIPT"
-  ON)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   # CMAKE_BUILD_TYPE is set at CMake configuration type. But usage of
@@ -383,9 +370,9 @@ message(
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
 if((${PG_VERSION_MAJOR} LESS "15")
-   OR (${PG_VERSION_MAJOR} GREATER "17")
+   OR (${PG_VERSION_MAJOR} GREATER "18")
    AND NOT (${EXPERIMENTAL}))
-  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 15, 16 and 17")
+  message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 15, 16, 17 and 18")
 endif()
 
 # Get PostgreSQL configuration from pg_config

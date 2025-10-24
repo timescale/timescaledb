@@ -7,6 +7,8 @@
 \ir include/compression_utils.sql
 CREATE TYPE customtype;
 
+SET client_min_messages TO WARNING;
+
 CREATE OR REPLACE FUNCTION customtype_in(cstring) RETURNS customtype
 AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_in'
 LANGUAGE C IMMUTABLE STRICT;
@@ -18,6 +20,8 @@ LANGUAGE C IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION customtype_eq(customtype, customtype) RETURNS BOOL
 AS :TSL_MODULE_PATHNAME, 'ts_compression_custom_type_eq'
 LANGUAGE C IMMUTABLE STRICT;
+
+SET client_min_messages TO DEFAULT;
 
 -- for testing purposes we need a fixed length pass-by-ref type, and one whose
 -- alignment is greater than it's size. This type serves both purposes.
@@ -40,6 +44,8 @@ CREATE OPERATOR CLASS customtype_ops
   DEFAULT
   FOR TYPE customtype
   USING hash AS OPERATOR 1 =;
+
+SELECT count(delete_job(job_id)) from timescaledb_information.jobs ;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
@@ -76,12 +82,13 @@ SELECT DISTINCT attname, attstattarget
 
 
 -- Test that the GUC to disable bulk decompression works.
-explain (analyze, verbose, timing off, costs off, summary off)
+vacuum analyze test1;
+explain (analyze, verbose, timing off, buffers off, costs off, summary off)
 select * from _timescaledb_internal._hyper_1_10_chunk;
 
 set timescaledb.enable_bulk_decompression to false;
 
-explain (analyze, verbose, timing off, costs off, summary off)
+explain (analyze, verbose, timing off, buffers off, costs off, summary off)
 select * from _timescaledb_internal._hyper_1_10_chunk;
 
 reset timescaledb.enable_bulk_decompression;

@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <access/htup.h>
 #include <access/htup_details.h>
+#include <access/tableam.h>
 #include <access/xact.h>
 #include <nodes/memnodes.h>
 #include <storage/lmgr.h>
@@ -71,6 +72,35 @@ typedef struct InvalidationThresholdData
 	const InternalTimeRange *refresh_window;
 	int64 computed_invalidation_threshold;
 } InvalidationThresholdData;
+
+typedef struct InvalidationThresholdGetData
+{
+	int32 hypertable_id;
+	int64 threshold;
+} InvalidationThresholdGetData;
+
+static ScanTupleResult
+invalidation_threshold_scan_get(TupleInfo *ti, void *const data)
+{
+	InvalidationThresholdGetData *the_data = (InvalidationThresholdGetData *) data;
+	bool isnull;
+	Datum datum;
+
+	if (ti->lockresult == TM_Updated || ti->lockresult == TM_Deleted)
+		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
+
+	Ensure(ti->lockresult == TM_Ok,
+		   "unable to lock invalidation threshold tuple for hypertable %d (lock result %d)",
+		   the_data->hypertable_id,
+		   ti->lockresult);
+
+	datum = slot_getattr(ti->slot, Anum_continuous_aggs_invalidation_threshold_watermark, &isnull);
+
+	Ensure(!isnull, "invalidation threshold for hypertable %d is null", the_data->hypertable_id);
+	the_data->threshold = DatumGetInt64(datum);
+
+	return SCAN_DONE;
+}
 
 static ScanTupleResult
 invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
@@ -152,6 +182,51 @@ invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
 }
 
 /*
+ * Get the invalidation threshold for the hypertable.
+ *
+ * This will also lock the row.
+ */
+int64
+invalidation_threshold_get(int32 hypertable_id, Oid type)
+{
+	InvalidationThresholdGetData data = { .hypertable_id = hypertable_id };
+	ScanKeyData scankey[1];
+	Catalog *catalog = ts_catalog_get();
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	PushActiveSnapshot(GetLatestSnapshot());
+	ScannerCtx scanctx = {
+		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
+		.index = catalog_get_index(catalog,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY),
+		.nkeys = 1,
+		.scankey = scankey,
+		.data = &data,
+		.tuple_found = invalidation_threshold_scan_get,
+		.lockmode = RowShareLock,
+		.scandirection = ForwardScanDirection,
+		.result_mctx = CurrentMemoryContext,
+		.tuplock = &scantuplock,
+		.flags = SCANNER_F_KEEPLOCK,
+		.snapshot = GetActiveSnapshot(),
+	};
+
+	ScanKeyInit(&scankey[0],
+				Anum_continuous_aggs_invalidation_threshold_hypertable_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(hypertable_id));
+
+	bool found = ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME);
+	Ensure(found, "invalidation threshold for hypertable %d not found", hypertable_id);
+	PopActiveSnapshot();
+	return data.threshold;
+}
+
+/*
  * Set a new invalidation threshold.
  *
  * The threshold is only updated if the new threshold is greater than the old
@@ -175,10 +250,12 @@ invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 		.cagg = cagg,
 		.refresh_window = refresh_window,
 	};
+	PushActiveSnapshot(GetLatestSnapshot());
 	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-		.index =
-			catalog_get_index(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD, BGW_JOB_PKEY_IDX),
+		.index = catalog_get_index(catalog,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY),
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = &updatectx,
@@ -190,10 +267,10 @@ invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 		.flags = SCANNER_F_KEEPLOCK,
 		/* We update the threshold value using this scanner. Since the scanner uses SnapshotSelf
 		 * per default, the updated tuple would become immediately visible to the scanner (the
-		 * snapshot includes "changes made by the current command") and ts_scanner_scan_one() would
-		 * fail due to the second found tuple. A normal MVCC snapshot is used to prevent the update
-		 * is immediately seen by the scanner. */
-		.snapshot = GetLatestSnapshot(),
+		 * snapshot includes "changes made by the current command") and ts_scanner_scan_one()
+		 * would fail due to the second found tuple. A normal MVCC snapshot is used to prevent
+		 * the update is immediately seen by the scanner. */
+		.snapshot = GetActiveSnapshot(),
 	};
 
 	ScanKeyInit(&scankey[0],
@@ -206,6 +283,7 @@ invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 	Ensure(found,
 		   "invalidation threshold for hypertable %d not found",
 		   cagg->data.raw_hypertable_id);
+	PopActiveSnapshot();
 
 	return updatectx.computed_invalidation_threshold;
 }
@@ -272,8 +350,9 @@ invalidation_threshold_initialize(const ContinuousAgg *cagg)
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD),
-		.index =
-			catalog_get_index(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD, BGW_JOB_PKEY_IDX),
+		.index = catalog_get_index(catalog,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
+								   CONTINUOUS_AGGS_INVALIDATION_THRESHOLD_PKEY),
 		.nkeys = 1,
 		.scankey = scankey,
 		.lockmode = ShareUpdateExclusiveLock,

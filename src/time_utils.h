@@ -39,9 +39,24 @@
 #define TS_TIME_NOBEGIN (PG_INT64_MIN)
 #define TS_TIME_NOEND (PG_INT64_MAX)
 
+/*
+ * A UUIDv7 timestamp is 6 bytes milliseconds in Unix epoch (unsigned).
+ *
+ * Since RFC9562 specifies the timestamp as unsigned, the minimum value is
+ * 0. Further, the sub-millisecond part cannot be used as time since the bits
+ * are optional and it is not possible to know if they are random or represent
+ * a time fraction. Therefore, the max value is limited to the milliseconds.
+ */
+#define TS_TIME_UUID_MS_MIN (0x000000000000)
+#define TS_TIME_UUID_MIN (0x000000000000 * 1000) /* microseconds */
+#define TS_TIME_UUID_MS_MAX (0xFFFFFFFFFFFF)
+#define TS_TIME_UUID_MAX (TS_TIME_UUID_MS_MAX * 1000) /* microseconds */
+
 #define IS_INTEGER_TYPE(type) (type == INT2OID || type == INT4OID || type == INT8OID)
 #define IS_TIMESTAMP_TYPE(type) (type == TIMESTAMPOID || type == TIMESTAMPTZOID || type == DATEOID)
-#define IS_VALID_TIME_TYPE(type) (IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type))
+#define IS_UUID_TYPE(type) (type == UUIDOID)
+#define IS_VALID_TIME_TYPE(type)                                                                   \
+	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || IS_UUID_TYPE(type))
 
 #define TS_TIME_DATUM_IS_MIN(timeval, type) (timeval == ts_time_datum_get_min(type))
 #define TS_TIME_DATUM_IS_MAX(timeval, type) (timeval == ts_time_datum_get_max(type))

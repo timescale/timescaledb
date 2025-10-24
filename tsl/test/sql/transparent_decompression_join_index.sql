@@ -29,10 +29,12 @@ set enable_seqscan = 'off';
 -- make some tweaks to avoid flakiness
 analyze test;
 analyze test_copy;
+set enable_hashagg = off;
+set enable_sort to off;
 set jit = off;
 set max_parallel_workers_per_gather = 0;
 
-explain (costs off) with query_params as (
+explain (buffers off, costs off) with query_params as (
 	select distinct a, b
 	from test_copy
 	where test_copy.a IN ('lat', 'lon')
@@ -72,7 +74,7 @@ order by test.time;
 
 -- Also test outer join for better coverage of nullability handling.
 -- This test case generates a nullable equivalence member for test.b.
-explain (costs off)
+explain (buffers off, costs off)
 with query_params as (
     select distinct a, b + 1 as b
     from test_copy

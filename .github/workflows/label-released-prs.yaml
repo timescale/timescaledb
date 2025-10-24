@@ -1,0 +1,30 @@
+# Apply "released" labels to the PRs that got into a particular release.
+name: Label Released PRs
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [trigger/label-released-prs]
+
+jobs:
+  label-release:
+    name: Label Released PRs
+    runs-on: timescaledb-runner-arm64
+    env:
+      GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python Dependencies
+        run: |
+          pip install PyGithub requests
+
+      - name: Get latest release tag
+        run: |
+          echo "LATEST_TAG=$(gh release view --json tagName --jq '.tagName')" >> $GITHUB_ENV
+
+      - name: Run label-released script
+        run: |
+          scripts/label-released.py --release "$LATEST_TAG"

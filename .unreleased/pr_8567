@@ -1,0 +1,2 @@
+Fixes: #8567 Do not require job to have executed to show status
+Thanks: @moodgorning for reporting issue with timescaledb_information.job_stats view

@@ -1,4 +1,4 @@
-Parsed test spec with 9 sessions
+Parsed test spec with 16 sessions
 
 starting permutation: R1_refresh S1_select R3_refresh S1_select L2_read_unlock_threshold_table L3_unlock_cagg_table L1_unlock_threshold_table
 step R1_refresh: 
@@ -25,18 +25,15 @@ bucket|        avg_temp
     40|16.0909090909091
     50|            26.9
     60|            18.9
-(7 rows)
 
 cagg_bucket_count
 -----------------
                 7
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |         70
 conditions2|-2147483648
-(2 rows)
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
@@ -65,18 +62,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(10 rows)
 
 cagg_bucket_count
 -----------------
                10
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L2_read_unlock_threshold_table: 
     ROLLBACK;
@@ -89,6 +83,11 @@ step L1_unlock_threshold_table:
 
 
 starting permutation: L2_read_lock_threshold_table R3_refresh L2_read_unlock_threshold_table S1_select L3_unlock_cagg_table L1_unlock_threshold_table
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
 step L2_read_lock_threshold_table: 
     LOCK _timescaledb_catalog.continuous_aggs_invalidation_threshold
     IN ACCESS SHARE MODE;
@@ -119,18 +118,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(6 rows)
 
 cagg_bucket_count
 -----------------
                 6
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -140,6 +136,11 @@ step L1_unlock_threshold_table:
 
 
 starting permutation: R1_refresh L2_read_lock_threshold_table R3_refresh L2_read_unlock_threshold_table S1_select L3_unlock_cagg_table L1_unlock_threshold_table
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
 
@@ -177,18 +178,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(10 rows)
 
 cagg_bucket_count
 -----------------
                10
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -198,6 +196,11 @@ step L1_unlock_threshold_table:
 
 
 starting permutation: R3_refresh L2_read_lock_threshold_table R1_refresh L2_read_unlock_threshold_table S1_select L3_unlock_cagg_table L1_unlock_threshold_table
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
 
@@ -235,18 +238,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(10 rows)
 
 cagg_bucket_count
 -----------------
                10
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L3_unlock_cagg_table: 
     ROLLBACK;
@@ -256,13 +256,17 @@ step L1_unlock_threshold_table:
 
 
 starting permutation: L3_lock_cagg_table R1_refresh L3_unlock_cagg_table S1_select L1_unlock_threshold_table L2_read_unlock_threshold_table
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
 step L3_lock_cagg_table: 
     SELECT lock_cagg('cond_10');
 
 lock_cagg
 ---------
          
-(1 row)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -292,18 +296,15 @@ bucket|        avg_temp
     40|16.0909090909091
     50|            26.9
     60|            18.9
-(7 rows)
 
 cagg_bucket_count
 -----------------
                 7
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |         70
 conditions2|-2147483648
-(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -313,13 +314,17 @@ step L2_read_unlock_threshold_table:
 
 
 starting permutation: L3_lock_cagg_table R1_refresh R2_refresh L3_unlock_cagg_table S1_select L1_unlock_threshold_table L2_read_unlock_threshold_table
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
 step L3_lock_cagg_table: 
     SELECT lock_cagg('cond_10');
 
 lock_cagg
 ---------
          
-(1 row)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -331,7 +336,6 @@ step L3_unlock_cagg_table:
     ROLLBACK;
 
 step R1_refresh: <... completed>
-R2: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 step R2_refresh: <... completed>
 step S1_select: 
     SELECT bucket, avg_temp
@@ -354,18 +358,15 @@ bucket|        avg_temp
     40|16.0909090909091
     50|            26.9
     60|            18.9
-(7 rows)
 
 cagg_bucket_count
 -----------------
                 7
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |         70
 conditions2|-2147483648
-(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -375,13 +376,17 @@ step L2_read_unlock_threshold_table:
 
 
 starting permutation: L3_lock_cagg_table R1_refresh R3_refresh L3_unlock_cagg_table S1_select L1_unlock_threshold_table L2_read_unlock_threshold_table
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
 step L3_lock_cagg_table: 
     SELECT lock_cagg('cond_10');
 
 lock_cagg
 ---------
          
-(1 row)
 
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
@@ -418,18 +423,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(10 rows)
 
 cagg_bucket_count
 -----------------
                10
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -439,13 +441,17 @@ step L2_read_unlock_threshold_table:
 
 
 starting permutation: L3_lock_cagg_table R3_refresh R4_refresh L3_unlock_cagg_table S1_select L1_unlock_threshold_table L2_read_unlock_threshold_table
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
 step L3_lock_cagg_table: 
     SELECT lock_cagg('cond_10');
 
 lock_cagg
 ---------
          
-(1 row)
 
 step R3_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 70, 107);
@@ -477,18 +483,15 @@ bucket|        avg_temp
     70|            24.6
     80|            23.6
     90|            21.3
-(6 rows)
 
 cagg_bucket_count
 -----------------
                 6
-(1 row)
 
 hypertable |  threshold
 -----------+-----------
 conditions |        100
 conditions2|-2147483648
-(2 rows)
 
 step L1_unlock_threshold_table: 
     ROLLBACK;
@@ -498,9 +501,230 @@ step L2_read_unlock_threshold_table:
 
 
 starting permutation: R1_refresh R12_refresh
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
 step R1_refresh: 
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
 
 step R12_refresh: 
     CALL refresh_continuous_aggregate('cond2_10', 25, 70);
+
+
+starting permutation: WP_after_enable R1_refresh R6_pending_materialization_ranges R5_refresh R6_pending_materialization_ranges WP_after_release R6_pending_materialization_ranges S1_select
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_after_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|lowest_modified_value|greatest_modified_value
+--------------+---------------------+-----------------------
+cond_10       |                   30|                     70
+
+R5: LOG:  statement: 
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
+
+step R5_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
+ <waiting ...>
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|lowest_modified_value|greatest_modified_value
+--------------+---------------------+-----------------------
+cond_10       |                   30|                     70
+cond_10       |                   70|                    100
+
+step WP_after_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R1_refresh: <... completed>
+R5: DEBUG:  continuous aggregate refresh (individual invalidation) on "cond_10" in window [ 70, 100 ]
+R5: LOG:  deleted 0 row(s) from materialization table "_timescaledb_internal._materialized_hypertable_X"
+R5: LOG:  inserted 3 row(s) into materialization table "_timescaledb_internal._materialized_hypertable_X"
+step R5_refresh: <... completed>
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|lowest_modified_value|greatest_modified_value
+--------------+---------------------+-----------------------
+
+step S1_select: 
+    SELECT bucket, avg_temp
+    FROM cond_10
+    ORDER BY 1;
+
+    SELECT * FROM cagg_bucket_count('cond_10');
+    SELECT h.table_name AS hypertable, it.watermark AS threshold
+    FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold it,
+    _timescaledb_catalog.hypertable h
+    WHERE it.hypertable_id = h.id
+    ORDER BY 1;
+
+bucket|        avg_temp
+------+----------------
+     0|15.8888888888889
+    10|            14.2
+    20|            13.4
+    30|            18.3
+    40|16.0909090909091
+    50|            26.9
+    60|            18.9
+    70|            24.6
+    80|            23.6
+    90|            21.3
+
+cagg_bucket_count
+-----------------
+               10
+
+hypertable |  threshold
+-----------+-----------
+conditions |        100
+conditions2|-2147483648
+
+
+starting permutation: WP_after_enable R6_pending_materialization_ranges R1_refresh R3_refresh K1_cancelpid R6_pending_materialization_ranges WP_after_release R13_refresh R6_pending_materialization_ranges
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_after_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|lowest_modified_value|greatest_modified_value
+--------------+---------------------+-----------------------
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step R3_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
+ <waiting ...>
+step K1_cancelpid: 
+    CALL cancelpids();
+ <waiting ...>
+step R1_refresh: <... completed>
+ERROR:  canceling statement due to user request
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|lowest_modified_value|greatest_modified_value
+--------------+---------------------+-----------------------
+cond_10       |                   30|                     70
+cond_10       |                   70|                    100
+
+step K1_cancelpid: <... completed>
+step WP_after_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R3_refresh: <... completed>
+step R13_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 65, 100);
+
+step R6_pending_materialization_ranges: 
+    SELECT * FROM pending_materialization_ranges WHERE user_view_name = 'cond_10';
+
+user_view_name|lowest_modified_value|greatest_modified_value
+--------------+---------------------+-----------------------
+
+
+starting permutation: WP_before_enable R1_refresh R3_refresh WP_before_release
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_before_enable: 
+    SELECT debug_waitpoint_enable('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step R3_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
+ <waiting ...>
+step WP_before_release: 
+    SELECT debug_waitpoint_release('before_process_cagg_invalidations_for_refresh_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R1_refresh: <... completed>
+step R3_refresh: <... completed>
+
+starting permutation: WP_after_materialization_enable R1_refresh WP_after_materialization_release R3_refresh
+R5: LOG:  statement: 
+    SET SESSION lock_timeout = '500ms';
+    SET SESSION deadlock_timeout = '500ms';
+    SET SESSION client_min_messages = 'DEBUG1';
+
+L1: WARNING:  there is already a transaction in progress
+L2: WARNING:  there is already a transaction in progress
+L3: WARNING:  there is already a transaction in progress
+step WP_after_materialization_enable: 
+    SELECT debug_waitpoint_enable('after_process_cagg_materializations');
+
+debug_waitpoint_enable
+----------------------
+                      
+
+step R1_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 25, 70);
+ <waiting ...>
+step WP_after_materialization_release: 
+    SELECT debug_waitpoint_release('after_process_cagg_materializations');
+
+debug_waitpoint_release
+-----------------------
+                       
+
+step R1_refresh: <... completed>
+step R3_refresh: 
+    CALL refresh_continuous_aggregate('cond_10', 70, 107);
 

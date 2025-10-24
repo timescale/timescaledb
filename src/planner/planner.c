@@ -23,6 +23,7 @@
 #include <optimizer/planner.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
+#include <parser/parse_param.h>
 #include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <utils/elog.h>
@@ -50,7 +51,6 @@
 #include "import/allpaths.h"
 #include "license_guc.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/modify_hypertable.h"
 #include "partitioning.h"
@@ -496,8 +496,8 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 	 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
 	 */
 	if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
-		context->root->glob->boundParams && query->jointree->quals &&
-		IsA(query->jointree->quals, OpExpr))
+		query->jointree->quals && IsA(query->jointree->quals, OpExpr) &&
+		(context->root->glob->boundParams || query_contains_extern_params(query)))
 	{
 		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
 		if (!rte->inh && rte->rtekind == RTE_RELATION)
@@ -518,8 +518,8 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 	 *      WHERE $n = fkatt1 [AND ...]
 	 */
 	if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
-		context->root->glob->boundParams && query->jointree->quals &&
-		IsA(query->jointree->quals, OpExpr))
+		query->jointree->quals && IsA(query->jointree->quals, OpExpr) &&
+		(context->root->glob->boundParams || query_contains_extern_params(query)))
 	{
 		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
 		if (!rte->inh && rte->rtekind == RTE_RELATION)
@@ -541,7 +541,8 @@ preprocess_fk_checks(Query *query, Cache *hcache, PreprocessQueryContext *contex
 	 *       FOR KEY SHARE OF x
 	 */
 	if (query->commandType == CMD_SELECT && query->hasForUpdate &&
-		list_length(query->rtable) == 1 && context->root->glob->boundParams)
+		list_length(query->rtable) == 1 &&
+		(context->root->glob->boundParams || query_contains_extern_params(query)))
 	{
 		RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
 		if (!rte->inh && rte->rtekind == RTE_RELATION && rte->rellockmode == RowShareLock &&
@@ -906,8 +907,8 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 
 	/*
 	 * An entry of reloptkind RELOPT_OTHER_MEMBER_REL might still
-	 * be a hypertable here if it was pulled up from a subquery
-	 * as happens with UNION ALL for example. So we have to
+	 * be a hypertable or a chunk here if it was pulled up from a
+	 * subquery as happens with UNION ALL for example. So we have to
 	 * check for that to properly detect that pattern.
 	 */
 	if (parent_rte->rtekind == RTE_SUBQUERY)
@@ -915,7 +916,21 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 		*ht = ts_planner_get_hypertable(rte->relid,
 										rte->inh ? CACHE_FLAG_MISSING_OK : CACHE_FLAG_CHECK);
 
-		return *ht ? TS_REL_HYPERTABLE : TS_REL_OTHER;
+		if (*ht)
+			return TS_REL_HYPERTABLE;
+
+		/*
+		 * This is either a chunk seen as a standalone table or a non-chunk baserel.
+		 * We need a costly chunk metadata scan to distinguish between them, so we
+		 * cache the result of this lookup to avoid doing it repeatedly.
+		 */
+		BaserelInfoEntry *entry = get_or_add_baserel_from_cache(rte->relid, InvalidOid);
+		*ht = entry->ht;
+
+		if (*ht)
+			return TS_REL_CHUNK_STANDALONE;
+
+		return TS_REL_OTHER;
 	}
 
 	if (parent_rte->relid == rte->relid)
@@ -1101,6 +1116,16 @@ expand_hypertables(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry 
 	for (int i = 1; i < root->simple_rel_array_size; i++)
 	{
 		RangeTblEntry *in_rte = root->simple_rte_array[i];
+
+#if PG18_GE
+		/* RTE could be removed due to self-join
+		 * elimination optimization.
+		 *
+		 * https://github.com/postgres/postgres/commit/5f6f95
+		 */
+		if (!in_rte)
+			continue;
+#endif
 
 		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
 		{
@@ -1474,8 +1499,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			{
 				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
 
-				if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk) &&
-					!ts_is_hypercore_am(chunk->amoid))
+				if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk))
 				{
 					rel->indexlist = NIL;
 				}
@@ -1527,7 +1551,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
 }
 
 /*
- * Replace INSERT (ModifyTablePath) paths on hypertables.
+ * Replace ModifyTablePath paths on hypertables.
  *
  * From the ModifyTable description: "Each ModifyTable node contains
  * a list of one or more subplans, much like an Append node.  There
@@ -1535,18 +1559,6 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *
  * The subplans produce the tuples for INSERT, while the result relation is the
  * table we'd like to insert into.
- *
- * The way we redirect tuples to chunks is to insert an intermediate "chunk
- * dispatch" plan node, between the ModifyTable and its subplan that produces
- * the tuples. When the ModifyTable plan is executed, it tries to read a tuple
- * from the intermediate chunk dispatch plan instead of the original
- * subplan. The chunk plan reads the tuple from the original subplan, looks up
- * the chunk, sets the executor's resultRelation to the chunk table and finally
- * returns the tuple to the ModifyTable node.
- *
- * We also need to wrap the ModifyTable plan node with a HypertableInsert node
- * to give the ChunkDispatchState node access to the ModifyTableState node in
- * the execution phase.
  *
  * Conceptually, the plan modification looks like this:
  *
@@ -1567,10 +1579,6 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
  *		  ^
  *		  |
  *	[ ModifyTable ] -> resultRelation
- *		  ^			   ^
- *		  | Tuple	  / <Set resultRelation to the matching chunk table>
- *		  |			 /
- * [ ChunkDispatch ]
  *		  ^
  *		  | Tuple
  *		  |
@@ -1592,34 +1600,82 @@ replace_modify_hypertable_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			ModifyTablePath *mt = castNode(ModifyTablePath, path);
 			RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 			Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
-			if (
-				/* We only route UPDATE/DELETE through our CustomNode for PG 14+ because
-				 * the codepath for earlier versions is different. */
-				mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE ||
-				mt->operation == CMD_INSERT)
+
+			/* Direct INSERT into internal compressed hypertable is not supported.
+			 * Compressed chunks have no dimensions so we could not do tuple routing.
+			 * Additionally internal compressed hypertable has no columns so you
+			 * couldn't even insert any actual data.
+			 */
+			if (ht && ht->fd.compression_state == HypertableInternalCompressionTable)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("direct insert into internal compressed hypertable is not "
+								"supported")));
+
+			/* Check for DML on chunk directly */
+			if (!ht)
 			{
-				if (ht)
+				Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
+				if (!chunk)
 				{
-					path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
+					/* Not a hypertable or chunk, continue */
+					new_pathlist = lappend(new_pathlist, path);
+					continue;
+				}
+
+				ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
+				if (ht->fd.compression_state == HypertableInternalCompressionTable)
+				{
+					/*
+					 * For operations on internal compressed chunks we block modifications
+					 * if the chunk belongs to a frozen chunk.
+					 * Direct modifications of uncompressed chunks is intercepted by chunk
+					 * tuple routing.
+					 * In all other cases of direct modification of chunks we dont interfere
+					 * and do not add a ModifyHypertable node.
+					 */
+					Chunk *uncompressed = ts_chunk_get_compressed_chunk_parent(chunk);
+					if (ts_chunk_is_frozen(uncompressed))
+						ereport(ERROR,
+								(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+								 errmsg("cannot modify compressed chunk belonging to a frozen "
+										"chunk")));
+
+					new_pathlist = lappend(new_pathlist, path);
+					continue;
 				}
 			}
-			if (ht && mt->operation == CMD_MERGE)
+
+			switch (mt->operation)
 			{
-				List *firstMergeActionList = linitial(mt->mergeActionLists);
-				ListCell *l;
-				/*
-				 * Iterate over merge action to check if there is an INSERT sql.
-				 * If so, then add ChunkDispatch node.
-				 */
-				foreach (l, firstMergeActionList)
+				case CMD_INSERT:
+				case CMD_UPDATE:
+				case CMD_DELETE:
 				{
-					MergeAction *action = (MergeAction *) lfirst(l);
-					if (action->commandType == CMD_INSERT)
-					{
-						path = ts_modify_hypertable_path_create(root, mt, ht, input_rel);
-						break;
-					}
+					path = ts_modify_hypertable_path_create(root, mt, input_rel);
+					break;
 				}
+				case CMD_MERGE:
+				{
+					List *firstMergeActionList = linitial(mt->mergeActionLists);
+					ListCell *l;
+					/*
+					 * Iterate over merge action to check if there is an INSERT sql.
+					 * If so, then add ModifyHypertable node.
+					 */
+					foreach (l, firstMergeActionList)
+					{
+						MergeAction *action = (MergeAction *) lfirst(l);
+						if (action->commandType == CMD_INSERT)
+						{
+							path = ts_modify_hypertable_path_create(root, mt, input_rel);
+							break;
+						}
+					}
+					break;
+				}
+				default:
+					break;
 			}
 		}
 
@@ -1813,6 +1869,12 @@ cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, List *outer_sor
 						get_sortgroupref_clause(subq_tle->ressortgroupref, subq_groupclause_copy);
 					subq_gclause->sortop = outer_sc->sortop;
 					subq_gclause->nulls_first = outer_sc->nulls_first;
+#if PG18_GE
+					/* Track sort direction in SortGroupClause
+					 * https://github.com/postgres/postgres/commit/0d2aa4d4
+					 */
+					subq_gclause->reverse_sort = outer_sc->reverse_sort;
+#endif
 					Assert(subq_gclause->eqop == outer_sc->eqop);
 					new_groupclause = lappend(new_groupclause, subq_gclause);
 					not_found = false;

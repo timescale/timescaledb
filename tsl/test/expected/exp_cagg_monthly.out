@@ -12,7 +12,6 @@ SELECT create_hypertable(
     create_hypertable    
 -------------------------
  (1,public,conditions,t)
-(1 row)
 
 INSERT INTO conditions (day, city, temperature) VALUES
   ('2021-06-14', 'Moscow', 26),
@@ -75,7 +74,6 @@ WHERE mat_hypertable_id = :cagg_id;
  mat_hypertable_id |                            bucket_func                            | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
 -------------------+-------------------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
                  2 | timescaledb_experimental.time_bucket_ng(interval,pg_catalog.date) | @ 1 mon      | <NULL>        | <NULL>        | <NULL>          | f
-(1 row)
 
 \pset null ""
 -- Check that the saved invalidation threshold is -infinity
@@ -85,7 +83,6 @@ WHERE hypertable_id = :ht_id;
  to_timestamp 
 --------------
  -infinity
-(1 row)
 
 -- Make sure truncating of the refresh window works
 \set ON_ERROR_STOP 0
@@ -100,7 +97,6 @@ ORDER by month, city;
   city  |   month    | min | max 
 --------+------------+-----+-----
  Moscow | 2021-06-01 |  22 |  34
-(1 row)
 
 -- Make sure larger refresh window is fine too
 CALL refresh_continuous_aggregate('conditions_summary', '2021-03-01', '2021-07-01');
@@ -110,7 +106,6 @@ ORDER by month, city;
   city  |   month    | min | max 
 --------+------------+-----+-----
  Moscow | 2021-06-01 |  22 |  34
-(1 row)
 
 -- Special check for "invalid or missing information about the bucketing
 -- function" code path
@@ -136,7 +131,6 @@ WHERE hypertable_id = :ht_id;
          timezone         
 --------------------------
  Thu Jul 01 00:00:00 2021
-(1 row)
 
 -- Add some dummy data for two more months and call refresh (no invalidations test case)
 INSERT INTO conditions (day, city, temperature)
@@ -274,7 +268,6 @@ ORDER BY city DESC, day;
  2021-08-29 | Berlin |         122
  2021-08-30 | Berlin |         123
  2021-08-31 | Berlin |         124
-(124 rows)
 
 -- Make sure the invalidation threshold was unaffected
 SELECT _timescaledb_functions.to_timestamp(watermark) at time zone 'UTC'
@@ -283,7 +276,6 @@ WHERE hypertable_id = :ht_id;
          timezone         
 --------------------------
  Thu Jul 01 00:00:00 2021
-(1 row)
 
 -- Make sure the invalidation log is empty
 SELECT
@@ -293,7 +285,6 @@ FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
 WHERE hypertable_id = :ht_id;
  lowest | greatest 
 --------+----------
-(0 rows)
 
 -- Call refresh
 CALL refresh_continuous_aggregate('conditions_summary', '2021-06-15', '2021-09-15');
@@ -307,7 +298,6 @@ ORDER by month, city;
  Moscow | 2021-07-01 |   1 |  31
  Berlin | 2021-08-01 |  94 | 124
  Moscow | 2021-08-01 |  32 |  62
-(5 rows)
 
 -- Make sure the invalidation threshold has changed
 SELECT _timescaledb_functions.to_timestamp(watermark) at time zone 'UTC'
@@ -316,22 +306,21 @@ WHERE hypertable_id = :ht_id;
          timezone         
 --------------------------
  Wed Sep 01 00:00:00 2021
-(1 row)
 
 -- Make sure the catalog is cleaned up when the cagg is dropped
 DROP MATERIALIZED VIEW conditions_summary;
 NOTICE:  drop cascades to 3 other objects
-SELECT * FROM _timescaledb_catalog.continuous_agg
+SELECT count(*) FROM _timescaledb_catalog.continuous_agg
 WHERE mat_hypertable_id = :cagg_id;
- mat_hypertable_id | raw_hypertable_id | parent_mat_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | direct_view_schema | direct_view_name | materialized_only | finalized 
--------------------+-------------------+--------------------------+------------------+----------------+---------------------+-------------------+--------------------+------------------+-------------------+-----------
-(0 rows)
+ count 
+-------
+     0
 
-SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function
+SELECT count(*) FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
- mat_hypertable_id | bucket_func | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
--------------------+-------------+--------------+---------------+---------------+-----------------+--------------------
-(0 rows)
+ count 
+-------
+     0
 
 -- Re-create cagg, this time WITH DATA
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
@@ -356,7 +345,6 @@ ORDER by month, city;
  Moscow | 2021-07-01 |   1 |  31
  Berlin | 2021-08-01 |  94 | 124
  Moscow | 2021-08-01 |  32 |  62
-(5 rows)
 
 -- Check the invalidation.
 -- Step 1/2. Insert some more data , do a refresh and make sure that the
@@ -373,7 +361,6 @@ FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
 WHERE hypertable_id = :ht_id;
  lowest | greatest 
 --------+----------
-(0 rows)
 
 SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
 FROM conditions_summary
@@ -387,7 +374,6 @@ ORDER by month, city;
  Moscow | 2021-08-01 |  32 |  62
  Berlin | 2021-09-01 |  16 |  30
  Moscow | 2021-09-01 |   1 |  15
-(7 rows)
 
 -- Step 2/2. Add more data below the invalidation threshold, make sure that the
 --           invalidation log is not empty, that do a refresh.
@@ -403,7 +389,6 @@ WHERE hypertable_id = :ht_id;
           lowest          |         greatest         
 --------------------------+--------------------------
  Thu Sep 16 00:00:00 2021 | Thu Sep 30 00:00:00 2021
-(1 row)
 
 CALL refresh_continuous_aggregate('conditions_summary', '2021-09-01', '2021-10-01');
 SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
@@ -418,7 +403,6 @@ ORDER by month, city;
  Moscow | 2021-08-01 |  32 |  62
  Berlin | 2021-09-01 |  16 |  40
  Moscow | 2021-09-01 | -40 |  15
-(7 rows)
 
 SELECT
     _timescaledb_functions.to_timestamp(lowest_modified_value) AS lowest,
@@ -427,7 +411,6 @@ FROM _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log
 WHERE hypertable_id = :ht_id;
  lowest | greatest 
 --------+----------
-(0 rows)
 
 -- Create a real-time aggregate
 DROP MATERIALIZED VIEW conditions_summary;
@@ -455,7 +438,6 @@ ORDER by month, city;
  Moscow | 2021-08-01 |  32 |  62
  Berlin | 2021-09-01 |  16 |  40
  Moscow | 2021-09-01 | -40 |  15
-(7 rows)
 
 -- Add some data to the hypertable and make sure they are visible in the cagg
 INSERT INTO conditions (day, city, temperature) VALUES
@@ -481,7 +463,6 @@ ORDER by month, city;
  Moscow | 2021-09-01 | -40 |  15
  Berlin | 2021-10-01 |   5 |   8
  Moscow | 2021-10-01 |   1 |   4
-(9 rows)
 
 -- Refresh the cagg and make sure that the result of SELECT query didn't change
 CALL refresh_continuous_aggregate('conditions_summary', '2021-10-01', '2021-11-01');
@@ -499,7 +480,6 @@ ORDER by month, city;
  Moscow | 2021-09-01 | -40 |  15
  Berlin | 2021-10-01 |   5 |   8
  Moscow | 2021-10-01 |   1 |   4
-(9 rows)
 
 -- Add some more data, enable compression, compress the chunks and repeat the test
 INSERT INTO conditions (day, city, temperature) VALUES
@@ -515,7 +495,6 @@ ALTER TABLE conditions SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'city'
 );
-NOTICE:  default order by for hypertable "conditions" is set to "day DESC"
 SELECT compress_chunk(ch) FROM show_chunks('conditions') AS ch;
               compress_chunk              
 ------------------------------------------
@@ -633,7 +612,6 @@ SELECT compress_chunk(ch) FROM show_chunks('conditions') AS ch;
  _timescaledb_internal._hyper_1_124_chunk
  _timescaledb_internal._hyper_1_125_chunk
  _timescaledb_internal._hyper_1_126_chunk
-(114 rows)
 
 -- Data for 2021-11 is seen because the cagg is real-time
 SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
@@ -652,7 +630,6 @@ ORDER by month, city;
  Moscow | 2021-10-01 |   1 |   4
  Berlin | 2021-11-01 |  15 |  18
  Moscow | 2021-11-01 |  11 |  14
-(11 rows)
 
 CALL refresh_continuous_aggregate('conditions_summary', '2021-11-01', '2021-12-01');
 -- Data for 2021-11 is seen because the cagg was refreshed
@@ -672,7 +649,6 @@ ORDER by month, city;
  Moscow | 2021-10-01 |   1 |   4
  Berlin | 2021-11-01 |  15 |  18
  Moscow | 2021-11-01 |  11 |  14
-(11 rows)
 
 -- Test N-months buckets where N in 2,3,4,5,6,12,13 on a relatively large table
 -- This also tests the case when a single hypertable has multiple caggs.
@@ -686,7 +662,6 @@ SELECT create_hypertable(
        create_hypertable       
 -------------------------------
  (6,public,conditions_large,t)
-(1 row)
 
 INSERT INTO conditions_large(day, temperature)
 SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
@@ -765,7 +740,6 @@ SELECT * FROM conditions_large_2m ORDER BY bucket;
  07-01-2019 |  701 |  831
  09-01-2019 |  901 | 1031
  11-01-2019 | 1101 | 1231
-(60 rows)
 
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_3m
@@ -821,7 +795,6 @@ SELECT * FROM conditions_large_3m ORDER BY bucket;
  04-01-2019 |  401 |  630
  07-01-2019 |  701 |  930
  10-01-2019 | 1001 | 1231
-(40 rows)
 
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_4m
@@ -867,7 +840,6 @@ SELECT * FROM conditions_large_4m ORDER BY bucket;
  01-01-2019 | 101 |  430
  05-01-2019 | 501 |  831
  09-01-2019 | 901 | 1231
-(30 rows)
 
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_5m
@@ -907,7 +879,6 @@ SELECT * FROM conditions_large_5m ORDER BY bucket;
  10-01-2018 | 101 | 1231
  03-01-2019 | 301 |  731
  08-01-2019 | 801 | 1231
-(24 rows)
 
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_6m
@@ -943,7 +914,6 @@ SELECT * FROM conditions_large_6m ORDER BY bucket;
  07-01-2018 | 701 | 1231
  01-01-2019 | 101 |  630
  07-01-2019 | 701 | 1231
-(20 rows)
 
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_1y
@@ -969,7 +939,6 @@ SELECT * FROM conditions_large_1y ORDER BY bucket;
  01-01-2017 | 101 | 1231
  01-01-2018 | 101 | 1231
  01-01-2019 | 101 | 1231
-(10 rows)
 
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_1y1m
@@ -995,12 +964,10 @@ SELECT * FROM conditions_large_1y1m ORDER BY bucket;
  05-01-2017 | 101 | 1231
  06-01-2018 | 101 | 1231
  07-01-2019 | 701 | 1231
-(10 rows)
 
 -- Trigger merged refresh to check corresponding code path as well
 DROP MATERIALIZED VIEW conditions_large_1y;
 NOTICE:  drop cascades to 10 other objects
-SET timescaledb.materializations_per_refresh_window = 0;
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_1y
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
@@ -1025,7 +992,6 @@ SELECT * FROM conditions_large_1y ORDER BY bucket;
  01-01-2017 | 101 | 1231
  01-01-2018 | 101 | 1231
  01-01-2019 | 101 | 1231
-(10 rows)
 
 INSERT INTO conditions_large(day, temperature)
 SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
@@ -1045,9 +1011,7 @@ SELECT * FROM conditions_large_1y ORDER BY bucket;
  01-01-2018 | 101 | 1231
  01-01-2019 | 101 | 1231
  01-01-2020 | 101 | 1231
-(11 rows)
 
-RESET timescaledb.materializations_per_refresh_window;
 -- Test the specific code path of creating a CAGG on top of empty hypertable.
 CREATE TABLE conditions_empty(
   day DATE NOT NULL,
@@ -1060,7 +1024,6 @@ SELECT create_hypertable(
        create_hypertable        
 --------------------------------
  (15,public,conditions_empty,t)
-(1 row)
 
 SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_summary_empty
@@ -1078,7 +1041,6 @@ FROM conditions_summary_empty
 ORDER by month, city;
  city | month | min | max 
 ------+-------+-----+-----
-(0 rows)
 
 -- The test above changes the record that gets added to the invalidation log
 -- for an empty table. Make sure it doesn't have any unintended side-effects
@@ -1105,7 +1067,6 @@ ORDER by month, city;
   city  |   month    | min | max 
 --------+------------+-----+-----
  Moscow | 2021-06-01 |  22 |  34
-(1 row)
 
 -- Make sure add_continuous_aggregate_policy() works
 CREATE TABLE conditions_policy(
@@ -1119,7 +1080,6 @@ SELECT create_hypertable(
         create_hypertable        
 ---------------------------------
  (17,public,conditions_policy,t)
-(1 row)
 
 INSERT INTO conditions_policy (day, city, temperature) VALUES
   ('2021-06-14', 'Moscow', 26),
@@ -1151,7 +1111,6 @@ SELECT * FROM conditions_summary_policy;
   city  |   bucket   | min | max 
 --------+------------+-----+-----
  Moscow | 06-01-2021 |  22 |  34
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- Check for "policy refresh window too small" error
@@ -1171,7 +1130,6 @@ SELECT delete_job(:job_id);
  delete_job 
 ------------
  
-(1 row)
 
 SELECT add_continuous_aggregate_policy('conditions_summary_policy',
     start_offset => INTERVAL '2 months',
@@ -1181,7 +1139,6 @@ SELECT delete_job(:job_id);
  delete_job 
 ------------
  
-(1 row)
 
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('conditions_summary_policy',
@@ -1197,5 +1154,4 @@ SELECT add_continuous_aggregate_policy('conditions_summary_policy',
  add_continuous_aggregate_policy 
 ---------------------------------
                             1002
-(1 row)
 

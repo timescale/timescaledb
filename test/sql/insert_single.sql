@@ -74,11 +74,11 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_7_16_chunk');
 SELECT * FROM "3dim";
 
 -- test that explain works
-EXPLAIN (COSTS FALSE)
+EXPLAIN (BUFFERS FALSE, COSTS FALSE)
 INSERT INTO "3dim" VALUES('2017-01-21T09:00:01', 32.9, 'green', 'nyc'),
                          ('2017-01-21T09:00:47', 27.3, 'purple', 'la') RETURNING *;
 
-EXPLAIN (COSTS FALSE)
+EXPLAIN (BUFFERS FALSE, COSTS FALSE)
 WITH "3dim_insert" AS (
      INSERT INTO "3dim" VALUES('2017-01-21T09:01:44', 19.3, 'black', 'la') RETURNING time, temp
 ), regular_insert AS (

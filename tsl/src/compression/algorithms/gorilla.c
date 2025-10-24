@@ -202,27 +202,32 @@ gorilla_compressor_finish_and_reset(Compressor *compressor)
 const Compressor gorilla_float_compressor = {
 	.append_val = gorilla_compressor_append_float,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 
 const Compressor gorilla_double_compressor = {
 	.append_val = gorilla_compressor_append_double,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 const Compressor gorilla_uint16_compressor = {
 	.append_val = gorilla_compressor_append_int16,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 const Compressor gorilla_uint32_compressor = {
 	.append_val = gorilla_compressor_append_int32,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 const Compressor gorilla_uint64_compressor = {
 	.append_val = gorilla_compressor_append_int64,
 	.append_null = gorilla_compressor_append_null_value,
+	.is_full = NULL,
 	.finish = gorilla_compressor_finish_and_reset,
 };
 
@@ -421,6 +426,7 @@ compressed_gorilla_data_serialize(CompressedGorillaData *input)
 	data = palloc0(compressed_size);
 	compressed = (GorillaCompressed *) data;
 	SET_VARSIZE(&compressed->vl_len_, compressed_size);
+	Assert(compressed_size % 4 == 0);
 
 	compressed->last_value = input->header->last_value;
 	compressed->compression_algorithm = COMPRESSION_ALGORITHM_GORILLA;

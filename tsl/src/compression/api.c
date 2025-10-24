@@ -8,7 +8,6 @@
  *  compress and decompress chunks
  */
 #include <postgres.h>
-#include "guc.h"
 #include <access/tableam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
@@ -45,8 +44,6 @@
 #include "debug_point.h"
 #include "error_utils.h"
 #include "errors.h"
-#include "hypercore/hypercore_handler.h"
-#include "hypercore/utils.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -254,7 +251,7 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	compress_ht = ts_hypertable_get_by_id(srcht->fd.compressed_hypertable_id);
 	if (compress_ht == NULL)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("missing columnstore-enabled hypertable")));
 	/* user has to be the owner of the compression table too */
 	ts_hypertable_permissions_check(compress_ht->main_table_relid, GetUserId());
@@ -301,7 +298,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		p->coordinates[p->num_coords++] = current_chunk->cube->slices[i]->fd.range_start;
 	}
 
-	previous_chunk = ts_hypertable_find_chunk_for_point(ht, p);
+	previous_chunk = ts_hypertable_find_chunk_for_point(ht, p, ExclusiveLock);
 
 	/* If there is no previous adjacent chunk along the time dimension or
 	 * if it hasn't been compressed yet, we can't merge.
@@ -335,7 +332,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	/* Get reloid of the previous compressed chunk via settings */
 	CompressionSettings *prev_comp_settings = ts_compression_settings_get(previous_chunk->table_id);
 	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
-	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
+	if (!ts_compression_settings_equal_with_defaults(ht_comp_settings, prev_comp_settings))
 		return NULL;
 
 	/* We don't support merging chunks with sequence numbers */
@@ -444,28 +441,13 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
-		/* Associate compressed chunk with main chunk. Needed for Hypercore
-		 * TAM to not recreate the compressed chunk again when the main chunk
-		 * rel is opened. */
+		/* Associate compressed chunk with main chunk. */
 		ts_chunk_set_compressed_chunk(cxt.srcht_chunk, compress_ht_chunk->fd.id);
 		new_compressed_chunk = true;
 		ereport(DEBUG1,
 				(errmsg("new columnstore chunk \"%s.%s\" created",
 						NameStr(compress_ht_chunk->fd.schema_name),
 						NameStr(compress_ht_chunk->fd.table_name))));
-
-		/* Since a new compressed relation was created it is necessary to
-		 * invalidate the relcache entry for the chunk because Hypercore TAM
-		 * caches information about the compressed relation in the
-		 * relcache. */
-		if (ts_is_hypercore_am(cxt.srcht_chunk->amoid))
-		{
-			/* Tell other backends */
-			CacheInvalidateRelcacheByRelid(cxt.srcht_chunk->table_id);
-
-			/* Immediately invalidate our own cache */
-			RelationCacheInvalidateEntry(cxt.srcht_chunk->table_id);
-		}
 
 		EventTriggerAlterTableEnd();
 	}
@@ -502,27 +484,11 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
 
-	/*
-	 * Calculate and add the column dimension ranges for the src chunk. This has to
-	 * be done before the compression. In case of recompression, the logic will get the
-	 * min/max entries for the uncompressed portion and reconcile and update the existing
-	 * entry for ht/chunk/column combination. This case handles:
-	 *
-	 * * INSERTs into uncompressed chunk
-	 * * UPDATEs into uncompressed chunk
-	 *
-	 * In case of DELETEs, the entries won't exist in the uncompressed chunk, but since
-	 * we are deleting, we will stay within the earlier computed max/min range. This
-	 * means that the chunk will not get pruned for a larger range of values. This will
-	 * work ok enough if only a few of the compressed chunks get DELETEs down the line.
-	 * In the future, we can look at computing min/max entries in the compressed chunk
-	 * using the batch metadata and then recompute the range to handle DELETE cases.
-	 */
-	if (cxt.srcht->range_space)
-		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk);
-
 	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
 	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
+
+	if (cxt.srcht->range_space)
+		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk);
 
 	if (new_compressed_chunk)
 	{
@@ -534,32 +500,24 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 											  cstat.rowcnt_post_compression,
 											  cstat.rowcnt_frozen);
 
-		/* Copy chunk constraints (including fkey) to compressed chunk.
-		 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
-		 * referenced table during compression.
-		 */
-		ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
-		ts_trigger_create_all_on_chunk(compress_ht_chunk);
-
 		/* Detect and emit warning if poor compression ratio is found */
 		float compression_ratio = ((float) before_size.total_size / after_size.total_size);
 		float POOR_COMPRESSION_THRESHOLD = 1.0;
-		ereport(ts_guc_enable_compression_ratio_warnings &&
-						compression_ratio < POOR_COMPRESSION_THRESHOLD ?
-					WARNING :
-					DEBUG1,
-				errcode(ERRCODE_WARNING),
-				errmsg("poor compression rate detected for chunk \"%s\"'",
-					   get_rel_name(chunk_relid)),
-				errdetail("Chunk \"%s\" has a poor compression ratio: %.2f. Size before "
-						  "compression: " INT64_FORMAT
-						  " bytes. Size after compression: " INT64_FORMAT " bytes",
-						  get_rel_name(chunk_relid),
-						  compression_ratio,
-						  before_size.total_size,
-						  after_size.total_size),
-				errhint("Changing compression settings for \"%s\" can improve compression rate",
-						get_rel_name(hypertable_relid)));
+		if (ts_guc_enable_compression_ratio_warnings &&
+			compression_ratio < POOR_COMPRESSION_THRESHOLD)
+			ereport(WARNING,
+					errcode(ERRCODE_WARNING),
+					errmsg("poor compression rate detected for chunk \"%s\"'",
+						   get_rel_name(chunk_relid)),
+					errdetail("Chunk \"%s\" has a poor compression ratio: %.2f. Size before "
+							  "compression: " INT64_FORMAT
+							  " bytes. Size after compression: " INT64_FORMAT " bytes",
+							  get_rel_name(chunk_relid),
+							  compression_ratio,
+							  before_size.total_size,
+							  after_size.total_size),
+					errhint("Changing compression settings for \"%s\" can improve compression rate",
+							get_rel_name(hypertable_relid)));
 	}
 	else
 	{
@@ -612,7 +570,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);
 	if (compressed_hypertable == NULL)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("missing columnstore-enabled hypertable")));
 
 	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
@@ -756,10 +714,6 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
 	EventTriggerAlterTableEnd();
 
-	/* Copy chunk constraints (including fkey) to compressed chunk */
-	ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
-	ts_trigger_create_all_on_chunk(compress_ht_chunk);
-
 	/* Insert empty stats to compression_chunk_size */
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
 										  &uncompressed_size,
@@ -783,164 +737,19 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(chunk_relid);
 }
 
-static Oid
-set_access_method(Oid relid, const char *amname)
-{
-	AlterTableCmd cmd = {
-		.type = T_AlterTableCmd,
-		.subtype = AT_SetAccessMethod,
-		.name = pstrdup(amname),
-	};
-	bool to_hypercore = strcmp(amname, TS_HYPERCORE_TAM_NAME) == 0;
-	Oid amoid = ts_get_rel_am(relid);
-	Oid new_amoid = get_am_oid(amname, false);
-
-	/* Setting the same access method is a no-op */
-	if (amoid == new_amoid)
-		return relid;
-
-	hypercore_alter_access_method_begin(relid, !to_hypercore);
-	AlterTableInternal(relid, list_make1(&cmd), false);
-
-#if (PG_VERSION_NUM < 150004)
-
-	/*
-	 * Also do a runtime check in order to be ABI compatible with PG server
-	 * upgrades, e.g., upgrading from 15.3 to 15.4 without updating the
-	 * extension.
-	 */
-	const char *version_num_str = GetConfigOption("server_version_num", false, false);
-	int server_version_num;
-
-	if (parse_int(version_num_str, &server_version_num, 0, NULL) && server_version_num < 150004)
-	{
-		/* Fix for PostgreSQL bug where pg_depend was not updated to reflect the
-		 * new dependency between AM and relation. See related PG fix here:
-		 * https://github.com/postgres/postgres/commit/97d89101045fac8cb36f4ef6c08526ea0841a596 */
-		if (changeDependencyFor(RelationRelationId,
-								relid,
-								AccessMethodRelationId,
-								amoid,
-								new_amoid) != 1)
-			elog(ERROR,
-				 "could not change access method dependency for relation \"%s.%s\"",
-				 get_namespace_name(get_rel_namespace(relid)),
-				 get_rel_name(relid));
-	}
-#endif
-	hypercore_alter_access_method_finish(relid, !to_hypercore);
-
-	return relid;
-}
-
-/*
- * When using compress_chunk() with hypercore, there are three cases to
- * handle:
- *
- * 1. Convert from (uncompressed) heap to hypercore
- *
- * 2. Convert from compressed heap to hypercore
- *
- * 3. Recompress a hypercore
- */
-static Oid
-compress_hypercore(Chunk *chunk, bool rel_is_hypercore, UseAccessMethod useam,
-				   bool if_not_compressed, bool recompress)
-{
-	Oid relid = InvalidOid;
-
-	/* Either the chunk is already a hypercore (and in that case recompress),
-	 * or it is being converted to one */
-	Assert(rel_is_hypercore || useam == USE_AM_TRUE);
-
-	if (ts_chunk_is_compressed(chunk) && !rel_is_hypercore)
-	{
-		Assert(useam == USE_AM_TRUE);
-		char *relname = get_rel_name(chunk->table_id);
-		char *relschema = get_namespace_name(get_rel_namespace(chunk->table_id));
-		const RangeVar *rv = makeRangeVar(relschema, relname, -1);
-		/* Do quick migration to hypercore of already compressed data by
-		 * simply changing the access method to hypercore in pg_am. */
-		hypercore_set_am(rv);
-		hypercore_set_reloptions(chunk);
-		return chunk->table_id;
-	}
-
-	switch (useam)
-	{
-		case USE_AM_FALSE:
-			/* Converting from Hypercore to "regular" compressed is currently
-			 * not supported */
-			Assert(rel_is_hypercore);
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("cannot converting to columnstore \"%s\" without using Hypercore "
-							"access method",
-							get_rel_name(chunk->table_id)),
-					 errhint("Convert to rowstore first and then convert to columnstore without "
-							 "Hypercore access method.")));
-			break;
-		case USE_AM_NULL:
-			Assert(rel_is_hypercore);
-			/* Don't forward the truncate to the compressed data during recompression */
-			bool truncate_compressed = hypercore_set_truncate_compressed(false);
-			relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
-			hypercore_set_truncate_compressed(truncate_compressed);
-			break;
-		case USE_AM_TRUE:
-			if (rel_is_hypercore)
-			{
-				/* Don't forward the truncate to the compressed data during recompression */
-				bool truncate_compressed = hypercore_set_truncate_compressed(false);
-				relid = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
-				hypercore_set_truncate_compressed(truncate_compressed);
-			}
-			else
-			{
-				/* Convert to a compressed hypercore by simply calling ALTER TABLE
-				 * <chunk> SET ACCESS METHOD hypercore */
-				set_access_method(chunk->table_id, TS_HYPERCORE_TAM_NAME);
-				relid = chunk->table_id;
-			}
-			break;
-	}
-
-	return relid;
-}
-
-/*
- * Check the value of the use_access_method argument and use the default value
- * otherwise.
- */
-static UseAccessMethod
-check_useam(UseAccessMethod arg, bool is_hypercore)
-{
-	if (arg == USE_AM_NULL)
-		return is_hypercore ? USE_AM_TRUE :
-							  (UseAccessMethod) ts_guc_default_hypercore_use_access_method;
-	return arg;
-}
-
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
-	UseAccessMethod useam;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
-	bool rel_is_hypercore = get_table_am_oid(TS_HYPERCORE_TAM_NAME, false) == chunk->amoid;
-	useam = check_useam(PG_ARGISNULL(3) ? USE_AM_NULL : PG_GETARG_BOOL(3), rel_is_hypercore);
 
-	if (rel_is_hypercore || useam == USE_AM_TRUE)
-		uncompressed_chunk_id =
-			compress_hypercore(chunk, rel_is_hypercore, useam, if_not_compressed, recompress);
-	else
-		uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+	uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
@@ -960,14 +769,23 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
 
+			/* try recompression first */
 			if (!valid_orderby_settings ||
-				!ts_compression_settings_equal(ht_settings, chunk_settings))
+				!ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings) ||
+				!recompress_chunk_impl(chunk))
 			{
+				/* TODO: move away from manual decompression/compression */
+				elog(NOTICE,
+					 "falling back to compress/decompress, performing full "
+					 "recompression on "
+					 "chunk \"%s.%s\"",
+					 NameStr(chunk->fd.schema_name),
+					 NameStr(chunk->fd.table_name));
 				decompress_chunk_impl(chunk, false);
 				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
-				write_logical_replication_msg_compression_end();
-				return uncompressed_chunk_id;
 			}
+			write_logical_replication_msg_compression_end();
+			return uncompressed_chunk_id;
 		}
 		if (!ts_chunk_needs_recompression(chunk))
 		{
@@ -996,8 +814,13 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 						  ""),
 					 NameStr(chunk->fd.schema_name),
 					 NameStr(chunk->fd.table_name));
-			decompress_chunk_impl(chunk, false);
-			compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+			/* try recompression first */
+			if (!recompress_chunk_impl(chunk))
+			{
+				/* TODO: move away from manual decompression/compression */
+				decompress_chunk_impl(chunk, false);
+				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+			}
 		}
 	}
 	else
@@ -1029,12 +852,10 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 
 	if (!ht->fd.compressed_hypertable_id)
 		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
+				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
 				 errmsg("missing columnstore-enabled hypertable")));
 
-	if (ts_is_hypercore_am(uncompressed_chunk->amoid))
-		set_access_method(uncompressed_chunk_id, "heap");
-	else if (!ts_chunk_is_compressed(uncompressed_chunk))
+	if (!ts_chunk_is_compressed(uncompressed_chunk))
 	{
 		ereport((if_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -1093,4 +914,11 @@ get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 	table_close(uncompressed_chunk_rel, NoLock);
 
 	return index_oid;
+}
+
+Chunk *
+tsl_compression_chunk_create(Hypertable *compressed_ht, Chunk *src_chunk)
+{
+	/* Create a new compressed chunk */
+	return create_compress_chunk(compressed_ht, src_chunk, InvalidOid);
 }

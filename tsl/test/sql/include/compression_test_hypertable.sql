@@ -18,7 +18,7 @@ SET client_min_messages = ERROR;
 
 \c :TEST_DBNAME
 SET client_min_messages = ERROR;
-CREATE EXTENSION timescaledb CASCADE;
+CREATE EXTENSION IF NOT EXISTS timescaledb;
 RESET client_min_messages;
 
 --\! cp dump/pg_dump.sql /tmp/dump.sql

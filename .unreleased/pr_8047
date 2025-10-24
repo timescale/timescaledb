@@ -1,1 +1,0 @@
-Implements: #8047 Support SkipScan for SELECT DISTINCT with multiple distincts when all but one distinct is pinned

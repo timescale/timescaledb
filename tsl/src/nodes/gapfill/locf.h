@@ -21,4 +21,5 @@ typedef struct GapFillLocfColumnState
 void gapfill_locf_initialize(GapFillLocfColumnState *, GapFillState *, FuncExpr *);
 void gapfill_locf_group_change(GapFillLocfColumnState *);
 void gapfill_locf_tuple_returned(GapFillLocfColumnState *, Datum, bool);
-void gapfill_locf_calculate(GapFillLocfColumnState *, GapFillState *, int64, Datum *, bool *);
+void gapfill_locf_calculate(GapFillLocfColumnState *, GapFillState *, TupleTableSlot *, int64,
+							Datum *, bool *);

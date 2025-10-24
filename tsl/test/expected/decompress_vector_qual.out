@@ -6,20 +6,16 @@ create function stable_abs(x int4) returns int4 as 'int4abs' language internal s
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
 select create_hypertable('vectorqual', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (1,public,vectorqual,t)
-(1 row)
 
 alter table vectorqual set (timescaledb.compress, timescaledb.compress_segmentby = 'device');
-NOTICE:  default order by for hypertable "vectorqual" is set to "ts DESC"
 insert into vectorqual(ts, device, metric1, metric2) values ('2020-01-01 00:00:00', 1, 11, 12);
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
  count 
 -------
      1
-(1 row)
 
 alter table vectorqual drop column metric1;
 insert into vectorqual(ts, device, metric2) values ('2021-01-01 00:00:00', 2, 22);
@@ -28,7 +24,6 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
  count 
 -------
      2
-(1 row)
 
 alter table vectorqual add column metric3 int4 default 777;
 insert into vectorqual(ts, device, metric2, metric3) values ('2022-01-01 00:00:00', 3, 32, 33);
@@ -38,7 +33,6 @@ NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
  count 
 -------
      3
-(1 row)
 
 alter table vectorqual add column metric4 int8;
 insert into vectorqual(ts, device, metric2, metric3, metric4) values ('2023-01-01 00:00:00', 4, 42, 43, 44);
@@ -49,7 +43,6 @@ NOTICE:  chunk "_hyper_1_5_chunk" is already converted to columnstore
  count 
 -------
      4
-(1 row)
 
 select * from vectorqual order by vectorqual;
             ts            | metric2 | device | metric3 | metric4 
@@ -58,104 +51,85 @@ select * from vectorqual order by vectorqual;
  Fri Jan 01 00:00:00 2021 |      22 |      2 |     777 |        
  Sat Jan 01 00:00:00 2022 |      32 |      3 |      33 |        
  Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44
-(4 rows)
 
 -- single chunk
 select * from vectorqual where ts between '2019-02-02' and '2020-02-02' order by vectorqual;
             ts            | metric2 | device | metric3 | metric4 
 --------------------------+---------+--------+---------+---------
  Wed Jan 01 00:00:00 2020 |      12 |      1 |     777 |        
-(1 row)
 
 select * from vectorqual where ts between '2020-02-02' and '2021-02-02' order by vectorqual;
             ts            | metric2 | device | metric3 | metric4 
 --------------------------+---------+--------+---------+---------
  Fri Jan 01 00:00:00 2021 |      22 |      2 |     777 |        
-(1 row)
 
 select * from vectorqual where ts between '2021-02-02' and '2022-02-02' order by vectorqual;
             ts            | metric2 | device | metric3 | metric4 
 --------------------------+---------+--------+---------+---------
  Sat Jan 01 00:00:00 2022 |      32 |      3 |      33 |        
-(1 row)
 
 select * from vectorqual where ts between '2022-02-02' and '2023-02-02' order by vectorqual;
             ts            | metric2 | device | metric3 | metric4 
 --------------------------+---------+--------+---------+---------
  Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44
-(1 row)
 
 set timescaledb.debug_require_vector_qual to 'require' /* all following quals must be vectorized */;
 select count(*) from vectorqual where ts > '1999-01-01 00:00:00';
  count 
 -------
      4
-(1 row)
 
 select count(*) from vectorqual where metric2 = 22;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where 22 = metric2 /* commutators */;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric3 = 33;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric3 = 777 /* default value */;
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where metric4 = 44 /* column with default null */;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric4 >= 0 /* nulls shouldn't pass the qual */;
  count 
 -------
      1
-(1 row)
 
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;
  count 
 -------
      1
-(1 row)
 
 -- Test various combinations of arithmetic types.
 create table arithmetic(ts int, a int2, b int4, c int8, d float4, e float8,
     ax int2, bx int4, cx int8, dx float4, ex float8);
 select create_hypertable('arithmetic', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (3,public,arithmetic,t)
-(1 row)
 
 alter table arithmetic set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "arithmetic" is set to ""
-NOTICE:  default order by for hypertable "arithmetic" is set to "ts DESC"
 insert into arithmetic values (100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
     (101, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
 select count(compress_chunk(x, true)) from show_chunks('arithmetic') x;
  count 
 -------
      1
-(1 row)
 
 set timescaledb.debug_require_vector_qual to 'require';
 select * from arithmetic where
@@ -168,7 +142,6 @@ select * from arithmetic where
  ts  | a | b | c | d | e | ax | bx | cx | dx | ex 
 -----+---+---+---+---+---+----+----+----+----+----
  101 | 2 | 3 | 4 | 5 | 6 |  7 |  8 |  9 | 10 | 11
-(1 row)
 
 -- Test columns that don't support bulk decompression.
 alter table vectorqual add column tag name;
@@ -181,7 +154,6 @@ NOTICE:  chunk "_hyper_1_7_chunk" is already converted to columnstore
  count 
 -------
      5
-(1 row)
 
 set timescaledb.debug_require_vector_qual to 'require';
 select tag from vectorqual where metric2 > 0;
@@ -192,7 +164,6 @@ select tag from vectorqual where metric2 > 0;
  
  
  tag5
-(5 rows)
 
 -- Can't vectorize parameterized join clauses for now.
 set timescaledb.debug_require_vector_qual to 'forbid';
@@ -207,7 +178,6 @@ with values(x) as materialized(select distinct metric2 from vectorqual)
  32 |      32
  42 |      42
  52 |      52
-(5 rows)
 
 reset enable_hashjoin;
 reset enable_mergejoin;
@@ -217,7 +187,6 @@ select count(*) from vectorqual where metric2
  count 
 -------
      1
-(1 row)
 
 -- Can vectorize clauses with query parameters.
 set timescaledb.debug_require_vector_qual to 'require';
@@ -227,7 +196,6 @@ execute p(33);
  count 
 -------
      1
-(1 row)
 
 deallocate p;
 -- Also try query parameter in combination with a stable function.
@@ -236,7 +204,6 @@ execute p(33);
  count 
 -------
      1
-(1 row)
 
 deallocate p;
 reset plan_cache_mode;
@@ -248,14 +215,12 @@ select * from vectorqual where ts > '2021-01-01 00:00:00' order by vectorqual;
  Sat Jan 01 00:00:00 2022 |      32 |      3 |      33 |         | 
  Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44 | 
  Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
-(3 rows)
 
 select * from vectorqual where metric4 >= 0 order by vectorqual;
             ts            | metric2 | device | metric3 | metric4 | tag  
 --------------------------+---------+--------+---------+---------+------
  Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44 | 
  Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
-(2 rows)
 
 -- Constraints on columns not selected.
 select metric4 from vectorqual where ts > '2021-01-01 00:00:00' order by 1;
@@ -264,7 +229,6 @@ select metric4 from vectorqual where ts > '2021-01-01 00:00:00' order by 1;
       44
       54
         
-(3 rows)
 
 -- ANDed constraints on multiple columns.
 select * from vectorqual where ts > '2021-01-01 00:00:00' and metric3 > 40 order by vectorqual;
@@ -272,7 +236,6 @@ select * from vectorqual where ts > '2021-01-01 00:00:00' and metric3 > 40 order
 --------------------------+---------+--------+---------+---------+------
  Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44 | 
  Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
-(2 rows)
 
 -- ORed constrainst on multiple columns.
 set timescaledb.debug_require_vector_qual to 'require';
@@ -286,52 +249,44 @@ select * from vectorqual where ts > '2021-01-01 00:00:00' or metric3 > 40 order 
  Sat Jan 01 00:00:00 2022 |      32 |      3 |      33 |         | 
  Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44 | 
  Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
-(5 rows)
 
 -- Some more tests for boolean operations.
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00';
  count 
 -------
      3
-(1 row)
 
 select count(*) from vectorqual where 40 < metric3;
  count 
 -------
      4
-(1 row)
 
 select count(*) from vectorqual where metric2 < 0;
  count 
 -------
      0
-(1 row)
 
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00' or 40 < metric3;
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where not (ts <= '2021-01-01 00:00:00' and 40 >= metric3);
  count 
 -------
      5
-(1 row)
 
 -- early exit inside AND BoolExpr
 select count(*) from vectorqual where metric2 < 0 or (metric4 < -1 and 40 >= metric3);
  count 
 -------
      0
-(1 row)
 
 -- early exit after OR BoolExpr
 select count(*) from vectorqual where metric2 < 0 or metric3  < -1;
  count 
 -------
      0
-(1 row)
 
 -- expression evaluated to null at run time
 select count(*) from vectorqual where metric3 = 777
@@ -339,7 +294,6 @@ select count(*) from vectorqual where metric3 = 777
  count 
 -------
      2
-(1 row)
 
 reset timescaledb.enable_bulk_decompression;
 -- Test with unary operator.
@@ -349,13 +303,11 @@ select count(*) from vectorqual where !!metric3;
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where not !!metric3;
  count 
 -------
      0
-(1 row)
 
 -- Custom operator on column that supports bulk decompression is not vectorized.
 set timescaledb.debug_require_vector_qual to 'forbid';
@@ -365,25 +317,21 @@ select count(*) from vectorqual where metric3 === 777;
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where metric3 === any(array[777, 888]);
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where not metric3 === 777;
  count 
 -------
      3
-(1 row)
 
 select count(*) from vectorqual where metric3 = 777 or metric3 === 777;
  count 
 -------
      2
-(1 row)
 
 -- Custom operator that can be vectorized but doesn't have a negator.
 create operator !!! (function = 'int4ne', rightarg = int4, leftarg = int4);
@@ -392,69 +340,58 @@ select count(*) from vectorqual where metric3 !!! 777;
  count 
 -------
      3
-(1 row)
 
 select count(*) from vectorqual where metric3 !!! any(array[777, 888]);
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where metric3 !!! 777 or metric3 !!! 888;
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where metric3 !!! 666 and (metric3 !!! 777 or metric3 !!! 888);
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where metric3 !!! 666 and (metric3 !!! 777 or metric3 !!! stable_abs(888));
  count 
 -------
      5
-(1 row)
 
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where not metric3 !!! 777;
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where metric3 !!! 666 or (metric3 !!! 777 and not metric3 !!! 888);
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where metric3 !!! 666 or not (metric3 !!! 777 and not metric3 !!! 888);
  count 
 -------
      5
-(1 row)
 
 set timescaledb.debug_require_vector_qual to 'allow';
 select count(*) from vectorqual where metric3 !!! 777 or not metric3 !!! 888;
  count 
 -------
      3
-(1 row)
 
 select count(*) from vectorqual where metric3 !!! 777 and not metric3 !!! 888;
  count 
 -------
      0
-(1 row)
 
 select count(*) from vectorqual where not(metric3 !!! 666 or not (metric3 !!! 777 and not metric3 !!! 888));
  count 
 -------
      0
-(1 row)
 
 -- These operators don't have a commutator.
 set timescaledb.debug_require_vector_qual to 'forbid';
@@ -462,13 +399,11 @@ select count(*) from vectorqual where 777 === metric3;
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where 777 !!! metric3;
  count 
 -------
      3
-(1 row)
 
 -- NullTest is vectorized.
 set timescaledb.debug_require_vector_qual to 'require';
@@ -476,25 +411,21 @@ select count(*) from vectorqual where metric4 is null;
  count 
 -------
      3
-(1 row)
 
 select count(*) from vectorqual where metric4 is not null;
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where metric3 = 777 or metric4 is not null;
  count 
 -------
      4
-(1 row)
 
 select count(*) from vectorqual where metric3 = stable_abs(777) or metric4 is null;
  count 
 -------
      3
-(1 row)
 
 -- Can't vectorize conditions on system columns. Have to check this on a single
 -- chunk, otherwise the whole-row var will be masked by ConvertRowType.
@@ -504,19 +435,16 @@ select count(*) from :chunk1 t where t is null;
  count 
 -------
      0
-(1 row)
 
 select count(*) from :chunk1 t where t.* is null;
  count 
 -------
      0
-(1 row)
 
 select count(*) from :chunk1 t where tableoid is null;
  count 
 -------
      0
-(1 row)
 
 -- Scalar array operators are vectorized if the operator is vectorizable.
 set timescaledb.debug_require_vector_qual to 'require';
@@ -524,25 +452,21 @@ select count(*) from vectorqual where metric3 = any(array[777, 888]); /* default
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where metric4 = any(array[44, 55]) /* default null */;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric2 > any(array[-1, -2, -3]) /* any */;
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where metric2 > all(array[-1, -2, -3]) /* all */;
  count 
 -------
      5
-(1 row)
 
 -- Also have to support null array elements, because they are impossible to
 -- prevent in stable expressions.
@@ -551,49 +475,61 @@ select count(*) from vectorqual where metric2 = any(array[null::int]) /* any wit
  count 
 -------
      0
-(1 row)
 
 select count(*) from vectorqual where metric2 = any(array[22, null]) /* any with null element */;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric2 = any(array[null, 32]) /* any with null element */;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric2 = any(array[22, null, 32]) /* any with null element */;
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where metric2 = all(array[null::int]) /* all with null element */;
  count 
 -------
      0
-(1 row)
 
 select count(*) from vectorqual where metric2 = all(array[22, null]) /* all with null element */;
  count 
 -------
      0
-(1 row)
 
 select count(*) from vectorqual where metric2 = all(array[null, 32]) /* all with null element */;
  count 
 -------
      0
-(1 row)
 
 select count(*) from vectorqual where metric2 = all(array[22, null, 32]) /* all with null element */;
  count 
 -------
      0
-(1 row)
+
+select count(*) from vectorqual where metric2 = all(array[]::int[]);
+ count 
+-------
+     5
+
+select count(*) from vectorqual where metric2 = any(array[]::int[]);
+ count 
+-------
+     0
+
+select count(*) from vectorqual where metric2 = all(null::int[]);
+ count 
+-------
+     0
+
+select count(*) from vectorqual where metric2 = any(null::int[]);
+ count 
+-------
+     0
 
 -- Check early exit.
 reset timescaledb.debug_require_vector_qual;
@@ -603,18 +539,13 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
     create_hypertable     
 --------------------------
  (5,public,singlebatch,t)
-(1 row)
 
 alter table singlebatch set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "singlebatch" is set to ""
-NOTICE:  default order by for hypertable "singlebatch" is set to "ts DESC"
 insert into singlebatch select '2022-02-02 02:02:02', metric2, device, metric3, metric4, tag from vectorqual;
 select count(compress_chunk(x, true)) from show_chunks('singlebatch') x;
  count 
 -------
      1
-(1 row)
 
 set timescaledb.debug_require_vector_qual to 'require';
 -- Uncomment to generate the test reference w/o the vector optimizations.
@@ -624,211 +555,176 @@ select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 22]);
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric2 = any(array[0, 22, 0, 0, 0]);
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 0]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 != any(array[0, 0, 0, 0, 0]);
  count 
 -------
      5
-(1 row)
 
 select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]);
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric3 = 777 and metric2 = any(array[0, 0, 0, 0, 22]);
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric3 = 777 and metric2 = any(array[0, 22, 0, 0, 0]);
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric3 = 777 and metric2 = any(array[0, 0, 0, 0, 0]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric3 = 777 and metric2 != any(array[0, 0, 0, 0, 0]);
  count 
 -------
      2
-(1 row)
 
 select count(*) from singlebatch where metric3 = 777 and metric2 <= all(array[12, 12, 12, 12, 0]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric3 = 777 and metric2 <= all(array[12, 0, 12, 12, 12]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric3 = 777 and metric2 <= all(array[12, 12, 12, 12, 12]);
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 22]) and metric3 = 777;
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric2 = any(array[0, 22, 0, 0, 0]) and metric3 = 777;
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 0]) and metric3 = 777;
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 != any(array[0, 0, 0, 0, 0]) and metric3 = 777;
  count 
 -------
      2
-(1 row)
 
 select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]) and metric3 = 777;
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]) and metric3 = 777;
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]) and metric3 = 777;
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric3 != 777 and metric2 = any(array[0, 0, 0, 0, 22]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric3 != 777 and metric2 = any(array[0, 22, 0, 0, 0]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric3 != 777 and metric2 = any(array[0, 0, 0, 0, 0]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric3 != 777 and metric2 != any(array[0, 0, 0, 0, 0]);
  count 
 -------
      3
-(1 row)
 
 select count(*) from singlebatch where metric3 != 777 and metric2 <= all(array[12, 12, 12, 12, 0]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric3 != 777 and metric2 <= all(array[12, 0, 12, 12, 12]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric3 != 777 and metric2 <= all(array[12, 12, 12, 12, 12]);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 22]) and metric3 != 777;
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 = any(array[0, 22, 0, 0, 0]) and metric3 != 777;
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 0]) and metric3 != 777;
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 != any(array[0, 0, 0, 0, 0]) and metric3 != 777;
  count 
 -------
      3
-(1 row)
 
 select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]) and metric3 != 777;
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]) and metric3 != 777;
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]) and metric3 != 777;
  count 
 -------
      0
-(1 row)
 
 -- Also check early exit for AND/OR. Top-level clause must be OR, because top-level
 -- AND is flattened into a list.
@@ -836,205 +732,171 @@ select count(*) from singlebatch where (metric2 < 20 and metric2 < 30) or metric
  count 
 -------
      2
-(1 row)
 
 select count(*) from singlebatch where (metric2 < 30 and metric2 < 20) or metric3 = 777;
  count 
 -------
      2
-(1 row)
 
 select count(*) from singlebatch where metric3 = 777 or (metric2 < 20 and metric2 < 30);
  count 
 -------
      2
-(1 row)
 
 select count(*) from singlebatch where metric3 = 777 or (metric2 < 30 and metric2 < 20);
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where (metric2 < 20 and metric2 < 30) or metric3 = 777;
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where (metric2 < 30 and metric2 < 20) or metric3 = 777;
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where metric3 = 777 or (metric2 < 20 and metric2 < 30);
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where metric3 = 777 or (metric2 < 30 and metric2 < 20);
  count 
 -------
      2
-(1 row)
 
 select count(*) from singlebatch where metric2 < 20 or metric3 < 50 or metric3 > 50;
  count 
 -------
      5
-(1 row)
 
 select count(*) from singlebatch where metric2 < 20 or metric3 > 50 or metric3 < 50;
  count 
 -------
      5
-(1 row)
 
 select count(*) from singlebatch where metric3 < 50 or metric2 < 20 or metric3 > 50;
  count 
 -------
      5
-(1 row)
 
 select count(*) from singlebatch where metric3 > 50 or metric3 < 50 or metric2 < 20;
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where metric2 < 20 or metric3 < 50 or metric3 > 50;
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where metric2 < 20 or metric3 > 50 or metric3 < 50;
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where metric3 < 50 or metric2 < 20 or metric3 > 50;
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where metric3 > 50 or metric3 < 50 or metric2 < 20;
  count 
 -------
      5
-(1 row)
 
 select count(*) from singlebatch where metric2 = 12 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric2 = 22 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric2 = 32 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric2 = 42 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where metric2 = 52 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric2 = 12 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric2 = 22 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric2 = 32 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric2 = 42 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where metric2 = 52 or metric3 = 888;
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 777 and metric2 = 12);
  count 
 -------
      1
-(1 row)
 
 select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 777 and metric2 = 666);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
  count 
 -------
      0
-(1 row)
 
 select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
  count 
 -------
      0
-(1 row)
 
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and metric2 = 12);
  count 
 -------
      2
-(1 row)
 
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and metric2 = 666);
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
  count 
 -------
      1
-(1 row)
 
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
  count 
 -------
      1
-(1 row)
 
 -- On versions >= 14, the Postgres planner chooses to build a hash table for
 -- large arrays. We currently don't vectorize in this case.
@@ -1044,7 +906,6 @@ select 1 from set_config('timescaledb.debug_require_vector_qual',
  ?column? 
 ----------
         1
-(1 row)
 
 select count(*) from singlebatch where metric2 = any(array[
  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
@@ -1061,7 +922,6 @@ select count(*) from singlebatch where metric2 = any(array[
  count 
 -------
      5
-(1 row)
 
 reset timescaledb.enable_bulk_decompression;
 reset timescaledb.debug_require_vector_qual;
@@ -1071,13 +931,11 @@ select count(*) from vectorqual where metric3 = metric4;
  count 
 -------
      0
-(1 row)
 
 select count(*) from vectorqual where metric3 = any(array[metric4]);
  count 
 -------
      0
-(1 row)
 
 -- Vectorized filters also work if we have only stable functions on the right
 -- side that can be evaluated to a constant at run time.
@@ -1086,26 +944,22 @@ select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz::t
  count 
 -------
      3
-(1 row)
 
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamp - interval '1 day';
  count 
 -------
      4
-(1 row)
 
 -- Expression that evaluates to Null.
 select count(*) from vectorqual where ts > case when '2021-01-01'::timestamp < '2022-01-01'::timestamptz then null else '2021-01-01 00:00:00'::timestamp end;
  count 
 -------
      0
-(1 row)
 
 select count(*) from vectorqual where ts < LOCALTIMESTAMP + '3 years'::interval;
  count 
 -------
      5
-(1 row)
 
 -- These filters are not vectorizable as written, because the 'timestamp > timestamptz'
 -- operator is stable, not immutable. We will try to cast the constant to the
@@ -1115,13 +969,11 @@ select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz;
  count 
 -------
      3
-(1 row)
 
 select count(*) from vectorqual where ts < LOCALTIMESTAMP at time zone 'UTC' + '3 years'::interval;
  count 
 -------
      5
-(1 row)
 
 -- Can't vectorize comparison with a volatile function.
 set timescaledb.debug_require_vector_qual to 'forbid';
@@ -1129,13 +981,11 @@ select count(*) from vectorqual where metric3 > random()::int - 100;
  count 
 -------
      5
-(1 row)
 
 select count(*) from vectorqual where ts > case when random() < 10 then null else '2021-01-01 00:00:00'::timestamp end;
  count 
 -------
      0
-(1 row)
 
 -- Test that the vectorized quals are disabled by disabling the bulk decompression.
 set timescaledb.enable_bulk_decompression to off;
@@ -1144,7 +994,6 @@ select count(*) from vectorqual where metric4 > null;
  count 
 -------
      0
-(1 row)
 
 set timescaledb.enable_bulk_decompression to on;
 -- Test that the debug GUC works
@@ -1159,56 +1008,45 @@ ERROR:  debug: encountered non-vector quals when they are disabled
 -- Date columns
 create table date_table(ts date);
 select create_hypertable('date_table', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (7,public,date_table,t)
-(1 row)
 
 alter table date_table set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "date_table" is set to ""
-NOTICE:  default order by for hypertable "date_table" is set to "ts DESC"
 insert into date_table values ('2021-01-01'), ('2021-01-02'),
     ('2021-01-03');
 select count(compress_chunk(x, true)) from show_chunks('date_table') x;
  count 
 -------
      1
-(1 row)
 
 set timescaledb.debug_require_vector_qual to 'require';
 select * from date_table where ts >  '2021-01-02';
      ts     
 ------------
  01-03-2021
-(1 row)
 
 select * from date_table where ts >= '2021-01-02';
      ts     
 ------------
  01-03-2021
  01-02-2021
-(2 rows)
 
 select * from date_table where ts =  '2021-01-02';
      ts     
 ------------
  01-02-2021
-(1 row)
 
 select * from date_table where ts <= '2021-01-02';
      ts     
 ------------
  01-02-2021
  01-01-2021
-(2 rows)
 
 select * from date_table where ts <  '2021-01-02';
      ts     
 ------------
  01-01-2021
-(1 row)
 
 select * from date_table where ts <  CURRENT_DATE;
      ts     
@@ -1216,25 +1054,20 @@ select * from date_table where ts <  CURRENT_DATE;
  01-03-2021
  01-02-2021
  01-01-2021
-(3 rows)
 
 -- Text columns.
 create table text_table(ts int, d int);
 select create_hypertable('text_table', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
  (9,public,text_table,t)
-(1 row)
 
 alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
-NOTICE:  default order by for hypertable "text_table" is set to "ts DESC"
 insert into text_table select x, 0 /*, default */ from generate_series(1, 1000) x;
 select count(compress_chunk(x, true)) from show_chunks('text_table') x;
  count 
 -------
      1
-(1 row)
 
 alter table text_table add column a text default 'default';
 insert into text_table select x, 1, '' from generate_series(1, 1000) x;
@@ -1257,26 +1090,22 @@ select sum(length(a)) from text_table;
   sum   
 --------
  118551
-(1 row)
 
 select count(distinct a) from text_table;
  count 
 -------
   2905
-(1 row)
 
 select count(compress_chunk(x, true)) from show_chunks('text_table') x;
  count 
 -------
      1
-(1 row)
 
 select compress_chunk(x) from show_chunks('text_table') x;
 NOTICE:  chunk "_hyper_9_17_chunk" is already converted to columnstore
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_17_chunk
-(1 row)
 
 -- Check result with decompression.
 set timescaledb.enable_bulk_decompression to on;
@@ -1285,13 +1114,11 @@ select sum(length(a)) from text_table;
   sum   
 --------
  118551
-(1 row)
 
 select count(distinct a) from text_table;
  count 
 -------
   2905
-(1 row)
 
 -- Test vectorized predicates.
 set timescaledb.debug_require_vector_qual to 'require';
@@ -1302,265 +1129,221 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'def
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1000 |   1 | 1000 |   0 |   0
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = '';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1000 |   1 | 1000 |   1 |   1
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'same';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1000 |   1 | 1000 |   2 |   2
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a != 'same';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   6400 |   1 | 1000 |   0 |   8
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'одинаковый';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1000 |   1 | 1000 |   6 |   6
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'same-with-nulls';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
    500 |   1 | 999 |   4 |   4
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      1 |   1 |   1 |   3 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = '異なる1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      1 |   1 |   1 |   7 |   7
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different-with-nulls1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      1 |   1 |   1 |   5 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different1000';
  count | min  | max  | min | max 
 -------+------+------+-----+-----
      1 | 1000 | 1000 |   3 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different-with-nulls999';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      1 | 999 | 999 |   5 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('same', 'different500');
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1001 |   1 | 1000 |   2 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('same-with-nulls', 'different-with-nulls499');
  count | min | max | min | max 
 -------+-----+-----+-----+-----
    501 |   1 | 999 |   4 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('different500', 'default');
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1001 |   1 | 1000 |   0 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different500' or a = 'default';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1001 |   1 | 1000 |   0 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is null;
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1000 |   2 | 1000 |   4 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is not null;
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   7400 |   1 | 1000 |   0 |   8
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%same%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1500 |   1 | 1000 |   2 |   4
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одинаковый%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1000 |   1 | 1000 |   6 |   6
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одилаковый%';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      0 |     |     |     |    
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одимаковый%';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      0 |     |     |     |    
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異なる%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1000 |   1 | 1000 |   7 |   7
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異オる%';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      0 |     |     |     |    
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異にる%';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      0 |     |     |     |    
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '異_る_';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      9 |   1 |   9 |   7 |   7
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   7400 |   1 | 1000 |   0 |   8
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
    112 |   1 | 1000 |   3 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%different1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      1 |   1 |   1 |   3 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1500 |   1 | 1000 |   3 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%%1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
    200 |   1 | 991 |   3 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%\1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
    200 |   1 | 991 |   3 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%_';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1500 |   1 | 1000 |   3 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%__';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1491 |   1 | 1000 |   3 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%___';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1401 |   1 | 1000 |   3 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%_1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
    199 |   1 | 991 |   3 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%nulls_';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      5 |   1 |   9 |   5 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
    112 |   1 | 1000 |   3 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\%';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      0 |     |     |     |    
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      1 |   1 |   1 |   3 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_%1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
    199 |   1 | 991 |   3 |   5
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      9 |   1 |   9 |   3 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      9 |  11 |  91 |   3 |   3
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'same_';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      0 |     |     |     |    
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a not like '%different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   7288 |   1 | 1000 |   0 |   8
-(1 row)
 
 \set ON_ERROR_STOP 0
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\';
@@ -1575,29 +1358,22 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'sam
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   3900 |   1 | 1000 |   0 |   8
-(1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   2500 |   1 | 1000 |   4 |   7
-(1 row)
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
 -- Test the nonstandard Postgres NaN comparison that doesn't match the IEEE floats.
 create table nans(t int, cfloat4 float4, cfloat8 float8);
 select create_hypertable('nans', 't', chunk_time_interval => 1024 * 1024 * 1024);
-NOTICE:  adding not-null constraint to column "t"
  create_hypertable  
 --------------------
  (11,public,nans,t)
-(1 row)
 
 alter table nans set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "nans" is set to ""
-NOTICE:  default order by for hypertable "nans" is set to "t DESC"
 insert into nans select pow(2, n), x, x
     from unnest(array[null, 0, 1, 'nan', '-inf', '+inf']::float8[])
         with ordinality as x(x, n)
@@ -1606,7 +1382,6 @@ select count(compress_chunk(x)) from show_chunks('nans') x;
  count 
 -------
      1
-(1 row)
 
 set timescaledb.enable_bulk_decompression to on;
 set timescaledb.debug_require_vector_qual to 'require';
@@ -1622,1322 +1397,1365 @@ select sum(t) from nans where cfloat4 = null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 = null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 = null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 = null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 = null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 = null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 != null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 != null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 != null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 != null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 != null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 != null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 < null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 < null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 < null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 < null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 < null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 < null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 <= null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 <= null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 <= null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 <= null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 <= null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 <= null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 > null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 > null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 > null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 > null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 > null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 > null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 >= null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 >= null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 >= null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 >= null::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 >= null::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 >= null::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 = 0::float4;
  sum 
 -----
    4
-(1 row)
 
 select sum(t) from nans where cfloat4 = 0::float8;
  sum 
 -----
    4
-(1 row)
 
 select sum(t) from nans where cfloat4 = 0::numeric;
  sum 
 -----
    4
-(1 row)
 
 select sum(t) from nans where cfloat8 = 0::float4;
  sum 
 -----
    4
-(1 row)
 
 select sum(t) from nans where cfloat8 = 0::float8;
  sum 
 -----
    4
-(1 row)
 
 select sum(t) from nans where cfloat8 = 0::numeric;
  sum 
 -----
    4
-(1 row)
 
 select sum(t) from nans where cfloat4 != 0::float4;
  sum 
 -----
  120
-(1 row)
 
 select sum(t) from nans where cfloat4 != 0::float8;
  sum 
 -----
  120
-(1 row)
 
 select sum(t) from nans where cfloat4 != 0::numeric;
  sum 
 -----
  120
-(1 row)
 
 select sum(t) from nans where cfloat8 != 0::float4;
  sum 
 -----
  120
-(1 row)
 
 select sum(t) from nans where cfloat8 != 0::float8;
  sum 
 -----
  120
-(1 row)
 
 select sum(t) from nans where cfloat8 != 0::numeric;
  sum 
 -----
  120
-(1 row)
 
 select sum(t) from nans where cfloat4 < 0::float4;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat4 < 0::float8;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat4 < 0::numeric;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat8 < 0::float4;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat8 < 0::float8;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat8 < 0::numeric;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat4 <= 0::float4;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat4 <= 0::float8;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat4 <= 0::numeric;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat8 <= 0::float4;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat8 <= 0::float8;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat8 <= 0::numeric;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat4 > 0::float4;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat4 > 0::float8;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat4 > 0::numeric;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat8 > 0::float4;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat8 > 0::float8;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat8 > 0::numeric;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat4 >= 0::float4;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat4 >= 0::float8;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat4 >= 0::numeric;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat8 >= 0::float4;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat8 >= 0::float8;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat8 >= 0::numeric;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat4 = 1::float4;
  sum 
 -----
    8
-(1 row)
 
 select sum(t) from nans where cfloat4 = 1::float8;
  sum 
 -----
    8
-(1 row)
 
 select sum(t) from nans where cfloat4 = 1::numeric;
  sum 
 -----
    8
-(1 row)
 
 select sum(t) from nans where cfloat8 = 1::float4;
  sum 
 -----
    8
-(1 row)
 
 select sum(t) from nans where cfloat8 = 1::float8;
  sum 
 -----
    8
-(1 row)
 
 select sum(t) from nans where cfloat8 = 1::numeric;
  sum 
 -----
    8
-(1 row)
 
 select sum(t) from nans where cfloat4 != 1::float4;
  sum 
 -----
  116
-(1 row)
 
 select sum(t) from nans where cfloat4 != 1::float8;
  sum 
 -----
  116
-(1 row)
 
 select sum(t) from nans where cfloat4 != 1::numeric;
  sum 
 -----
  116
-(1 row)
 
 select sum(t) from nans where cfloat8 != 1::float4;
  sum 
 -----
  116
-(1 row)
 
 select sum(t) from nans where cfloat8 != 1::float8;
  sum 
 -----
  116
-(1 row)
 
 select sum(t) from nans where cfloat8 != 1::numeric;
  sum 
 -----
  116
-(1 row)
 
 select sum(t) from nans where cfloat4 < 1::float4;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat4 < 1::float8;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat4 < 1::numeric;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat8 < 1::float4;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat8 < 1::float8;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat8 < 1::numeric;
  sum 
 -----
   36
-(1 row)
 
 select sum(t) from nans where cfloat4 <= 1::float4;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat4 <= 1::float8;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat4 <= 1::numeric;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat8 <= 1::float4;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat8 <= 1::float8;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat8 <= 1::numeric;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat4 > 1::float4;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat4 > 1::float8;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat4 > 1::numeric;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat8 > 1::float4;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat8 > 1::float8;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat8 > 1::numeric;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat4 >= 1::float4;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat4 >= 1::float8;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat4 >= 1::numeric;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat8 >= 1::float4;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat8 >= 1::float8;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat8 >= 1::numeric;
  sum 
 -----
   88
-(1 row)
 
 select sum(t) from nans where cfloat4 = 'nan'::float4;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat4 = 'nan'::float8;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat4 = 'nan'::numeric;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat8 = 'nan'::float4;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat8 = 'nan'::float8;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat8 = 'nan'::numeric;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat4 != 'nan'::float4;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat4 != 'nan'::float8;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat4 != 'nan'::numeric;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat8 != 'nan'::float4;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat8 != 'nan'::float8;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat8 != 'nan'::numeric;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat4 < 'nan'::float4;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat4 < 'nan'::float8;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat4 < 'nan'::numeric;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat8 < 'nan'::float4;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat8 < 'nan'::float8;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat8 < 'nan'::numeric;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat4 <= 'nan'::float4;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat4 <= 'nan'::float8;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat4 <= 'nan'::numeric;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat8 <= 'nan'::float4;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat8 <= 'nan'::float8;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat8 <= 'nan'::numeric;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat4 > 'nan'::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 > 'nan'::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 > 'nan'::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 > 'nan'::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 > 'nan'::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 > 'nan'::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 >= 'nan'::float4;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat4 >= 'nan'::float8;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat4 >= 'nan'::numeric;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat8 >= 'nan'::float4;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat8 >= 'nan'::float8;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat8 >= 'nan'::numeric;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat4 = '-inf'::float4;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat4 = '-inf'::float8;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat4 = '-inf'::numeric;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat8 = '-inf'::float4;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat8 = '-inf'::float8;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat8 = '-inf'::numeric;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat4 != '-inf'::float4;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat4 != '-inf'::float8;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat4 != '-inf'::numeric;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat8 != '-inf'::float4;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat8 != '-inf'::float8;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat8 != '-inf'::numeric;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat4 < '-inf'::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 < '-inf'::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 < '-inf'::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 < '-inf'::float4;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 < '-inf'::float8;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat8 < '-inf'::numeric;
  sum 
 -----
     
-(1 row)
 
 select sum(t) from nans where cfloat4 <= '-inf'::float4;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat4 <= '-inf'::float8;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat4 <= '-inf'::numeric;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat8 <= '-inf'::float4;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat8 <= '-inf'::float8;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat8 <= '-inf'::numeric;
  sum 
 -----
   32
-(1 row)
 
 select sum(t) from nans where cfloat4 > '-inf'::float4;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat4 > '-inf'::float8;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat4 > '-inf'::numeric;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat8 > '-inf'::float4;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat8 > '-inf'::float8;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat8 > '-inf'::numeric;
  sum 
 -----
   92
-(1 row)
 
 select sum(t) from nans where cfloat4 >= '-inf'::float4;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat4 >= '-inf'::float8;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat4 >= '-inf'::numeric;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat8 >= '-inf'::float4;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat8 >= '-inf'::float8;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat8 >= '-inf'::numeric;
  sum 
 -----
  124
-(1 row)
 
 select sum(t) from nans where cfloat4 = '+inf'::float4;
  sum 
 -----
   64
-(1 row)
 
 select sum(t) from nans where cfloat4 = '+inf'::float8;
  sum 
 -----
   64
-(1 row)
 
 select sum(t) from nans where cfloat4 = '+inf'::numeric;
  sum 
 -----
   64
-(1 row)
 
 select sum(t) from nans where cfloat8 = '+inf'::float4;
  sum 
 -----
   64
-(1 row)
 
 select sum(t) from nans where cfloat8 = '+inf'::float8;
  sum 
 -----
   64
-(1 row)
 
 select sum(t) from nans where cfloat8 = '+inf'::numeric;
  sum 
 -----
   64
-(1 row)
 
 select sum(t) from nans where cfloat4 != '+inf'::float4;
  sum 
 -----
   60
-(1 row)
 
 select sum(t) from nans where cfloat4 != '+inf'::float8;
  sum 
 -----
   60
-(1 row)
 
 select sum(t) from nans where cfloat4 != '+inf'::numeric;
  sum 
 -----
   60
-(1 row)
 
 select sum(t) from nans where cfloat8 != '+inf'::float4;
  sum 
 -----
   60
-(1 row)
 
 select sum(t) from nans where cfloat8 != '+inf'::float8;
  sum 
 -----
   60
-(1 row)
 
 select sum(t) from nans where cfloat8 != '+inf'::numeric;
  sum 
 -----
   60
-(1 row)
 
 select sum(t) from nans where cfloat4 < '+inf'::float4;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat4 < '+inf'::float8;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat4 < '+inf'::numeric;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat8 < '+inf'::float4;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat8 < '+inf'::float8;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat8 < '+inf'::numeric;
  sum 
 -----
   44
-(1 row)
 
 select sum(t) from nans where cfloat4 <= '+inf'::float4;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat4 <= '+inf'::float8;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat4 <= '+inf'::numeric;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat8 <= '+inf'::float4;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat8 <= '+inf'::float8;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat8 <= '+inf'::numeric;
  sum 
 -----
  108
-(1 row)
 
 select sum(t) from nans where cfloat4 > '+inf'::float4;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat4 > '+inf'::float8;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat4 > '+inf'::numeric;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat8 > '+inf'::float4;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat8 > '+inf'::float8;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat8 > '+inf'::numeric;
  sum 
 -----
   16
-(1 row)
 
 select sum(t) from nans where cfloat4 >= '+inf'::float4;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat4 >= '+inf'::float8;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat4 >= '+inf'::numeric;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat8 >= '+inf'::float4;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat8 >= '+inf'::float8;
  sum 
 -----
   80
-(1 row)
 
 select sum(t) from nans where cfloat8 >= '+inf'::numeric;
  sum 
 -----
   80
-(1 row)
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
+-- Test predicates on UUID columns can be vectorized
+-- if UUID compression is _disabled_. With the new changes
+-- vectorized decompression should be supported, regardless of
+-- whether the UUID compression is enabled or not.
+set timescaledb.enable_uuid_compression = off;
+-- Generate reference results with uncommenting the next two lines
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+create table uuid_table(ts int, u uuid);
+select count(*) from create_hypertable('uuid_table', 'ts');
+ count 
+-------
+     1
+
+alter table uuid_table set (timescaledb.compress);
+insert into uuid_table values
+	(1, '0197a7a9-b48b-7c70-be05-e376afc66ee1'), (2, '0197a7a9-b48b-7c71-92cb-eb724822bb0f'), (3, '0197a7a9-b48b-7c72-bd57-49f981f064fd'), (4, '0197a7a9-b48b-7c73-b521-91172c2e770a'),
+	(5, '0197a7a9-b48b-7c74-a2a4-dcdbce635d11'), (6, '0197a7a9-b48b-7c75-a810-8acf630e634f'), (7, '0197a7a9-b48b-7c76-b616-69e64a802b5c'), (8, '0197a7a9-b48b-7c77-b54f-c5f3d64d68d0'),
+	(9, '0197a7a9-b48b-7c78-ab14-78b3dd81dbbc'), (10, '0197a7a9-b48b-7c79-92c7-7dde3bea6252'), (11, '0197a7a9-b48b-7c7a-8d9e-5afc3bf15234'), (12, '0197a7a9-b48b-7c7b-bc49-7150f16d8d63'),
+	(13, '0197a7a9-b48b-7c7c-aa7a-60d47bf04ff8'), (14, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (15, '0197a7a9-b48b-7c7e-9ebb-acf63f5b625e'), (16, '0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a'),
+    (17, '01941f29-7c00-706a-bea9-105dad841304'), (18, '01941f2a-665f-7722-b4b5-cf4e70e666d0'),
+	(19, NULL::uuid), (20, NULL::uuid), (21, NULL::uuid);
+select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
+ count 
+-------
+     1
+
+-- With the new changes bulk decompression and vectorized filtering
+-- will be supported regardless of whether the UUID compression is
+-- enabled or not.
+set timescaledb.debug_require_vector_qual to 'require';
+select * from uuid_table where u = '01941f29-7c00-706a-bea9-105dad841304'::uuid;
+ ts |                  u                   
+----+--------------------------------------
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+
+select * from uuid_table where u in (
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid)
+order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  6 | 0197a7a9-b48b-7c75-a810-8acf630e634f
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+
+select * from uuid_table where u = any(array[
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid
+]) order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  6 | 0197a7a9-b48b-7c75-a810-8acf630e634f
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+
+select * from uuid_table where u not in (
+	'0197a7a9-b48b-7c70-be05-e376afc66ee1'::uuid,
+	'0197a7a9-b48b-7c71-92cb-eb724822bb0f'::uuid)
+order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  3 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+  4 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+  5 | 0197a7a9-b48b-7c74-a2a4-dcdbce635d11
+  6 | 0197a7a9-b48b-7c75-a810-8acf630e634f
+  7 | 0197a7a9-b48b-7c76-b616-69e64a802b5c
+  8 | 0197a7a9-b48b-7c77-b54f-c5f3d64d68d0
+  9 | 0197a7a9-b48b-7c78-ab14-78b3dd81dbbc
+ 10 | 0197a7a9-b48b-7c79-92c7-7dde3bea6252
+ 11 | 0197a7a9-b48b-7c7a-8d9e-5afc3bf15234
+ 12 | 0197a7a9-b48b-7c7b-bc49-7150f16d8d63
+ 13 | 0197a7a9-b48b-7c7c-aa7a-60d47bf04ff8
+ 14 | 0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9
+ 15 | 0197a7a9-b48b-7c7e-9ebb-acf63f5b625e
+ 16 | 0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+ 18 | 01941f2a-665f-7722-b4b5-cf4e70e666d0
+
+select * from uuid_table where u is not null order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  1 | 0197a7a9-b48b-7c70-be05-e376afc66ee1
+  2 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f
+  3 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+  4 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+  5 | 0197a7a9-b48b-7c74-a2a4-dcdbce635d11
+  6 | 0197a7a9-b48b-7c75-a810-8acf630e634f
+  7 | 0197a7a9-b48b-7c76-b616-69e64a802b5c
+  8 | 0197a7a9-b48b-7c77-b54f-c5f3d64d68d0
+  9 | 0197a7a9-b48b-7c78-ab14-78b3dd81dbbc
+ 10 | 0197a7a9-b48b-7c79-92c7-7dde3bea6252
+ 11 | 0197a7a9-b48b-7c7a-8d9e-5afc3bf15234
+ 12 | 0197a7a9-b48b-7c7b-bc49-7150f16d8d63
+ 13 | 0197a7a9-b48b-7c7c-aa7a-60d47bf04ff8
+ 14 | 0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9
+ 15 | 0197a7a9-b48b-7c7e-9ebb-acf63f5b625e
+ 16 | 0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+ 18 | 01941f2a-665f-7722-b4b5-cf4e70e666d0
+
+-- Modify the data to make sure dictionary compression is used as well.
+update uuid_table set u = '0197a7a9-b48b-7c70-be05-e376afc66ee1' where ts in (1, 2, 3, 4);
+update uuid_table set u = '0197a7a9-b48b-7c71-92cb-eb724822bb0f' where ts in (5, 6, 7, 8);
+update uuid_table set u = '0197a7a9-b48b-7c72-bd57-49f981f064fd' where ts in (9, 10, 11, 12);
+update uuid_table set u = '0197a7a9-b48b-7c73-b521-91172c2e770a' where ts in (13, 14, 15, 16);
+select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
+ count 
+-------
+     1
+
+-- Generate reference results with uncommenting the next two lines
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+select * from uuid_table where u = '01941f29-7c00-706a-bea9-105dad841304'::uuid;
+ ts |                  u                   
+----+--------------------------------------
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+
+select * from uuid_table where u in (
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid)
+order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+
+select * from uuid_table where u = any(array[
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid
+]) order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+
+select * from uuid_table where u not in (
+	'0197a7a9-b48b-7c70-be05-e376afc66ee1'::uuid,
+	'0197a7a9-b48b-7c71-92cb-eb724822bb0f'::uuid)
+order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  9 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+ 10 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+ 11 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+ 12 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+ 13 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+ 14 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+ 15 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+ 16 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+ 18 | 01941f2a-665f-7722-b4b5-cf4e70e666d0
+
+select * from uuid_table where u is not null order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  1 | 0197a7a9-b48b-7c70-be05-e376afc66ee1
+  2 | 0197a7a9-b48b-7c70-be05-e376afc66ee1
+  3 | 0197a7a9-b48b-7c70-be05-e376afc66ee1
+  4 | 0197a7a9-b48b-7c70-be05-e376afc66ee1
+  5 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f
+  6 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f
+  7 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f
+  8 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f
+  9 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+ 10 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+ 11 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+ 12 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+ 13 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+ 14 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+ 15 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+ 16 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+ 18 | 01941f2a-665f-7722-b4b5-cf4e70e666d0
+
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.debug_require_vector_qual;
+-- Test predicates on UUID columns can be vectorized
+-- if UUID compression is _enabled_
+set timescaledb.enable_uuid_compression = on;
+-- Generate reference results with uncommenting the next two lines
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+delete from uuid_table;
+insert into uuid_table values
+	(1, '0197a7a9-b48b-7c70-be05-e376afc66ee1'), (2, '0197a7a9-b48b-7c71-92cb-eb724822bb0f'), (3, '0197a7a9-b48b-7c72-bd57-49f981f064fd'), (4, '0197a7a9-b48b-7c73-b521-91172c2e770a'),
+	(5, '0197a7a9-b48b-7c74-a2a4-dcdbce635d11'), (6, '0197a7a9-b48b-7c75-a810-8acf630e634f'), (7, '0197a7a9-b48b-7c76-b616-69e64a802b5c'), (8, '0197a7a9-b48b-7c77-b54f-c5f3d64d68d0'),
+	(9, '0197a7a9-b48b-7c78-ab14-78b3dd81dbbc'), (10, '0197a7a9-b48b-7c79-92c7-7dde3bea6252'), (11, '0197a7a9-b48b-7c7a-8d9e-5afc3bf15234'), (12, '0197a7a9-b48b-7c7b-bc49-7150f16d8d63'),
+	(13, '0197a7a9-b48b-7c7c-aa7a-60d47bf04ff8'), (14, '0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9'), (15, '0197a7a9-b48b-7c7e-9ebb-acf63f5b625e'), (16, '0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a'),
+    (17, '01941f29-7c00-706a-bea9-105dad841304'), (18, '01941f2a-665f-7722-b4b5-cf4e70e666d0'),
+	(19, NULL::uuid), (20, NULL::uuid), (21, NULL::uuid);
+select count(compress_chunk(x, true)) from show_chunks('uuid_table') x;
+ count 
+-------
+     1
+
+set timescaledb.debug_require_vector_qual to 'require';
+select * from uuid_table where u = '01941f29-7c00-706a-bea9-105dad841304'::uuid;
+ ts |                  u                   
+----+--------------------------------------
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+
+select * from uuid_table where u in (
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid)
+order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  6 | 0197a7a9-b48b-7c75-a810-8acf630e634f
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+
+select * from uuid_table where u = any(array[
+	'01941f29-7c00-706a-bea9-105dad841304'::uuid,
+	'0197a7a9-b48b-7c75-a810-8acf630e634f'::uuid
+]) order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  6 | 0197a7a9-b48b-7c75-a810-8acf630e634f
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+
+select * from uuid_table where u not in (
+	'0197a7a9-b48b-7c70-be05-e376afc66ee1'::uuid,
+	'0197a7a9-b48b-7c71-92cb-eb724822bb0f'::uuid)
+order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  3 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+  4 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+  5 | 0197a7a9-b48b-7c74-a2a4-dcdbce635d11
+  6 | 0197a7a9-b48b-7c75-a810-8acf630e634f
+  7 | 0197a7a9-b48b-7c76-b616-69e64a802b5c
+  8 | 0197a7a9-b48b-7c77-b54f-c5f3d64d68d0
+  9 | 0197a7a9-b48b-7c78-ab14-78b3dd81dbbc
+ 10 | 0197a7a9-b48b-7c79-92c7-7dde3bea6252
+ 11 | 0197a7a9-b48b-7c7a-8d9e-5afc3bf15234
+ 12 | 0197a7a9-b48b-7c7b-bc49-7150f16d8d63
+ 13 | 0197a7a9-b48b-7c7c-aa7a-60d47bf04ff8
+ 14 | 0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9
+ 15 | 0197a7a9-b48b-7c7e-9ebb-acf63f5b625e
+ 16 | 0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+ 18 | 01941f2a-665f-7722-b4b5-cf4e70e666d0
+
+select * from uuid_table where u is not null order by 1, 2;
+ ts |                  u                   
+----+--------------------------------------
+  1 | 0197a7a9-b48b-7c70-be05-e376afc66ee1
+  2 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f
+  3 | 0197a7a9-b48b-7c72-bd57-49f981f064fd
+  4 | 0197a7a9-b48b-7c73-b521-91172c2e770a
+  5 | 0197a7a9-b48b-7c74-a2a4-dcdbce635d11
+  6 | 0197a7a9-b48b-7c75-a810-8acf630e634f
+  7 | 0197a7a9-b48b-7c76-b616-69e64a802b5c
+  8 | 0197a7a9-b48b-7c77-b54f-c5f3d64d68d0
+  9 | 0197a7a9-b48b-7c78-ab14-78b3dd81dbbc
+ 10 | 0197a7a9-b48b-7c79-92c7-7dde3bea6252
+ 11 | 0197a7a9-b48b-7c7a-8d9e-5afc3bf15234
+ 12 | 0197a7a9-b48b-7c7b-bc49-7150f16d8d63
+ 13 | 0197a7a9-b48b-7c7c-aa7a-60d47bf04ff8
+ 14 | 0197a7a9-b48b-7c7d-8cfe-9503ed9bb1c9
+ 15 | 0197a7a9-b48b-7c7e-9ebb-acf63f5b625e
+ 16 | 0197a7a9-b48b-7c7f-a0c1-ba4adf950a2a
+ 17 | 01941f29-7c00-706a-bea9-105dad841304
+ 18 | 01941f2a-665f-7722-b4b5-cf4e70e666d0
+
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_uuid_compression;
 -- Test predicates on boolean columns can be vectorized
 -- with the bool compression enabled.
 set timescaledb.enable_bulk_decompression to on;
 set timescaledb.enable_bool_compression = on;
 create table bool_table(ts int, b bool);
-select create_hypertable('bool_table', 'ts');
-NOTICE:  adding not-null constraint to column "ts"
-    create_hypertable     
---------------------------
- (13,public,bool_table,t)
-(1 row)
+select count(*) from create_hypertable('bool_table', 'ts');
+ count 
+-------
+     1
 
 alter table bool_table set (timescaledb.compress);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for converting to columnstore. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "bool_table" is set to ""
-NOTICE:  default order by for hypertable "bool_table" is set to "ts DESC"
 insert into bool_table values (100, true), (101, false), (102, null);
 select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
  count 
 -------
      1
-(1 row)
 
 set timescaledb.debug_require_vector_qual to 'require';
 -- BooleanTest expressions
@@ -2945,121 +2763,102 @@ select * from bool_table where b is true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b is false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is not true order by 1;
  ts  | b 
 -----+---
  101 | f
  102 | 
-(2 rows)
 
 select * from bool_table where b is not false order by 1;
  ts  | b 
 -----+---
  100 | t
  102 | 
-(2 rows)
 
 select * from bool_table where b is unknown order by 1;
  ts  | b 
 -----+---
  102 | 
-(1 row)
 
 select * from bool_table where b is not unknown order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 -- Combinations of nulls and bool exprs
 select * from bool_table where b = true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = true or b = false order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b = false order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true or b is null order by 1;
  ts  | b 
 -----+---
  100 | t
  102 | 
-(2 rows)
 
 select * from bool_table where b = true or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true and b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b = false or b is null order by 1;
  ts  | b 
 -----+---
  101 | f
  102 | 
-(2 rows)
 
 select * from bool_table where b = false or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = false and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = false and b is not null order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is null order by 1;
  ts  | b 
 -----+---
  102 | 
-(1 row)
 
 select * from bool_table where b is null or b is not null order by 1;
  ts  | b 
@@ -3067,158 +2866,132 @@ select * from bool_table where b is null or b is not null order by 1;
  100 | t
  101 | f
  102 | 
-(3 rows)
 
 select * from bool_table where b is null and b is not null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 delete from bool_table where b is null;
 select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
  count 
 -------
      1
-(1 row)
 
 select * from bool_table where b is true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b is false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is not true order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is not false order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b is unknown order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is not unknown order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = true or b = false order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b = false order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true or b is null order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = true or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true and b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b = false or b is null order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b = false or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = false and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = false and b is not null order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is null or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b is null and b is not null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
@@ -3232,126 +3005,106 @@ select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
  count 
 -------
      1
-(1 row)
 
 select * from bool_table where b is true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b is false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is not true order by 1;
  ts  | b 
 -----+---
  101 | f
  102 | 
-(2 rows)
 
 select * from bool_table where b is not false order by 1;
  ts  | b 
 -----+---
  100 | t
  102 | 
-(2 rows)
 
 select * from bool_table where b is unknown order by 1;
  ts  | b 
 -----+---
  102 | 
-(1 row)
 
 select * from bool_table where b is not unknown order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = true or b = false order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b = false order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true or b is null order by 1;
  ts  | b 
 -----+---
  100 | t
  102 | 
-(2 rows)
 
 select * from bool_table where b = true or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true and b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b = false or b is null order by 1;
  ts  | b 
 -----+---
  101 | f
  102 | 
-(2 rows)
 
 select * from bool_table where b = false or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = false and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = false and b is not null order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is null order by 1;
  ts  | b 
 -----+---
  102 | 
-(1 row)
 
 select * from bool_table where b is null or b is not null order by 1;
  ts  | b 
@@ -3359,158 +3112,132 @@ select * from bool_table where b is null or b is not null order by 1;
  100 | t
  101 | f
  102 | 
-(3 rows)
 
 select * from bool_table where b is null and b is not null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 delete from bool_table where b is null;
 select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
  count 
 -------
      1
-(1 row)
 
 select * from bool_table where b is true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b is false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is not true order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is not false order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b is unknown order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is not unknown order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = true or b = false order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b = false order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true or b is null order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = true or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true and b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b = false or b is null order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b = false or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = false and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = false and b is not null order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is null or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b is null and b is not null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 -- At this point the bool data is generated as 'bool compression disabed'
 -- meaning, it is compressed with array compression. I try to confuse the
@@ -3522,133 +3249,236 @@ select * from bool_table where b is true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b is false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is not true order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is not false order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b is unknown order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is not unknown order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = true or b = false order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b = false order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true or b is null order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = true or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = true and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = true and b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
-(1 row)
 
 select * from bool_table where b = false order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b = false or b is null order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b = false or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b = false and b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b = false and b is not null order by 1;
  ts  | b 
 -----+---
  101 | f
-(1 row)
 
 select * from bool_table where b is null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is null or b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
 select * from bool_table where b is null and b is not null order by 1;
  ts | b 
 ----+---
-(0 rows)
 
 select * from bool_table where b is not null order by 1;
  ts  | b 
 -----+---
  100 | t
  101 | f
-(2 rows)
 
+-- Verify that NULL compression with bools is vectorized
+set timescaledb.debug_require_vector_qual to 'require';
+update bool_table set b = NULL;
+select count(compress_chunk(x, true)) from show_chunks('bool_table') x;
+ count 
+-------
+     1
+
+select * from bool_table where b is null order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+
+select * from bool_table where b is not null order by 1;
+ ts | b 
+----+---
+
+select * from bool_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+
+select * from bool_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+
+select * from bool_table where b is not true order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+
+select * from bool_table where b is not false order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+
+select * from bool_table where b is unknown order by 1;
+ ts  | b 
+-----+---
+ 100 | 
+ 101 | 
+
+select * from bool_table where b is not unknown order by 1;
+ ts | b 
+----+---
+
+-- Verify that NULL compression with ints is vectorized
+create table int_table(ts int, b int);
+select count(*) from create_hypertable('int_table', 'ts');
+ count 
+-------
+     1
+
+alter table int_table set (timescaledb.compress);
+insert into int_table values (100, NULL), (101, NULL), (102, NULL);
+select count(compress_chunk(x, true)) from show_chunks('int_table') x;
+ count 
+-------
+     1
+
+select * from int_table where b is null order by 1;
+ ts  | b 
+-----+---
+ 100 |  
+ 101 |  
+ 102 |  
+
+select * from int_table where b is not null order by 1;
+ ts | b 
+----+---
+
+select * from int_table where b is null or b is not null order by 1;
+ ts  | b 
+-----+---
+ 100 |  
+ 101 |  
+ 102 |  
+
+select * from int_table where b is null and b is not null order by 1;
+ ts | b 
+----+---
+
+-- check the compression algorithm for the compressed chunks
+set timescaledb.enable_transparent_decompression='off';
+DO $$
+DECLARE
+	comp_regclass REGCLASS;
+	rec RECORD;
+BEGIN
+	FOR comp_regclass IN
+		SELECT
+			format('%I.%I', comp.schema_name, comp.table_name)::regclass as comp_regclass
+		FROM
+			_timescaledb_catalog.chunk uncomp,
+			_timescaledb_catalog.chunk comp,
+			(SELECT show_chunks('bool_table') as c UNION SELECT show_chunks('int_table') as c) as x
+		WHERE
+			uncomp.dropped IS FALSE AND uncomp.compressed_chunk_id IS NOT NULL AND
+			comp.id = uncomp.compressed_chunk_id AND
+			x.c = format('%I.%I', uncomp.schema_name, uncomp.table_name)::regclass
+	LOOP
+		FOR rec IN
+			EXECUTE format('SELECT b, _timescaledb_functions.compressed_data_info(b) FROM %s', comp_regclass)
+		LOOP
+			RAISE NOTICE 'Compressed info results: %', rec;
+		END LOOP;
+
+		FOR rec IN
+			EXECUTE format('SELECT b, _timescaledb_functions.compressed_data_has_nulls(b) FROM %s', comp_regclass)
+		LOOP
+			RAISE NOTICE 'Has nulls results: %', rec;
+		END LOOP;
+
+	END LOOP;
+END;
+$$;
+NOTICE:  Compressed info results: (Bg==,"(NULL,t)")
+NOTICE:  Has nulls results: (Bg==,t)
+NOTICE:  Compressed info results: (Bg==,"(NULL,t)")
+NOTICE:  Has nulls results: (Bg==,t)
+reset timescaledb.enable_transparent_decompression;
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bool_compression;

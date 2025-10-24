@@ -79,7 +79,7 @@ typedef struct MutatorContext
 
 static bool find_first_last_aggs_walker(Node *node, List **context);
 static bool build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop,
-								  Oid sortop, bool nulls_first);
+								  Oid sortop, bool reverse_sort, bool nulls_first);
 static void first_last_qp_callback(PlannerInfo *root, void *extra);
 static Node *mutate_aggref_node(Node *node, MutatorContext *context);
 static void replace_aggref_in_tlist(MinMaxAggPath *minmaxagg_path);
@@ -343,9 +343,9 @@ ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist)
 		 * FIRST is more likely to be available if the operator is a
 		 * reverse-sort operator, so try that first if reverse.
 		 */
-		if (build_first_last_path(root, fl_info, eqop, mminfo->aggsortop, reverse))
+		if (build_first_last_path(root, fl_info, eqop, mminfo->aggsortop, reverse, reverse))
 			continue;
-		if (build_first_last_path(root, fl_info, eqop, mminfo->aggsortop, !reverse))
+		if (build_first_last_path(root, fl_info, eqop, mminfo->aggsortop, reverse, !reverse))
 			continue;
 
 		/* No indexable path for this aggregate, so fail */
@@ -549,7 +549,7 @@ find_first_last_aggs_walker(Node *node, List **context)
  */
 static bool
 build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oid sortop,
-					  bool nulls_first)
+					  bool reverse_sort, bool nulls_first)
 {
 	PlannerInfo *subroot;
 	Query *parse;
@@ -654,6 +654,12 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	sortcl->sortop = sortop;
 	sortcl->nulls_first = nulls_first;
 	sortcl->hashable = false; /* no need to make this accurate */
+#if PG18_GE
+	/* Track sort direction in SortGroupClause
+	 * https://github.com/postgres/postgres/commit/0d2aa4d4
+	 */
+	sortcl->reverse_sort = reverse_sort;
+#endif
 	parse->sortClause = list_make1(sortcl);
 
 	/* set up expressions for LIMIT 1 */

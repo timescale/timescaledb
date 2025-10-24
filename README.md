@@ -1,8 +1,8 @@
 <div align=center>
 <picture align=center>
-    <source media="(prefers-color-scheme: dark)" srcset="https://assets.timescale.com/docs/images/timescale-logo-dark-mode.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://assets.timescale.com/docs/images/timescale-logo-light-mode.svg">
-    <img alt="Timescale logo" >
+    <source media="(prefers-color-scheme: dark)" srcset="https://assets.timescale.com/docs/images/tigerdata-gradient-white.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://assets.timescale.com/docs/images/tigerdata-gradient-black.svg">
+    <img alt="TigerData logo" >
 </picture>
 </div>
 
@@ -10,9 +10,9 @@
 
 <h3>TimescaleDB is a PostgreSQL extension for high-performance real-time analytics on time-series and event data</h3>
 
-[![Docs](https://img.shields.io/badge/Read_the_Timescale_docs-black?style=for-the-badge&logo=readthedocs&logoColor=white)](https://docs.timescale.com/)
-[![SLACK](https://img.shields.io/badge/Ask_the_Timescale_community-black?style=for-the-badge&logo=slack&logoColor=white)](https://timescaledb.slack.com/archives/C4GT3N90X)
-[![Try TimescaleDB for free](https://img.shields.io/badge/Try_Timescale_for_free-black?style=for-the-badge&logo=timescale&logoColor=white)](https://console.cloud.timescale.com/signup)
+[![Docs](https://img.shields.io/badge/Read_the_TigerData_docs-black?style=for-the-badge&logo=readthedocs&logoColor=white)](https://docs.tigerdata.com/)
+[![SLACK](https://img.shields.io/badge/Ask_the_TigerData_community-black?style=for-the-badge&logo=slack&logoColor=white)](https://timescaledb.slack.com/archives/C4GT3N90X)
+[![Try TimescaleDB for free](https://img.shields.io/badge/Try_Tiger_Cloud_for_free-black?style=for-the-badge&logo=timescale&logoColor=white)](https://console.cloud.timescale.com/signup)
 
 </div>
 
@@ -23,7 +23,7 @@ Install from a Docker container:
 1. Run the TimescaleDB container:
 
     ```bash
-    docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb:latest-pg17
+    docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescale/timescaledb-ha:pg17
     ```
 
 1. Connect to a database:
@@ -32,57 +32,35 @@ Install from a Docker container:
     docker exec -it timescaledb psql -d "postgres://postgres:password@localhost/postgres"
     ```
 
-See [other installation options](https://docs.timescale.com/self-hosted/latest/install/) or try [Timescale Cloud](https://docs.timescale.com/getting-started/latest/) for free.
+See [other installation options](https://docs.tigerdata.com/self-hosted/latest/install/) or try [Tiger Cloud](https://docs.tigerdata.com/getting-started/latest/) for free.
 
 ## Create a hypertable
 
-You create a regular table and then convert it into a hypertable. A hypertable automatically partitions data into chunks to accelerate your queries.
+TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical query performance on your time-series and event data, while reducing data size by more than 90%. This keeps your analytics operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
 
 ```sql
--- Create timescaledb extension
-CREATE EXTENSION IF NOT EXISTS timescaledb;
-
--- Create a regular SQL table
+-- Create a hypertable, with the columnstore from the hypercore engine
+-- "time" as partitioning column and a segment by on location
 CREATE TABLE conditions (
   time        TIMESTAMPTZ       NOT NULL,
   location    TEXT              NOT NULL,
   temperature DOUBLE PRECISION  NULL,
   humidity    DOUBLE PRECISION  NULL
+)
+WITH (
+  timescaledb.hypertable,
+  timescaledb.partition_column='time',
+  timescaledb.segmentby='location'
 );
-
--- Convert the table into a hypertable that is partitioned by time
-SELECT create_hypertable('conditions', by_range('time'));
 ```
 
 See more:
 
-- [About hypertables](https://docs.timescale.com/use-timescale/latest/hypertables/)
-- [API reference](https://docs.timescale.com/api/latest/hypertable/)
-
-## Enable columnstore
-
-TimescaleDB's hypercore is a hybrid row-columnar store that boosts analytical query performance on your time-series and event data, while reducing data size by more than 90%. This keeps your analytics operating at lightning speed and ensures low storage costs as you scale. Data is inserted in row format in the rowstore and converted to columnar format in the columnstore based on your configuration.
-
-- Configure the columnstore on a hypertable:
-
-    ```sql
-    ALTER TABLE conditions SET (
-      timescaledb.compress,
-      timescaledb.compress_segmentby = 'location'
-    );
-    ```
-
-- Create a policy to automatically convert chunks in row format that are older than seven days to chunks in the columnar format:
-
-    ```sql
-    SELECT add_compression_policy('conditions', INTERVAL '7 days');
-    ```
-
-See more:
-
-- [About columnstore](https://docs.timescale.com/use-timescale/latest/compression/about-compression/)
-- [Enable columnstore manually](https://docs.timescale.com/use-timescale/latest/compression/manual-compression/)
-- [API reference](https://docs.timescale.com/api/latest/compression/)
+- [About hypertables](https://docs.tigerdata.com/use-timescale/latest/hypertables/)
+- [API reference](https://docs.tigerdata.com/api/latest/hypertable/)
+- [About columnstore](https://docs.tigerdata.com/use-timescale/latest/compression/about-compression/)
+- [Enable columnstore manually](https://docs.tigerdata.com/use-timescale/latest/compression/manual-compression/)
+- [API reference](https://docs.tigerdata.com/api/latest/compression/)
 
 ## Insert and query data
 
@@ -111,8 +89,8 @@ Insert and query data in a hypertable via regular SQL commands. For example:
 
 See more:
 
-- [Query data](https://docs.timescale.com/use-timescale/latest/query-data/)
-- [Write data](https://docs.timescale.com/use-timescale/latest/write-data/)
+- [Query data](https://docs.tigerdata.com/use-timescale/latest/query-data/)
+- [Write data](https://docs.tigerdata.com/use-timescale/latest/write-data/)
 
 ## Create time buckets
 
@@ -134,10 +112,10 @@ ORDER BY
 
 See more:
 
-- [About time buckets](https://docs.timescale.com/use-timescale/latest/time-buckets/about-time-buckets/)
-- [API reference](https://docs.timescale.com/api/latest/hyperfunctions/time_bucket/)
-- [All TimescaleDB features](https://docs.timescale.com/use-timescale/latest/)
-- [Tutorials](https://docs.timescale.com/tutorials/latest/)
+- [About time buckets](https://docs.tigerdata.com/use-timescale/latest/time-buckets/about-time-buckets/)
+- [API reference](https://docs.tigerdata.com/api/latest/hyperfunctions/time_bucket/)
+- [All TimescaleDB features](https://docs.tigerdata.com/use-timescale/latest/)
+- [Tutorials](https://docs.tigerdata.com/tutorials/latest/)
 
 ## Create continuous aggregates
 
@@ -176,19 +154,19 @@ For example, create a continuous aggregate view for daily weather data in two si
    ```
 See more:
 
-- [About continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
-- [API reference](https://docs.timescale.com/api/latest/continuous-aggregates/create_materialized_view/)
+- [About continuous aggregates](https://docs.tigerdata.com/use-timescale/latest/continuous-aggregates/)
+- [API reference](https://docs.tigerdata.com/api/latest/continuous-aggregates/create_materialized_view/)
 
-## Want TimescaleDB hosted and managed for you? Try Timescale Cloud
+## Want TimescaleDB hosted and managed for you? Try Tiger Cloud
 
-[Timescale Cloud](https://docs.timescale.com/getting-started/latest/) is the modern PostgreSQL data platform for all your applications. It enhances PostgreSQL to handle time series, events, real-time analytics, and vector search—all in a single database alongside transactional workloads. You get one system that handles live data ingestion, late and out-of-order updates, and low latency queries, with the performance, reliability, and scalability your app needs. Ideal for IoT, crypto, finance, SaaS, and a myriad other domains, Timescale Cloud allows you to build data-heavy, mission-critical apps while retaining the familiarity and reliability of PostgreSQL. See [our whitepaper](https://docs.timescale.com/about/latest/whitepaper/) for a deep dive into Timescale's architecture and how it meets the needs of even the most demanding applications.
+[Tiger Cloud](https://docs.tigerdata.com/getting-started/latest/) is the modern PostgreSQL data platform for all your applications. It enhances PostgreSQL to handle time series, events, real-time analytics, and vector search—all in a single database alongside transactional workloads. You get one system that handles live data ingestion, late and out-of-order updates, and low latency queries, with the performance, reliability, and scalability your app needs. Ideal for IoT, crypto, finance, SaaS, and a myriad other domains, Tiger Cloud allows you to build data-heavy, mission-critical apps while retaining the familiarity and reliability of PostgreSQL. See [our whitepaper](https://docs.tigerdata.com/about/latest/whitepaper/) for a deep dive into Tiger Cloud's architecture and how it meets the needs of even the most demanding applications.
 
-A Timescale Cloud service is a single optimized 100% PostgreSQL database instance that you use as is, or extend with capabilities specific to your business needs. The available capabilities are:
+A Tiger Cloud service is a single optimized 100% PostgreSQL database instance that you use as is, or extend with capabilities specific to your business needs. The available capabilities are:
 
 - **Time-series and analytics**: PostgreSQL with TimescaleDB. The PostgreSQL you know and love, supercharged with functionality for storing and querying time-series data at scale for real-time analytics and other use cases. Get faster time-based queries with hypertables, continuous aggregates, and columnar storage. Save on storage with native compression, data retention policies, and bottomless data tiering to Amazon S3.
 - **AI and vector**: PostgreSQL with vector extensions. Use PostgreSQL as a vector database with purpose built extensions for building AI applications from start to scale. Get fast and accurate similarity search with the pgvector and pgvectorscale extensions. Create vector embeddings and perform LLM reasoning on your data with the pgai extension.
 - **PostgreSQL**: the trusted industry-standard RDBMS. Ideal for applications requiring strong data consistency, complex relationships, and advanced querying capabilities. Get ACID compliance, extensive SQL support, JSON handling, and extensibility through custom functions, data types, and extensions.
-All services include all the cloud tooling you'd expect for production use: [automatic backups](https://docs.timescale.com/use-timescale/latest/backup-restore/backup-restore-cloud/), [high availability](https://docs.timescale.com/use-timescale/latest/ha-replicas/), [read replicas](https://docs.timescale.com/use-timescale/latest/ha-replicas/read-scaling/), [data forking](https://docs.timescale.com/use-timescale/latest/services/service-management/#fork-a-service), [connection pooling](https://docs.timescale.com/use-timescale/latest/services/connection-pooling/), [tiered storage](https://docs.timescale.com/use-timescale/latest/data-tiering/), [usage-based storage](https://docs.timescale.com/about/latest/pricing-and-account-management/), and much more.
+All services include all the cloud tooling you'd expect for production use: [automatic backups](https://docs.tigerdata.com/use-timescale/latest/backup-restore/backup-restore-cloud/), [high availability](https://docs.tigerdata.com/use-timescale/latest/ha-replicas/), [read replicas](https://docs.tigerdata.com/use-timescale/latest/ha-replicas/read-scaling/), [data forking](https://docs.tigerdata.com/use-timescale/latest/services/service-management/#fork-a-service), [connection pooling](https://docs.tigerdata.com/use-timescale/latest/services/connection-pooling/), [tiered storage](https://docs.tigerdata.com/use-timescale/latest/data-tiering/), [usage-based storage](https://docs.tigerdata.com/about/latest/pricing-and-account-management/), and much more.
 
 ## Check build status
 
@@ -200,7 +178,7 @@ All services include all the cloud tooling you'd expect for production use: [aut
 
 We welcome contributions to TimescaleDB! See [Contributing](https://github.com/timescale/timescaledb/blob/main/CONTRIBUTING.md) and [Code style guide](https://github.com/timescale/timescaledb/blob/main/docs/StyleGuide.md) for details.
 
-## Learn about Timescale
+## Learn about TigerData
 
-Timescale is PostgreSQL made powerful. To learn more about the company and its products, visit [timescale.com](https://www.timescale.com).
+TigerData is the fastest PostgreSQL for transactional, analytical and agentic workloads. To learn more about the company and its products, visit [tigerdata.com](https://www.tigerdata.com).
 

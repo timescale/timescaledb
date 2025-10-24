@@ -5,7 +5,7 @@
 SET timescaledb.enable_transparent_decompression to OFF;
 SET timezone TO 'America/Los_Angeles';
 
-\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+\set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 
 \ir include/rand_generator.sql
 
@@ -232,9 +232,10 @@ SELECT tableoid::regclass AS "CHUNK_NAME" FROM plan_inval ORDER BY time LIMIT 1
 \gset
 
 SELECT compress_chunk(:'CHUNK_NAME');
+VACUUM ANALYZE plan_inval;
 
 EXECUTE prep_plan;
-EXPLAIN (COSTS OFF) EXECUTE prep_plan;
+EXPLAIN (BUFFERS OFF, COSTS OFF) EXECUTE prep_plan;
 
 SET enable_hashagg = ON;
 
@@ -263,40 +264,26 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 
 --compress 2 chunks
 SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch LIMIT 2;
-
-CREATE OR REPLACE PROCEDURE reindex_compressed_hypertable(hypertable REGCLASS)
-AS $$
-DECLARE
-  hyper_id int;
-BEGIN
-  SELECT h.compressed_hypertable_id
-  INTO hyper_id
-  FROM _timescaledb_catalog.hypertable h
-  WHERE h.table_name = hypertable::name;
-  EXECUTE format('REINDEX TABLE _timescaledb_internal._compressed_hypertable_%s',
-    hyper_id);
-END $$ LANGUAGE plpgsql;
--- reindexing compressed hypertable to update statistics
-CALL reindex_compressed_hypertable('test_collation');
+VACUUM ANALYZE test_collation;
 
 --segment bys are pushed down correctly
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "POSIX";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE device_id < 'a';
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE device_id < 'a' COLLATE "POSIX";
 
 \set ON_ERROR_STOP 0
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id COLLATE "POSIX" < device_id_2 COLLATE "C";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE device_id COLLATE "POSIX" < device_id_2 COLLATE "C";
 SELECT device_id < device_id_2  FROM test_collation;
 \set ON_ERROR_STOP 1
 
 --segment meta on order bys pushdown
 --should work
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSIX";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_1 < 'a';
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_2 < 'a';
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "C";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "POSIX";
 --cannot pushdown when op collation does not match column's collation since min/max used different collation than what op needs
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSIX";
-EXPLAIN (costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "C";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_1 < 'a' COLLATE "POSIX";
+EXPLAIN (buffers off, costs off) SELECT * FROM test_collation WHERE val_2 < 'a' COLLATE "C";
 
 --test datatypes
 CREATE TABLE datatype_test(
@@ -317,7 +304,7 @@ CREATE TABLE datatype_test(
 );
 
 SELECT create_hypertable('datatype_test','time');
-ALTER TABLE datatype_test SET (timescaledb.compress);
+ALTER TABLE datatype_test SET (timescaledb.compress, timescaledb.compress_orderby='"time" desc');
 INSERT INTO datatype_test VALUES ('2000-01-01',2,4,8,4.0,8.0,'2000-01-01','2001-01-01 12:00','2001-01-01 6:00','1 week', 3.41, 4.2, 'text', 'x');
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
@@ -350,14 +337,14 @@ GROUP BY 1 WITH NO DATA;
 CALL refresh_continuous_aggregate('cagg_expr', NULL, NULL);
 SELECT * FROM cagg_expr ORDER BY time LIMIT 5;
 
-ALTER TABLE metrics set(timescaledb.compress);
+ALTER TABLE metrics set(timescaledb.compress, timescaledb.compress_orderby='"time" desc');
 
 -- test rescan in compress chunk dml blocker
 CREATE TABLE rescan_test(id integer NOT NULL, t timestamptz NOT NULL, val double precision, PRIMARY KEY(id, t));
 SELECT create_hypertable('rescan_test', 't', chunk_time_interval => interval '1 day');
 
 -- compression
-ALTER TABLE rescan_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'id');
+ALTER TABLE rescan_test SET (timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby='t desc');
 
 -- INSERT dummy data
 INSERT INTO rescan_test SELECT 1, time, random() FROM generate_series('2000-01-01'::timestamptz, '2000-01-05'::timestamptz, '1h'::interval) g(time);
@@ -451,7 +438,7 @@ INSERT INTO ht5 SELECT '2000-01-01'::TIMESTAMPTZ;
 INSERT INTO ht5 SELECT '2001-01-01'::TIMESTAMPTZ;
 
 -- compressed chunk stats should not show dropped chunks
-ALTER TABLE ht5 SET (timescaledb.compress);
+ALTER TABLE ht5 SET (timescaledb.compress, timescaledb.orderby = '"time" desc');
 SELECT compress_chunk(i) FROM show_chunks('ht5') i;
 SELECT drop_chunks('ht5', newer_than => '2000-01-01'::TIMESTAMPTZ);
 select chunk_name from chunk_compression_stats('ht5')
@@ -537,6 +524,7 @@ ALTER TABLE stattest SET (timescaledb.compress);
 -- check that approximate_row_count works with all normal chunks
 SELECT approximate_row_count('stattest');
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
+ANALYZE stattest;
 -- check that approximate_row_count works with all compressed chunks
 SELECT approximate_row_count('stattest');
 -- actual count should match with the above
@@ -792,23 +780,17 @@ ORDER BY
 ALTER TABLE f_sensor_data SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id' ,timescaledb.compress_orderby = 'time DESC');
 
 SELECT compress_chunk(i) FROM show_chunks('f_sensor_data') i;
-CALL reindex_compressed_hypertable('f_sensor_data');
-
 VACUUM ANALYZE f_sensor_data;
 
 -- Encourage use of parallel plans
+SET max_parallel_workers_per_gather = 4;
+SET min_parallel_index_scan_size = 0;
+SET min_parallel_table_scan_size = 0;
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
-SET min_parallel_table_scan_size TO '0';
-
-\set explain 'EXPLAIN (VERBOSE, COSTS OFF)'
-
-SHOW min_parallel_table_scan_size;
 SHOW max_parallel_workers;
-SHOW max_parallel_workers_per_gather;
 
-SET max_parallel_workers_per_gather = 4;
-SHOW max_parallel_workers_per_gather;
+\set explain 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 
 -- We disable enable_parallel_append here to ensure
 -- that we create the same query plan in all PG 14.X versions
@@ -817,16 +799,10 @@ SET enable_parallel_append = false;
 :explain
 SELECT sum(cpu) FROM f_sensor_data;
 
--- Encourage use of Index Scan
-
-SET enable_seqscan = false;
-SET enable_indexscan = true;
-SET min_parallel_index_scan_size = 0;
-SET min_parallel_table_scan_size = 0;
-
 CREATE INDEX ON f_sensor_data (time, sensor_id);
+
 :explain
-SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+SELECT * FROM f_sensor_data WHERE sensor_id > 1000;
 
 RESET enable_parallel_append;
 
@@ -844,11 +820,13 @@ FROM
 ORDER BY
     time;
 
+VACUUM ANALYZE f_sensor_data;
+
 :explain
 SELECT sum(cpu) FROM f_sensor_data;
 
 :explain
-SELECT * FROM f_sensor_data WHERE sensor_id > 100;
+SELECT * FROM f_sensor_data WHERE sensor_id > 1000;
 
 
 -- Test non-partial paths below append are not executed multiple times
@@ -858,6 +836,7 @@ SELECT create_hypertable('ts_device_table', 'time', chunk_time_interval => 1000)
 INSERT INTO ts_device_table SELECT generate_series(0,999,1), 1, 100, 20;
 ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_segmentby='location', timescaledb.compress_orderby='time');
 SELECT compress_chunk(i) AS chunk_name FROM show_chunks('ts_device_table') i \gset
+VACUUM ANALYZE ts_device_table;
 
 SELECT count(*) FROM ts_device_table;
 SELECT count(*) FROM :chunk_name;
@@ -895,6 +874,8 @@ SELECT time, device, device * 0.1 FROM
 SELECT compress_chunk(c) FROM show_chunks('ht_metrics_partially_compressed') c;
 
 INSERT INTO ht_metrics_partially_compressed VALUES ('2020-01-01'::timestamptz, 1, 0.1);
+
+VACUUM ANALYZE ht_metrics_partially_compressed;
 
 :explain
 SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1;
@@ -960,6 +941,8 @@ INSERT INTO i6069 VALUES('2023-07-01', 1, 1),('2023-07-03', 2, 1),('2023-07-05',
 
 SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('i6069') i;
 
+VACUUM ANALYZE i6069;
+
 SET enable_indexscan = ON;
 SET enable_seqscan = OFF;
 
@@ -1014,7 +997,7 @@ SET work_mem = '16MB';
 
 -- Compress three of the chunks
 SELECT compress_chunk(ch) FROM show_chunks('sensor_data_compressed') ch LIMIT 3;
-ANALYZE sensor_data_compressed;
+VACUUM ANALYZE sensor_data_compressed;
 
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 
@@ -1030,6 +1013,7 @@ RESET timescaledb.enable_decompression_sorted_merge;
 
 -- Compress the remaining chunks
 SELECT compress_chunk(ch, if_not_compressed => true) FROM show_chunks('sensor_data_compressed') ch;
+VACUUM ANALYZE sensor_data_compressed;
 
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 
@@ -1046,6 +1030,7 @@ RESET timescaledb.enable_decompression_sorted_merge;
 -- Convert the last chunk into a partially compressed chunk
 INSERT INTO sensor_data_compressed (time, sensor_id, cpu, temperature)
    VALUES ('1980-01-02 01:00:00-00', 2, 4, 14.0);
+VACUUM ANALYZE sensor_data_compressed;
 
 -- Only the first chunks should be accessed (batch sorted merge is enabled)
 :PREFIX
@@ -1059,7 +1044,7 @@ RESET timescaledb.enable_decompression_sorted_merge;
 
 -- create another chunk
 INSERT INTO stattest SELECT '2021/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(125,140) v;
-ANALYZE stattest;
+VACUUM ANALYZE stattest;
 SELECT count(*) from show_chunks('stattest');
 SELECT table_name INTO TEMPORARY temptable FROM _timescaledb_catalog.chunk WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'stattest') ORDER BY creation_time desc limit 1;
 SELECT table_name  as "STAT_CHUNK2_NAME" FROM temptable \gset
@@ -1259,3 +1244,4 @@ SELECT compress_chunk(show_chunks('badly_compressed_ht'));
 \set VERBOSITY terse
 
 RESET timescaledb.enable_compression_ratio_warnings;
+
