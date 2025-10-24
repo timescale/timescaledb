@@ -114,7 +114,7 @@ jobs:
         apt install -y cmake postgresql-server-dev-${{ matrix.pg }}
         cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
-        make -C build installcheck
+        sudo -u postgres make -C build installcheck
 
     - name: Collect the logs
       if: always() && steps.installcheck.conclusion != 'skipped'
