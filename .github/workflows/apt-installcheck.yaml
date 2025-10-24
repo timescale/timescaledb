@@ -94,15 +94,18 @@ jobs:
         if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
           false
         fi
+
         sudo -u postgres psql -X -t -c "
           select format(E'commit_hash=%s\ncommit_tag=%s', commit_hash, commit_tag)
           from _timescaledb_functions.get_git_commit();
-        " >> $GITHUB_OUTPUT
+        " | tee -a $GITHUB_OUTPUT
 
     - name: Checkout the sources for version ${{ steps.installation.outputs.commit_tag }}
       uses: actions/checkout@v4
       with:
         ref: ${{ steps.installation.outputs.commit_hash }}
+      run: |
+        git log -1
 
     - name: Run make installcheck
       id: installcheck
