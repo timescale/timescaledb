@@ -507,7 +507,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 			compression_ratio < POOR_COMPRESSION_THRESHOLD)
 			ereport(WARNING,
 					errcode(ERRCODE_WARNING),
-					errmsg("poor compression rate detected for chunk \"%s\"'",
+					errmsg("poor compression ratio detected for chunk \"%s\"'",
 						   get_rel_name(chunk_relid)),
 					errdetail("Chunk \"%s\" has a poor compression ratio: %.2f. Size before "
 							  "compression: " INT64_FORMAT
