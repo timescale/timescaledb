@@ -33,6 +33,8 @@ if(GIT_FOUND)
      OR _revparse_RESULT
      OR _log_RESULT)
     message(STATUS "Unable to get git commit information")
+  else()
+    message(STATUS "Building commit ${EXT_GIT_COMMIT_TAG} (${EXT_GIT_COMMIT_HASH}), ${EXT_GIT_COMMIT_TIME}")
   endif()
 endif()
 
