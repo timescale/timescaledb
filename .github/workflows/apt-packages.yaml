@@ -106,11 +106,24 @@ jobs:
         fi
 
     - name: Run make installcheck
+      id: installcheck
       if: matrix.image == 'ubuntu:22.04' && matrix.license == 'TSL' && matrix.pg == 17
       run: |
         apt install -y cmake postgresql-server-dev-${{ matrix.pg }}
-        cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -C build installcheck
+        find . -name regression.diffs -exec cat {} + > regression.log
+
+    - name: Save PostgreSQL log
+      if: always() && steps.installcheck.conclusion != 'skipped'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Installcheck log ${{ matrix.image }} ${{ matrix.license }} ${{ matrix.pg }}
+        path: |
+            postmaster.*
+            initdb.log
+            regression.log
 
     - name: Install toolkit
       run: |
