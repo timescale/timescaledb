@@ -46,7 +46,7 @@ jobs:
     - name: Add repositories
       run: |
         apt-get update
-        apt-get install -y wget lsb-release gnupg apt-transport-https sudo postgresql-common
+        apt-get install -y wget lsb-release gnupg apt-transport-https sudo postgresql-common git cmake
         yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
         echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
@@ -110,7 +110,7 @@ jobs:
       shell: bash
       run: |
         git log -1
-        apt install -y cmake postgresql-server-dev-${{ matrix.pg }}
+        apt install -y postgresql-server-dev-${{ matrix.pg }}
         cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         chown -R postgres:postgres .
