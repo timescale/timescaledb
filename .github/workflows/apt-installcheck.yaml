@@ -23,17 +23,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: ubuntu-latest
-            arch: amd64
-          - runner: timescaledb-runner-arm64
-            arch: ARM
-          - image: ubuntu:22.04
-            image_friendly: ubuntu-22.04
+        runner:
+          - ubuntu-latest
+          - timescaledb-runner-arm64
+        image:
+          - ubuntu:22.04
         pg:
           - 17
         license:
           - "TSL"
+        include:
+          - runner: ubuntu-latest
+            arch: AMD64
+          - runner: timescaledb-runner-arm64
+            arch: ARM
+          - image: ubuntu:22.04
+            image_friendly: Ubuntu 22.04
 
     runs-on: ${{ matrix.runner }}
 
@@ -74,7 +79,7 @@ jobs:
         fi
         echo "version=${version}" >>$GITHUB_OUTPUT
 
-        cat /etc/os-release >> $GITHUB_OUTPUT
+        grep PRETTY_NAME /etc/os-release >> $GITHUB_OUTPUT
         echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
 
     - name: Checkout the sources for version ${{ steps.versions.outputs.version }}
