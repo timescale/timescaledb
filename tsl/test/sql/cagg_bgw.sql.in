@@ -5,7 +5,7 @@
 --
 -- Setup
 --
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE OR REPLACE FUNCTION ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(timeout INT = -1, mock_start_time INT = 0) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 

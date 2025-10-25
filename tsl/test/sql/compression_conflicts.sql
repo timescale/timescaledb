@@ -177,7 +177,7 @@ BEGIN;
 ROLLBACK;
 
 -- using superuser to create indexes on compressed chunks
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 set timescaledb.debug_compression_path_info to on;
 -- ignore matching partial index
 BEGIN;

@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- Disable background workers since we are testing manual refresh
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET datestyle TO 'ISO, YMD';

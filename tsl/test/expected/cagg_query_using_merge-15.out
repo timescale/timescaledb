@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Connect as superuser to use SET ROLE later
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO PST8PDT;
 -- Run tests with default role
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -1090,7 +1090,7 @@ SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint_offset2';
  public           | cagg_bigint_offset2 | public.time_bucket(bigint,bigint,bigint) | 2            |               | 1             |                 | t
 
 -- mess with the bucket_func signature to make sure it will raise an exception
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 \set ON_ERROR_STOP 0
 BEGIN;
 UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_func = 'func_does_not_exist()';

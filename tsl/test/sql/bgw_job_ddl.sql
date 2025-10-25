@@ -53,7 +53,7 @@ SELECT * FROM my_jobs;
 -- a normal user. We test both users with superuser privileges and
 -- default permissions.
 \set ON_ERROR_STOP 0
-REASSIGN OWNED BY another_user TO :ROLE_CLUSTER_SUPERUSER;
+REASSIGN OWNED BY another_user TO :ROLE_SUPERUSER;
 REASSIGN OWNED BY another_user TO :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 1
 
@@ -109,7 +109,7 @@ SELECT * FROM my_jobs;
 ROLLBACK;
 
 -- Test that reassigning to postgres works
-REASSIGN OWNED BY renamed_user TO :ROLE_CLUSTER_SUPERUSER;
+REASSIGN OWNED BY renamed_user TO :ROLE_SUPERUSER;
 SELECT * FROM my_jobs;
 
 -- Dropping the user now should work.

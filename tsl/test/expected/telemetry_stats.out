@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 --telemetry tests that require a community license
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 SET timezone TO 'America/Los_Angeles';
 -- function call info size is too variable for this test, so disable it
 SET timescaledb.telemetry_level='no_functions';
