@@ -49,9 +49,6 @@ else()
   set(TEST_HBA_LOCAL "local")
 endif()
 
-configure_file(${PRIMARY_TEST_DIR}/pg_hba.conf.in pg_hba.conf)
-set(TEST_PG_HBA_FILE ${TEST_OUTPUT_DIR}/pg_hba.conf)
-
 # This variable is set differently in CI. We use it to save the logs outside the
 # tmp instance, because it is deleted by pg_regress on successful test
 # completion, and we want to run some additional checks on the logs in any case.
