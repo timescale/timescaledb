@@ -12,6 +12,7 @@ $$;
 
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+DROP VIEW IF EXISTS timescaledb_information.chunks;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger() RETURNS TRIGGER AS '@MODULE_PATHNAME@', 'ts_update_placeholder' LANGUAGE C;
 

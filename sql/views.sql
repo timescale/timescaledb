@@ -178,22 +178,22 @@ FROM (
     dim.column_name AS primary_dimension,
     dim.column_type AS primary_dimension_type,
     row_number() OVER (PARTITION BY chcons.chunk_id ORDER BY dim.id) AS chunk_dimension_num,
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       _timescaledb_functions.to_timestamp(dimsl.range_start)
     ELSE
       NULL
     END AS range_start,
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       _timescaledb_functions.to_timestamp(dimsl.range_end)
     ELSE
       NULL
     END AS range_end,
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       NULL
     ELSE
       dimsl.range_start
     END AS integer_range_start,
-    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date', 'uuid']::regtype[]) THEN
       NULL
     ELSE
       dimsl.range_end
