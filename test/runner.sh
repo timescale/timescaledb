@@ -12,6 +12,7 @@ TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
 TEST_SUPPORT_FILE_INIT=${CURRENT_DIR}/sql/utils/testsupport_init.sql
+TEST_TIMEOUT=${TEST_TIMEOUT:-120}
 
 # PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
 # to get the name of the test
@@ -32,12 +33,11 @@ if [ "$(uname)" == "Darwin" ]; then
     then
       TIMEOUT_CMD=""
     else
-      TIMEOUT_CMD="gtimeout -v 120s"
+      TIMEOUT_CMD="gtimeout -v ${TEST_TIMEOUT}s"
   fi
 else
-  TIMEOUT_CMD="timeout -v 120s"
+  TIMEOUT_CMD="timeout -v ${TEST_TIMEOUT}s"
 fi
-
 
 #docker doesn't set user
 USER=${USER:-$(whoami)}
