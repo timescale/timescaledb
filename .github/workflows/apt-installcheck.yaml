@@ -1,0 +1,139 @@
+# Test running make installcheck on our ubuntu and debian packages for the latest version.
+name: "Packaging tests: Installcheck for APT"
+"on":
+  schedule:
+    # run daily 0:00 on main branch
+    - cron: '0 0 * * *'
+  pull_request:
+    paths: .github/workflows/apt-installcheck.yaml
+  push:
+    tags:
+    - '*'
+    branches:
+    - release_test
+    - trigger/package_test
+  workflow_dispatch:
+jobs:
+  apt_tests:
+    name: APT ${{ matrix.runner }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
+    container:
+      image: ${{ matrix.image }}
+      env:
+        DEBIAN_FRONTEND: noninteractive
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - timescaledb-runner-arm64
+        image:
+          - ubuntu:22.04
+        pg:
+          - 17
+        license:
+          - "TSL"
+        include:
+          - runner: ubuntu-latest
+            arch: AMD64
+          - runner: timescaledb-runner-arm64
+            arch: ARM
+          - image: ubuntu:22.04
+            image_friendly: Ubuntu 22.04
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+    - name: Add repositories
+      run: |
+        apt-get update
+        apt-get install -y wget lsb-release gnupg sudo postgresql-common git cmake
+        yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        image_type=$(lsb_release -i -s | tr '[:upper:]' '[:lower:]')
+        echo "deb https://packagecloud.io/timescale/timescaledb/${image_type}/ $(lsb_release -c -s) main" \
+          > /etc/apt/sources.list.d/timescaledb.list
+        wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
+
+    - name: Install timescaledb
+      run: |
+        apt-get update
+        apt-get install -y --no-install-recommends \
+          timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }} timescaledb-tools
+        timescaledb-tune --quiet --yes
+
+    - uses: actions/checkout@v4
+
+    - name: Read versions
+      id: versions
+      run: |
+        # read expected version from version.config
+        # version will only be a proper version in a release branch so we use previous_version
+        # as fallback for main
+        if grep '^version = [0-9.]\+$' version.config; then
+          version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
+        else
+          version=$(grep '^previous_version = ' version.config | sed -e 's!^previous_version = !!')
+        fi
+        echo "version=${version}" >>$GITHUB_OUTPUT
+
+        grep PRETTY_NAME /etc/os-release >> $GITHUB_OUTPUT
+        echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
+
+    - name: Test Installation
+      id: installation
+      run: |
+        set -xeu
+        pg_ctlcluster ${{ matrix.pg }} main start
+        sudo -u postgres psql -X -c "CREATE EXTENSION timescaledb" \
+          -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
+        installed_version=$(sudo -u postgres psql -X -t \
+          -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
+          false
+        fi
+
+        sudo -u postgres psql -qtAX -c "
+          select format(E'commit_hash=%s\ncommit_tag=%s', commit_hash, commit_tag)
+          from _timescaledb_functions.get_git_commit();
+        " | tee -a $GITHUB_OUTPUT
+
+    - name: Checkout the sources for version ${{ steps.installation.outputs.commit_tag }}
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ steps.installation.outputs.commit_hash }}
+
+    - name: Run make installcheck
+      id: installcheck
+      shell: bash
+      run: |
+        chown -R postgres:postgres .
+        chmod g+s .
+        sudo -u postgres git log -1 .
+        apt install -y postgresql-server-dev-${{ matrix.pg }}
+        sudo -u postgres cmake -B build -S . -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
+        set -o pipefail
+        sudo -u postgres make -k -C build installcheck | tee installcheck.log
+
+    - name: Collect the logs
+      if: always()
+      run: |
+        find . -name regression.diffs -exec cat {} + > regression.log
+        find . -mindepth 2 -name initdb.log -exec cat {} + > initdb.log
+
+    - name: Show regression diffs
+      if: always()
+      run: |
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
+        cat regression.log
+
+    - name: Save the logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: Installcheck logs ${{ matrix.runner }} ${{ matrix.image_friendly }} PG ${{ matrix.pg }}
+        path: |
+            postmaster.*
+            initdb.log
+            regression.log
+            installcheck.log
+
