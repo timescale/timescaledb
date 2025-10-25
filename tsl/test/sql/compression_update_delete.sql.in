@@ -664,11 +664,11 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_2 WHERE device_id IS NULL;
 
 BEGIN;
 -- report 0 row
-SELECT * FROM sample_table WHERE a = 247;
+SELECT * FROM sample_table WHERE a = 247 ORDER BY time;
 -- delete 1 row
 UPDATE sample_table SET a = 247 WHERE device_id IS NULL;
 -- ensure rows are visible
-SELECT * FROM sample_table WHERE a = 247;
+SELECT * FROM sample_table WHERE a = 247 ORDER BY time;
 ROLLBACK;
 
 -- report 0 rows
