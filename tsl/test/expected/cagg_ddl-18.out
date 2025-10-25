@@ -20,7 +20,7 @@ SELECT table_name FROM create_hypertable('conditions', 'timec');
  conditions
 
 -- schema tests
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET timezone TO 'UTC+8';
 -- drop if the tablespace1 and/or tablespace2 exists
 SET client_min_messages TO error;
@@ -79,9 +79,9 @@ WHERE user_view_name = 'rename_test'
 \gset
 RESET ROLE;
 SELECT current_user;
-    current_user    
---------------------
- cluster_super_user
+ current_user 
+--------------
+ super_user
 
 ALTER VIEW :"PART_VIEW_SCHEMA".:"PART_VIEW_NAME" SET SCHEMA public;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -100,9 +100,9 @@ SELECT user_view_schema, user_view_name, direct_view_schema, direct_view_name
 
 RESET ROLE;
 SELECT current_user;
-    current_user    
---------------------
- cluster_super_user
+ current_user 
+--------------
+ super_user
 
 ALTER VIEW :"DIR_VIEW_SCHEMA".:"DIR_VIEW_NAME" SET SCHEMA public;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -115,9 +115,9 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
 
 RESET ROLE;
 SELECT current_user;
-    current_user    
---------------------
- cluster_super_user
+ current_user 
+--------------
+ super_user
 
 ALTER SCHEMA rename_schema RENAME TO new_name_schema;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -139,9 +139,9 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name,
 
 RESET ROLE;
 SELECT current_user;
-    current_user    
---------------------
- cluster_super_user
+ current_user 
+--------------
+ super_user
 
 ALTER SCHEMA new_name_schema RENAME TO foo_name_schema;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -160,9 +160,9 @@ SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
 
 RESET ROLE;
 SELECT current_user;
-    current_user    
---------------------
- cluster_super_user
+ current_user 
+--------------
+ super_user
 
 ALTER SCHEMA foo_name_schema RENAME TO rename_schema;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -1017,7 +1017,7 @@ ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 ERROR:  must be able to SET ROLE "test_role_1"
 \set ON_ERROR_STOP 1
 -- Superuser can always change owner
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
 \x on
 SELECT * FROM cagg_info WHERE user_view::text = 'owner_check';
