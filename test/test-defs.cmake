@@ -41,6 +41,9 @@ set(TEST_SCHEDULE_SHARED
     ${CMAKE_CURRENT_BINARY_DIR}/shared/test_schedule_shared)
 set(ISOLATION_TEST_SCHEDULE ${CMAKE_CURRENT_BINARY_DIR}/isolation_test_schedule)
 set(TEST_PASSFILE ${TEST_OUTPUT_DIR}/pgpass.conf)
+set(TEST_TIMEOUT
+    120
+    CACHE STRING "Timeout in seconds for individual tests")
 
 # Windows does not support local connections (unix domain sockets)
 if(WIN32)
