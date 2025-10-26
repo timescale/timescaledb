@@ -769,6 +769,8 @@ recompress_chunk_in_memory_impl(Chunk *uncompressed_chunk)
 	if (uncompressed_chunk == NULL)
 		ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("chunk cannot be NULL")));
 
+	Ensure(ts_guc_enable_in_memory_recompression, "in-memory recompression functionality disabled");
+
 	/*
 	 * Only proceed if chunk is in compressed state without partial or unordered status
 	 * Status meanings:
