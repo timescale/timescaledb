@@ -710,6 +710,15 @@ recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
 	/* TODO: optimize cases where settings differ but recompression is still possible */
 	else if (recompress && ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
 	{
+		if (!ts_guc_enable_in_memory_recompression)
+		{
+			ereport(DEBUG1,
+					(errcode(ERRCODE_WARNING),
+					 errmsg("in-memory recompression functionality disabled, "
+							"set timescaledb.enable_in_memory_recompression to on")));
+			return false;
+		}
+
 		recompressed = recompress_chunk_in_memory_impl(chunk);
 	}
 
