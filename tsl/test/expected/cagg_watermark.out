@@ -1686,3 +1686,14 @@ SELECT * FROM cagg, other WHERE time_bucket > 10;
                      ->  Result (actual rows=0.00 loops=1)
                            One-Time Filter: false
 
+-- test error handling
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.cagg_watermark(-1);
+ERROR:  invalid materialized hypertable ID: -1
+SELECT COALESCE(_timescaledb_functions.cagg_watermark(-1),12);
+ERROR:  invalid materialized hypertable ID: -1
+SELECT _timescaledb_functions.cagg_watermark_materialized(-1);
+ERROR:  invalid materialized hypertable ID: -1
+SELECT COALESCE(_timescaledb_functions.cagg_watermark_materialized(-1),12);
+ERROR:  invalid materialized hypertable ID: -1
+\set ON_ERROR_STOP 1
