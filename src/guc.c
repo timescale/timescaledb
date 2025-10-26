@@ -119,6 +119,7 @@ TSDLLEXPORT bool ts_guc_read_legacy_bloom1_v1 = false;
 
 bool ts_guc_enable_chunk_skipping = false;
 TSDLLEXPORT bool ts_guc_enable_segmentwise_recompression = true;
+TSDLLEXPORT bool ts_guc_enable_in_memory_recompression = true;
 TSDLLEXPORT bool ts_guc_enable_exclusive_locking_recompression = false;
 TSDLLEXPORT bool ts_guc_enable_bool_compression = true;
 TSDLLEXPORT bool ts_guc_enable_uuid_compression = true;
@@ -900,6 +901,16 @@ _guc_init(void)
 							 "Enable segmentwise recompression functionality",
 							 "Enable segmentwise recompression",
 							 &ts_guc_enable_segmentwise_recompression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_in_memory_recompression"),
+							 "Enable in-memory recompression functionality",
+							 "Enable in-memory recompression",
+							 &ts_guc_enable_in_memory_recompression,
 							 true,
 							 PGC_USERSET,
 							 0,

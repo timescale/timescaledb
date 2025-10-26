@@ -198,5 +198,34 @@ RESET timescaledb.enable_direct_compress_insert;
 RESET timescaledb.enable_direct_compress_insert_sort_batches;
 RESET timescaledb.enable_direct_compress_insert_client_sorted;
 
+-- Test Case 6: Disabled in-memory recompression GUC
+CREATE TABLE recomp_guc_test(
+    time timestamptz NOT NULL,
+    device text,
+    value float
+);
+SELECT create_hypertable('recomp_guc_test','time') \gset
+
+ALTER TABLE recomp_guc_test SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby='device',
+    timescaledb.compress_orderby='time'
+);
+
+SET timescaledb.enable_in_memory_recompression = off;
+-- Insert test data
+INSERT INTO recomp_guc_test VALUES ('2000-01-01 00:00:00', 'device1', 20.5);
+
+-- Compress all chunks
+SELECT compress_chunk(ch) FROM show_chunks('recomp_guc_test') ch;
+SELECT compress_chunk(ch, recompress := true) FROM show_chunks('recomp_guc_test') ch LIMIT 1;
+
+-- Verify data integrity after fallback recompression
+SELECT COUNT(*) FROM recomp_guc_test;
+SELECT * FROM recomp_guc_test ORDER BY time, device;
+
+RESET timescaledb.enable_in_memory_recompression;
+DROP TABLE recomp_guc_test CASCADE;
+
 
 
