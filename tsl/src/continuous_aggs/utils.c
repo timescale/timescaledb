@@ -67,10 +67,10 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 {
 	text *query_text = PG_GETARG_TEXT_P(0);
 	char *sql;
-	volatile bool is_valid_query = false;
+	bool is_valid_query = false;
 	Datum datum_sql;
 	TupleDesc tupdesc;
-	volatile ErrorData *edata;
+	ErrorData *edata;
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	/* Change $1, $2 ... placeholders to NULL constant. This is necessary to make parser happy */
@@ -144,6 +144,7 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 	}
 	PG_CATCH();
 	{
+		is_valid_query = false;
 		MemoryContextSwitchTo(oldcontext);
 		edata = CopyErrorData();
 		FlushErrorState();
