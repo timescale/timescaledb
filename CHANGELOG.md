@@ -11,7 +11,7 @@ This release contains performance improvements and bug fixes since the 2.22.1 re
 
 **Highlighted features in TimescaleDB v2.23.0**
 * This release introduces full PostgreSQL 18 support for all existing features. TimescaleDB v2.23 is available for PostgreSQL 15, 16, 17, and 18.
-* UUID compression is now enabled by default on the columnstore. This feature was shipped in [v2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0), and accomplishes 30% storage saving as the worst case scenario and delivers ~2× faster query performance with UUID columns in the filter conditions.
+* UUIDv7 compression is now enabled by default on the columnstore. This feature was shipped in [v2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0), and accomplishes 30% storage saving as the worst case scenario and delivers ~2× faster query performance with UUIDv7 columns in the filter conditions.
 * Added the ability to set hypertables to unlogged, addressing an open community request [#836](https://github.com/timescale/timescaledb/issues/836). This allows the tradeoff between durability and performance, with the latter being favourable for larger imports.
 * By allowing [set-returning functions](https://www.postgresql.org/docs/current/functions-srf.html) in continuous aggregates, this releases addresses a long standing blocker, raised by the community [#1717](https://github.com/timescale/timescaledb/issues/1717).
 
@@ -28,7 +28,7 @@ This release contains performance improvements and bug fixes since the 2.22.1 re
 * [#8734](https://github.com/timescale/timescaledb/pull/8734) Support direct compress when inserting into a chunk.
 * [#8741](https://github.com/timescale/timescaledb/pull/8741) Add support for unlogged hypertables.
 * [#8769](https://github.com/timescale/timescaledb/pull/8769) Remove continuous aggregate invalidation trigger.
-* [#8798](https://github.com/timescale/timescaledb/pull/8798) Enable UUID compression by default.
+* [#8798](https://github.com/timescale/timescaledb/pull/8798) Enable UUIDv7 compression by default.
 * [#8804](https://github.com/timescale/timescaledb/pull/8804) Remove `insert_blocker` trigger.
 
 **Bugfixes**
