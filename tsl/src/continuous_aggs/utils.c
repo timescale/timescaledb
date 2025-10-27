@@ -70,7 +70,7 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 	volatile bool is_valid_query = false;
 	Datum datum_sql;
 	TupleDesc tupdesc;
-	ErrorData *edata;
+	volatile ErrorData *edata;
 	MemoryContext oldcontext = CurrentMemoryContext;
 
 	/* Change $1, $2 ... placeholders to NULL constant. This is necessary to make parser happy */
