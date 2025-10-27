@@ -11,7 +11,7 @@ This release contains performance improvements and bug fixes since the 2.22.1 re
 
 **Highlighted features in TimescaleDB v2.23.0**
 * This release introduces full PostgreSQL 18 support for all existing features. TimescaleDB v2.23 is available for PostgreSQL 15, 16, 17, and 18.
-* UUIDv7 compression is now enabled by default on the columnstore. This feature was shipped in [v2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0), and accomplishes 30% storage saving as the worst case scenario and delivers ~2× faster query performance with UUIDv7 columns in the filter conditions.
+* UUIDv7 compression is now enabled by default on the columnstore. This feature was shipped in [v2.22.0](https://github.com/timescale/timescaledb/releases/tag/2.22.0). It saves you at least 30% of storage and delivers ~2× faster query performance with UUIDv7 columns in the filter conditions.
 * Added the ability to set hypertables to unlogged, addressing an open community request [#836](https://github.com/timescale/timescaledb/issues/836). This allows the tradeoff between durability and performance, with the latter being favourable for larger imports.
 * By allowing [set-returning functions](https://www.postgresql.org/docs/current/functions-srf.html) in continuous aggregates, this releases addresses a long standing blocker, raised by the community [#1717](https://github.com/timescale/timescaledb/issues/1717).
 
@@ -19,7 +19,7 @@ This release contains performance improvements and bug fixes since the 2.22.1 re
 * [#8373](https://github.com/timescale/timescaledb/pull/8373) More precise estimates of row numbers for columnar storage based on Postgres statistics.
 * [#8581](https://github.com/timescale/timescaledb/pull/8581) Allow mixing Postgres and TimescaleDB options in `ALTER TABLE SET`.
 * [#8582](https://github.com/timescale/timescaledb/pull/8582) Make `partition_column` in `CREATE TABLE WITH` optional.
-* [#8588](https://github.com/timescale/timescaledb/pull/8588) Automatically, create a columnstore policy when a hypertable with columnstore enabled is created via `CREATE TABLE WITH` statement.
+* [#8588](https://github.com/timescale/timescaledb/pull/8588) Automatically create a columnstore policy when a hypertable with columnstore enabled is created via `CREATE TABLE WITH` statement.
 * [#8606](https://github.com/timescale/timescaledb/pull/8606) Add job history config parameters for maximum successes and failures to keep for each job.
 * [#8632](https://github.com/timescale/timescaledb/pull/8632) Remove `ChunkDispatch` custom node.
 * [#8637](https://github.com/timescale/timescaledb/pull/8637) Add `INSERT` support for direct compress.
@@ -53,13 +53,13 @@ This release contains performance improvements and bug fixes since the 2.22.1 re
 * `cagg_processing_wal_batch_size`: Batch size when processing WAL entries.
 * `enable_cagg_wal_based_invalidation`: Enable experimental invalidations for continuous aggregates using WAL.
 * `enable_direct_compress_insert`: Enable direct compression during `INSERT`.
-* `enable_direct_compress_insert_client_sorted`: Enable direct compress `INSERT` with presorted data
+* `enable_direct_compress_insert_client_sorted`: Enable direct compress `INSERT` with presorted data.
 * `enable_direct_compress_insert_sort_batches`: Enable batch sorting during direct compress `INSERT`.
 * `materializations_per_refresh_window`
 
 **Thanks**
-* @brandonpurcell-dev For highlighting issues with show_chunks() and UUIDv7 partitioning
-* @moodgorning for reporting issue with timescaledb_information.job_stats view
+* @brandonpurcell-dev For highlighting issues with `show_chunks()` and UUIDv7 partitioning
+* @moodgorning for reporting an issue with the `timescaledb_information.job_stats` view
 * @ruideyllot for reporting set-returning functions not working in continuous aggregates
 * @t-aistleitner for reporting an issue with utility statements in plpgsql functions
 
