@@ -55,7 +55,6 @@ This release contains performance improvements and bug fixes since the 2.22.1 re
 * `enable_direct_compress_insert`: Enable direct compression during `INSERT`.
 * `enable_direct_compress_insert_client_sorted`: Enable direct compress `INSERT` with presorted data.
 * `enable_direct_compress_insert_sort_batches`: Enable batch sorting during direct compress `INSERT`.
-* `materializations_per_refresh_window`
 
 **Thanks**
 * @brandonpurcell-dev For highlighting issues with `show_chunks()` and UUIDv7 partitioning
