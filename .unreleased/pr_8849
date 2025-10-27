@@ -1,0 +1,2 @@
+Implements: #8840 Allow ALTER COLUMN TYPE when compression enabled but no compressed chunks exist
+Thanks: @bezpechno for implementing ALTER COLUMN TYPE for hypertable with columnstore when no compressed chunks exist
