@@ -2556,3 +2556,93 @@ SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hype
 ------------+-----------+---------+--------------------------+-------
  mix_pg_ts  |           | "time"  |                          | 
 
+-- test with compression enabled but no compressed chunks
+CREATE TABLE alter_col_type_test(time timestamptz NOT NULL, device_id int, value float);
+SELECT create_hypertable('alter_col_type_test','time');
+         create_hypertable         
+-----------------------------------
+ (52,public,alter_col_type_test,t)
+
+INSERT INTO alter_col_type_test VALUES ('2025-01-01', 1, 10.5), ('2025-01-02', 2, 20.5);
+-- alter column type should work on hypertable without compression
+ALTER TABLE alter_col_type_test ALTER COLUMN device_id TYPE bigint;
+SELECT * FROM alter_col_type_test ORDER BY time;
+             time             | device_id | value 
+------------------------------+-----------+-------
+ Wed Jan 01 00:00:00 2025 PST |         1 |  10.5
+ Thu Jan 02 00:00:00 2025 PST |         2 |  20.5
+
+-- enable compression but don't compress any chunks yet
+ALTER TABLE alter_col_type_test SET (timescaledb.compress, timescaledb.compress_segmentby='device_id');
+-- alter column type should succeed when compression is enabled but no chunks are compressed
+ALTER TABLE alter_col_type_test ALTER COLUMN device_id TYPE int;
+ALTER TABLE alter_col_type_test ALTER COLUMN value TYPE double precision;
+-- verify the changes worked
+\d alter_col_type_test
+                  Table "public.alter_col_type_test"
+  Column   |           Type           | Collation | Nullable | Default 
+-----------+--------------------------+-----------+----------+---------
+ time      | timestamp with time zone |           | not null | 
+ device_id | integer                  |           |          | 
+ value     | double precision         |           |          | 
+Indexes:
+    "alter_col_type_test_time_idx" btree ("time" DESC)
+Number of child tables: 2 (Use \d+ to list them.)
+
+SELECT * FROM alter_col_type_test ORDER BY time;
+             time             | device_id | value 
+------------------------------+-----------+-------
+ Wed Jan 01 00:00:00 2025 PST |         1 |  10.5
+ Thu Jan 02 00:00:00 2025 PST |         2 |  20.5
+
+-- now compress a chunk
+SELECT compress_chunk(show_chunks('alter_col_type_test'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_52_241_chunk
+ _timescaledb_internal._hyper_52_242_chunk
+
+-- ALTER COLUMN TYPE should fail when chunks are compressed
+\set ON_ERROR_STOP 0
+ALTER TABLE alter_col_type_test ALTER COLUMN device_id TYPE text;
+ERROR:  operation not supported on hypertables with compressed chunks
+\set ON_ERROR_STOP 1
+-- decompress and try again, should succeed
+SELECT decompress_chunk(show_chunks('alter_col_type_test'));
+             decompress_chunk              
+-------------------------------------------
+ _timescaledb_internal._hyper_52_241_chunk
+ _timescaledb_internal._hyper_52_242_chunk
+
+ALTER TABLE alter_col_type_test ALTER COLUMN device_id TYPE bigint;
+\d alter_col_type_test
+                  Table "public.alter_col_type_test"
+  Column   |           Type           | Collation | Nullable | Default 
+-----------+--------------------------+-----------+----------+---------
+ time      | timestamp with time zone |           | not null | 
+ device_id | bigint                   |           |          | 
+ value     | double precision         |           |          | 
+Indexes:
+    "alter_col_type_test_time_idx" btree ("time" DESC)
+Number of child tables: 2 (Use \d+ to list them.)
+
+-- verify we can still work with the table after type change
+SELECT * FROM alter_col_type_test ORDER BY time;
+             time             | device_id | value 
+------------------------------+-----------+-------
+ Wed Jan 01 00:00:00 2025 PST |         1 |  10.5
+ Thu Jan 02 00:00:00 2025 PST |         2 |  20.5
+
+-- compress again to verify compression still works
+SELECT compress_chunk(show_chunks('alter_col_type_test'));
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_52_241_chunk
+ _timescaledb_internal._hyper_52_242_chunk
+
+-- ALTER TYPE should fail again when compressed
+\set ON_ERROR_STOP 0
+ALTER TABLE alter_col_type_test ALTER COLUMN device_id TYPE text;
+ERROR:  operation not supported on hypertables with compressed chunks
+\set ON_ERROR_STOP 1
+DROP TABLE alter_col_type_test;
