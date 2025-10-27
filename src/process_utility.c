@@ -257,6 +257,16 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 	}
 }
 
+/* check if hypertable has compressed chunks */
+static bool
+ts_hypertable_has_compressed_chunks(const Hypertable *ht)
+{
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		return false;
+
+	return ts_chunk_exists_with_compression(ht->fd.id);
+}
+
 static void
 check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt *stmt)
 {
@@ -313,6 +323,9 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_ForceRowSecurity:
 			case AT_NoForceRowSecurity:
 			default:
+				/* Special case: Allow AT_AlterColumnType when no compressed chunks exist */
+				if (cmd->subtype == AT_AlterColumnType && !ts_hypertable_has_compressed_chunks(ht))
+					continue;
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("operation not supported on hypertables that have columnstore "
