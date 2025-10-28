@@ -5,7 +5,6 @@ DECLARE
  vname regclass;
  mat_ht_id INTEGER;
  materialized_only bool;
- finalized bool;
  ts_major INTEGER;
  ts_minor INTEGER;
 BEGIN
@@ -23,8 +22,8 @@ BEGIN
       ) AS '@MODULE_PATHNAME@', 'ts_cagg_try_repair' LANGUAGE C;
     END IF;
 
-    FOR vname, mat_ht_id, materialized_only, finalized IN
-      SELECT format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.mat_hypertable_id, cagg.materialized_only, cagg.finalized
+    FOR vname, mat_ht_id, materialized_only IN
+      SELECT format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.mat_hypertable_id, cagg.materialized_only
       FROM _timescaledb_catalog.continuous_agg cagg
     LOOP
       IF ts_major < 2 THEN
