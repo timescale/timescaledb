@@ -15,6 +15,10 @@ This release contains performance improvements and bug fixes since the 2.22.1 re
 * Added the ability to set hypertables to unlogged, addressing an open community request [#836](https://github.com/timescale/timescaledb/issues/836). This allows the tradeoff between durability and performance, with the latter being favourable for larger imports.
 * By allowing [set-returning functions](https://www.postgresql.org/docs/current/functions-srf.html) in continuous aggregates, this releases addresses a long standing blocker, raised by the community [#1717](https://github.com/timescale/timescaledb/issues/1717).
 
+**PostgreSQL 15 deprecation announcement**
+
+We will continue supporting PostgreSQL 15 until June 2026. Closer to that time, we will announce the specific TimescaleDB version in which PostgreSQL 15 support will not be included going forward.
+
 **Features**
 * [#8373](https://github.com/timescale/timescaledb/pull/8373) More precise estimates of row numbers for columnar storage based on Postgres statistics.
 * [#8581](https://github.com/timescale/timescaledb/pull/8581) Allow mixing Postgres and TimescaleDB options in `ALTER TABLE SET`.
