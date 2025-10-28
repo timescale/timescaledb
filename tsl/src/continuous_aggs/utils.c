@@ -67,7 +67,7 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 {
 	text *query_text = PG_GETARG_TEXT_P(0);
 	char *sql;
-	bool is_valid_query = false;
+	volatile bool is_valid_query = false;
 	Datum datum_sql;
 	TupleDesc tupdesc;
 	ErrorData *edata;
