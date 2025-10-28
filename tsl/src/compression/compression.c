@@ -189,7 +189,6 @@ truncate_relation(Oid table_oid)
 #else
 		RelationSetNewRelfilenumber(rel, rel->rd_rel->relpersistence);
 #endif
-		Assert(rel->rd_rel->relpersistence != RELPERSISTENCE_UNLOGGED);
 		table_close(rel, NoLock);
 	}
 
