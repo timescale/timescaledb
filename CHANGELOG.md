@@ -17,7 +17,7 @@ This release contains performance improvements and bug fixes since the 2.22.1 re
 
 **PostgreSQL 15 deprecation announcement**
 
-We will continue supporting PostgreSQL 15 until May 2026. Closer to that time, we will announce the specific TimescaleDB version in which PostgreSQL 15 support will not be included going forward.
+We will continue supporting PostgreSQL 15 until June 2026. Closer to that time, we will announce the specific TimescaleDB version in which PostgreSQL 15 support will not be included going forward.
 
 **Features**
 * [#8373](https://github.com/timescale/timescaledb/pull/8373) More precise estimates of row numbers for columnar storage based on Postgres statistics.
