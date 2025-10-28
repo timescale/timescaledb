@@ -1058,7 +1058,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		if (NULL == slice || TS_TIME_IS_MIN(slice->fd.range_start, refresh_window.type) ||
 			TS_TIME_IS_NOBEGIN(slice->fd.range_start, refresh_window.type))
 		{
-			elog(LOG,
+			elog(DEBUG1,
 				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
 				 "single batch processing",
 				 NameStr(cagg->data.user_view_schema),
@@ -1078,7 +1078,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		if (NULL == slice || TS_TIME_IS_MAX(slice->fd.range_end, refresh_window.type) ||
 			TS_TIME_IS_NOEND(slice->fd.range_end, refresh_window.type))
 		{
-			elog(LOG,
+			elog(DEBUG1,
 				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
 				 "single batch processing",
 				 NameStr(cagg->data.user_view_schema),
@@ -1113,7 +1113,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		Datum refresh_size_interval = ts_internal_to_interval_value(refresh_window_size, type);
 		Datum batch_size_interval = ts_internal_to_interval_value(batch_size, type);
 
-		elog(LOG,
+		elog(DEBUG1,
 			 "refresh window size (%s) is smaller than or equal to batch size (%s), falling back "
 			 "to single batch processing",
 			 ts_datum_to_string(refresh_size_interval, type),
@@ -1245,7 +1245,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	if (SPI_processed == 1)
 	{
-		elog(LOG,
+		elog(DEBUG1,
 			 "only one batch produced for continuous aggregate \"%s.%s\", falling back to single "
 			 "batch processing",
 			 NameStr(cagg->data.user_view_schema),
@@ -1321,7 +1321,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	if (refresh_window_list == NIL)
 	{
-		elog(LOG,
+		elog(DEBUG1,
 			 "no valid batches produced for continuous aggregate \"%s.%s\", falling back to single "
 			 "batch processing",
 			 NameStr(cagg->data.user_view_schema),
