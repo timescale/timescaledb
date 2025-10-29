@@ -12,6 +12,7 @@ $$;
 
 DROP VIEW IF EXISTS timescaledb_information.job_stats;
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+DROP VIEW IF EXISTS timescaledb_information.chunks;
 
 -- remove cagg trigger from all hypertables and chunks
 DO $$
