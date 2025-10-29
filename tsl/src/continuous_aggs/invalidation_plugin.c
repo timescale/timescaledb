@@ -40,7 +40,7 @@
 #include "invalidation_record.h"
 #include "utils.h"
 
-PG_MODULE_MAGIC;
+TS_MODULE_MAGIC;
 
 #if PG16_LT
 extern TSDLLEXPORT void _PG_output_plugin_init(OutputPluginCallbacks *cb);
