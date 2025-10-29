@@ -1,1 +1,0 @@
-Fixes: #8807 Only warn but not fail the compression if bloom filter indexes are configured but disabled with a GUC.

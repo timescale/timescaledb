@@ -1,1 +1,0 @@
-Fixes: #8742 Potential internal program error when grouping by bool columns of a compressed hypertable.
