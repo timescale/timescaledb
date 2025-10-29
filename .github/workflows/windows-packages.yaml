@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ "15", "16", "17", "18" ]
+        pg: [ "15", "16", "17" ]
     env:
       # PostgreSQL configuration
       PGPORT: 6543
