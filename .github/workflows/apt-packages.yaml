@@ -30,6 +30,10 @@ jobs:
         include:
           - license: Apache
             pkg_suffix: "-oss"
+        exclude:
+          - image: "debian:11-slim"
+            pg: 18
+
 
     steps:
     - name: Add repositories
@@ -90,7 +94,7 @@ jobs:
         fi
 
     - name: Test Downgrade
-      if: matrix.image != 'debian:13-slim' # debian 13 only has timescaledb 2.22.0+ so we can only start testing downgrades with 2.22.1+
+      if: matrix.pg != '18' # pg18 only has 1 version so downgrade is not possible
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.

@@ -29,6 +29,9 @@ jobs:
         include:
           - license: Apache
             pkg_suffix: "-oss"
+        exclude:
+          - image: "rockylinux:8"
+            pg: 18
 
     steps:
     - name: Add postgres repositories
@@ -93,6 +96,7 @@ jobs:
         fi
 
     - name: Test Downgrade
+      if: matrix.pg != '18' # pg18 only has 1 version so downgrade is not possible
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
