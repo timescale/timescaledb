@@ -22,6 +22,9 @@ jobs:
       matrix:
         image: [ "debian:11-slim", "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04" ]
         pg: [ 15, 16, 17, 18 ]
+        exclude:
+          - image: "debian:11-slim"
+            pg: 18
 
     steps:
     - name: Setup emulation
