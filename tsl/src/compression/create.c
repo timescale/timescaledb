@@ -814,8 +814,6 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 		ts_hypertable_unset_compressed(ht);
 	}
 
-	ts_compression_settings_delete(ht->main_table_relid);
-
 	return true;
 }
 

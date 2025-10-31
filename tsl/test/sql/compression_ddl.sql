@@ -1237,3 +1237,16 @@ ALTER TABLE mix_pg_ts RESET (fillfactor, tsdb.segmentby);
 SELECT reloptions FROM pg_class WHERE relname='mix_pg_ts';
 SELECT * FROM timescaledb_information.hypertable_compression_settings WHERE hypertable='mix_pg_ts'::regclass;
 
+-- test that compression settings are retained when disabling and re-enabling columnstore
+CREATE TABLE retain_settings(time timestamptz NOT NULL, device text, value float);
+SELECT create_hypertable('retain_settings', 'time');
+ALTER TABLE retain_settings SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time DESC');
+-- settings stored before disable
+SELECT segmentby, orderby FROM _timescaledb_catalog.compression_settings WHERE relid = 'retain_settings'::regclass;
+-- disable and check settings are retained
+ALTER TABLE retain_settings SET (timescaledb.columnstore = false);
+SELECT segmentby, orderby FROM _timescaledb_catalog.compression_settings WHERE relid = 'retain_settings'::regclass;
+-- re-enable and verify settings restored
+ALTER TABLE retain_settings SET (timescaledb.columnstore = true);
+SELECT segmentby, orderby FROM _timescaledb_catalog.compression_settings WHERE relid = 'retain_settings'::regclass;
+
