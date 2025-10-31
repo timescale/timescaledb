@@ -1,0 +1,1 @@
+Fixes: #8873 Don't error on failure to update job stats
