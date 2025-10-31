@@ -15,6 +15,7 @@
 #include <access/tupdesc.h>
 #include <executor/tuptable.h>
 #include <nodes/pg_list.h>
+#include <utils/memutils.h>
 
 #include "grouping_policy.h"
 
@@ -96,7 +97,13 @@ create_grouping_policy_hash(int num_agg_defs, VectorAggDef *agg_defs, int num_gr
 			break;
 	}
 
-	policy->hashing.key_body_mctx = policy->agg_extra_mctx;
+	policy->hashing.key_body_mctx =
+#if (PG17_LT)
+		AllocSetContextCreate(
+#else
+		BumpContextCreate(
+#endif
+			CurrentMemoryContext, "hashing keys", ALLOCSET_DEFAULT_SIZES);
 
 	policy->hashing.init(&policy->hashing, policy);
 
@@ -113,6 +120,8 @@ gp_hash_reset(GroupingPolicy *obj)
 	policy->returning_results = false;
 
 	policy->hashing.reset(&policy->hashing);
+
+	MemoryContextReset(policy->hashing.key_body_mctx);
 
 	policy->stat_input_valid_rows = 0;
 	policy->stat_input_total_rows = 0;
