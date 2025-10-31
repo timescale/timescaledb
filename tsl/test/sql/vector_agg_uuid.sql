@@ -117,7 +117,7 @@ SET timescaledb.debug_require_vector_agg = 'require';
 
 SELECT ver, u, ts, uuid_ts from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
-order by 1,2;
+order by 1, 2, 3;
 
 SELECT ver, u, count(*), sum(ts) from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
