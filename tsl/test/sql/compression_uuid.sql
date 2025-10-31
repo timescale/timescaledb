@@ -244,7 +244,6 @@ WHERE
 --   generate a UUID v7 based on the timestamp and
 --   extract the timestamp from the UUID and
 --   compare the timestamp to the original one
---   1 microsecond difference is allowed due to scaling of decimals to binaries
 --
 CREATE TABLE subms AS SELECT to_uuidv7(x) u, x ts
 FROM
@@ -259,7 +258,7 @@ FROM
       subms
   ) x
 WHERE
-  (x.ts - x.ts2) > '00:00:00.000001' OR (x.ts - x.ts2) < '-00:00:00.000001';
+  x.ts <> x.ts2;
 
 
 -- Make sure UUIDv7 compression is enabled
