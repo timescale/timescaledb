@@ -164,7 +164,12 @@ rte_mark_for_expansion(RangeTblEntry *rte)
 	Assert(rte->rtekind == RTE_RELATION);
 	Assert(rte->ctename == NULL);
 	rte->ctename = (char *) TS_CTE_EXPAND;
-	rte->inh = false;
+	/*
+	 * Do not mark partitioned hypertables for inheritance, as Postgres
+	 * is supposed to expand them.
+	 */
+	if (rte->relkind != RELKIND_PARTITIONED_TABLE)
+		rte->inh = false;
 }
 
 static void

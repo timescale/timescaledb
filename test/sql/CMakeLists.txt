@@ -38,6 +38,7 @@ set(TEST_FILES
     lateral.sql
     merge.sql
     partition.sql
+    partitioned_hypertable.sql
     partitioning.sql
     pg_join.sql
     plain.sql

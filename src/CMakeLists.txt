@@ -36,6 +36,7 @@ set(SOURCES
     license_guc.c
     osm_callbacks.c
     partitioning.c
+    partition_chunk.c
     process_utility.c
     scanner.c
     scan_iterator.c

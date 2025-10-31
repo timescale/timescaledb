@@ -336,12 +336,12 @@ CREATE TABLE event(time timestamptz, info text);
 SELECT table_name FROM create_hypertable('event', 'time');
 \set ON_ERROR_STOP 0
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time);
-psql:include/foreign_keys.sql:383: ERROR:  hypertables cannot be used as foreign key references of hypertables
+psql:include/foreign_keys.sql:383: ERROR:  hypertables cannot be used as foreign key references of hypertables not using declarative partitioning
 \set ON_ERROR_STOP 1
 CREATE TABLE event2(time timestamptz REFERENCES metrics(time), info text);
 \set ON_ERROR_STOP 0
 SELECT table_name FROM create_hypertable('event2', 'time');
-psql:include/foreign_keys.sql:388: ERROR:  hypertables cannot be used as foreign key references of hypertables
+psql:include/foreign_keys.sql:388: ERROR:  hypertables cannot be used as foreign key references of hypertables not using declarative partitioning
 \set ON_ERROR_STOP 1
 DROP TABLE event;
 DROP TABLE event2;
@@ -1021,12 +1021,12 @@ CREATE TABLE event(time timestamptz, info text);
 SELECT table_name FROM create_hypertable('event', 'time');
 \set ON_ERROR_STOP 0
 ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time);
-psql:include/foreign_keys.sql:383: ERROR:  hypertables cannot be used as foreign key references of hypertables
+psql:include/foreign_keys.sql:383: ERROR:  hypertables cannot be used as foreign key references of hypertables not using declarative partitioning
 \set ON_ERROR_STOP 1
 CREATE TABLE event2(time timestamptz REFERENCES metrics(time), info text);
 \set ON_ERROR_STOP 0
 SELECT table_name FROM create_hypertable('event2', 'time');
-psql:include/foreign_keys.sql:388: ERROR:  hypertables cannot be used as foreign key references of hypertables
+psql:include/foreign_keys.sql:388: ERROR:  hypertables cannot be used as foreign key references of hypertables not using declarative partitioning
 \set ON_ERROR_STOP 1
 DROP TABLE event;
 DROP TABLE event2;

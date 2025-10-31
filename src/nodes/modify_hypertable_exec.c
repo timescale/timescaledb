@@ -602,7 +602,6 @@ ExecInsert(ModifyTableContext *context,
 	OnConflictAction onconflict = node->onConflictAction;
 	bool skip_generated_column_computations = false;
 
-	Assert(!mtstate->mt_partition_tuple_routing);
 
 	/*
 	 * If the input result relation is a partitioned table, find the leaf

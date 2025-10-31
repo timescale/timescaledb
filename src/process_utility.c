@@ -74,6 +74,7 @@
 #include "indexing.h"
 #include "license_guc.h"
 #include "partitioning.h"
+#include "partition_chunk.h"
 #include "process_utility.h"
 #include "scan_iterator.h"
 #include "time_utils.h"
@@ -2950,11 +2951,11 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 		if (contype == CONSTR_FOREIGN)
 		{
 			Oid confrelid = ts_hypertable_relid(constr->pktable);
-			if (OidIsValid(confrelid))
+			if (OidIsValid(confrelid) && !is_partitioning_allowed(ht->main_table_relid))
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("hypertables cannot be used as foreign key references of "
-								"hypertables")));
+								"hypertables not using declarative partitioning")));
 		}
 
 		/* NO INHERIT constraints do not really make sense on a hypertable */
@@ -3769,7 +3770,11 @@ process_create_table_end(Node *parsetree)
 	{
 		Oid table_relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 		char *time_column = NULL;
-		if (create_table_info.with_clauses[CreateTableFlagTimeColumn].is_default)
+		if (stmt->partspec != NULL)
+		{
+			time_column = ((PartitionElem *)linitial(stmt->partspec->partParams))->name;
+		}
+		else if (create_table_info.with_clauses[CreateTableFlagTimeColumn].is_default)
 		{
 			time_column = get_default_partition_column(table_relid);
 			if (time_column)
@@ -4796,11 +4801,11 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 				ts_hypertable_cache_get_entry(hcache, confrelid, CACHE_FLAG_MISSING_OK);
 			if (pk)
 			{
-				if (ht)
+				if (ht && !is_partitioning_allowed(ht->main_table_relid))
 					ereport(ERROR,
 							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 							 errmsg("hypertables cannot be used as foreign key references of "
-									"hypertables")));
+									"hypertables not using declarative partitioning")));
 				ts_fk_propagate(relid, pk);
 			}
 		}
@@ -5150,6 +5155,33 @@ process_create_table_as(ProcessUtilityArgs *args)
 	return DDL_CONTINUE;
 }
 
+/*
+ * Get the default partition column from the column definitions. The default
+ * partition column is the first column of type TIMESTAMP/TZ.
+ */
+static char *
+get_default_partition_column_by_definitions(List *definitions)
+{
+	char *column_name = NULL;
+	ListCell *lc;
+
+	foreach (lc, definitions)
+	{
+		Node *node = lfirst(lc);
+		if (!IsA(node, ColumnDef))
+			continue;
+
+		ColumnDef *coldef = castNode(ColumnDef, node);
+		char *typename = strVal(linitial(coldef->typeName->names));
+		if (strstr(typename, "timestamp") || strstr(typename, "timestamptz"))
+		{
+			column_name = pstrdup(coldef->colname);
+			break;
+		}
+	}
+	return column_name;
+}
+
 static DDLResult
 process_create_stmt(ProcessUtilityArgs *args)
 {
@@ -5173,11 +5205,55 @@ process_create_stmt(ProcessUtilityArgs *args)
 		create_table_info.hypertable =
 			DatumGetBool(create_table_info.with_clauses[CreateTableFlagHypertable].parsed);
 
-		if (!create_table_info.with_clauses[CreateTableFlagHypertable].parsed)
+		if (!create_table_info.hypertable)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
 					 errmsg("timescaledb options requires hypertable option"),
 					 errhint("Use \"timescaledb.hypertable\" to enable creating a hypertable.")));
+
+		if (ts_guc_enable_partitioned_hypertables)
+		{
+			/*
+			* For partitioned hypertables, we need to decide the default partition column here
+			* instead of process_create_table_end() as opposed to regular hypertable case. This is
+			* because in partitioned hypertable case, we need to set the PartitionSpec in CreateStmt.
+			*/
+			char *time_column = NULL;
+			if (create_table_info.with_clauses[CreateTableFlagTimeColumn].is_default)
+			{
+				time_column = get_default_partition_column_by_definitions(stmt->tableElts);
+				if (time_column)
+					ereport(NOTICE,
+							(errmsg("using column \"%s\" as partitioning column", time_column),
+								errhint("Use \"timescaledb.partition_column\" to specify a different "
+										"column to use as "
+										"partitioning column.")));
+				else
+					ereport(ERROR,
+							(errcode(ERRCODE_UNDEFINED_COLUMN),
+								errmsg("partition column could not be determined"),
+								errhint(
+									"Use \"timescaledb.partition_column\" to specify the column to use as "
+									"partitioning column.")));
+			}
+			else
+				time_column = TextDatumGetCString(
+					create_table_info.with_clauses[CreateTableFlagTimeColumn].parsed);
+
+			PartitionElem *pelem = makeNode(PartitionElem);
+			pelem->name = time_column;
+			pelem->location = -1;
+
+			PartitionSpec *partspec = makeNode(PartitionSpec);
+#if PG16_LT
+			partspec->strategy = pstrdup("range");
+#else
+			partspec->strategy = PARTITION_STRATEGY_RANGE;
+#endif
+			partspec->partParams = list_make1(pelem);
+			partspec->location = -1;
+			stmt->partspec = partspec;
+		}
 	}
 
 	return DDL_CONTINUE;
