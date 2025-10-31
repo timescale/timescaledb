@@ -235,12 +235,25 @@ select count(compress_chunk(c)) from show_chunks('estimate_count') c;
      2
 
 vacuum analyze estimate_count;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+with hypertables as (
+    select unnest(array[compressed_hypertable_id, id])
+    from _timescaledb_catalog.hypertable
+    where (schema_name || '.' || table_name)::regclass = 'estimate_count'::regclass)
+, chunks as (
+    select (schema_name || '.' || table_name)::regclass
+    from _timescaledb_catalog.chunk
+    where hypertable_id in (select * from hypertables)
+)
+delete from pg_statistic
+where starelid in (select * from chunks)
+;
 explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 --- QUERY PLAN ---
- Append  (cost=0.04..2974.00 rows=193000 width=20) (actual rows=193000.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_21_chunk  (cost=0.04..679.00 rows=64000 width=20) (actual rows=64000.00 loops=1)
+ Append  (cost=0.04..30079.00 rows=2000000 width=20) (actual rows=193000.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_21_chunk  (cost=0.04..10039.00 rows=1000000 width=20) (actual rows=64000.00 loops=1)
          ->  Seq Scan on compress_hyper_4_23_chunk  (cost=0.00..39.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_3_22_chunk  (cost=0.04..1330.00 rows=129000 width=20) (actual rows=129000.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_3_22_chunk  (cost=0.04..10040.00 rows=1000000 width=20) (actual rows=129000.00 loops=1)
          ->  Seq Scan on compress_hyper_4_24_chunk  (cost=0.00..40.00 rows=1000 width=88) (actual rows=1000.00 loops=1)
 
 -- Test a high-cardinality orderby column

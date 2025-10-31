@@ -135,7 +135,23 @@ from generate_series('2025-01-01'::timestamptz,'2025-01-03','15 min') t,
 ;
 
 select count(compress_chunk(c)) from show_chunks('estimate_count') c;
+
 vacuum analyze estimate_count;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+with hypertables as (
+    select unnest(array[compressed_hypertable_id, id])
+    from _timescaledb_catalog.hypertable
+    where (schema_name || '.' || table_name)::regclass = 'estimate_count'::regclass)
+, chunks as (
+    select (schema_name || '.' || table_name)::regclass
+    from _timescaledb_catalog.chunk
+    where hypertable_id in (select * from hypertables)
+)
+delete from pg_statistic
+where starelid in (select * from chunks)
+;
 
 explain (analyze, timing off, summary off, buffers off) select * from estimate_count;
 
