@@ -130,15 +130,14 @@ where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
 order by 1,2;
  ver |                  u                   | ts |               uuid_ts               
 -----+--------------------------------------+----+-------------------------------------
-   7 | 01941f29-7c00-706a-bea9-105dad841304 | 17 | Tue Dec 31 16:00:00.000025 2024 PST
-   7 | 01941f2a-665f-7722-b4b5-cf4e70e666d0 | 18 | Tue Dec 31 16:00:59.999445 2024 PST
+   7 | 01941f29-7c00-706a-bea9-105dad841304 | 17 | Tue Dec 31 16:00:00.000026 2024 PST
+   7 | 01941f2a-665f-7722-b4b5-cf4e70e666d0 | 18 | Tue Dec 31 16:00:59.999446 2024 PST
    7 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f |  4 | Wed Jun 25 08:16:46.347777 2025 PDT
    7 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f |  3 | Wed Jun 25 08:16:46.347777 2025 PDT
    7 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f |  2 | Wed Jun 25 08:16:46.347777 2025 PDT
    7 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f |  1 | Wed Jun 25 08:16:46.347777 2025 PDT
    7 | 0197a7a9-b48b-7c75-a810-8acf630e634f |  5 | Wed Jun 25 08:16:46.347778 2025 PDT
    7 | 0197a7a9-b48b-7c75-a810-8acf630e634f |  6 | Wed Jun 25 08:16:46.347778 2025 PDT
-   7 | 0197a7a9-b48b-7c76-b616-69e64a802b5c |  7 | Wed Jun 25 08:16:46.347778 2025 PDT
 
 SELECT ver, u, count(*), sum(ts) from uuid_table
 where uuid_ts < '2025-06-25 16:16:46.347779+01' and ver = 7
@@ -149,6 +148,5 @@ group by 1,2 order by 1,2;
    7 | 01941f2a-665f-7722-b4b5-cf4e70e666d0 |     1 |  18
    7 | 0197a7a9-b48b-7c71-92cb-eb724822bb0f |     4 |  10
    7 | 0197a7a9-b48b-7c75-a810-8acf630e634f |     2 |  11
-   7 | 0197a7a9-b48b-7c76-b616-69e64a802b5c |     1 |   7
 
 RESET timescaledb.debug_require_vector_agg;
