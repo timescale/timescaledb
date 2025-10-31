@@ -31,7 +31,7 @@ char *compressed_column_metadata_name_v2(const char *metadata_type, const char *
 typedef struct CompressionSettings CompressionSettings;
 int compressed_column_metadata_attno(const CompressionSettings *settings, Oid chunk_reloid,
 									 AttrNumber chunk_attno, Oid compressed_reloid,
-									 char *metadata_type);
+									 char const *metadata_type);
 
 void tsl_columnstore_setup(Hypertable *ht, WithClauseResult *with_clause_options);
 
