@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
+ALTER DATABASE :TEST_DBNAME SET timezone TO 'UTC';
+\c
 CREATE PROCEDURE custom_job_ok(job_id int, config jsonb) LANGUAGE PLPGSQL AS
 $$
 BEGIN
@@ -416,7 +418,7 @@ FROM generate_series(now() - interval '90 days', now(), interval '15 minutes') a
 select * from job_history_summary;
  job_id | succeeded | record_count 
 --------+-----------+--------------
-    100 | t         |         8641
+    100 | t         |         8645
 
 -- Test the retention job (job id 3)
 CALL run_job(3);
