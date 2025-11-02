@@ -1,0 +1,2 @@
+Fixes: #8879 Fix blocker for multiple hierarchical continuous aggregate policies
+Thanks: @leppaott for reporting an issue with hierarchical continuous aggregates
