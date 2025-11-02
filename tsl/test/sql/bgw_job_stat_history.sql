@@ -4,6 +4,9 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+ALTER DATABASE :TEST_DBNAME SET timezone TO 'UTC';
+\c
+
 CREATE PROCEDURE custom_job_ok(job_id int, config jsonb) LANGUAGE PLPGSQL AS
 $$
 BEGIN
