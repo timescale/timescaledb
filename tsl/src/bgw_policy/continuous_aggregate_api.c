@@ -401,9 +401,12 @@ interval_to_int64(Datum interval, Oid type)
 			break;
 	}
 
-	pg_unreachable();
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("unsupported interval argument type: %s", format_type_be(type))));
 
-	return 0;
+	/* Needed to make windows compiler happy */
+	pg_unreachable();
 }
 
 /*
