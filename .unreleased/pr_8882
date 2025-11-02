@@ -1,0 +1,2 @@
+Fixes: #8882 Fix crash in policy creation
+Thanks: @alexanderlaw for reporting a crash when creating a policy
