@@ -34,7 +34,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
-            libkrb5-dev build-essential autoconf autoconf-archive \
+            build-essential autoconf autoconf-archive \
             libboost-regex-dev libsqlite3-dev jq
 
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh

@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 -- Following tests checks that API functions which modify data (including catalog)
 -- properly recognize read-only transaction state
 --
@@ -113,7 +113,7 @@ SET default_transaction_read_only TO off;
 SET client_min_messages TO error;
 DROP TABLESPACE IF EXISTS tablespace1;
 RESET client_min_messages;
-CREATE TABLESPACE tablespace1 OWNER :ROLE_CLUSTER_SUPERUSER LOCATION :TEST_TABLESPACE1_PATH;
+CREATE TABLESPACE tablespace1 OWNER :ROLE_SUPERUSER LOCATION :TEST_TABLESPACE1_PATH;
 SET default_transaction_read_only TO on;
 -- attach_tablespace()
 --

@@ -3,7 +3,6 @@
 
 autovacuum=true
 datestyle='Postgres, MDY'
-hba_file='@TEST_PG_HBA_FILE@'
 log_destination='jsonlog,stderr'
 log_directory='@TEST_PG_LOG_DIRECTORY@'
 log_filename='postmaster.log'

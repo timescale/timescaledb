@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- need superuser to modify statistics
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 \ir include/skip_scan_load.sql
 
 -- we want to run with analyze here so we can see counts in the nodes

@@ -12,6 +12,7 @@ TEST_INPUT_DIR=${TEST_INPUT_DIR:-${EXE_DIR}}
 TEST_OUTPUT_DIR=${TEST_OUTPUT_DIR:-${EXE_DIR}}
 TEST_SUPPORT_FILE=${CURRENT_DIR}/sql/utils/testsupport.sql
 TEST_SUPPORT_FILE_INIT=${CURRENT_DIR}/sql/utils/testsupport_init.sql
+TEST_TIMEOUT=${TEST_TIMEOUT:-120}
 
 # PGAPPNAME will be 'pg_regress/test' so we cut off the prefix
 # to get the name of the test
@@ -32,12 +33,11 @@ if [ "$(uname)" == "Darwin" ]; then
     then
       TIMEOUT_CMD=""
     else
-      TIMEOUT_CMD="gtimeout -v 120s"
+      TIMEOUT_CMD="gtimeout -v ${TEST_TIMEOUT}s"
   fi
 else
-  TIMEOUT_CMD="timeout -v 120s"
+  TIMEOUT_CMD="timeout -v ${TEST_TIMEOUT}s"
 fi
-
 
 #docker doesn't set user
 USER=${USER:-$(whoami)}
@@ -49,7 +49,6 @@ TEST_ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER:-default_perm_user}
 TEST_ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2:-default_perm_user_2}
 
 # Users for clustering. These users have password auth enabled in pg_hba.conf
-TEST_ROLE_CLUSTER_SUPERUSER=${TEST_ROLE_CLUSTER_SUPERUSER:-cluster_superuser}
 TEST_ROLE_1=${TEST_ROLE_1:-test_role_1}
 TEST_ROLE_2=${TEST_ROLE_2:-test_role_2}
 TEST_ROLE_2_PASS=${TEST_ROLE_2_PASS:-pass}
@@ -94,7 +93,6 @@ if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
     \$\$ LANGUAGE PLPGSQL;
 
     ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;
-    ALTER USER ${TEST_ROLE_CLUSTER_SUPERUSER} WITH SUPERUSER;
     ALTER USER ${TEST_ROLE_1} WITH CREATEDB CREATEROLE;
     ALTER USER ${TEST_ROLE_2} WITH CREATEDB PASSWORD '${TEST_ROLE_2_PASS}';
     ALTER USER ${TEST_ROLE_3} WITH CREATEDB PASSWORD '${TEST_ROLE_3_PASS}';
@@ -148,7 +146,6 @@ ${TIMEOUT_CMD} ${PSQL} -U ${TEST_PGUSER} \
      -v ROLE_SUPERUSER=${TEST_ROLE_SUPERUSER} \
      -v ROLE_DEFAULT_PERM_USER=${TEST_ROLE_DEFAULT_PERM_USER} \
      -v ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2} \
-     -v ROLE_CLUSTER_SUPERUSER=${TEST_ROLE_CLUSTER_SUPERUSER} \
      -v ROLE_1=${TEST_ROLE_1} \
      -v ROLE_2=${TEST_ROLE_2} \
      -v ROLE_3=${TEST_ROLE_3} \

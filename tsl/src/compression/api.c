@@ -507,7 +507,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 			compression_ratio < POOR_COMPRESSION_THRESHOLD)
 			ereport(WARNING,
 					errcode(ERRCODE_WARNING),
-					errmsg("poor compression rate detected for chunk \"%s\"'",
+					errmsg("poor compression ratio detected for chunk \"%s\"'",
 						   get_rel_name(chunk_relid)),
 					errdetail("Chunk \"%s\" has a poor compression ratio: %.2f. Size before "
 							  "compression: " INT64_FORMAT
@@ -660,6 +660,61 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	write_logical_replication_msg_decompression_end();
 }
 
+static bool
+recompress_chunk_impl(Chunk *chunk, Oid *uncompressed_chunk_id, bool recompress)
+{
+	CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
+	CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
+	bool recompressed = false;
+
+	if (!chunk_settings || !chunk_settings->fd.orderby)
+	{
+		elog(NOTICE,
+			 "in-memory recompression is disabled due to no order by, "
+			 "performing decompress/compress on chunk \"%s.%s\"",
+			 NameStr(chunk->fd.schema_name),
+			 NameStr(chunk->fd.table_name));
+		return false;
+	}
+	else if (!get_compressed_chunk_index_for_recompression(chunk))
+	{
+		elog(NOTICE,
+			 "in-memory recompression is disabled due to no compressed chunk index, "
+			 "performing decompress/compress on chunk \"%s.%s\"",
+			 NameStr(chunk->fd.schema_name),
+			 NameStr(chunk->fd.table_name));
+		return false;
+	}
+
+	/*
+	 * Choose recompression strategy based on chunk state and settings:
+	 * 1. Segmentwise recompression: For partial chunks
+	 * 2. In-memory recompression: For fully compressed chunks with matching settings
+	 * 3. Fallback to decompress/compress: When neither strategy is applicable
+	 */
+
+	if (ts_chunk_is_partial(chunk))
+	{
+		if (!ts_guc_enable_segmentwise_recompression)
+		{
+			ereport(NOTICE,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("segmentwise in-memory recompression functionality disabled, "
+							"set timescaledb.enable_segmentwise_recompression to on")));
+			return false;
+		}
+
+		*uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
+		recompressed = true;
+	}
+	/* TODO: optimize cases where settings differ but recompression is still possible */
+	else if (recompress && ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings))
+	{
+		recompressed = recompress_chunk_in_memory_impl(chunk);
+	}
+
+	return recompressed;
+}
 /*
  * Create a new compressed chunk using existing table with compressed data.
  *
@@ -761,75 +816,35 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 
 	write_logical_replication_msg_compression_start();
 
-	if (ts_chunk_is_compressed(chunk))
+	if (ts_chunk_needs_compression(chunk))
 	{
-		CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
-		bool valid_orderby_settings = chunk_settings && chunk_settings->fd.orderby;
-		if (recompress)
+		uncompressed_chunk_id = compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+	}
+	else if (recompress || ts_chunk_needs_recompression(chunk))
+	{
+		/* Try in-memory recompression first and then fall back to decompress/recompress */
+		bool recompressed = recompress_chunk_impl(chunk, &uncompressed_chunk_id, recompress);
+		if (!recompressed)
 		{
-			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
-
-			/* try recompression first */
-			if (!valid_orderby_settings ||
-				!ts_compression_settings_equal_with_defaults(ht_settings, chunk_settings) ||
-				!recompress_chunk_impl(chunk))
-			{
-				/* TODO: move away from manual decompression/compression */
-				elog(NOTICE,
-					 "falling back to compress/decompress, performing full "
-					 "recompression on "
-					 "chunk \"%s.%s\"",
-					 NameStr(chunk->fd.schema_name),
-					 NameStr(chunk->fd.table_name));
-				decompress_chunk_impl(chunk, false);
-				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
-			}
-			write_logical_replication_msg_compression_end();
-			return uncompressed_chunk_id;
-		}
-		if (!ts_chunk_needs_recompression(chunk))
-		{
-			write_logical_replication_msg_compression_end();
-			ereport((if_not_compressed ? NOTICE : ERROR),
-					(errcode(ERRCODE_DUPLICATE_OBJECT),
-					 errmsg("chunk \"%s\" is already converted to columnstore",
-							get_rel_name(chunk->table_id))));
-			return uncompressed_chunk_id;
-		}
-
-		if (ts_guc_enable_segmentwise_recompression && valid_orderby_settings &&
-			ts_chunk_is_partial(chunk) && get_compressed_chunk_index_for_recompression(chunk))
-		{
-			uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
-		}
-		else
-		{
-			if (!ts_guc_enable_segmentwise_recompression || !valid_orderby_settings)
-				elog(NOTICE,
-					 "segmentwise recompression is disabled%s, performing full "
-					 "recompression on "
-					 "chunk \"%s.%s\"",
-					 (ts_guc_enable_segmentwise_recompression && !valid_orderby_settings ?
-						  " due to no order by" :
-						  ""),
-					 NameStr(chunk->fd.schema_name),
-					 NameStr(chunk->fd.table_name));
-			/* try recompression first */
-			if (!recompress_chunk_impl(chunk))
-			{
-				/* TODO: move away from manual decompression/compression */
-				decompress_chunk_impl(chunk, false);
-				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
-			}
+			/* TODO: move away from manual decompression/compression */
+			elog(DEBUG1,
+				 "falling back to compress/decompress, performing full "
+				 "recompression on chunk \"%s.%s\"",
+				 NameStr(chunk->fd.schema_name),
+				 NameStr(chunk->fd.table_name));
+			decompress_chunk_impl(chunk, false);
+			compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 		}
 	}
 	else
 	{
-		uncompressed_chunk_id = compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+		ereport((if_not_compressed ? NOTICE : ERROR),
+				(errcode(ERRCODE_DUPLICATE_OBJECT),
+				 errmsg("chunk \"%s\" is already converted to columnstore",
+						get_rel_name(chunk->table_id))));
 	}
 
 	write_logical_replication_msg_compression_end();
-
 	return uncompressed_chunk_id;
 }
 

@@ -4,7 +4,7 @@
 -- test query planning with hypertable which contains
 -- compressed chunks that depend on sequence number optimization
 -- which is removed in latest schema revision
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set EXPLAIN 'EXPLAIN (VERBOSE, BUFFERS OFF, COSTS OFF)'
 CREATE TABLE hyper(
@@ -148,7 +148,7 @@ AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
 LIMIT 1 \gset
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -170,7 +170,7 @@ AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id OFFSET 2 LIMIT 1 \gset
 SELECT schemaname || '.' || indexname AS "CHUNK_INDEX" FROM pg_indexes where tablename = :'CHUNK_NAME'
 LIMIT 1 \gset
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -300,6 +300,7 @@ INSERT INTO hyper VALUES (20, 1, 1);
 SELECT compress_chunk(show_chunks('hyper'));
 NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
 NOTICE:  chunk "_hyper_1_2_chunk" is already converted to columnstore
+NOTICE:  in-memory recompression is disabled due to no compressed chunk index, performing decompress/compress on chunk "_timescaledb_internal._hyper_1_3_chunk"
 NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
              compress_chunk             
 ----------------------------------------
@@ -404,7 +405,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timesc
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id LIMIT 1 \gset
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -420,7 +421,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timesc
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id OFFSET 3 LIMIT 1 \gset
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SET timescaledb.restoring TO ON;
 -- add sequence number column and fill in the correct sequences
 ALTER TABLE :CHUNK_FULL_NAME ADD COLUMN _ts_meta_sequence_num int;
@@ -513,7 +514,7 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk comp_ch, _timesc
 WHERE ch1.hypertable_id = ht.id AND ht.table_name LIKE 'hyper'
 AND ch1.compressed_chunk_id = comp_ch.id
 ORDER BY ch1.id LIMIT 1 \gset
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
+SET ROLE :ROLE_SUPERUSER;
 SELECT :'CHUNK_FULL_NAME'::regclass::oid as "CHUNK_OID" \gset
 SELECT (power(2,31)+1)::bigint as "CHUNK_NEW_OID" \gset
 UPDATE pg_class SET oid = :CHUNK_NEW_OID

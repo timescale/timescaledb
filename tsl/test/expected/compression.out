@@ -2463,7 +2463,6 @@ NOTICE:  chunk "_hyper_47_102_chunk" is already converted to columnstore
 
 -- unless we specify recompress := true
 SELECT compress_chunk(:'CHUNK', recompress := true);
-NOTICE:  falling back to compress/decompress, performing full recompression on chunk "_timescaledb_internal._hyper_47_102_chunk"
               compress_chunk               
 -------------------------------------------
  _timescaledb_internal._hyper_47_102_chunk
@@ -2690,10 +2689,10 @@ SELECT _ts_meta_count FROM :COMPRESSED_CHUNK_NAME ORDER BY device, _ts_meta_min_
             281
 
 ROLLBACK;
--- Test poor compression rate warning works as expected
+-- Test poor compression ratio warning works as expected
 -- Turn GUC on
 SET timescaledb.enable_compression_ratio_warnings TO ON;
--- Compressing a table with very few rows virtually guarantees a poor compression rate
+-- Compressing a table with very few rows virtually guarantees a poor compression ratio
 CREATE TABLE badly_compressed_ht (time timestamptz, device_id integer, a integer);
 SELECT create_hypertable('badly_compressed_ht', 'time');
          create_hypertable         
@@ -2707,7 +2706,7 @@ INSERT INTO badly_compressed_ht VALUES
 ('2025-04-25 02:00'::timestamp, 3, 3);
 \set VERBOSITY default
 SELECT compress_chunk(show_chunks('badly_compressed_ht'));
-WARNING:  poor compression rate detected for chunk "_hyper_57_116_chunk"'
+WARNING:  poor compression ratio detected for chunk "_hyper_57_116_chunk"'
 DETAIL:  Chunk "_hyper_57_116_chunk" has a poor compression ratio: 0.60. Size before compression: 24576 bytes. Size after compression: 40960 bytes
 HINT:  Changing compression settings for "badly_compressed_ht" can improve compression rate
               compress_chunk               

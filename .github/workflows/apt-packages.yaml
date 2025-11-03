@@ -15,8 +15,8 @@ name: "Packaging tests: APT"
   workflow_dispatch:
 jobs:
   apt_tests:
-    name: APT ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
-    runs-on: ubuntu-latest
+    name: APT ${{ matrix.arch }} ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
+    runs-on: ${{ matrix.runner }}
     container:
       image: ${{ matrix.image }}
       env:
@@ -24,12 +24,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        arch: [ "x86", "ARM" ]
         image: [ "debian:11-slim", "debian:12-slim", "debian:13-slim", "ubuntu:22.04", "ubuntu:24.04" ]
-        pg: [ 15, 16, 17 ]
+        pg: [ 15, 16, 17, 18 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
             pkg_suffix: "-oss"
+          - arch: "x86"
+            runner: "ubuntu-latest"
+          - arch: "ARM"
+            runner: "cloud-image-runner-ubuntu-24-arm64"
+        exclude:
+          - image: "debian:11-slim"
+            pg: 18
+
 
     steps:
     - name: Add repositories
@@ -90,7 +99,7 @@ jobs:
         fi
 
     - name: Test Downgrade
-      if: matrix.image != 'debian:13-slim' # debian 13 only has timescaledb 2.22.0+ so we can only start testing downgrades with 2.22.1+
+      if: matrix.pg != '18' # pg18 only has 1 version so downgrade is not possible
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
