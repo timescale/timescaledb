@@ -35,7 +35,7 @@ def getenv_or_default(envvar, default):
 
 def initialize_node(working_dir, prefix, port, bin_dir, base_dir):
     node = get_new_node(prefix=prefix, port=port, bin_dir=bin_dir, base_dir=base_dir)
-    node.init()
+    node.init(initdb_params=["--data-checksums"])
     set_default_conf(node, working_dir)
     return node
 
