@@ -537,10 +537,16 @@ policy_refresh_cagg_check_for_overlaps(ContinuousAgg *cagg, Jsonb *policy_config
 		return overlap_result;
 
 	if (ContinuousAggIsHierarchical(cagg))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("multiple refresh policies are not supported for hierarchical "
-						"continuous aggregates")));
+	{
+		/* if this is an existing job, it will also be in the list of jobs */
+		int max_concurrent = existing_job_id ? 1 : 0;
+
+		if (list_length(jobs) > max_concurrent)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("multiple refresh policies are not supported for hierarchical "
+							"continuous aggregates")));
+	}
 
 	Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
 	const Dimension *dim = get_open_dimension_for_hypertable(mat_ht, true);
