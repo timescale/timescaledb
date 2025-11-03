@@ -993,7 +993,7 @@ test_null()
 
 	{
 		StringInfoData buffer;
-
+		initStringInfo(&buffer);
 		void *compressed = null_compressor_get_dummy_block();
 		Datum sent_datum = DirectFunctionCall2(tsl_compressed_data_send,
 											   PointerGetDatum(compressed),
