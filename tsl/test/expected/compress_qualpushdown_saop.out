@@ -650,7 +650,7 @@ execute array_param(array[]::text[]);
                Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, $1)
                Rows Removed by Filter: 69
 
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(null::text[]);
 --- QUERY PLAN ---
  Append (actual rows=0.00 loops=1)
@@ -690,7 +690,7 @@ execute array_param(array[]::text[]);
  Result (actual rows=0.00 loops=1)
    One-Time Filter: false
 
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(null::text[]);
 --- QUERY PLAN ---
  Append (actual rows=0.00 loops=1)

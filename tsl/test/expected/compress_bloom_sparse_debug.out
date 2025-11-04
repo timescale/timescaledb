@@ -173,7 +173,6 @@ select count(compress_chunk(x)) from show_chunks('detoaster') x;
  count 
 -------
      2
-(1 row)
 
 with chunks as (
   select
@@ -199,12 +198,10 @@ from v
 -----------------+-----------------
  t               | f
  f               | t
-(2 rows)
 
 select (ts_bloom1_debug_info(f)).* from v;
  toast_header | toasted_bytes | compressed_bytes | detoasted_bytes | bits_total | bits_set | estimated_elements 
 --------------+---------------+------------------+-----------------+------------+----------+--------------------
             1 |            16 |                  |            1024 |       8192 |     4199 |                981
             1 |            16 |                  |            1024 |       8192 |     4210 |                984
-(2 rows)
 

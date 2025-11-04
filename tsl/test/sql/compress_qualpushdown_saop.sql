@@ -195,7 +195,7 @@ execute array_param(array['1', '10']);
 explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(array[]::text[]);
 
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(null::text[]);
 
 -- Custom plans.
@@ -207,7 +207,7 @@ execute array_param(array['1', '10']);
 explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(array[]::text[]);
 
-explain (analyze, costs off, timing off, summary off)
+explain (analyze, buffers off, costs off, timing off, summary off)
 execute array_param(null::text[]);
 
 reset timescaledb.enable_chunk_append;
