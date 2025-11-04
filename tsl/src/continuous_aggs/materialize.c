@@ -569,6 +569,7 @@ create_materialization_ranges_select_statement(MaterializationContext *context)
 					 "SELECT ctid, lowest_modified_value, greatest_modified_value "
 					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
 					 "WHERE materialization_id = $1 "
+					 "AND greatest_modified_value >= lowest_modified_value "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
 					 "ORDER BY lowest_modified_value ASC "
@@ -602,6 +603,7 @@ create_materialization_ranges_pending_statement(MaterializationContext *context)
 					 "SELECT * "
 					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
 					 "WHERE materialization_id = $1 "
+					 "AND greatest_modified_value >= lowest_modified_value "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
 					 "LIMIT 1 ");
