@@ -1146,9 +1146,10 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	 * Append, and also different MergeAppend costs on Postgres before 17 due to
 	 * a bug there.
 	 */
-	const double new_row_estimate = compressed_rel->rows * compression_info->compressed_batch_size;
 	const double new_tuples_estimate =
 		compressed_rel->tuples * compression_info->compressed_batch_size;
+	const double new_row_estimate = new_tuples_estimate *
+			clauselist_selectivity(root, chunk_rel->baserestrictinfo, 0, JOIN_INNER, NULL);
 	if (!compression_info->single_chunk)
 	{
 		/*
