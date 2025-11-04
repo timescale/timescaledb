@@ -17,9 +17,10 @@
 #include "subspace_store.h"
 
 ChunkTupleRouting *
-ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
+ts_chunk_tuple_routing_create(EState *estate, Hypertable *ht, ResultRelInfo *rri)
 {
 	ChunkTupleRouting *ctr;
+	Assert(ht);
 
 	/*
 	 * Here we attempt to expend as little effort as possible in setting up
@@ -33,24 +34,13 @@ ts_chunk_tuple_routing_create(EState *estate, ResultRelInfo *rri)
 	ctr->root_rel = rri->ri_RelationDesc;
 	ctr->estate = estate;
 	ctr->counters = palloc0(sizeof(SharedCounters));
-
-	ctr->hypertable =
-		ts_hypertable_cache_get_cache_and_entry(RelationGetRelid(rri->ri_RelationDesc),
-												CACHE_FLAG_MISSING_OK,
-												&ctr->hypertable_cache);
-
+	ctr->hypertable = ht;
 	/*
-	 * If we are inserting into a chunk directly, rri will point to the chunk
-	 * itself, so we need to get the hypertable from the chunk.
+	 * If the relid of ResultRelInfo does not match the Hypertable this is an operation
+	 * directly on a chunk.
 	 */
-	if (!ctr->hypertable)
-	{
-		Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(rri->ri_RelationDesc), true);
-		ctr->hypertable = ts_hypertable_cache_get_entry(ctr->hypertable_cache,
-														chunk->hypertable_relid,
-														CACHE_FLAG_NONE);
-		ctr->single_chunk_insert = true;
-	}
+	ctr->single_chunk_insert = ht->main_table_relid != RelationGetRelid(rri->ri_RelationDesc);
+
 	ctr->subspace = ts_subspace_store_init(ctr->hypertable->space,
 										   estate->es_query_cxt,
 										   ts_guc_max_open_chunks_per_insert);
@@ -64,7 +54,6 @@ void
 ts_chunk_tuple_routing_destroy(ChunkTupleRouting *ctr)
 {
 	ts_subspace_store_free(ctr->subspace);
-	ts_cache_release(&ctr->hypertable_cache);
 
 	pfree(ctr);
 }

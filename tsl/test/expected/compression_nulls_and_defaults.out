@@ -47,7 +47,7 @@ select * from t;
 
 insert into t (ts,c1) values (7,7);
 select compress_chunk(show_chunks('t'));
-NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_1_1_chunk"
+NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_1_1_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -137,7 +137,7 @@ select * from t;
   6 |  6 |  
 
 select compress_chunk(show_chunks('t'));
-NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_5_6_chunk"
+NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_5_6_chunk"
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_5_6_chunk
@@ -307,7 +307,7 @@ select * from t;
 alter table t alter column a set default 7.2;
 insert into t (ts,c1) values (7,7);
 select compress_chunk(show_chunks('t'));
-NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_13_15_chunk"
+NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_13_15_chunk"
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_15_chunk

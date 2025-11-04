@@ -72,11 +72,10 @@ END
 $$
 LANGUAGE plpgsql SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_job_stat_history_retention(job_id integer, config JSONB) RETURNS integer
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_job_stat_history_retention(job_id integer, config JSONB) RETURNS VOID
 LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
-    numrows INTEGER;
     search_point TIMESTAMPTZ;
     id_found BIGINT;
 BEGIN
@@ -91,7 +90,7 @@ BEGIN
   id_found := _timescaledb_functions.job_history_bsearch(search_point);
 
   IF id_found IS NULL THEN
-    RETURN 0;
+    RETURN;
   END IF;
 
   -- Build a table that contains only rows younger than the max age
@@ -119,9 +118,6 @@ BEGIN
   INSERT INTO _timescaledb_internal.bgw_job_stat_history
   SELECT * FROM __tmp_bgw_job_stat_history;
 
-  GET DIAGNOSTICS numrows = ROW_COUNT;
-
-  RETURN numrows;
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 

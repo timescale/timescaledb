@@ -33,6 +33,9 @@ typedef struct ModifyHypertableState
 	CustomScanState cscan_state;
 	ModifyTable *mt;
 	ChunkTupleRouting *ctr;
+	Hypertable *ht;
+	Cache *ht_cache;
+	bool has_continuous_aggregate;
 
 	RowCompressor *compressor;
 	BulkWriter *bulk_writer;

@@ -89,15 +89,25 @@ SELECT show_chunks('ht_metrics_compressed') AS "CHUNK" LIMIT 1 \gset
 
 :PREFIX SELECT value FROM :CHUNK UNION ALL SELECT value FROM :CHUNK ORDER BY value DESC;
 --- QUERY PLAN ---
- Sort (actual rows=282.00 loops=1)
+ Merge Append (actual rows=282.00 loops=1)
    Sort Key: _hyper_1_1_chunk.value DESC
-   Sort Method: quicksort 
-   ->  Append (actual rows=282.00 loops=1)
+   ->  Sort (actual rows=84.00 loops=1)
+         Sort Key: _hyper_1_1_chunk.value DESC
+         Sort Method: quicksort 
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=84.00 loops=1)
                ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3.00 loops=1)
+   ->  Sort (actual rows=57.00 loops=1)
+         Sort Key: _hyper_1_1_chunk.value DESC
+         Sort Method: quicksort 
          ->  Seq Scan on _hyper_1_1_chunk (actual rows=57.00 loops=1)
+   ->  Sort (actual rows=84.00 loops=1)
+         Sort Key: _hyper_1_1_chunk_1.value DESC
+         Sort Method: quicksort 
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=84.00 loops=1)
                ->  Seq Scan on compress_hyper_2_4_chunk compress_hyper_2_4_chunk_1 (actual rows=3.00 loops=1)
+   ->  Sort (actual rows=57.00 loops=1)
+         Sort Key: _hyper_1_1_chunk_1.value DESC
+         Sort Method: quicksort 
          ->  Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1 (actual rows=57.00 loops=1)
 
 -- chunkAppend eligible queries (from tsbench)

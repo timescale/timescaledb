@@ -107,9 +107,7 @@ get_all_wal_using_hypertables(void)
 
 		Assert(!isnull);
 		int32 hypertable_id = DatumGetInt32(datum);
-		Oid relid = ts_hypertable_id_to_relid(hypertable_id, false);
-		if (!has_invalidation_trigger(relid))
-			hypertables = list_append_unique_int(hypertables, hypertable_id);
+		hypertables = list_append_unique_int(hypertables, hypertable_id);
 	}
 	ts_scan_iterator_close(&iterator);
 
@@ -930,8 +928,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 		 * lock, so we need to add a separate lock to ensure a blocking
 		 * behaviour.
 		 */
-		if (has_invalidation_trigger(
-				ts_hypertable_id_to_relid(cagg->data.raw_hypertable_id, false)))
+		if (!ts_guc_enable_cagg_wal_based_invalidation)
 			invalidation_process_hypertable_log(cagg->data.raw_hypertable_id, refresh_window.type);
 		else
 			multi_invalidation_process_hypertable_log(get_all_wal_using_hypertables());
@@ -1061,7 +1058,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		if (NULL == slice || TS_TIME_IS_MIN(slice->fd.range_start, refresh_window.type) ||
 			TS_TIME_IS_NOBEGIN(slice->fd.range_start, refresh_window.type))
 		{
-			elog(LOG,
+			elog(DEBUG1,
 				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
 				 "single batch processing",
 				 NameStr(cagg->data.user_view_schema),
@@ -1081,7 +1078,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		if (NULL == slice || TS_TIME_IS_MAX(slice->fd.range_end, refresh_window.type) ||
 			TS_TIME_IS_NOEND(slice->fd.range_end, refresh_window.type))
 		{
-			elog(LOG,
+			elog(DEBUG1,
 				 "no min slice range start for continuous aggregate \"%s.%s\", falling back to "
 				 "single batch processing",
 				 NameStr(cagg->data.user_view_schema),
@@ -1116,7 +1113,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 		Datum refresh_size_interval = ts_internal_to_interval_value(refresh_window_size, type);
 		Datum batch_size_interval = ts_internal_to_interval_value(batch_size, type);
 
-		elog(LOG,
+		elog(DEBUG1,
 			 "refresh window size (%s) is smaller than or equal to batch size (%s), falling back "
 			 "to single batch processing",
 			 ts_datum_to_string(refresh_size_interval, type),
@@ -1248,7 +1245,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	if (SPI_processed == 1)
 	{
-		elog(LOG,
+		elog(DEBUG1,
 			 "only one batch produced for continuous aggregate \"%s.%s\", falling back to single "
 			 "batch processing",
 			 NameStr(cagg->data.user_view_schema),
@@ -1324,7 +1321,7 @@ continuous_agg_split_refresh_window(ContinuousAgg *cagg, InternalTimeRange *orig
 
 	if (refresh_window_list == NIL)
 	{
-		elog(LOG,
+		elog(DEBUG1,
 			 "no valid batches produced for continuous aggregate \"%s.%s\", falling back to single "
 			 "batch processing",
 			 NameStr(cagg->data.user_view_schema),

@@ -4591,6 +4591,12 @@ ts_chunk_is_compressed(const Chunk *chunk)
 }
 
 bool
+ts_chunk_needs_compression(const Chunk *chunk)
+{
+	return !ts_chunk_is_compressed(chunk);
+}
+
+bool
 ts_chunk_needs_recompression(const Chunk *chunk)
 {
 	Assert(ts_chunk_is_compressed(chunk));

@@ -222,7 +222,7 @@ select * from settings;
  test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
  _timescaledb_internal._hyper_3_1_chunk | _timescaledb_internal.compress_hyper_4_2_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
 
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
  count 
 -------
      1
@@ -243,7 +243,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
  x                    | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  value                | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
  _ts_meta_v2_bloom1_u | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- u                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ u                    | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  _ts_meta_v2_min_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
  _ts_meta_v2_max_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
  ts                   | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
@@ -321,7 +321,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
  x                    | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  value                | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
  _ts_meta_v2_bloom1_u | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- u                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ u                    | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  _ts_meta_v2_min_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
  _ts_meta_v2_max_ts   | timestamp without time zone           |           |          |         | plain    | 1000         | 
  ts                   | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
@@ -360,6 +360,15 @@ select count(*) from test_sparse_index where ts between '2021-01-07' and '2021-0
                Filter: ((compress_hyper_6_5_chunk._ts_meta_v2_max_ts >= 'Thu Jan 07 00:00:00 2021'::timestamp without time zone) AND (compress_hyper_6_5_chunk._ts_meta_v2_min_ts <= 'Thu Jan 14 00:00:00 2021'::timestamp without time zone))
                Rows Removed by Filter: 9
 
+-- Test recompression when the bloom filter index is disabled by a GUC
+set timescaledb.enable_sparse_index_bloom to off;
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+WARNING:  Creating bloom sparse index is disabled
+ count 
+-------
+     1
+
+reset timescaledb.enable_sparse_index_bloom;
 -- Test rename column
 -- change a non-sparse index column
 alter table test_sparse_index rename value to value_new;
@@ -369,7 +378,7 @@ select * from settings;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                                                   index                                                                                    
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  test_sparse_index                      |                                                |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts_new", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_5_chunk |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts_new", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_6_chunk |           | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "u", "source": "config"}, {"type": "minmax", "column": "ts_new", "source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
 
 select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
     where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
@@ -377,7 +386,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 \d+ :chunk
-                                         Table "_timescaledb_internal.compress_hyper_6_5_chunk"
+                                         Table "_timescaledb_internal.compress_hyper_6_6_chunk"
          Column         |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
 ------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
  _ts_meta_count         | integer                               |           |          |         | plain    | 1000         | 
@@ -386,12 +395,12 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
  x                      | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  value_new              | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
  _ts_meta_v2_bloom1_u   | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
- u                      | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ u                      | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  _ts_meta_v2_min_ts_new | timestamp without time zone           |           |          |         | plain    | 1000         | 
  _ts_meta_v2_max_ts_new | timestamp without time zone           |           |          |         | plain    | 1000         | 
  ts_new                 | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
 Indexes:
-    "compress_hyper_6_5_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
+    "compress_hyper_6_6_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
 Options: toast_tuple_target=128
 
 -- Test same minmax and orderby column
@@ -399,7 +408,7 @@ alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = 'minmax("x")');
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
  count 
 -------
      1
@@ -410,7 +419,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 \d+ :chunk
-                                     Table "_timescaledb_internal.compress_hyper_6_6_chunk"
+                                     Table "_timescaledb_internal.compress_hyper_6_7_chunk"
      Column     |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
 ----------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
  _ts_meta_count | integer                               |           |          |         | plain    | 1000         | 
@@ -418,17 +427,17 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
  _ts_meta_max_1 | integer                               |           |          |         | plain    | 1000         | 
  x              | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  value_new      | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- u              | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ u              | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  ts_new         | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
 Indexes:
-    "compress_hyper_6_6_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
+    "compress_hyper_6_7_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
 Options: toast_tuple_target=128
 
 select * from settings;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                          index                          
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+---------------------------------------------------------
  test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "config"}]
- _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_6_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "config"}]
+ _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_7_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "minmax", "column": "x", "source": "config"}]
 
 -- Test auto sparse index
 create index ii on test_sparse_index(value_new);
@@ -436,7 +445,7 @@ alter table test_sparse_index reset (timescaledb.compress_index);
 alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'x');
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
  count 
 -------
      1
@@ -447,7 +456,7 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
             where table_name = 'test_sparse_index') limit 1)
 \gset
 \d+ :chunk
-                                            Table "_timescaledb_internal.compress_hyper_6_7_chunk"
+                                            Table "_timescaledb_internal.compress_hyper_6_8_chunk"
             Column            |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
 ------------------------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
  _ts_meta_count               | integer                               |           |          |         | plain    | 1000         | 
@@ -456,61 +465,24 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
  x                            | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  _ts_meta_v2_bloom1_value_new | _timescaledb_internal.bloom1          |           |          |         | external | 1000         | 
  value_new                    | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- u                            | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ u                            | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  ts_new                       | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
 Indexes:
-    "compress_hyper_6_7_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
+    "compress_hyper_6_8_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
 Options: toast_tuple_target=128
 
 select * from settings;
                  relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                                          index                                                          
 ----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+-------------------------------------------------------------------------------------------------------------------------
  test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | 
- _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_7_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value_new", "source": "default"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_8_chunk | {}        | {x}     | {f}          | {f}                | [{"type": "bloom", "column": "value_new", "source": "default"}, {"type": "minmax", "column": "x", "source": "orderby"}]
 
 -- Test empty sparse index
 alter table test_sparse_index set (timescaledb.compress,
     timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'x',
     timescaledb.compress_index = '');
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
- count 
--------
-     1
-
-vacuum full analyze test_sparse_index;
-select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
-    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
-        where hypertable_id = (select id from _timescaledb_catalog.hypertable
-            where table_name = 'test_sparse_index') limit 1)
-\gset
-\d+ :chunk
-                                     Table "_timescaledb_internal.compress_hyper_6_8_chunk"
-     Column     |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
-----------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
- _ts_meta_count | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_min_1 | integer                               |           |          |         | plain    | 1000         | 
- _ts_meta_max_1 | integer                               |           |          |         | plain    | 1000         | 
- x              | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- value_new      | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- u              | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
- ts_new         | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
-Indexes:
-    "compress_hyper_6_8_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
-Options: toast_tuple_target=128
-
-select * from settings;
-                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                     index                                      
-----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------
- test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
- _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_8_chunk | {}        | {x}     | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
-
--- Test default orderby without sparse index
-set timescaledb.enable_sparse_index_bloom to false;
-alter table test_sparse_index reset (timescaledb.compress_segmentby,
-    timescaledb.compress_orderby,
-    timescaledb.compress_index);
-select count(compress_chunk(decompress_chunk(x))) from show_chunks('test_sparse_index') x;
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
  count 
 -------
      1
@@ -526,21 +498,58 @@ select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
      Column     |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
 ----------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
  _ts_meta_count | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_min_1 | integer                               |           |          |         | plain    | 1000         | 
+ _ts_meta_max_1 | integer                               |           |          |         | plain    | 1000         | 
+ x              | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ value_new      | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ u              | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+ ts_new         | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
+Indexes:
+    "compress_hyper_6_9_chunk__ts_meta_min_1__ts_meta_max_1_idx" btree (_ts_meta_min_1, _ts_meta_max_1)
+Options: toast_tuple_target=128
+
+select * from settings;
+                 relid                  |                 compress_relid                 | segmentby | orderby | orderby_desc | orderby_nullsfirst |                                     index                                      
+----------------------------------------+------------------------------------------------+-----------+---------+--------------+--------------------+--------------------------------------------------------------------------------
+ test_sparse_index                      |                                                | {}        | {x}     | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+ _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_9_chunk | {}        | {x}     | {f}          | {f}                | [{"source": "config"}, {"type": "minmax", "column": "x", "source": "orderby"}]
+
+-- Test default orderby without sparse index
+set timescaledb.enable_sparse_index_bloom to false;
+alter table test_sparse_index reset (timescaledb.compress_segmentby,
+    timescaledb.compress_orderby,
+    timescaledb.compress_index);
+select count(compress_chunk(x, recompress:=true)) from show_chunks('test_sparse_index') x;
+ count 
+-------
+     1
+
+vacuum full analyze test_sparse_index;
+select schema_name || '.' || table_name chunk from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'test_sparse_index') limit 1)
+\gset
+\d+ :chunk
+                                     Table "_timescaledb_internal.compress_hyper_6_10_chunk"
+     Column     |                 Type                  | Collation | Nullable | Default | Storage  | Stats target | Description 
+----------------+---------------------------------------+-----------+----------+---------+----------+--------------+-------------
+ _ts_meta_count | integer                               |           |          |         | plain    | 1000         | 
  value_new      | text                                  |           |          |         | extended | 1000         | 
  _ts_meta_min_1 | integer                               |           |          |         | plain    | 1000         | 
  _ts_meta_max_1 | integer                               |           |          |         | plain    | 1000         | 
  x              | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
- u              | _timescaledb_internal.compressed_data |           |          |         | extended | 0            | 
+ u              | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
  ts_new         | _timescaledb_internal.compressed_data |           |          |         | external | 0            | 
 Indexes:
-    "compress_hyper_6_9_chunk_value_new__ts_meta_min_1__ts_meta__idx" btree (value_new, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC)
+    "compress_hyper_6_10_chunk_value_new__ts_meta_min_1__ts_meta_idx" btree (value_new, _ts_meta_min_1 DESC, _ts_meta_max_1 DESC)
 Options: toast_tuple_target=128
 
 select * from settings;
-                 relid                  |                 compress_relid                 |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                          index                           
-----------------------------------------+------------------------------------------------+-------------+---------+--------------+--------------------+----------------------------------------------------------
- test_sparse_index                      |                                                |             |         |              |                    | 
- _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_9_chunk | {value_new} | {x}     | {t}          | {t}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
+                 relid                  |                 compress_relid                  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst |                          index                           
+----------------------------------------+-------------------------------------------------+-------------+---------+--------------+--------------------+----------------------------------------------------------
+ test_sparse_index                      |                                                 |             |         |              |                    | 
+ _timescaledb_internal._hyper_5_4_chunk | _timescaledb_internal.compress_hyper_6_10_chunk | {value_new} | {x}     | {t}          | {t}                | [{"type": "minmax", "column": "x", "source": "orderby"}]
 
 reset timescaledb.enable_sparse_index_bloom;
 drop table test_sparse_index;

@@ -48,14 +48,13 @@ jobs:
 
   build:
     # Change the JOB_NAME variable below when changing the name.
-    name: PG${{ matrix.pg }} ${{ matrix.build_type }} ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: PG${{ matrix.pg }} ${{ matrix.build_type }} windows
+    runs-on: windows-2025
     needs: config
     strategy:
       fail-fast: false
       matrix:
         pg: [ 15, 16, 17 ]
-        os: [ windows-2025 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
@@ -65,8 +64,8 @@ jobs:
             pg_version: ${{ needs.config.outputs.pg16_latest }}
           - pg: 17
             pg_version: ${{ needs.config.outputs.pg17_latest }}
-          - pg: 18
-            pg_version: ${{ needs.config.outputs.pg18_latest }}
+#          - pg: 18
+#            pg_version: ${{ needs.config.outputs.pg18_latest }}
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -79,9 +78,9 @@ jobs:
         compress_bloom_sparse_compat
         compress_bloom_sparse_debug
         compress_qualpushdown_saop
-        compressed_copy
         compression_algos
         compression_uuid
+        direct_compress_copy
         merge_append_partially_compressed
         metadata
         telemetry
@@ -92,6 +91,7 @@ jobs:
         vector_agg_text
         vector_agg_uuid
         vectorized_aggregation
+        ${{ matrix.pg < 16 && 'columnar_scan_cost' || '' }}
       SKIPS: >-
         bgw_db_scheduler
         bgw_db_scheduler_fixed
@@ -201,7 +201,6 @@ jobs:
         icacls ${{ env.TABLESPACE1 }} /grant runneradmin:F /T
         icacls ${{ env.TABLESPACE2 }} /grant runneradmin:F /T
         copy build_win/test/postgresql.conf ${{ env.PGDATA }}
-        copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
         icacls . /grant runneradmin:F /T
         C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
         C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
@@ -244,7 +243,6 @@ jobs:
         Remove-Item -Recurse ${{ env.PGDATA }}
         C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
-        copy build_win/tsl/test/pg_hba.conf ${{ env.PGDATA }}
         C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postmaster.log"
         C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         C:\Progra~1/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'

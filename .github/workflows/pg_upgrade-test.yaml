@@ -27,7 +27,7 @@ jobs:
       - name: Install Linux Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install pip postgresql-common libkrb5-dev
+          sudo apt-get install pip postgresql-common
 
       - name: Install testgres
         run: |

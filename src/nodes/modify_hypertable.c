@@ -64,7 +64,15 @@ should_use_direct_compress(ModifyHypertableState *state)
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 		return false;
 
-	if (resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->numtriggers > 1)
+	if (ts_hypertable_has_continuous_aggregates(ht->fd.id))
+	{
+		ereport(WARNING,
+				(errmsg("disabling direct compress because the destination table has continuous "
+						"aggregates")));
+		return false;
+	}
+
+	if (resultRelInfo->ri_TrigDesc)
 	{
 		ereport(WARNING,
 				(errmsg("disabling direct compress because the destination table has triggers")));
@@ -124,10 +132,30 @@ modify_hypertable_begin(CustomScanState *node, EState *estate, int eflags)
 	if (estate->es_auxmodifytables && linitial(estate->es_auxmodifytables) == mtstate)
 		linitial(estate->es_auxmodifytables) = node;
 
+	state->ht =
+		ts_hypertable_cache_get_cache_and_entry(RelationGetRelid(
+													mtstate->resultRelInfo->ri_RelationDesc),
+												CACHE_FLAG_MISSING_OK,
+												&state->ht_cache);
+
+	/*
+	 * If we are inserting into a chunk directly, rri will point to the chunk
+	 * itself, so we need to get the hypertable from the chunk.
+	 */
+	if (!state->ht)
+	{
+		Chunk *chunk =
+			ts_chunk_get_by_relid(RelationGetRelid(mtstate->resultRelInfo->ri_RelationDesc), true);
+		state->ht = ts_hypertable_cache_get_entry(state->ht_cache,
+												  chunk->hypertable_relid,
+												  CACHE_FLAG_NONE);
+	}
+	state->has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(state->ht->fd.id);
+
 	if (mtstate->operation == CMD_INSERT || mtstate->operation == CMD_MERGE)
 	{
 		/* setup chunk tuple routing state for INSERT/MERGE */
-		state->ctr = ts_chunk_tuple_routing_create(estate, mtstate->resultRelInfo);
+		state->ctr = ts_chunk_tuple_routing_create(estate, state->ht, mtstate->resultRelInfo);
 		state->ctr->mht_state = state;
 
 		if (mtstate->operation == CMD_INSERT && should_use_direct_compress(state))
@@ -167,6 +195,8 @@ modify_hypertable_end(CustomScanState *node)
 	ExecEndNode(linitial(node->custom_ps));
 	if (state->ctr)
 		ts_chunk_tuple_routing_destroy(state->ctr);
+
+	ts_cache_release(&state->ht_cache);
 }
 
 static void

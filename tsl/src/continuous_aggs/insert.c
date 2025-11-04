@@ -215,60 +215,12 @@ update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 		cache_entry->greatest_modified_value = timeval;
 }
 
-/*
- * Trigger to store what the max/min updated values are for a function.
- * This is used by continuous aggregates to ensure that the aggregated values
- * are updated correctly. Upon creating a continuous aggregate for a hypertable,
- * this trigger should be registered, if it does not already exist.
- */
-Datum
-continuous_agg_trigfn(PG_FUNCTION_ARGS)
+void
+continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
+							  HeapTuple chunk_newtuple, bool update)
 {
-	if (!CALLED_AS_TRIGGER(fcinfo))
-		ereport(ERROR,
-				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
-				errmsg("function \"%s\" was not called by trigger manager",
-					   get_func_name(fcinfo->flinfo->fn_oid)));
-	/*
-	 * Use TriggerData to determine which row to return/work with, in the case
-	 * of updates, we'll need to call the functions twice, once with the old
-	 * rows (which act like deletes) and once with the new rows.
-	 */
-	TriggerData *trigdata = castNode(TriggerData, fcinfo->context);
-
-	if (ts_guc_enable_cagg_wal_based_invalidation)
-	{
-		if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
-			return PointerGetDatum(trigdata->tg_trigtuple);
-		else
-			return PointerGetDatum(trigdata->tg_newtuple);
-	}
-
-	if (!TRIGGER_FIRED_AFTER(trigdata->tg_event) || !TRIGGER_FIRED_FOR_ROW(trigdata->tg_event))
-		ereport(ERROR,
-				errcode(ERRCODE_E_R_I_E_TRIGGER_PROTOCOL_VIOLATED),
-				errmsg("continuous agg trigger function must be called in per row after trigger"));
-
-	char *hypertable_id_str;
-	int32 hypertable_id;
-	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
-		ereport(ERROR,
-				errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				errmsg("must supply hypertable id"));
-
-	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
-	hypertable_id = atol(hypertable_id_str);
-
-	execute_cagg_trigger(hypertable_id,
-						 trigdata->tg_relation,
-						 trigdata->tg_trigtuple,
-						 trigdata->tg_newtuple,
-						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event));
-
-	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
-		return PointerGetDatum(trigdata->tg_trigtuple);
-	else
-		return PointerGetDatum(trigdata->tg_newtuple);
+	Assert(!ts_guc_enable_cagg_wal_based_invalidation);
+	execute_cagg_trigger(hypertable_id, chunk_rel, chunk_tuple, chunk_newtuple, update);
 }
 
 /*

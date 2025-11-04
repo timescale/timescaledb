@@ -15,7 +15,6 @@
 #include "compat/compat.h"
 #include "with_clause/with_clause_parser.h"
 
-#define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 #define TS_INVALIDATION_SLOT_NAME_MAX (32)
 
 /*switch to ts user for _timescaledb_internal access */
@@ -153,12 +152,6 @@ typedef struct ContinuousAggPolicyOffset
 	bool isnull;
 	const char *name;
 } ContinuousAggPolicyOffset;
-
-static inline bool
-has_invalidation_trigger(Oid relid)
-{
-	return OidIsValid(get_trigger_oid(relid, CAGGINVAL_TRIGGER_NAME, true));
-}
 
 extern TSDLLEXPORT Oid ts_cagg_permissions_check(Oid cagg_oid, Oid userid);
 

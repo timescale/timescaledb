@@ -99,7 +99,9 @@ SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_cat
 
 -- recompressing chunks should apply current hypertable settings
 SELECT compress_chunk(:'CHUNK', recompress:=true);
+SELECT * FROM settings;
 SELECT compress_chunk(:'CHUNK', recompress:=true);
+SELECT * FROM settings;
 
 ALTER TABLE metrics SET (timescaledb.compress_orderby='"time" desc', timescaledb.compress_segmentby='d2', timescaledb.index='');
 

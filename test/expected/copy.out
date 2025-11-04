@@ -455,8 +455,6 @@ SELECT create_hypertable('table_without_bf_trigger', 'time', chunk_time_interval
 ----------------------------------------
  (11,public,table_without_bf_trigger,t)
 
--- Drop the default insert block trigger
-DROP TRIGGER ts_insert_blocker ON table_without_bf_trigger;
 \copy table_without_bf_trigger from data/copy_data.csv with csv header;
 SET client_min_messages TO DEBUG1;
 \copy table_without_bf_trigger from data/copy_data.csv with csv header;

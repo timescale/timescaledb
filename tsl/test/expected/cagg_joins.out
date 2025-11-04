@@ -1246,7 +1246,7 @@ FROM conditions
 JOIN devices ON conditions.device_id = devices.device_id
 GROUP BY name, location, bucket
 WITH NO DATA;
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\c :TEST_DBNAME :ROLE_SUPERUSER
 VACUUM ANALYZE;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT a.* FROM cagg_realtime a WHERE a.location = 'Moscow' ORDER BY bucket LIMIT 2;

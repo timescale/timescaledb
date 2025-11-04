@@ -577,3 +577,11 @@ other AS (
     SELECT * FROM generate_series(1,10)
 )
 SELECT * FROM cagg, other WHERE time_bucket > 10;
+
+-- test error handling
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.cagg_watermark(-1);
+SELECT COALESCE(_timescaledb_functions.cagg_watermark(-1),12);
+SELECT _timescaledb_functions.cagg_watermark_materialized(-1);
+SELECT COALESCE(_timescaledb_functions.cagg_watermark_materialized(-1),12);
+\set ON_ERROR_STOP 1

@@ -139,6 +139,7 @@ typedef struct TSCopyMultiInsertInfo
 	CommandId mycid;		  /* Command Id used for COPY */
 	int ti_options;			  /* table insert options */
 	Hypertable *ht;			  /* The hypertable for the inserts */
+	bool has_continuous_aggregate;
 } TSCopyMultiInsertInfo;
 
 /*
@@ -354,6 +355,7 @@ TSCopyMultiInsertInfoInit(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 	miinfo->mycid = mycid;
 	miinfo->ti_options = ti_options;
 	miinfo->ht = ht;
+	miinfo->has_continuous_aggregate = ts_hypertable_has_continuous_aggregates(ht->fd.id);
 }
 
 /*
@@ -479,6 +481,19 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 								 slots[i],
 								 NIL,
 								 NULL /* transition capture */);
+		}
+
+		if (miinfo->has_continuous_aggregate && !ts_guc_enable_cagg_wal_based_invalidation)
+		{
+			bool should_free;
+			HeapTuple tuple = ExecFetchSlotHeapTuple(slots[i], false, &should_free);
+			ts_cm_functions->continuous_agg_dml_invalidate(miinfo->ht->fd.id,
+														   resultRelInfo->ri_RelationDesc,
+														   tuple,
+														   NULL,
+														   false);
+			if (should_free)
+				heap_freetuple(tuple);
 		}
 
 		ExecClearTuple(slots[i]);
@@ -740,42 +755,6 @@ copy_table_to_chunk_error_callback(void *arg)
 	errcontext("copying from table %s", RelationGetRelationName(scandesc->rs_rd));
 }
 
-/*
- * Tests if there are other before insert row triggers besides the
- * ts_insert_blocker trigger.
- */
-static inline bool
-has_other_before_insert_row_trigger_than_ts(ResultRelInfo *resultRelInfo)
-{
-	TriggerDesc *trigdesc = resultRelInfo->ri_TrigDesc;
-	int i;
-
-	if (trigdesc == NULL)
-		return false;
-
-	if (!trigdesc->trig_insert_before_row)
-		return false;
-
-	for (i = 0; i < trigdesc->numtriggers; i++)
-	{
-		Trigger *trigger = &trigdesc->triggers[i];
-		if (!TRIGGER_TYPE_MATCHES(trigger->tgtype,
-								  TRIGGER_TYPE_ROW,
-								  TRIGGER_TYPE_BEFORE,
-								  TRIGGER_TYPE_INSERT))
-			continue;
-
-		/* Ignore the ts_insert_block trigger */
-		if (strncmp(trigger->tgname, INSERT_BLOCKER_NAME, NAMEDATALEN) == 0)
-			continue;
-
-		/* At least one trigger exists */
-		return true;
-	}
-
-	return false;
-}
-
 static TSCopyInsertMethod
 choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resultRelInfo)
 {
@@ -788,7 +767,8 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 	 */
 
 	/* Before INSERT Triggers */
-	bool has_before_insert_row_trig = has_other_before_insert_row_trigger_than_ts(resultRelInfo);
+	bool has_before_insert_row_trig =
+		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_before_row);
 
 	/* Instead of INSERT Triggers */
 	bool has_instead_insert_row_trig =
@@ -813,7 +793,14 @@ choose_copy_method(Hypertable *ht, CopyChunkState *ccstate, ResultRelInfo *resul
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht) && ts_guc_enable_direct_compress_copy)
 	{
-		if (ts_indexing_relation_has_primary_or_unique_index(ccstate->rel))
+		if (ts_hypertable_has_continuous_aggregates(ccstate->ctr->hypertable->fd.id))
+		{
+			ereport(WARNING,
+					(errmsg(
+						"disabling direct compress because the destination table has continuous "
+						"aggregates")));
+		}
+		else if (ts_indexing_relation_has_primary_or_unique_index(ccstate->rel))
 		{
 			ereport(WARNING,
 					(errmsg("disabling direct compress because the destination table has unique "
@@ -970,7 +957,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 	ExecOpenIndices(resultRelInfo, false);
 
-	ccstate->ctr = ts_chunk_tuple_routing_create(estate, resultRelInfo);
+	ccstate->ctr = ts_chunk_tuple_routing_create(estate, ht, resultRelInfo);
 
 	singleslot = table_slot_create(resultRelInfo->ri_RelationDesc, &estate->es_tupleTable);
 

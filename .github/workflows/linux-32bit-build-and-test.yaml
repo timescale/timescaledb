@@ -73,6 +73,7 @@ jobs:
           vector_agg_text
           vector_agg_uuid
           vectorized_aggregation
+          ${{ matrix.pg < 16 && 'columnar_scan_cost' || '' }}
         SKIPS: chunk_adaptive histogram_test-*
         EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
@@ -93,7 +94,7 @@ jobs:
       run: |
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
-        apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl \
+        apt-get install -y gcc make cmake libssl-dev libipc-run-perl \
           libtest-most-perl sudo gdb git wget gawk lbzip2 flex bison lcov base-files \
           locales clang-14 llvm-14 llvm-14-dev llvm-14-tools postgresql-client pkgconf \
           icu-devtools

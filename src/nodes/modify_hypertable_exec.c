@@ -88,6 +88,7 @@
 typedef struct ModifyTableContext
 {
 	/* Operation state */
+	ModifyHypertableState *ht_state;
 	ModifyTableState *mtstate;
 	EPQState *epqstate;
 	EState *estate;
@@ -881,6 +882,15 @@ ExecInsert(ModifyTableContext *context,
 		}
 	}
 
+	if (context->ht_state->has_continuous_aggregate && !ts_guc_enable_cagg_wal_based_invalidation)
+	{
+		bool should_free;
+		HeapTuple tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
+		ts_cm_functions->continuous_agg_dml_invalidate(context->ht_state->ht->fd.id, resultRelationDesc, tuple, NULL, false);
+		if (should_free)
+			heap_freetuple(tuple);
+	}
+
 	if (canSetTag)
 		(estate->es_processed)++;
 
@@ -1371,6 +1381,18 @@ ldelete:
 		 * take care of it later.  We can't delete index tuples immediately
 		 * anyway, since the tuple is still visible to other transactions.
 		 */
+	}
+
+	if (context->ht_state->has_continuous_aggregate && !ts_guc_enable_cagg_wal_based_invalidation)
+	{
+		bool should_free;
+		TupleTableSlot *cagg_slot = table_slot_create(resultRelationDesc, NULL);
+		table_tuple_fetch_row_version(resultRelationDesc, tupleid, SnapshotAny, cagg_slot);
+		HeapTuple tuple = ExecFetchSlotHeapTuple(cagg_slot, false, &should_free);
+		ts_cm_functions->continuous_agg_dml_invalidate(context->ht_state->ht->fd.id, resultRelationDesc, tuple, NULL, false);
+		if (should_free)
+			heap_freetuple(tuple);
+		ExecDropSingleTupleTableSlot(cagg_slot);
 	}
 
 	if (canSetTag)
@@ -1901,6 +1923,26 @@ redo_act:
 	ExecUpdateEpilogue(context, &updateCxt, resultRelInfo, tupleid, oldtuple,
 					   slot);
 
+	if (context->ht_state->has_continuous_aggregate && !ts_guc_enable_cagg_wal_based_invalidation)
+	{
+		TupleTableSlot *invalidation_slot = NULL;
+		bool should_free_old = false, should_free_new = false;
+		if (!oldtuple)
+		{
+			invalidation_slot = table_slot_create(resultRelationDesc, NULL);
+			table_tuple_fetch_row_version(resultRelationDesc, tupleid, SnapshotAny, invalidation_slot);
+			oldtuple = ExecFetchSlotHeapTuple(invalidation_slot, false, &should_free_old);
+		}
+		HeapTuple newtuple = ExecFetchSlotHeapTuple(slot, false, &should_free_new);
+		ts_cm_functions->continuous_agg_dml_invalidate(context->ht_state->ht->fd.id, resultRelInfo->ri_RelationDesc, oldtuple, newtuple, true);
+		if (should_free_old)
+			heap_freetuple(oldtuple);
+		if (should_free_new)
+			heap_freetuple(newtuple);
+		if (invalidation_slot)
+			ExecDropSingleTupleTableSlot(invalidation_slot);
+	}
+
 	/* Process RETURNING if present */
 	if (resultRelInfo->ri_projectReturning)
 		return ExecProcessReturning(resultRelInfo, slot, context->planSlot);
@@ -2208,9 +2250,11 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	subplanstate = outerPlanState(node);
 
 	/* Set global context */
+	context.ht_state = ht_state;
 	context.mtstate = node;
 	context.epqstate = &node->mt_epqstate;
 	context.estate = estate;
+
 	/*
 	 * For UPDATE/DELETE on compressed hypertable, decompress chunks and
 	 * move rows to uncompressed chunks.

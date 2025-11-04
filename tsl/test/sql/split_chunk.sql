@@ -440,6 +440,7 @@ order by time;
 
 select table_name, dropped, status, compressed_chunk_id
 from _timescaledb_catalog.chunk where table_name = '_hyper_1_3_chunk';
+analyze _timescaledb_internal._hyper_1_3_chunk;
 
 truncate chunk_summary_before_split;
 insert into chunk_summary_before_split

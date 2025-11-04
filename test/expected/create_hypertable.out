@@ -92,9 +92,8 @@ select * from create_hypertable('test_schema.test_table', 'time', 'device_id', 2
 
 -- Check that the insert block trigger exists
 SELECT * FROM test.show_triggers('test_schema.test_table');
-      Trigger      | Type |               Function                
--------------------+------+---------------------------------------
- ts_insert_blocker |    7 | _timescaledb_functions.insert_blocker
+ Trigger | Type | Function 
+---------+------+----------
 
 SELECT * FROM _timescaledb_functions.get_create_command('test_table');
                                                                 get_create_command                                                                
