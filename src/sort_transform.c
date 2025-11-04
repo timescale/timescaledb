@@ -377,7 +377,7 @@ sort_transform_ec(PlannerInfo *root, EquivalenceClass *orig, Relids child_relids
 				newec->ec_members = lappend(newec->ec_members, em);
 
 			int i = -1;
-			for (; i >= 0; i = bms_next_member(em->em_relids, i))
+			while ((i = bms_next_member(em->em_relids, i)) >= 0)
 			{
 				RelOptInfo *child_rel = root->simple_rel_array[i];
 
