@@ -5,7 +5,7 @@
 -- need superuser for copy from program
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-CREATE TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.orderby='time');
+CREATE UNLOGGED TABLE metrics (time TIMESTAMPTZ NOT NULL, device TEXT, value float) WITH (tsdb.hypertable, tsdb.partition_column = 'time', tsdb.orderby='time');
 
 -- first try without the GUCs
 BEGIN;
@@ -128,7 +128,7 @@ ROLLBACK;
 
 
 -- test chunk status handling
-CREATE TABLE metrics_status(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time');
+CREATE UNLOGGED TABLE metrics_status(time timestamptz) WITH (tsdb.hypertable,tsdb.partition_column='time');
 
 -- normal insert should result in chunk status 0
 INSERT INTO metrics_status SELECT '2025-01-01';

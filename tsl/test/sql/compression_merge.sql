@@ -7,7 +7,7 @@
 \ir include/compression_utils.sql
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
-CREATE TABLE test1 ("Time" timestamptz, i integer, value integer);
+CREATE UNLOGGED TABLE test1 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test1', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 -- This will generate 24 chunks
@@ -34,7 +34,7 @@ SELECT 'test1' AS "HYPERTABLE_NAME" \gset
 
 DROP TABLE test1;
 
-CREATE TABLE test2 ("Time" timestamptz, i integer, loc integer, value integer);
+CREATE UNLOGGED TABLE test2 ("Time" timestamptz, i integer, loc integer, value integer);
 SELECT table_name from create_hypertable('test2', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 -- This will generate 24 1 hour chunks.
@@ -100,7 +100,7 @@ SELECT 'test2' AS "HYPERTABLE_NAME" \gset
 
 DROP TABLE test2;
 
-CREATE TABLE test3 ("Time" timestamptz, i integer, loc integer, value integer);
+CREATE UNLOGGED TABLE test3 ("Time" timestamptz, i integer, loc integer, value integer);
 SELECT table_name from create_hypertable('test3', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 SELECT table_name from  add_dimension('test3', 'i', number_partitions=> 3);
 
@@ -130,7 +130,7 @@ SELECT 'test3' AS "HYPERTABLE_NAME" \gset
 
 DROP TABLE test3;
 
-CREATE TABLE test4 ("Time" timestamptz, i integer, loc integer, value integer);
+CREATE UNLOGGED TABLE test4 ("Time" timestamptz, i integer, loc integer, value integer);
 SELECT table_name from create_hypertable('test4', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 -- Setting compress_chunk_time_interval to non-multiple of chunk_time_interval should emit a warning.
 \set VERBOSITY default
@@ -139,7 +139,7 @@ ALTER TABLE test4 set (timescaledb.compress, timescaledb.compress_orderby='loc,"
 
 DROP TABLE test4;
 
-CREATE TABLE test5 ("Time" timestamptz, i integer, value integer);
+CREATE UNLOGGED TABLE test5 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test5', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 -- This will generate 24 chunks. Note that we are forcing everyting into a single segment so we use table scan to when merging chunks.
@@ -177,7 +177,7 @@ SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 
 DROP TABLE test5;
 
-CREATE TABLE test6 ("Time" timestamptz, i integer, value integer);
+CREATE UNLOGGED TABLE test6 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test6', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 -- This will generate 24 chunks
@@ -234,7 +234,7 @@ ALTER TABLE test6 set (timescaledb.compress_chunk_time_interval=NULL);
 
 DROP TABLE test6;
 
-CREATE TABLE test7 ("Time" timestamptz, i integer, j integer, k integer, value integer);
+CREATE UNLOGGED TABLE test7 ("Time" timestamptz, i integer, j integer, k integer, value integer);
 SELECT table_name from create_hypertable('test7', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 -- This will generate 24 chunks
@@ -257,7 +257,7 @@ SELECT 'test7' AS "HYPERTABLE_NAME" \gset
 DROP TABLE test7;
 
 --#5090
-CREATE TABLE test8(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION NOT NULL, series_id BIGINT NOT NULL);
+CREATE UNLOGGED TABLE test8(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION NOT NULL, series_id BIGINT NOT NULL);
 
 SELECT create_hypertable('test8', 'time', chunk_time_interval => INTERVAL '1 h');
 
@@ -276,7 +276,7 @@ SET enable_bitmapscan TO ON;
 SELECT count(*) FROM test8 WHERE series_id = 1;
 
 -- Verify rollup is prevented when compression settings differ
-CREATE TABLE test9(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION NOT NULL, series_id BIGINT NOT NULL);
+CREATE UNLOGGED TABLE test9(time TIMESTAMPTZ NOT NULL, value DOUBLE PRECISION NOT NULL, series_id BIGINT NOT NULL);
 SELECT create_hypertable('test9', 'time', chunk_time_interval => INTERVAL '1 h');
 
 ALTER TABLE test9 set (timescaledb.compress,
@@ -329,7 +329,7 @@ BEGIN;
 ROLLBACK;
 
 -- Test RowExclusiveLock on compressed chunk during chunk rollup using a GUC
-CREATE TABLE test10 ("Time" timestamptz, i integer, value integer);
+CREATE UNLOGGED TABLE test10 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test10', 'Time', chunk_time_interval=> INTERVAL '1 hour');
 
 INSERT INTO test10
@@ -351,7 +351,7 @@ RESET enable_seqscan;
 RESET enable_bitmapscan;
 
 -- Test chunk merging with default compression settings
-CREATE TABLE test_defaults ("Time" timestamptz, i integer, value integer) WITH (tsdb.hypertable, tsdb.chunk_interval='1 hour');
+CREATE UNLOGGED TABLE test_defaults ("Time" timestamptz, i integer, value integer) WITH (tsdb.hypertable, tsdb.chunk_interval='1 hour');
 CREATE INDEX ON test_defaults (i);
 ALTER TABLE test_defaults set (timescaledb.compress, timescaledb.compress_chunk_time_interval='2 hours');
 SELECT delete_job(1000);

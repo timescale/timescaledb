@@ -13,7 +13,7 @@ create or replace function ts_debug_allocated_bytes(text = 'PortalContext') retu
     language c strict volatile;
 
 
-create table mvagg (t int, s0 int, s1 int);
+create unlogged table mvagg (t int, s0 int, s1 int);
 select create_hypertable('mvagg', 't', chunk_time_interval => pow(10, 9)::int);
 insert into mvagg select generate_series(1, 2 * pow(10, 6)::int) t, 1 s0, 1 s1;
 

@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 -- Test array compression overallocation protection
-CREATE TABLE vector_overalloc (time timestamptz, device int8, ord numeric, value text);
+CREATE UNLOGGED TABLE vector_overalloc (time timestamptz, device int8, ord numeric, value text);
 SELECT create_hypertable('vector_overalloc', 'time', create_default_indexes => false);
 -- This will try to create an array of chars over 1GB allocation limit
 INSERT INTO vector_overalloc

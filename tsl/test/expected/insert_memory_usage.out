@@ -14,7 +14,7 @@ select create_hypertable('uk_price_paid', 'date', chunk_time_interval => interva
  (1,public,uk_price_paid,t)
 
 -- This is where we log the memory usage.
-create table portal_memory_log(id serial, bytes bigint);
+create unlogged table portal_memory_log(id serial, bytes bigint);
 -- Returns the amount of memory currently allocated in a given
 -- memory context. Only works for PortalContext, and doesn't work for PG 12.
 create or replace function ts_debug_allocated_bytes(text) returns bigint
@@ -38,7 +38,7 @@ set timescaledb.max_open_chunks_per_insert = 2;
 set timescaledb.max_cached_chunks_per_hypertable = 3;
 -- Try increasingly larger data sets by concatenating the same file multiple
 -- times. First, INSERT into an uncompressed table.
-create table uk_price_paid_one(like uk_price_paid);
+create unlogged table uk_price_paid_one(like uk_price_paid);
 \copy uk_price_paid_one from program 'bash -c "cat <(zcat < data/prices-10k-random-1.tsv.gz)"';
 truncate uk_price_paid;
 insert into uk_price_paid select * from uk_price_paid_one;

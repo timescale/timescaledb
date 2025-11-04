@@ -22,6 +22,7 @@ DECLARE
 BEGIN
     FOR i IN 0..(timeout / min_time)::int
     LOOP
+        COMMIT;
         PERFORM pg_sleep(min_time);
         SELECT count(*) INTO backend_count FROM tsdb_bgw WHERE backend_type LIKE pattern;
         IF backend_count > 0 THEN
@@ -115,7 +116,7 @@ CALL wait_for_all_stopped(1, 50, '%Scheduler%');
 SELECT datname, application_name FROM tsdb_bgw;
 
 -- Wait for scheduler to restart.
-CALL wait_for_some_started(10, 100, '%Scheduler%');
+CALL wait_for_some_started(1, 100, '%Scheduler%');
 
 -- Make sure that the launcher and schedulers are running. Otherwise
 -- the test will fail.

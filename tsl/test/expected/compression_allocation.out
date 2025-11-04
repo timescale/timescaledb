@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Test array compression overallocation protection
-CREATE TABLE vector_overalloc (time timestamptz, device int8, ord numeric, value text);
+CREATE UNLOGGED TABLE vector_overalloc (time timestamptz, device int8, ord numeric, value text);
 SELECT create_hypertable('vector_overalloc', 'time', create_default_indexes => false);
        create_hypertable       
 -------------------------------

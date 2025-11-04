@@ -8,7 +8,7 @@
 create or replace function ts_debug_allocated_bytes(text = 'PortalContext') returns bigint
     as :MODULE_PATHNAME, 'ts_debug_allocated_bytes'
     language c strict volatile;
-create table mvagg (t int, s0 int, s1 int);
+create unlogged table mvagg (t int, s0 int, s1 int);
 select create_hypertable('mvagg', 't', chunk_time_interval => pow(10, 9)::int);
  create_hypertable  
 --------------------

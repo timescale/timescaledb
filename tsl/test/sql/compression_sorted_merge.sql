@@ -9,7 +9,7 @@ SET work_mem to '16MB';
 
 \set PREFIX 'EXPLAIN (analyze, verbose, buffers off, costs off, timing off, summary off)'
 
-CREATE TABLE test1 (
+CREATE UNLOGGED TABLE test1 (
 time timestamptz NOT NULL,
     x1 integer,
     x2 integer,
@@ -29,7 +29,7 @@ INSERT INTO test1 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1,
 SELECT compress_chunk(i) FROM show_chunks('test1') i;
 ANALYZE test1;
 
-CREATE TABLE test2 (
+CREATE UNLOGGED TABLE test2 (
 time timestamptz NOT NULL,
     x1 integer,
     x2 integer,
@@ -49,7 +49,7 @@ INSERT INTO test2 (time, x1, x2, x3, x4, x5) values('2000-01-01 03:00:00-00', 1,
 SELECT compress_chunk(i) FROM show_chunks('test2') i;
 ANALYZE test2;
 
-CREATE TABLE test_with_defined_null (
+CREATE UNLOGGED TABLE test_with_defined_null (
     time timestamptz NOT NULL,
     x1 integer,
     x2 integer,
@@ -367,7 +367,7 @@ ROLLBACK;
 
 set timescaledb.debug_require_batch_sorted_merge to 'allow';
 
-CREATE TABLE sensor_data (
+CREATE UNLOGGED TABLE sensor_data (
 time timestamptz NOT NULL,
 sensor_id integer NOT NULL,
 cpu double precision NULL,
@@ -406,11 +406,11 @@ CREATE PROCEDURE order_test(query text) LANGUAGE plpgsql AS $$
         BEGIN
 
         SET timescaledb.enable_decompression_sorted_merge = 0;
-        EXECUTE format('CREATE TABLE temp_data1 AS %s;', query);
+        EXECUTE format('CREATE UNLOGGED TABLE temp_data1 AS %s;', query);
         ALTER TABLE temp_data1 ADD COLUMN new_id SERIAL PRIMARY KEY;
 
         SET timescaledb.enable_decompression_sorted_merge = 1;
-        EXECUTE format('CREATE TABLE temp_data2 AS %s;', query);
+        EXECUTE format('CREATE UNLOGGED TABLE temp_data2 AS %s;', query);
         ALTER TABLE temp_data2 ADD COLUMN new_id SERIAL PRIMARY KEY;
 
         CREATE TEMP TABLE temp_data3 AS (
@@ -442,7 +442,7 @@ CALL order_test('SELECT * FROM test1 ORDER BY time ASC NULLS LAST');
 ------
 -- Test window functions
 ------
-CREATE TABLE insert_test(id INT);
+CREATE UNLOGGED TABLE insert_test(id INT);
 INSERT INTO insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
 
 SELECT * FROM insert_test AS ref_0
@@ -458,7 +458,7 @@ WHERE EXISTS (
 -- Test enabling and disabling the optimization based on costs
 ------
 
-CREATE TABLE test_costs (
+CREATE UNLOGGED TABLE test_costs (
 time timestamptz NOT NULL,
 segment_by integer NOT NULL,
 x1 integer NOT NULL);
@@ -523,7 +523,7 @@ set timescaledb.debug_require_batch_sorted_merge to 'require';
 SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_by < 999 ORDER BY time DESC;
 
 -- Target list creation - Issue 5738
-CREATE TABLE bugtab(
+CREATE UNLOGGED TABLE bugtab(
  time timestamp without time zone,
  hin   character varying(128) NOT NULL,
  model character varying(128) NOT NULL,
@@ -558,7 +558,7 @@ SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"sign
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM bugtab ORDER BY "time" DESC;
 
 -- Condition that filter the first tuple of a batch - Issue 5797
-CREATE TABLE test (
+CREATE UNLOGGED TABLE test (
     id      bigint,
     dttm    timestamp,
     otherId    int,

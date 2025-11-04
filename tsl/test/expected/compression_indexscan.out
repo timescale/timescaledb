@@ -4,13 +4,13 @@
 --Enable compression path info
 SET timescaledb.debug_compression_path_info= 'on';
 --Table creation
-CREATE TABLE tab1 (
+CREATE UNLOGGED TABLE tab1 (
     time timestamptz not null,
     id integer not null,
     c1 double precision null,
     c2 double precision null
 );
-CREATE TABLE tab2 (
+CREATE UNLOGGED TABLE tab2 (
     time timestamptz not null,
     id integer not null,
     c1 double precision null,
