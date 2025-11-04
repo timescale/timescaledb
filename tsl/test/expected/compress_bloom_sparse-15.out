@@ -448,7 +448,7 @@ select * from corner where c > s;
    ->  Seq Scan on compress_hyper_4_4_chunk
 
 -- Scalar array operation
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = any(array['short', 'nonexistent'])
 ;
 --- QUERY PLAN ---

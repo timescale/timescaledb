@@ -206,7 +206,7 @@ explain (buffers off, costs off)
 select * from corner where c > s;
 
 -- Scalar array operation
-explain (analyze, verbose, costs off, timing off, summary off)
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select * from corner where c = any(array['short', 'nonexistent'])
 ;
 
