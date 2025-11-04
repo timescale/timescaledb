@@ -19,7 +19,6 @@ SELECT table_name FROM create_hypertable( 'conditions_before', 'timec');
     table_name     
 -------------------
  conditions_before
-(1 row)
 
 INSERT INTO conditions_before
 SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 55, 75, 40, 70, NULL, (1,2)::custom_type, 2, true;
@@ -32,7 +31,6 @@ SELECT table_name FROM create_hypertable( 'conditions_after', 'timec');
     table_name    
 ------------------
  conditions_after
-(1 row)
 
 INSERT INTO conditions_after SELECT * FROM conditions_before;
 SELECT
@@ -103,13 +101,11 @@ SELECT count(*) FROM conditions_before;
  count 
 -------
    137
-(1 row)
 
 SELECT count(*) FROM conditions_after;
  count 
 -------
    137
-(1 row)
 
 SELECT  h.schema_name AS "MAT_SCHEMA_NAME",
        h.table_name AS "MAT_TABLE_NAME",
@@ -123,13 +119,11 @@ SELECT count(*) FROM conditions_before;
  count 
 -------
    137
-(1 row)
 
 SELECT count(*) FROM conditions_after;
  count 
 -------
    137
-(1 row)
 
 --dump & restore
 \c postgres :ROLE_SUPERUSER
@@ -143,20 +137,17 @@ SELECT timescaledb_pre_restore();
  timescaledb_pre_restore 
 -------------------------
  t
-(1 row)
 
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
 SELECT timescaledb_post_restore();
  timescaledb_post_restore 
 --------------------------
  t
-(1 row)
 
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
-(1 row)
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SET timezone TO PST8PDT;
@@ -173,20 +164,17 @@ SELECT count(*) FROM mat_after;
  count 
 -------
     16
-(1 row)
 
 --compare results
 SELECT count(*) FROM conditions_before;
  count 
 -------
    137
-(1 row)
 
 SELECT count(*) FROM conditions_after;
  count 
 -------
    137
-(1 row)
 
 \set VIEW_NAME mat_before
 \set QUERY :QUERY_BEFORE
@@ -194,7 +182,6 @@ SELECT count(*) FROM conditions_after;
                           description                          | view_name  | count 
 ---------------------------------------------------------------+------------+-------
  Number of rows different between view and original (expect 0) | mat_before |     0
-(1 row)
 
 \set VIEW_NAME mat_after
 \set QUERY :QUERY_AFTER
@@ -202,7 +189,6 @@ SELECT count(*) FROM conditions_after;
                           description                          | view_name | count 
 ---------------------------------------------------------------+-----------+-------
  Number of rows different between view and original (expect 0) | mat_after |     0
-(1 row)
 
 DROP MATERIALIZED VIEW mat_after;
 NOTICE:  drop cascades to 2 other objects

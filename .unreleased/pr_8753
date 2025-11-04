@@ -1,0 +1,1 @@
+Fixes: #8753 Allow sorts over decompressed index scans for ChunkAppend

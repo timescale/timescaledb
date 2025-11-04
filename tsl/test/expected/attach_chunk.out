@@ -17,7 +17,6 @@ SELECT * FROM create_hypertable('attach_test', 'time', 'id', 2);
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
              1 | public      | attach_test | t
-(1 row)
 
 CREATE TABLE attach_test_ref (
     id int PRIMARY KEY,
@@ -41,7 +40,6 @@ FROM _timescaledb_functions.show_chunk((SELECT show_chunks('attach_test') LIMIT 
  CHUNK_ID | HYPERTABLE_ID |     CHUNK_SCHEMA      |   CHUNK_TABLE    |               CHUNK_NAME               |                                       CHUNK_SLICES                                       
 ----------+---------------+-----------------------+------------------+----------------------------------------+------------------------------------------------------------------------------------------
         1 |             1 | _timescaledb_internal | _hyper_1_1_chunk | _timescaledb_internal._hyper_1_1_chunk | {"id": [-9223372036854775808, 1073741823], "time": [1748476800000000, 1749081600000000]}
-(1 row)
 
 -- Successful attachment
 CREATE TABLE regular_table_to_attach(id int, time timestamptz not null, device int, temp float);
@@ -58,7 +56,6 @@ SELECT count(*) > 0 FROM attach_test WHERE time >= '2025-07-5'::timestamptz;
  ?column? 
 ----------
  t
-(1 row)
 
 -- Check the chunk and related metadata are set up correctly
 SELECT id AS "ATTACHED_CHUNK" FROM _timescaledb_catalog.chunk
@@ -66,14 +63,12 @@ WHERE hypertable_id = :'HYPERTABLE_ID' AND table_name = 'regular_table_to_attach
  ATTACHED_CHUNK 
 ----------------
               4
-(1 row)
 
 -- Verify that each constraint/index on a auto-created chunk is also present on the attached chunk
 SELECT hypertable_constraint_name FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID'
 EXCEPT SELECT hypertable_constraint_name FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'ATTACHED_CHUNK';
  hypertable_constraint_name 
 ----------------------------
-(0 rows)
 
 SELECT * FROM test.show_indexesp('regular_table_to_attach');
           Table          |                    Index                     |  Columns  | Expr | Unique | Primary | Exclusion | Tablespace 
@@ -81,7 +76,6 @@ SELECT * FROM test.show_indexesp('regular_table_to_attach');
  regular_table_to_attach | regular_table_device_idx                     | {device}  |      | f      | f       | f         | 
  regular_table_to_attach | pre_attach_id_time_unique                    | {id,time} |      | t      | f       | f         | 
  regular_table_to_attach | regular_table_to_attach_attach_test_time_idx | {time}    |      | f      | f       | f         | 
-(3 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ds
 JOIN _timescaledb_catalog.chunk_constraint cc ON ds.id = cc.dimension_slice_id
@@ -90,7 +84,6 @@ WHERE cc.chunk_id = :'ATTACHED_CHUNK';
 ----+--------------+----------------------+------------------+----------+--------------------+-----------------+----------------------------
   2 |            2 | -9223372036854775808 |       1073741823 |        4 |                  2 | constraint_2    | 
   6 |            1 |     1751335200000000 | 1751853600000000 |        4 |                  6 | constraint_6    | 
-(2 rows)
 
 -- Verify that the chunk is a child of the hypertable
 SELECT count(*) > 0 FROM pg_inherits
@@ -98,7 +91,6 @@ WHERE inhrelid = 'regular_table_to_attach'::regclass::oid AND inhparent = 'attac
  ?column? 
 ----------
  t
-(1 row)
 
 -- Verify foreign key references work
 SELECT count(*) > 0 FROM pg_constraint
@@ -106,28 +98,24 @@ WHERE contype = 'f' AND confrelid = 'regular_table_to_attach'::regclass::oid;
  ?column? 
 ----------
  t
-(1 row)
 
 SELECT count(*) > 0 FROM pg_constraint
 WHERE contype = 'f' AND conrelid = 'regular_table_to_attach'::regclass::oid;
  ?column? 
 ----------
  t
-(1 row)
 
 -- Verify data is routed to the correct chunk
 SELECT count(*) FROM attach_test WHERE time > '2025-07-01'::timestamptz;
  count 
 -------
      1
-(1 row)
 
 INSERT INTO attach_test VALUES (5, '2025-07-4 05:00:00+3', 2, 19.5);
 SELECT count(*) FROM regular_table_to_attach;
  count 
 -------
      2
-(1 row)
 
 -- Detach and re-attach a chunk
 CALL detach_chunk(:'CHUNK_NAME');
@@ -137,14 +125,12 @@ SELECT chunk_id AS "CHUNK_ID" FROM _timescaledb_functions.show_chunk(:'CHUNK_NAM
  CHUNK_ID 
 ----------
         5
-(1 row)
 
 -- Verify it's re-attached
 SELECT count(*) > 0 FROM pg_inherits WHERE inhrelid = :'CHUNK_NAME'::regclass::oid;
  ?column? 
 ----------
  t
-(1 row)
 
 -- Verify constraints and indexes are restored
 SELECT * FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID';
@@ -154,7 +140,6 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint WHERE chunk_id = :'CHUNK_ID'
         5 |                    | 5_8_attach_test_device_fkey    | attach_test_device_fkey
         5 |                  2 | constraint_2                   | 
         5 |                  7 | constraint_7                   | 
-(4 rows)
 
 SELECT * FROM _timescaledb_catalog.dimension_slice ds
 JOIN _timescaledb_catalog.chunk_constraint cc ON ds.id = cc.dimension_slice_id
@@ -163,7 +148,6 @@ WHERE cc.chunk_id = :'CHUNK_ID';
 ----+--------------+----------------------+------------------+----------+--------------------+-----------------+----------------------------
   2 |            2 | -9223372036854775808 |       1073741823 |        5 |                  2 | constraint_2    | 
   7 |            1 |     1748476800000000 | 1749081600000000 |        5 |                  7 | constraint_7    | 
-(2 rows)
 
 -- Attach a chunk to another hypertable with a different dimension
 CALL detach_chunk('regular_table_to_attach');
@@ -172,7 +156,6 @@ SELECT * FROM create_hypertable('hypertable_with_different_dimension', 'time');
  hypertable_id | schema_name |             table_name              | created 
 ---------------+-------------+-------------------------------------+---------
              2 | public      | hypertable_with_different_dimension | t
-(1 row)
 
 CALL attach_chunk('hypertable_with_different_dimension', 'regular_table_to_attach', '{"time": ["2025-07-01 05:00:00+3", "2025-07-07 05:00:00+3"]}');
 CALL detach_chunk('regular_table_to_attach');
@@ -239,7 +222,6 @@ SELECT count(*) AS "PRE_ROLLBACK_CHUNKS" FROM _timescaledb_catalog.chunk WHERE h
  PRE_ROLLBACK_CHUNKS 
 ---------------------
                    3
-(1 row)
 
 BEGIN;
 CREATE TABLE rollback_test_table(id int, time timestamptz not null, device int, temp float);
@@ -250,7 +232,6 @@ SELECT count(*) = :'PRE_ROLLBACK_CHUNKS' FROM _timescaledb_catalog.chunk WHERE h
  ?column? 
 ----------
  t
-(1 row)
 
 CALL attach_chunk('attach_test', 'regular_table_to_attach', '{"time": ["2025-07-01 05:00:00", "2025-07-07 05:00:00"], "id": [-9223372036854775808, 1073741823]}');
 CALL detach_chunk('regular_table_to_attach');

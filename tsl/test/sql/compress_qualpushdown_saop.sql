@@ -32,7 +32,7 @@ select ts,
     ts % 23 segmentby,
     ts % 29 with_minmax,
     (mix(ts % 1483) * 1483)::int::text with_bloom
-from generate_series(1, 100000) ts;
+from generate_series(0, 100000) ts;
 
 create index on saop(with_bloom);
 

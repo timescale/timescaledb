@@ -172,6 +172,16 @@ bloom1_get_hash_function(Oid type, FmgrInfo **finfo)
 			return bloom1_hash_8;
 
 		case F_HASHINT4EXTENDED:
+#if PG18_GE
+		/*
+		 * PG18 added a custom hashing function for date type.
+		 * For backwards compatibility, we need to continue using
+		 * our own custom function which was used for < PG18.
+		 *
+		 * https://github.com/postgres/postgres/commit/23d0b484
+		 */
+		case F_HASHDATEEXTENDED:
+#endif
 			return bloom1_hash_4;
 	}
 

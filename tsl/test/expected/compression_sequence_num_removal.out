@@ -15,7 +15,6 @@ SELECT * FROM create_hypertable('hyper', 'time', chunk_time_interval => 10);
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | hyper      | t
-(1 row)
 
 -- test case with segmentby
 ALTER TABLE hyper SET (
@@ -30,14 +29,12 @@ SELECT compress_chunk(show_chunks('hyper'));
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 VACUUM ANALYZE hyper;
 -- output without sequence number chunks, should match output with sequence numbers below
 :EXPLAIN SELECT * FROM hyper
 ORDER BY device_id, time;
-                                                                                                                        QUERY PLAN                                                                                                                        
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Merge Append
    Sort Key: hyper.device_id, hyper."time"
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
@@ -68,7 +65,6 @@ ORDER BY device_id, time;
                Sort Key: compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
                      Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-(30 rows)
 
 SELECT * FROM hyper
 ORDER BY device_id, time;
@@ -86,13 +82,11 @@ ORDER BY device_id, time;
    23 |         4 |   3
    11 |         5 |   2
    31 |         5 |   4
-(12 rows)
 
 -- backwards index scan
 :EXPLAIN SELECT * FROM hyper
 ORDER BY device_id DESC, time DESC;
-                                                                                                                        QUERY PLAN                                                                                                                        
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Merge Append
    Sort Key: hyper.device_id DESC, hyper."time" DESC
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
@@ -127,7 +121,6 @@ ORDER BY device_id DESC, time DESC;
                Sort Key: compress_hyper_2_8_chunk.device_id DESC, compress_hyper_2_8_chunk._ts_meta_min_1 DESC, compress_hyper_2_8_chunk._ts_meta_max_1 DESC
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
                      Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-(34 rows)
 
 SELECT * FROM hyper
 ORDER BY device_id DESC, time DESC;
@@ -145,7 +138,6 @@ ORDER BY device_id DESC, time DESC;
     2 |         2 |   1
    30 |         1 |   4
     1 |         1 |   1
-(12 rows)
 
 -- modify two chunks by adding sequence number to the segments
 -- and rebuild the index based on that column
@@ -197,8 +189,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- output with sequence number chunks, should match output without sequence numbers above
 :EXPLAIN SELECT * FROM hyper
 ORDER BY device_id, time;
-                                                                                                                                                QUERY PLAN                                                                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Merge Append
    Sort Key: hyper.device_id, hyper."time"
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
@@ -229,7 +220,6 @@ ORDER BY device_id, time;
                Sort Key: compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
                      Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-(30 rows)
 
 SELECT * FROM hyper
 ORDER BY device_id, time;
@@ -247,13 +237,11 @@ ORDER BY device_id, time;
    23 |         4 |   3
    11 |         5 |   2
    31 |         5 |   4
-(12 rows)
 
 -- backwards index scan
 :EXPLAIN SELECT * FROM hyper
 ORDER BY device_id DESC, time DESC;
-                                                                                                                                                QUERY PLAN                                                                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Merge Append
    Sort Key: hyper.device_id DESC, hyper."time" DESC
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
@@ -288,7 +276,6 @@ ORDER BY device_id DESC, time DESC;
                Sort Key: compress_hyper_2_8_chunk.device_id DESC, compress_hyper_2_8_chunk._ts_meta_min_1 DESC, compress_hyper_2_8_chunk._ts_meta_max_1 DESC
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
                      Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-(34 rows)
 
 SELECT * FROM hyper
 ORDER BY device_id DESC, time DESC;
@@ -306,7 +293,6 @@ ORDER BY device_id DESC, time DESC;
     2 |         2 |   1
    30 |         1 |   4
     1 |         1 |   1
-(12 rows)
 
 -- test recompression which should do a full recompress of the chunk
 -- while dropping sequence numbers
@@ -321,15 +307,13 @@ NOTICE:  chunk "_hyper_1_4_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_1_2_chunk
  _timescaledb_internal._hyper_1_3_chunk
  _timescaledb_internal._hyper_1_4_chunk
-(4 rows)
 
 VACUUM ANALYZE hyper;
 -- removal of sequence numbers from the chunk should be
 -- reflected in this plan
 :EXPLAIN SELECT * FROM hyper
 ORDER BY device_id, time;
-                                                                                                                                                QUERY PLAN                                                                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Merge Append
    Sort Key: hyper.device_id, hyper."time"
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk
@@ -360,7 +344,6 @@ ORDER BY device_id, time;
                Sort Key: compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_8_chunk
                      Output: compress_hyper_2_8_chunk._ts_meta_count, compress_hyper_2_8_chunk.device_id, compress_hyper_2_8_chunk._ts_meta_min_1, compress_hyper_2_8_chunk._ts_meta_max_1, compress_hyper_2_8_chunk."time", compress_hyper_2_8_chunk.val
-(30 rows)
 
 -- test case without segmentby
 TRUNCATE hyper;
@@ -376,13 +359,11 @@ SELECT compress_chunk(show_chunks('hyper'));
  _timescaledb_internal._hyper_1_11_chunk
  _timescaledb_internal._hyper_1_12_chunk
  _timescaledb_internal._hyper_1_13_chunk
-(4 rows)
 
 VACUUM ANALYZE hyper;
 :EXPLAIN SELECT * FROM hyper
 ORDER BY time;
-                                                                                                                           QUERY PLAN                                                                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on public.hyper
    Output: hyper."time", hyper.device_id, hyper.val
    Order: hyper."time"
@@ -416,7 +397,6 @@ ORDER BY time;
                Sort Key: compress_hyper_2_17_chunk._ts_meta_min_1, compress_hyper_2_17_chunk._ts_meta_max_1
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_17_chunk
                      Output: compress_hyper_2_17_chunk._ts_meta_count, compress_hyper_2_17_chunk._ts_meta_min_1, compress_hyper_2_17_chunk._ts_meta_max_1, compress_hyper_2_17_chunk."time", compress_hyper_2_17_chunk.device_id, compress_hyper_2_17_chunk.val
-(33 rows)
 
 -- modify two chunks by adding sequence number to the segments
 SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
@@ -454,8 +434,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- from this point, two chunks should use sequence numbers and the rest will work without them
 :EXPLAIN SELECT * FROM hyper
 ORDER BY time;
-                                                                                                                                                   QUERY PLAN                                                                                                                                                    
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on public.hyper
    Output: hyper."time", hyper.device_id, hyper.val
    Order: hyper."time"
@@ -489,7 +468,6 @@ ORDER BY time;
                Sort Key: compress_hyper_2_17_chunk._ts_meta_sequence_num
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_17_chunk
                      Output: compress_hyper_2_17_chunk._ts_meta_count, compress_hyper_2_17_chunk._ts_meta_min_1, compress_hyper_2_17_chunk._ts_meta_max_1, compress_hyper_2_17_chunk."time", compress_hyper_2_17_chunk.device_id, compress_hyper_2_17_chunk.val, compress_hyper_2_17_chunk._ts_meta_sequence_num
-(33 rows)
 
 -- test rolling up chunks during compression
 -- this will not work with chunks which have sequence numbers
@@ -511,7 +489,6 @@ NOTICE:  chunk "_hyper_1_13_chunk" is already converted to columnstore
  _timescaledb_internal._hyper_1_13_chunk
  _timescaledb_internal._hyper_1_18_chunk
  _timescaledb_internal._hyper_1_18_chunk
-(6 rows)
 
 -- gh issue #7384
 -- modifying compressed chunk OID to over INT32_MAX
@@ -529,7 +506,6 @@ SELECT compress_chunk(show_chunks('hyper'));
  _timescaledb_internal._hyper_1_21_chunk
  _timescaledb_internal._hyper_1_21_chunk
  _timescaledb_internal._hyper_1_21_chunk
-(4 rows)
 
 VACUUM ANALYZE hyper;
 SELECT comp_ch.table_name AS "CHUNK_NAME", comp_ch.schema_name|| '.' || comp_ch.table_name AS "CHUNK_FULL_NAME"
@@ -548,8 +524,7 @@ UPDATE _timescaledb_catalog.compression_settings SET compress_relid = :CHUNK_NEW
 WHERE compress_relid = :CHUNK_OID;
 :EXPLAIN SELECT * FROM hyper
 WHERE device_id = 1 ORDER BY time;
-                                                                                                                        QUERY PLAN                                                                                                                        
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_21_chunk
    Output: _hyper_1_21_chunk."time", _hyper_1_21_chunk.device_id, _hyper_1_21_chunk.val
    ->  Sort
@@ -558,7 +533,6 @@ WHERE device_id = 1 ORDER BY time;
          ->  Seq Scan on _timescaledb_internal.compress_hyper_2_25_chunk
                Output: compress_hyper_2_25_chunk._ts_meta_count, compress_hyper_2_25_chunk.device_id, compress_hyper_2_25_chunk._ts_meta_min_1, compress_hyper_2_25_chunk._ts_meta_max_1, compress_hyper_2_25_chunk."time", compress_hyper_2_25_chunk.val
                Filter: (compress_hyper_2_25_chunk.device_id = 1)
-(8 rows)
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 DROP TABLE hyper;

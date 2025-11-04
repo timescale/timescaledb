@@ -66,6 +66,7 @@ jobs:
           telemetry
           transparent_decompress_chunk-*
           transparent_decompression-*
+          vector_agg_byte
           vector_agg_filter
           vector_agg_groupagg
           vector_agg_grouping
@@ -188,12 +189,15 @@ jobs:
         export LANG=C.UTF-8
         #
         # Even disabling parallel plans the Sort Method on 32bits
-        # is always 'still in progress' for PG17. So for now added
+        # is always 'still in progress' for PG17 and PG18. So for now added
         # those tests to SKIPS.
         #
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         if [ ${PG_MAJOR} -eq 17 ]; then
-          SKIPS="${SKIPS} constraint_exclusion_prepared ordered_append*"
+          SKIPS="${SKIPS} constraint_exclusion_prepared-17 ordered_append*"
+        fi
+        if [ ${PG_MAJOR} -eq 18 ]; then
+          SKIPS="${SKIPS} constraint_exclusion_prepared-18 ordered_append*"
         fi
         # PostgreSQL cannot be run as root. So, switch to postgres user.
         runuser -u postgres -- \

@@ -16,33 +16,33 @@ select count(compress_chunk(x)) from show_chunks('costtab') x;
 vacuum freeze analyze costtab;
 
 
-explain select * from costtab;
+explain (buffers off) select * from costtab;
 
-explain select * from costtab where s = '1';
+explain (buffers off) select * from costtab where s = '1';
 
-explain select * from costtab where c = '100';
+explain (buffers off) select * from costtab where c = '100';
 
-explain select * from costtab where ti = '200';
+explain (buffers off) select * from costtab where ti = '200';
 
-explain select * from costtab where fi = 200;
+explain (buffers off) select * from costtab where fi = 200;
 
-explain select ts from costtab;
+explain (buffers off) select ts from costtab;
 
-explain select ts from costtab where s = '1';
+explain (buffers off) select ts from costtab where s = '1';
 
-explain select ts from costtab where c = '100';
+explain (buffers off) select ts from costtab where c = '100';
 
-explain select ts, s from costtab;
+explain (buffers off) select ts, s from costtab;
 
-explain select ts, s from costtab where s = '1';
+explain (buffers off) select ts, s from costtab where s = '1';
 
-explain select ts, s from costtab where c = '100';
+explain (buffers off) select ts, s from costtab where c = '100';
 
-explain select * from costtab where ts = 5000;
+explain (buffers off) select * from costtab where ts = 5000;
 
-explain select * from costtab where fi = 200 and ts = 5000;
+explain (buffers off) select * from costtab where fi = 200 and ts = 5000;
 
-explain select * from costtab where s = '1' or (fi = 200 and ts = 5000);
+explain (buffers off) select * from costtab where s = '1' or (fi = 200 and ts = 5000);
 
 
 -- Test a high-cardinality orderby column
@@ -52,14 +52,14 @@ insert into highcard select generate_series(1, 1000000);
 select count(compress_chunk(x)) from show_chunks('highcard') x;
 vacuum freeze analyze highcard;
 
-explain (analyze, timing off, summary off)
+explain (buffers off, analyze, timing off, summary off)
 select * from highcard where ts > 200000 and ts < 300000;
 
-explain (analyze, timing off, summary off)
+explain (buffers off, analyze, timing off, summary off)
 select * from highcard where ts = 500000;
 
-explain (analyze, timing off, summary off)
+explain (buffers off, analyze, timing off, summary off)
 select * from highcard where ts < 500000;
 
-explain (analyze, timing off, summary off)
+explain (buffers off, analyze, timing off, summary off)
 select * from highcard where ts > 500000;

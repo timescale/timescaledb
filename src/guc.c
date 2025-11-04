@@ -93,6 +93,7 @@ TSDLLEXPORT bool ts_guc_enable_cagg_sort_pushdown = true;
 #endif
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
+TSDLLEXPORT bool ts_guc_enable_cagg_wal_based_invalidation = false;
 TSDLLEXPORT int ts_guc_cagg_wal_batch_size = 10000;
 TSDLLEXPORT int ts_guc_cagg_low_work_mem = GUC_CAGG_LOW_WORK_MEM_VALUE;
 TSDLLEXPORT int ts_guc_cagg_high_work_mem = GUC_CAGG_HIGH_WORK_MEM_VALUE;
@@ -967,6 +968,19 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_wal_based_invalidation"),
+							 "Enable experimental invalidations for continuous aggregates using "
+							 "WAL",
+							 "Use WAL to track changes to hypertables for continuous aggregates. "
+							 "This is not meant for production use.",
+							 &ts_guc_enable_cagg_wal_based_invalidation,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomIntVariable(MAKE_EXTOPTION("cagg_processing_wal_batch_size"),
 							"Batch size when processing WAL entries.",
 							"Number of entries processed from the WAL at a go. Larger values take "
@@ -1329,7 +1343,7 @@ _guc_init(void)
 							/* show_hook= */ NULL);
 
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
-							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
+							 /* short_desc= */ "require batch sorted merge in ColumnarScan node",
 							 /* long_desc= */ "this is for debugging purposes",
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_batch_sorted_merge,
 							 /* bootValue= */ DRO_Allow,
@@ -1407,7 +1421,7 @@ _guc_init(void)
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_vector_qual"),
 							 /* short_desc= */
 							 "ensure that non-vectorized or vectorized filters are used in "
-							 "DecompressChunk node",
+							 "ColumnarScan node",
 							 /* long_desc= */
 							 "this is for debugging purposes, to let us check if the vectorized "
 							 "quals are used or not. EXPLAIN differs after PG15 for custom nodes, "

@@ -16,7 +16,6 @@ SELECT create_hypertable('uuid_events', 'id', chunk_time_interval => interval '1
     create_hypertable     
 --------------------------
  (1,public,uuid_events,t)
-(1 row)
 
 --
 -- Test that inserting boundary values generates the right constraints
@@ -30,14 +29,12 @@ SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
 ----------------------+------+---------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  1_1_uuid_events_pkey | p    | {id}    | _timescaledb_internal."1_1_uuid_events_pkey" |                                                                                                                | f          | f        | t
  constraint_1         | c    | {id}    | -                                            | ((id >= '00000000-0000-0000-0000-000000000000'::uuid) AND (id < '00000526-5c00-0000-0000-000000000000'::uuid)) | f          | f        | t
-(2 rows)
 
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events ORDER BY id;
         uuid_timestamp        | device | temp 
 ------------------------------+--------+------
  Wed Dec 31 16:00:00 1969 PST |      1 |    1
-(1 row)
 
 -- Update v7 UUID to a v4 UUID that doesn't violate the chunk's range
 -- constraint. Currently we don't prevent this "loophole".
@@ -48,7 +45,6 @@ FROM uuid_events ORDER BY id;
  uuid_timestamp | device | temp 
 ----------------+--------+------
                 |      1 |    1
-(1 row)
 
 -- Update v7 UUID to a v4 that violates the chunk constraint:
 \set ON_ERROR_STOP 0
@@ -65,7 +61,6 @@ SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
 ----------------------+------+---------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------+------------+----------+-----------
  2_2_uuid_events_pkey | p    | {id}    | _timescaledb_internal."2_2_uuid_events_pkey" |                                                                                                                | f          | f        | t
  constraint_2         | c    | {id}    | -                                            | ((id >= '00000000-0000-0000-0000-000000000000'::uuid) AND (id < '00000526-5c00-0000-0000-000000000000'::uuid)) | f          | f        | t
-(2 rows)
 
 ROLLBACK;
 -- First value with max time: ffffffff-ffff-7000-8000-000000000000
@@ -76,7 +71,6 @@ SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
 ----------------------+------+---------+----------------------------------------------+------------------------------------------------------+------------+----------+-----------
  3_3_uuid_events_pkey | p    | {id}    | _timescaledb_internal."3_3_uuid_events_pkey" |                                                      | f          | f        | t
  constraint_3         | c    | {id}    | -                                            | (id >= 'fffffed0-3000-0000-0000-000000000000'::uuid) | f          | f        | t
-(2 rows)
 
 ROLLBACK;
 -- (Max time with min value) + 1
@@ -87,7 +81,6 @@ SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
 ----------------------+------+---------+----------------------------------------------+------------------------------------------------------+------------+----------+-----------
  4_4_uuid_events_pkey | p    | {id}    | _timescaledb_internal."4_4_uuid_events_pkey" |                                                      | f          | f        | t
  constraint_4         | c    | {id}    | -                                            | (id >= 'fffffed0-3000-0000-0000-000000000000'::uuid) | f          | f        | t
-(2 rows)
 
 ROLLBACK;
 -- Last value with max time: ffffffff-ffff-7fff-bfff-ffffffffffff
@@ -98,7 +91,6 @@ SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
 ----------------------+------+---------+----------------------------------------------+------------------------------------------------------+------------+----------+-----------
  5_5_uuid_events_pkey | p    | {id}    | _timescaledb_internal."5_5_uuid_events_pkey" |                                                      | f          | f        | t
  constraint_5         | c    | {id}    | -                                            | (id >= 'fffffed0-3000-0000-0000-000000000000'::uuid) | f          | f        | t
-(2 rows)
 
 ROLLBACK;
 --
@@ -126,7 +118,6 @@ SELECT * FROM show_chunks('uuid_events');
  _timescaledb_internal._hyper_1_6_chunk
  _timescaledb_internal._hyper_1_7_chunk
  _timescaledb_internal._hyper_1_8_chunk
-(3 rows)
 
 SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
       Constraint      | Type | Columns |                    Index                     |                                                      Expr                                                      | Deferrable | Deferred | Validated 
@@ -137,7 +128,6 @@ SELECT (test.show_constraints(ch)).* from show_chunks('uuid_events') ch;
  constraint_7         | c    | {id}    | -                                            | ((id >= '0194244f-d800-0000-0000-000000000000'::uuid) AND (id < '01942976-3400-0000-0000-000000000000'::uuid)) | f          | f        | t
  8_8_uuid_events_pkey | p    | {id}    | _timescaledb_internal."8_8_uuid_events_pkey" |                                                                                                                | f          | f        | t
  constraint_8         | c    | {id}    | -                                            | ((id >= '01942976-3400-0000-0000-000000000000'::uuid) AND (id < '01942e9c-9000-0000-0000-000000000000'::uuid)) | f          | f        | t
-(6 rows)
 
 SELECT id, device, temp FROM uuid_events;
                   id                  | device | temp 
@@ -148,7 +138,6 @@ SELECT id, device, temp FROM uuid_events;
  01942675-2900-7000-8db1-a98694b18785 |      4 |    4
  01942bd2-7380-7000-9bc4-5f97443907b8 |      5 |    5
  01942d52-f900-7000-866e-07d6404d53c1 |      6 |    6
-(6 rows)
 
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events;
@@ -160,7 +149,6 @@ FROM uuid_events;
  Thu Jan 02 02:00:00 2025 PST |      4 |    4
  Fri Jan 03 03:00:00 2025 PST |      5 |    5
  Fri Jan 03 10:00:00 2025 PST |      6 |    6
-(6 rows)
 
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events ORDER BY id;
@@ -172,7 +160,6 @@ FROM uuid_events ORDER BY id;
  Thu Jan 02 02:00:00 2025 PST |      4 |    4
  Fri Jan 03 03:00:00 2025 PST |      5 |    5
  Fri Jan 03 10:00:00 2025 PST |      6 |    6
-(6 rows)
 
 SELECT
     _timescaledb_functions.to_timestamp(range_start) AS range_start,
@@ -186,7 +173,6 @@ WHERE h.table_name = 'uuid_events';
  Tue Dec 31 16:00:00 2024 PST | Wed Jan 01 16:00:00 2025 PST
  Wed Jan 01 16:00:00 2025 PST | Thu Jan 02 16:00:00 2025 PST
  Thu Jan 02 16:00:00 2025 PST | Fri Jan 03 16:00:00 2025 PST
-(3 rows)
 
 SELECT
     _timescaledb_functions.to_timestamp(range_start) AS chunk_range_start,
@@ -201,20 +187,17 @@ SELECT :'chunk_range_start',  to_uuidv7_boundary(:'chunk_range_start');
            ?column?           |          to_uuidv7_boundary          
 ------------------------------+--------------------------------------
  Wed Jan 01 16:00:00 2025 PST | 0194244f-d800-7000-8000-000000000000
-(1 row)
 
 -- Exclude all but one chunk
 EXPLAIN (verbose, buffers off, costs off, timing off)
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
-                                          QUERY PLAN                                           
------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result
    Output: uuid_timestamp(_hyper_1_6_chunk.id), _hyper_1_6_chunk.device, _hyper_1_6_chunk.temp
    ->  Index Scan using "6_6_uuid_events_pkey" on _timescaledb_internal._hyper_1_6_chunk
          Output: _hyper_1_6_chunk.id, _hyper_1_6_chunk.device, _hyper_1_6_chunk.temp
          Index Cond: (_hyper_1_6_chunk.id < '0194244f-d800-7000-8000-000000000000'::uuid)
-(5 rows)
 
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
@@ -222,15 +205,13 @@ FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_start');
 ------------------------------+--------+------
  Wed Jan 01 01:00:00 2025 PST |      1 |    1
  Wed Jan 01 02:00:00 2025 PST |      2 |    2
-(2 rows)
 
 -- Exclude only one chunk. Add ordering (DESC)
 EXPLAIN (verbose, buffers off, costs off, timing off)
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 ORDER BY id DESC;
-                                               QUERY PLAN                                               
---------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result
    Output: uuid_timestamp(uuid_events.id), uuid_events.device, uuid_events.temp, uuid_events.id
    ->  Custom Scan (ChunkAppend) on public.uuid_events
@@ -244,7 +225,6 @@ ORDER BY id DESC;
          ->  Index Scan Backward using "6_6_uuid_events_pkey" on _timescaledb_internal._hyper_1_6_chunk
                Output: _hyper_1_6_chunk.id, _hyper_1_6_chunk.device, _hyper_1_6_chunk.temp
                Index Cond: (_hyper_1_6_chunk.id < '01942976-3400-7000-8000-000000000000'::uuid)
-(13 rows)
 
 SELECT uuid_timestamp(id), device, temp
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
@@ -255,13 +235,99 @@ ORDER BY id DESC;
  Thu Jan 02 01:00:00 2025 PST |      3 |    3
  Wed Jan 01 02:00:00 2025 PST |      2 |    2
  Wed Jan 01 01:00:00 2025 PST |      1 |    1
-(4 rows)
+
+CREATE VIEW chunk_ranges AS
+SELECT
+  chunk_name,
+  _timescaledb_functions.to_timestamp(range_start_integer) AS range_start,
+  _timescaledb_functions.to_timestamp(range_end_integer) AS range_end
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'uuid_events';
+SELECT * FROM chunk_ranges;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_6_chunk | Tue Dec 31 16:00:00 2024 PST | Wed Jan 01 16:00:00 2025 PST
+ _hyper_1_7_chunk | Wed Jan 01 16:00:00 2025 PST | Thu Jan 02 16:00:00 2025 PST
+ _hyper_1_8_chunk | Thu Jan 02 16:00:00 2025 PST | Fri Jan 03 16:00:00 2025 PST
+
+SELECT show_chunks('uuid_events', older_than => INTERVAL '1 day');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_6_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
+
+SELECT show_chunks('uuid_events', older_than => '2025-01-02');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_6_chunk
+
+SELECT show_chunks('uuid_events', newer_than => '2025-01-02');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_8_chunk
+
+SELECT drop_chunks('uuid_events', older_than => '2025-01-02');
+              drop_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_6_chunk
+
+SELECT show_chunks('uuid_events');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_8_chunk
 
 -- Insert non-v7 UUIDs
 \set ON_ERROR_STOP 0
 INSERT INTO uuid_events SELECT 'a8961135-cd89-4c4b-aa05-79df642407dd', 5, 5.0;
 ERROR:  a8961135-cd89-4c4b-aa05-79df642407dd is not a version 7 UUID
 \set ON_ERROR_STOP 1
+-- Insert as v7 UUID and later change to non-v7 to show effect on show_chunks()
+-- and drop_chunks()
+INSERT INTO uuid_events SELECT 'a8961135-cd89-7000-aa05-79df642407dd', 5, 5.0;
+SELECT * FROM chunk_ranges;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_7_chunk | Wed Jan 01 16:00:00 2025 PST | Thu Jan 02 16:00:00 2025 PST
+ _hyper_1_8_chunk | Thu Jan 02 16:00:00 2025 PST | Fri Jan 03 16:00:00 2025 PST
+ _hyper_1_9_chunk | Sun Nov 26 16:00:00 7843 PST | Mon Nov 27 16:00:00 7843 PST
+
+UPDATE uuid_events
+SET id = 'a8961135-cd89-4c4b-aa05-79df642407dd'
+WHERE id = 'a8961135-cd89-7000-aa05-79df642407dd';
+SELECT show_chunks('uuid_events', newer_than => '2025-01-02');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_8_chunk
+ _timescaledb_internal._hyper_1_9_chunk
+
+SELECT drop_chunks('uuid_events', newer_than => '2025-01-02');
+              drop_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_8_chunk
+ _timescaledb_internal._hyper_1_9_chunk
+
+SELECT * FROM chunk_ranges;
+    chunk_name    |         range_start          |          range_end           
+------------------+------------------------------+------------------------------
+ _hyper_1_7_chunk | Wed Jan 01 16:00:00 2025 PST | Thu Jan 02 16:00:00 2025 PST
+
+INSERT INTO uuid_events SELECT to_uuidv7(now()), 6, 6.0;
+SELECT show_chunks('uuid_events', newer_than => INTERVAL '2 months');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_1_10_chunk
+
+SELECT drop_chunks('uuid_events', newer_than => INTERVAL '2 months');
+               drop_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_1_10_chunk
+
+SELECT show_chunks('uuid_events', newer_than => INTERVAL '2 months');
+ show_chunks 
+-------------
+
 DROP TABLE uuid_events;
 BEGIN;
 -- Test UUID partition when using CREATE TABLE ... WITH
@@ -285,7 +351,6 @@ WHERE h.table_name='events';
  hours 
 -------
      2
-(1 row)
 
 ROLLBACK;
 -- Test a different interval
@@ -310,7 +375,6 @@ WHERE h.table_name='events';
  days 
 ------
    60
-(1 row)
 
 ROLLBACK;
 -- Verify same behavior without CREATE TABLE WITH:
@@ -329,7 +393,6 @@ WARNING:  column type "character varying" used for "event_type" does not follow 
   create_hypertable  
 ---------------------
  (4,public,events,t)
-(1 row)
 
 -- Verify that the chunk time interval is two hours
 SELECT ((interval_length/1000000)/60)/60 AS hours
@@ -338,7 +401,6 @@ WHERE h.table_name='events';
  hours 
 -------
      2
-(1 row)
 
 ROLLBACK;
 BEGIN;
@@ -356,7 +418,6 @@ WARNING:  column type "character varying" used for "event_type" does not follow 
   create_hypertable  
 ---------------------
  (5,public,events,t)
-(1 row)
 
 -- Verify that the chunk time interval is two hours
 SELECT (((interval_length/1000000)/60)/60)/24 AS days
@@ -365,6 +426,5 @@ WHERE h.table_name='events';
  days 
 ------
    60
-(1 row)
 
 ROLLBACK;

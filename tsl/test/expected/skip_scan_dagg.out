@@ -28,7 +28,6 @@ SELECT create_hypertable('skip_scan_ht', 'time', chunk_time_interval => 250, cre
      create_hypertable     
 ---------------------------
  (1,public,skip_scan_ht,t)
-(1 row)
 
 INSERT INTO skip_scan_ht(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
 ALTER TABLE skip_scan_ht DROP COLUMN f1;
@@ -46,7 +45,6 @@ SELECT create_hypertable('skip_scan_htc', 'time', chunk_time_interval => 250, cr
      create_hypertable      
 ----------------------------
  (3,public,skip_scan_htc,t)
-(1 row)
 
 ALTER TABLE skip_scan_htc SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htc(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -84,7 +82,6 @@ SELECT create_hypertable('skip_scan_htcl', 'time', chunk_time_interval => 250, c
       create_hypertable      
 -----------------------------
  (5,public,skip_scan_htcl,t)
-(1 row)
 
 ALTER TABLE skip_scan_htcl SET (timescaledb.compress, timescaledb.compress_orderby='time desc', timescaledb.compress_segmentby='dev');
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(0, 249) t, generate_series(1, 10) d;
@@ -93,7 +90,6 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch;
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_5_9_chunk
-(1 row)
 
 ALTER TABLE skip_scan_htcl DROP COLUMN f1;
 INSERT INTO skip_scan_htcl(time,dev,dev_name,val) SELECT t, d, 'device_' || d::text, random() FROM generate_series(250, 499) t, generate_series(1, 10) d;
@@ -110,7 +106,6 @@ SELECT compress_chunk(ch) FROM show_chunks('skip_scan_htcl') ch order by 1 desc 
  _timescaledb_internal._hyper_5_13_chunk
  _timescaledb_internal._hyper_5_12_chunk
  _timescaledb_internal._hyper_5_11_chunk
-(3 rows)
 
 ANALYZE skip_scan_htcl;
 -- adjust statistics so we get skipscan plans
@@ -517,7 +512,6 @@ RESET timescaledb.enable_skipscan_for_distinct_aggregates;
  ----------------------
 - off
 + on
- (1 row)
  
   count 
 -- run tests on hypertable and diff results
@@ -918,7 +912,6 @@ RESET timescaledb.enable_skipscan_for_distinct_aggregates;
  ----------------------
 - off
 + on
- (1 row)
  
   count 
 -- run tests on compressed hypertable and diff results
@@ -1342,7 +1335,6 @@ RESET timescaledb.enable_compressed_skipscan;
  ----------------------------
 - off
 + on
- (1 row)
  
               compress_chunk             
 -- run tests on compressed hypertable with different layouts of compressed chunks
@@ -1586,6 +1578,5 @@ RESET timescaledb.enable_compressed_skipscan;
  ----------------------------
 - off
 + on
- (1 row)
  
   count 

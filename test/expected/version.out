@@ -6,5 +6,4 @@ select pg_typeof(sysname) AS sysname_type,pg_typeof(version) AS version_type,pg_
  sysname_type | version_type | release_type 
 --------------+--------------+--------------
  text         | text         | text
-(1 row)
 

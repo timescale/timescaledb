@@ -14,7 +14,6 @@
 /* see postgres commit ab5e9caa4a3ec4765348a0482e88edcf3f6aab4a */
 
 #include <postgres.h>
-#include "utils.h"
 #include <access/amapi.h>
 #include <access/multixact.h>
 #include <access/relscan.h>
@@ -42,6 +41,7 @@
 #include <optimizer/planner.h>
 #include <storage/bufmgr.h>
 #include <storage/lmgr.h>
+#include <storage/lockdefs.h>
 #include <storage/predicate.h>
 #include <storage/smgr.h>
 #include <tcop/tcopprot.h>
@@ -58,14 +58,12 @@
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
 
-#include "compat/compat.h"
 #include <access/toast_internals.h>
 
-#include "annotations.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "debug_assert.h"
 #include "hypertable_cache.h"
+#include "import/heapswap.h"
 #include "indexing.h"
 #include "reorder.h"
 
@@ -79,13 +77,6 @@ static void rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid w
 static void copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 						   bool *pSwapToastByContent, TransactionId *pFreezeXid,
 						   MultiXactId *pCutoffMulti);
-
-static void finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids,
-							  List *new_index_oids, bool swap_toast_by_content, bool is_internal,
-							  TransactionId frozenXid, MultiXactId cutoffMulti, Oid wait_id);
-
-static void swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal,
-								TransactionId frozenXid, MultiXactId cutoffMulti);
 
 static Oid chunk_get_reorder_index(Hypertable *ht, Chunk *chunk, Oid index_relid);
 
@@ -479,6 +470,100 @@ reorder_rel(Oid tableOid, Oid indexOid, bool verbose, Oid wait_id, Oid destinati
 	/* NB: rebuild_relation does table_close() on OldHeap */
 }
 
+static void
+reorder_finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, char relpersistence, List *old_index_oids,
+						  List *new_index_oids, bool swap_toast_by_content, bool is_internal,
+						  TransactionId frozenXid, MultiXactId cutoffMulti, Oid wait_id)
+{
+	ListCell *old_index_cell;
+	ListCell *new_index_cell;
+	Oid mapped_tables[4];
+	int config_change;
+
+#ifdef DEBUG
+
+	/*
+	 * For debug purposes we serialize against wait_id if it exists, this
+	 * allows us to "pause" reorder immediately before swapping in the new
+	 * table
+	 */
+	if (OidIsValid(wait_id))
+	{
+		Relation waiter = table_open(wait_id, AccessExclusiveLock);
+
+		table_close(waiter, AccessExclusiveLock);
+	}
+#endif
+
+	/*
+	 * There's a risk of deadlock if some other process is also trying to
+	 * upgrade their lock in the same manner as us, at this time. Since our
+	 * transaction has performed a large amount of work, and only needs to be
+	 * run once per chunk, we do not want to abort it due to this deadlock. To
+	 * prevent abort we set our `deadlock_timeout` to a large value in the
+	 * expectation that the other process will timeout and abort first.
+	 * Currently we set `deadlock_timeout` to 1 hour, as this should be longer
+	 * than any other normal process, while still allowing the system to make
+	 * progress in the event of a real deadlock. As this is the last lock we
+	 * grab, and the setting is local to our transaction we do not bother
+	 * changing the guc back.
+	 */
+	config_change = set_config_option("deadlock_timeout",
+									  REORDER_ACCESS_EXCLUSIVE_DEADLOCK_TIMEOUT,
+									  PGC_SUSET,
+									  PGC_S_SESSION,
+									  GUC_ACTION_LOCAL,
+									  true,
+									  0,
+									  false);
+
+	if (config_change == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("deadlock_timeout guc does not exist.")));
+	else if (config_change < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("could not set deadlock_timeout guc.")));
+
+	/* Upgrade to an AccessExclusiveLock for the heap swap */
+	LockRelationOid(OIDOldHeap, AccessExclusiveLock);
+
+	/* Swap the contents of the indexes */
+	Assert(list_length(old_index_oids) == list_length(new_index_oids));
+	forboth (old_index_cell, old_index_oids, new_index_cell, new_index_oids)
+	{
+		Oid old_index_oid = lfirst_oid(old_index_cell);
+		Oid new_index_oid = lfirst_oid(new_index_cell);
+
+		ts_swap_relation_files(old_index_oid,
+							   new_index_oid,
+							   false,
+							   swap_toast_by_content,
+							   true,
+							   frozenXid,
+							   cutoffMulti,
+							   mapped_tables);
+	}
+
+	/* Old indexes must be visible for deletion */
+	CommandCounterIncrement();
+
+	/*
+	 * Swap the physical files of the target and transient tables, then
+	 * rebuild the target's indexes and throw away the transient table.
+	 */
+	ts_finish_heap_swap(OIDOldHeap,
+						OIDNewHeap,
+						false,
+						swap_toast_by_content,
+						true,
+						true,
+						true,
+						frozenXid,
+						cutoffMulti,
+						relpersistence);
+}
 /*
  * rebuild_relation: rebuild an existing relation in index or physical order
  *
@@ -528,19 +613,16 @@ rebuild_relation(Relation OldHeap, Oid indexOid, bool verbose, Oid wait_id,
 	new_index_oids =
 		ts_chunk_index_duplicate(tableOid, OIDNewHeap, &old_index_oids, index_tablespace);
 
-	/*
-	 * Swap the physical files of the target and transient tables, then
-	 * rebuild the target's indexes and throw away the transient table.
-	 */
-	finish_heap_swaps(tableOid,
-					  OIDNewHeap,
-					  old_index_oids,
-					  new_index_oids,
-					  swap_toast_by_content,
-					  true,
-					  frozenXid,
-					  cutoffMulti,
-					  wait_id);
+	reorder_finish_heap_swaps(tableOid,
+							  OIDNewHeap,
+							  relpersistence,
+							  old_index_oids,
+							  new_index_oids,
+							  swap_toast_by_content,
+							  true,
+							  frozenXid,
+							  cutoffMulti,
+							  wait_id);
 }
 
 /*
@@ -772,418 +854,4 @@ copy_heap_data(Oid OIDNewHeap, Oid OIDOldHeap, Oid OIDOldIndex, bool verbose,
 
 	/* Make the update visible */
 	CommandCounterIncrement();
-}
-
-/*
- * Remove the transient table that was built by make_new_heap, and finish
- * cleaning up (including rebuilding all indexes on the old heap).
- *
- * NB: new_index_oids must be in the same order as RelationGetIndexList
- *
- */
-static void
-finish_heap_swaps(Oid OIDOldHeap, Oid OIDNewHeap, List *old_index_oids, List *new_index_oids,
-				  bool swap_toast_by_content, bool is_internal, TransactionId frozenXid,
-				  MultiXactId cutoffMulti, Oid wait_id)
-{
-	ObjectAddress object;
-	Relation oldHeapRel;
-	ListCell *old_index_cell;
-	ListCell *new_index_cell;
-	int config_change;
-
-#ifdef DEBUG
-
-	/*
-	 * For debug purposes we serialize against wait_id if it exists, this
-	 * allows us to "pause" reorder immediately before swapping in the new
-	 * table
-	 */
-	if (OidIsValid(wait_id))
-	{
-		Relation waiter = table_open(wait_id, AccessExclusiveLock);
-
-		table_close(waiter, AccessExclusiveLock);
-	}
-#endif
-
-	/*
-	 * There's a risk of deadlock if some other process is also trying to
-	 * upgrade their lock in the same manner as us, at this time. Since our
-	 * transaction has performed a large amount of work, and only needs to be
-	 * run once per chunk, we do not want to abort it due to this deadlock. To
-	 * prevent abort we set our `deadlock_timeout` to a large value in the
-	 * expectation that the other process will timeout and abort first.
-	 * Currently we set `deadlock_timeout` to 1 hour, as this should be longer
-	 * than any other normal process, while still allowing the system to make
-	 * progress in the event of a real deadlock. As this is the last lock we
-	 * grab, and the setting is local to our transaction we do not bother
-	 * changing the guc back.
-	 */
-	config_change = set_config_option("deadlock_timeout",
-									  REORDER_ACCESS_EXCLUSIVE_DEADLOCK_TIMEOUT,
-									  PGC_SUSET,
-									  PGC_S_SESSION,
-									  GUC_ACTION_LOCAL,
-									  true,
-									  0,
-									  false);
-
-	if (config_change == 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("deadlock_timeout guc does not exist.")));
-	else if (config_change < 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("could not set deadlock_timeout guc.")));
-
-	oldHeapRel = table_open(OIDOldHeap, AccessExclusiveLock);
-
-	/*
-	 * All predicate locks on the tuples or pages are about to be made
-	 * invalid, because we move tuples around.  Promote them to relation
-	 * locks.  Predicate locks on indexes will be promoted when they are
-	 * reindexed.
-	 */
-	TransferPredicateLocksToHeapRelation(oldHeapRel);
-
-	/*
-	 * Swap the contents of the heap relations (including any toast tables).
-	 * Also set old heap's relfrozenxid to frozenXid.
-	 */
-	swap_relation_files(OIDOldHeap,
-						OIDNewHeap,
-						swap_toast_by_content,
-						is_internal,
-						frozenXid,
-						cutoffMulti);
-
-	/* Swap the contents of the indexes */
-	Assert(list_length(old_index_oids) == list_length(new_index_oids));
-	forboth (old_index_cell, old_index_oids, new_index_cell, new_index_oids)
-	{
-		Oid old_index_oid = lfirst_oid(old_index_cell);
-		Oid new_index_oid = lfirst_oid(new_index_cell);
-
-		swap_relation_files(old_index_oid,
-							new_index_oid,
-							swap_toast_by_content,
-							true,
-							frozenXid,
-							cutoffMulti);
-	}
-	table_close(oldHeapRel, NoLock);
-
-	CommandCounterIncrement();
-
-	/* Destroy new heap with old filenode */
-	object.classId = RelationRelationId;
-	object.objectId = OIDNewHeap;
-	object.objectSubId = 0;
-
-	/*
-	 * The new relation is local to our transaction and we know nothing
-	 * depends on it, so DROP_RESTRICT should be OK.
-	 */
-	performDeletion(&object, DROP_RESTRICT, PERFORM_DELETION_INTERNAL);
-
-	/* performDeletion does CommandCounterIncrement at end */
-
-	/*
-	 * At this point, everything is kosher except that, if we did toast swap
-	 * by links, the toast table's name corresponds to the transient table.
-	 * The name is irrelevant to the backend because it's referenced by OID,
-	 * but users looking at the catalogs could be confused.  Rename it to
-	 * prevent this problem.
-	 *
-	 * Note no lock required on the relation, because we already hold an
-	 * exclusive lock on it.
-	 */
-	if (!swap_toast_by_content)
-	{
-		Relation newrel;
-
-		newrel = table_open(OIDOldHeap, NoLock);
-		if (OidIsValid(newrel->rd_rel->reltoastrelid))
-		{
-			Oid toastidx;
-			char NewToastName[NAMEDATALEN];
-
-			/* Get the associated valid index to be renamed */
-			toastidx = toast_get_valid_index(newrel->rd_rel->reltoastrelid, AccessShareLock);
-
-			/* rename the toast table ... */
-			snprintf(NewToastName, NAMEDATALEN, "pg_toast_%u", OIDOldHeap);
-			RenameRelationInternal(newrel->rd_rel->reltoastrelid, NewToastName, true, false);
-
-			/* ... and its valid index too. */
-			snprintf(NewToastName, NAMEDATALEN, "pg_toast_%u_index", OIDOldHeap);
-
-			RenameRelationInternal(toastidx, NewToastName, true, true);
-		}
-		table_close(newrel, NoLock);
-	}
-
-	/* it's not a catalog table, clear any missing attribute settings */
-	{
-		Relation newrel;
-
-		newrel = table_open(OIDOldHeap, NoLock);
-		RelationClearMissing(newrel);
-		table_close(newrel, NoLock);
-	}
-}
-
-/*
- * Swap the physical files of two given relations.
- *
- * We swap the physical identity (reltablespace, relfilenode) while keeping the
- * same logical identities of the two relations.  relpersistence is also
- * swapped, which is critical since it determines where buffers live for each
- * relation.
- *
- * We can swap associated TOAST data in either of two ways: recursively swap
- * the physical content of the toast tables (and their indexes), or swap the
- * TOAST links in the given relations' pg_class entries. The latter is the only
- * way to handle cases in which a toast table is added or removed altogether.
- *
- * Additionally, the first relation is marked with relfrozenxid set to
- * frozenXid.  It seems a bit ugly to have this here, but the caller would
- * have to do it anyway, so having it here saves a heap_update.  Note: in
- * the swap-toast-links case, we assume we don't need to change the toast
- * table's relfrozenxid: the new version of the toast table should already
- * have relfrozenxid set to RecentXmin, which is good enough.
- *
- */
-static void
-swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal,
-					TransactionId frozenXid, MultiXactId cutoffMulti)
-{
-	Relation relRelation;
-	HeapTuple reltup1, reltup2;
-	Form_pg_class relform1, relform2;
-	Oid relfilenode1, relfilenode2;
-	Oid swaptemp;
-	char swptmpchr;
-
-	/* We need writable copies of both pg_class tuples. */
-	relRelation = table_open(RelationRelationId, RowExclusiveLock);
-
-	reltup1 = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(r1));
-	if (!HeapTupleIsValid(reltup1))
-		elog(ERROR, "cache lookup failed for relation %u", r1);
-	relform1 = (Form_pg_class) GETSTRUCT(reltup1);
-
-	reltup2 = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(r2));
-	if (!HeapTupleIsValid(reltup2))
-		elog(ERROR, "cache lookup failed for relation %u", r2);
-	relform2 = (Form_pg_class) GETSTRUCT(reltup2);
-
-	relfilenode1 = relform1->relfilenode;
-	relfilenode2 = relform2->relfilenode;
-
-	if (!OidIsValid(relfilenode1) || !OidIsValid(relfilenode2))
-		elog(ERROR, "cannot reorder mapped relation \"%s\".", NameStr(relform1->relname));
-
-	/* swap relfilenodes, reltablespaces, relpersistence */
-
-	swaptemp = relform1->relfilenode;
-	relform1->relfilenode = relform2->relfilenode;
-	relform2->relfilenode = swaptemp;
-
-	swaptemp = relform1->reltablespace;
-	relform1->reltablespace = relform2->reltablespace;
-	relform2->reltablespace = swaptemp;
-
-	swptmpchr = relform1->relpersistence;
-	relform1->relpersistence = relform2->relpersistence;
-	relform2->relpersistence = swptmpchr;
-
-	/* Also swap toast links, if we're swapping by links */
-	if (!swap_toast_by_content)
-	{
-		swaptemp = relform1->reltoastrelid;
-		relform1->reltoastrelid = relform2->reltoastrelid;
-		relform2->reltoastrelid = swaptemp;
-	}
-
-	/* set rel1's frozen Xid and minimum MultiXid */
-	if (relform1->relkind != RELKIND_INDEX)
-	{
-		Assert(TransactionIdIsNormal(frozenXid));
-		relform1->relfrozenxid = frozenXid;
-		Assert(MultiXactIdIsValid(cutoffMulti));
-		relform1->relminmxid = cutoffMulti;
-	}
-
-	/* swap size statistics too, since new rel has freshly-updated stats */
-	{
-		int32 swap_pages;
-		float4 swap_tuples;
-		int32 swap_allvisible;
-
-		swap_pages = relform1->relpages;
-		relform1->relpages = relform2->relpages;
-		relform2->relpages = swap_pages;
-
-		swap_tuples = relform1->reltuples;
-		relform1->reltuples = relform2->reltuples;
-		relform2->reltuples = swap_tuples;
-
-		swap_allvisible = relform1->relallvisible;
-		relform1->relallvisible = relform2->relallvisible;
-		relform2->relallvisible = swap_allvisible;
-	}
-
-	/* Update the tuples in pg_class. */
-	{
-		CatalogIndexState indstate;
-		indstate = CatalogOpenIndexes(relRelation);
-		CatalogTupleUpdateWithInfo(relRelation, &reltup1->t_self, reltup1, indstate);
-		CatalogTupleUpdateWithInfo(relRelation, &reltup2->t_self, reltup2, indstate);
-		CatalogCloseIndexes(indstate);
-	}
-
-	/*
-	 * Post alter hook for modified relations. The change to r2 is always
-	 * internal, but r1 depends on the invocation context.
-	 */
-	InvokeObjectPostAlterHookArg(RelationRelationId, r1, 0, InvalidOid, is_internal);
-	InvokeObjectPostAlterHookArg(RelationRelationId, r2, 0, InvalidOid, true);
-
-	/*
-	 * If we have toast tables associated with the relations being swapped,
-	 * deal with them too.
-	 */
-	if (relform1->reltoastrelid || relform2->reltoastrelid)
-	{
-		if (swap_toast_by_content)
-		{
-			if (relform1->reltoastrelid && relform2->reltoastrelid)
-			{
-				/* Recursively swap the contents of the toast tables */
-				swap_relation_files(relform1->reltoastrelid,
-									relform2->reltoastrelid,
-									swap_toast_by_content,
-									is_internal,
-									frozenXid,
-									cutoffMulti);
-			}
-			else
-			{
-				/* caller messed up */
-				elog(ERROR, "cannot swap toast files by content when there's only one");
-			}
-		}
-		else
-		{
-			/*
-			 * We swapped the ownership links, so we need to change dependency
-			 * data to match.
-			 *
-			 * NOTE: it is possible that only one table has a toast table.
-			 *
-			 * NOTE: at present, a TOAST table's only dependency is the one on
-			 * its owning table.  If more are ever created, we'd need to use
-			 * something more selective than deleteDependencyRecordsFor() to
-			 * get rid of just the link we want.
-			 */
-			ObjectAddress baseobject, toastobject;
-			long count;
-
-			/*
-			 * The original code disallowed this case for system catalogs. We
-			 * don't allow reordering system catalogs, but Assert anyway
-			 */
-			Assert(!IsSystemClass(r1, relform1));
-
-			/* Delete old dependencies */
-			if (relform1->reltoastrelid)
-			{
-				count =
-					deleteDependencyRecordsFor(RelationRelationId, relform1->reltoastrelid, false);
-				if (count != 1)
-					elog(ERROR, "expected one dependency record for TOAST table, found %ld", count);
-			}
-			if (relform2->reltoastrelid)
-			{
-				count =
-					deleteDependencyRecordsFor(RelationRelationId, relform2->reltoastrelid, false);
-				if (count != 1)
-					elog(ERROR, "expected one dependency record for TOAST table, found %ld", count);
-			}
-
-			/* Register new dependencies */
-			baseobject.classId = RelationRelationId;
-			baseobject.objectSubId = 0;
-			toastobject.classId = RelationRelationId;
-			toastobject.objectSubId = 0;
-
-			if (relform1->reltoastrelid)
-			{
-				baseobject.objectId = r1;
-				toastobject.objectId = relform1->reltoastrelid;
-				recordDependencyOn(&toastobject, &baseobject, DEPENDENCY_INTERNAL);
-			}
-
-			if (relform2->reltoastrelid)
-			{
-				baseobject.objectId = r2;
-				toastobject.objectId = relform2->reltoastrelid;
-				recordDependencyOn(&toastobject, &baseobject, DEPENDENCY_INTERNAL);
-			}
-		}
-	}
-
-	/*
-	 * If we're swapping two toast tables by content, do the same for their
-	 * valid index. The swap can actually be safely done only if the relations
-	 * have indexes.
-	 */
-	if (swap_toast_by_content && relform1->relkind == RELKIND_TOASTVALUE &&
-		relform2->relkind == RELKIND_TOASTVALUE)
-	{
-		Oid toastIndex1, toastIndex2;
-
-		/* Get valid index for each relation */
-		toastIndex1 = toast_get_valid_index(r1, AccessExclusiveLock);
-		toastIndex2 = toast_get_valid_index(r2, AccessExclusiveLock);
-
-		swap_relation_files(toastIndex1,
-							toastIndex2,
-							swap_toast_by_content,
-							is_internal,
-							InvalidTransactionId,
-							InvalidMultiXactId);
-	}
-
-	/* Clean up. */
-	heap_freetuple(reltup1);
-	heap_freetuple(reltup2);
-
-	table_close(relRelation, RowExclusiveLock);
-
-	/*
-	 * Close both relcache entries' smgr links.  We need this kludge because
-	 * both links will be invalidated during upcoming CommandCounterIncrement.
-	 * Whichever of the rels is the second to be cleared will have a dangling
-	 * reference to the other's smgr entry.  Rather than trying to avoid this
-	 * by ordering operations just so, it's easiest to close the links first.
-	 * (Fortunately, since one of the entries is local in our transaction,
-	 * it's sufficient to clear out our own relcache this way; the problem
-	 * cannot arise for other backends when they see our update on the
-	 * non-transient relation.)
-	 *
-	 * Caution: the placement of this step interacts with the decision to
-	 * handle toast rels by recursion.  When we are trying to rebuild pg_class
-	 * itself, the smgr close on pg_class must happen after all accesses in
-	 * this function.
-	 */
-
-#if PG17_LT
-	/* Not needed as of 21d9c3ee4ef7 in the upstream */
-	RelationCloseSmgrByOid(r1);
-	RelationCloseSmgrByOid(r2);
-#endif
 }

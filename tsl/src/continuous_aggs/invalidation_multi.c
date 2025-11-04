@@ -155,9 +155,6 @@ multi_invalidation_hypertable_entry_init(MultiInvalidationState *state,
 	const Dimension *const dim = hyperspace_get_open_dimension(ht->space, 0);
 	ListCell *lc;
 
-	Ensure(!OidIsValid(get_trigger_oid(ht->main_table_relid, CAGGINVAL_TRIGGER_NAME, true)),
-		   "hypertable has invalidation trigger, which was not expected");
-
 	entry->hypertable_id = hypertable_id;
 	entry->dimtype = ts_dimension_get_partition_type(dim);
 	entry->caggs = NIL;

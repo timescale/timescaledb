@@ -8,7 +8,6 @@ select create_hypertable('longstr', 'ts');
   create_hypertable   
 ----------------------
  (1,public,longstr,t)
-(1 row)
 
 alter table longstr set (timescaledb.compress);
 -- We want to test the case for inline compression. It is technically possible,
@@ -31,12 +30,10 @@ select sum(t) from generate_series(1, 30) x, lateral test(x * x * x, false) t;
   sum   
 --------
  864900
-(1 row)
 
 -- Also test decompression which uses the detoaster as well.
 select sum(t) from generate_series(1, 30) x, lateral test(x * x * x, true) t;
   sum   
 --------
  864900
-(1 row)
 

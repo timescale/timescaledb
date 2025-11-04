@@ -4,7 +4,6 @@ starting permutation: s2_begin s2_insert s2_count s1_retention s2_commit
 expected_count
 --------------
              4
-(1 row)
 
 step s2_begin: 
     BEGIN;
@@ -21,7 +20,6 @@ step s2_count:
 s2_count
 --------
       10
-(1 row)
 
 step s1_retention: 
     CALL run_job(3);
@@ -34,14 +32,12 @@ step s1_retention: <... completed>
 s1_count
 --------
        5
-(1 row)
 
 
 starting permutation: s2_lock_table s1_retention s2_unlock_table
 expected_count
 --------------
              4
-(1 row)
 
 step s2_lock_table: 
     BEGIN;
@@ -58,5 +54,4 @@ step s1_retention: <... completed>
 s1_count
 --------
        4
-(1 row)
 

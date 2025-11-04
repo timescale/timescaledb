@@ -7,7 +7,6 @@ select create_hypertable('cdmlcopy', 'ts', chunk_time_interval => 1000);
    create_hypertable   
 -----------------------
  (1,public,cdmlcopy,t)
-(1 row)
 
 alter table cdmlcopy add unique (metric, ts);
 alter table cdmlcopy set (timescaledb.compress, timescaledb.compress_segmentby = 'metric');
@@ -16,7 +15,6 @@ select count(compress_chunk(x)) from show_chunks('cdmlcopy') x;
  count 
 -------
      1
-(1 row)
 
 alter table cdmlcopy drop column filler;
 \copy cdmlcopy from stdin
@@ -25,7 +23,6 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already converted to columnstore
  count 
 -------
      2
-(1 row)
 
 \set ON_ERROR_STOP 0
 \copy cdmlcopy from stdin
@@ -41,7 +38,6 @@ NOTICE:  chunk "_hyper_1_3_chunk" is already converted to columnstore
  count 
 -------
      2
-(1 row)
 
 \copy cdmlcopy from stdin
 reset timescaledb.max_open_chunks_per_insert;
@@ -49,6 +45,5 @@ select count(compress_chunk(x)) from show_chunks('cdmlcopy') x;
  count 
 -------
      2
-(1 row)
 
 drop table cdmlcopy;

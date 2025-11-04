@@ -15,7 +15,6 @@ step s3_wp_at_end_on: select debug_waitpoint_enable('split_chunk_at_end');
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_split_chunk: 
     call split_first_chunk('readings');
@@ -27,7 +26,6 @@ step s3_wp_at_end_off: select debug_waitpoint_release('split_chunk_at_end');
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_split_chunk: <... completed>
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
@@ -58,7 +56,6 @@ step s3_wp_before_routing_on: select debug_waitpoint_enable('split_chunk_before_
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_split_chunk: 
     call split_first_chunk('readings');
@@ -70,7 +67,6 @@ step s3_wp_before_routing_off: select debug_waitpoint_release('split_chunk_befor
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_split_chunk: <... completed>
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
@@ -101,7 +97,6 @@ step s3_wp_at_end_on: select debug_waitpoint_enable('split_chunk_at_end');
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_split_chunk: 
     call split_first_chunk('readings');
@@ -113,7 +108,6 @@ step s3_wp_at_end_off: select debug_waitpoint_release('split_chunk_at_end');
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_split_chunk: <... completed>
 step s1_insert_into_new_chunk: <... completed>
@@ -146,7 +140,6 @@ step s3_wp_before_routing_on: select debug_waitpoint_enable('split_chunk_before_
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_split_chunk: 
     call split_first_chunk('readings');
@@ -158,7 +151,6 @@ step s3_wp_before_routing_off: select debug_waitpoint_release('split_chunk_befor
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_split_chunk: <... completed>
 step s1_insert_into_new_chunk: <... completed>
@@ -191,7 +183,6 @@ step s3_wp_at_end_on: select debug_waitpoint_enable('split_chunk_at_end');
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_split_chunk: 
     call split_first_chunk('readings');
@@ -203,7 +194,6 @@ step s3_wp_at_end_off: select debug_waitpoint_release('split_chunk_at_end');
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_split_chunk: <... completed>
 step s1_insert_into_splitting_chunk: <... completed>
@@ -236,7 +226,6 @@ step s3_wp_before_routing_on: select debug_waitpoint_enable('split_chunk_before_
 debug_waitpoint_enable
 ----------------------
                       
-(1 row)
 
 step s2_split_chunk: 
     call split_first_chunk('readings');
@@ -248,7 +237,6 @@ step s3_wp_before_routing_off: select debug_waitpoint_release('split_chunk_befor
 debug_waitpoint_release
 -----------------------
                        
-(1 row)
 
 step s2_split_chunk: <... completed>
 step s1_insert_into_splitting_chunk: <... completed>
@@ -284,7 +272,6 @@ step s1_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s1_insert_into_splitting_chunk: 
     insert into readings values ('2024-01-05 01:05', 10, 10.0), ('2024-01-09 01:05', 11, 11.0);
@@ -316,7 +303,6 @@ step s4_begin:
 ?column?
 --------
 t       
-(1 row)
 
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
 s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
@@ -335,7 +321,6 @@ step s1_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s1_delete_from_splitting_chunk: 
     delete from readings where device = 1;
@@ -364,7 +349,6 @@ Fri Jan 05 02:00:00 2024 PST|     2|   2
 Mon Jan 08 02:00:00 2024 PST|     3|   3
 Thu Jan 11 01:01:00 2024 PST|     4|   4
 Mon Jan 15 02:00:00 2024 PST|     5|   5
-(5 rows)
 
 step s4_commit: commit;
 step s2_split_chunk: <... completed>
@@ -377,7 +361,6 @@ Fri Jan 05 02:00:00 2024 PST|     2|   2
 Mon Jan 08 02:00:00 2024 PST|     3|   3
 Thu Jan 11 01:01:00 2024 PST|     4|   4
 Mon Jan 15 02:00:00 2024 PST|     5|   5
-(4 rows)
 
 
 starting permutation: s4_begin s3_query_data s1_delete_from_splitting_chunk s2_split_chunk s3_query_data s4_query s4_commit s4_query
@@ -388,7 +371,6 @@ step s4_begin:
 ?column?
 --------
 t       
-(1 row)
 
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Wed Jan 10 16:00:00 2024 PST ]
 s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
@@ -426,7 +408,6 @@ Fri Jan 05 02:00:00 2024 PST|     2|   2
 Mon Jan 08 02:00:00 2024 PST|     3|   3
 Thu Jan 11 01:01:00 2024 PST|     4|   4
 Mon Jan 15 02:00:00 2024 PST|     5|   5
-(5 rows)
 
 step s4_commit: commit;
 step s2_split_chunk: <... completed>
@@ -439,7 +420,6 @@ Fri Jan 05 02:00:00 2024 PST|     2|   2
 Mon Jan 08 02:00:00 2024 PST|     3|   3
 Thu Jan 11 01:01:00 2024 PST|     4|   4
 Mon Jan 15 02:00:00 2024 PST|     5|   5
-(4 rows)
 
 
 starting permutation: s3_query_data s4_begin s1_delete_from_splitting_chunk s2_split_chunk s3_query_data s4_query s4_commit s4_query s3_query_data
@@ -460,7 +440,6 @@ step s4_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s1_delete_from_splitting_chunk: 
     delete from readings where device = 1;
@@ -487,7 +466,6 @@ Fri Jan 05 02:00:00 2024 PST|     2|   2
 Mon Jan 08 02:00:00 2024 PST|     3|   3
 Thu Jan 11 01:01:00 2024 PST|     4|   4
 Mon Jan 15 02:00:00 2024 PST|     5|   5
-(5 rows)
 
 step s4_commit: commit;
 step s4_query: 
@@ -499,7 +477,6 @@ Fri Jan 05 02:00:00 2024 PST|     2|   2
 Mon Jan 08 02:00:00 2024 PST|     3|   3
 Thu Jan 11 01:01:00 2024 PST|     4|   4
 Mon Jan 15 02:00:00 2024 PST|     5|   5
-(4 rows)
 
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
 s3: NOTICE:  ("Fri Jan 05 02:00:00 2024 PST",2,2)
@@ -530,7 +507,6 @@ step s4_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s1_update_splitting_chunk: 
     update readings set device = 1 where device = 2;
@@ -557,7 +533,6 @@ Fri Jan 05 02:00:00 2024 PST|     2|   2
 Mon Jan 08 02:00:00 2024 PST|     3|   3
 Thu Jan 11 01:01:00 2024 PST|     4|   4
 Mon Jan 15 02:00:00 2024 PST|     5|   5
-(5 rows)
 
 step s4_commit: commit;
 step s4_query: 
@@ -570,7 +545,6 @@ Fri Jan 05 02:00:00 2024 PST|     1|   2
 Mon Jan 08 02:00:00 2024 PST|     3|   3
 Thu Jan 11 01:01:00 2024 PST|     4|   4
 Mon Jan 15 02:00:00 2024 PST|     5|   5
-(5 rows)
 
 s3: NOTICE:  ---- chunk 0 [ Wed Jan 03 16:00:00 2024 PST : Sun Jan 07 04:00:00 2024 PST ]
 s3: NOTICE:  ("Thu Jan 04 01:00:00 2024 PST",1,1)
@@ -592,7 +566,6 @@ step s2_begin:
 ?column?
 --------
 t       
-(1 row)
 
 step s2_insert_into_splitting_chunk: 
     insert into readings values ('2024-01-05 01:05', 15, 15.0);

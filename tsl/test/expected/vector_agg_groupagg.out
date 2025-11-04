@@ -13,7 +13,6 @@ select create_hypertable('groupagg', 't', chunk_time_interval => 10000);
    create_hypertable   
 -----------------------
  (1,public,groupagg,t)
-(1 row)
 
 insert into groupagg
 select
@@ -29,7 +28,6 @@ select count(compress_chunk(x)) from show_chunks('groupagg') x;
  count 
 -------
      2
-(1 row)
 
 vacuum analyze groupagg;
 set timescaledb.debug_require_vector_agg to 'require';
@@ -46,7 +44,6 @@ select s, sum(value) from groupagg group by s order by s limit 10;
  18 | 3506346
  19 | 3516755
  20 | 3527164
-(10 rows)
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
 -- reverse order.
@@ -64,7 +61,6 @@ select s, sum(value) from groupagg group by s order by s desc limit 10;
  93 | 4287021
  92 | 4276612
  91 | 4266203
-(10 rows)
 
 reset timescaledb.debug_require_vector_agg;
 -- Also test the NULLS FIRST order.
@@ -72,7 +68,6 @@ select count(decompress_chunk(x)) from show_chunks('groupagg') x;
  count 
 -------
      2
-(1 row)
 
 alter table groupagg set (timescaledb.compress, timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 's nulls first');
@@ -80,7 +75,6 @@ select count(compress_chunk(x)) from show_chunks('groupagg') x;
  count 
 -------
      2
-(1 row)
 
 vacuum analyze groupagg;
 set timescaledb.debug_require_vector_agg to 'require';
@@ -97,7 +91,6 @@ select s, sum(value) from groupagg group by s order by s nulls first limit 10;
  17 | 3495937
  18 | 3506346
  19 | 3516755
-(10 rows)
 
 reset timescaledb.debug_require_vector_agg;
 -- More tests for dictionary encoding.
@@ -106,7 +99,6 @@ select create_hypertable('text_table', 'ts', chunk_time_interval => 3);
     create_hypertable    
 -------------------------
  (3,public,text_table,t)
-(1 row)
 
 alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'a');
 insert into text_table select -1, 'scalar' from generate_series(1, 1000) x;
@@ -114,7 +106,6 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
  count 
 -------
      1
-(1 row)
 
 insert into text_table select 1, '' from generate_series(1, 1000) x;
 insert into text_table select 2, 'same' from generate_series(1, 1000) x;
@@ -128,7 +119,6 @@ NOTICE:  chunk "_hyper_3_7_chunk" is already converted to columnstore
  count 
 -------
      3
-(1 row)
 
 vacuum analyze text_table;
 set timescaledb.debug_require_vector_agg to 'require';
@@ -145,7 +135,6 @@ select a, count(*) from text_table group by a order by count(*) desc, a limit 10
  different100  |     1
  different1000 |     1
  different101  |     1
-(10 rows)
 
 -- The hash grouping policies do not support the GroupAggregate mode in the
 -- reverse order. We have to filter out the chunk where 'a' is segmentby.
@@ -163,7 +152,6 @@ select a, count(*) from text_table where ts >= 0 group by a order by a desc limi
  differentwithnulls991 |     1
  differentwithnulls99  |     1
  differentwithnulls989 |     1
-(10 rows)
 
 reset timescaledb.debug_require_vector_agg;
 reset enable_sort;
@@ -172,7 +160,6 @@ select count(decompress_chunk(x)) from show_chunks('text_table') x;
  count 
 -------
      3
-(1 row)
 
 alter table text_table set (timescaledb.compress,
     timescaledb.compress_segmentby = '', timescaledb.compress_orderby = 'a nulls first');
@@ -180,7 +167,6 @@ select count(compress_chunk(x)) from show_chunks('text_table') x;
  count 
 -------
      3
-(1 row)
 
 set timescaledb.debug_require_vector_agg to 'require';
 select a, count(*) from text_table group by a order by a nulls first limit 10;
@@ -196,7 +182,6 @@ select a, count(*) from text_table group by a order by a nulls first limit 10;
  different102  |     1
  different103  |     1
  different104  |     1
-(10 rows)
 
 reset timescaledb.debug_require_vector_agg;
 -- TODO verify that this works with the serialized hash grouping strategy
@@ -214,7 +199,6 @@ select ts, a, count(*) from text_table group by ts, a order by ts, a limit 10;
   3 | different101  |     1
   3 | different102  |     1
   3 | different103  |     1
-(10 rows)
 
 select a, ts, count(*) from text_table group by a, ts order by a desc, ts desc limit 10;
            a           | ts | count 
@@ -229,7 +213,6 @@ select a, ts, count(*) from text_table group by a, ts order by a desc, ts desc l
  differentwithnulls995 |  5 |     1
  differentwithnulls993 |  5 |     1
  differentwithnulls991 |  5 |     1
-(10 rows)
 
 reset timescaledb.debug_require_vector_agg;
 reset max_parallel_workers_per_gather;

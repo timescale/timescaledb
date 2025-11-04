@@ -28,6 +28,7 @@ extern bool ts_guc_enable_constraint_exclusion;
 extern bool ts_guc_enable_cagg_reorder_groupby;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_window_functions;
 extern TSDLLEXPORT int ts_guc_cagg_max_individual_materializations;
+extern TSDLLEXPORT bool ts_guc_enable_cagg_wal_based_invalidation;
 extern TSDLLEXPORT int ts_guc_cagg_wal_batch_size;
 extern TSDLLEXPORT int ts_guc_cagg_low_work_mem;
 extern TSDLLEXPORT int ts_guc_cagg_high_work_mem;

@@ -15,7 +15,6 @@ select create_hypertable('agggroup', 's', chunk_time_interval => :GROUPING_CARDI
    create_hypertable   
 -----------------------
  (1,public,agggroup,t)
-(1 row)
 
 create view source as
 select s * 10000 + t as t,
@@ -35,7 +34,6 @@ select count(compress_chunk(x)) from show_chunks('agggroup') x;
  count 
 -------
      1
-(1 row)
 
 alter table agggroup add column ss int default 11;
 alter table agggroup add column x text default '11';
@@ -61,35 +59,30 @@ select x, count(*) from agggroup group by x having (x='11' or x is null) order b
 ----+-------
  11 | 20019
     | 20019
-(2 rows)
 
 select x, count(cint2) from agggroup group by x having (x='11' or x is null) order by count(cint2), x limit 10;
  x  | count 
 ----+-------
  11 | 20000
     | 20000
-(2 rows)
 
 select x, min(cint2) from agggroup group by x having (x='11' or x is null) order by min(cint2), x limit 10;
  x  |  min   
 ----+--------
     | -16382
  11 | -16378
-(2 rows)
 
 select x, count(*) from agggroup where cint2 > 0 group by x having (x='11' or x is null) order by count(*), x limit 10;
  x  | count 
 ----+-------
     |  9877
  11 | 10105
-(2 rows)
 
 select x, count(cint2) from agggroup where cint2 > 0 group by x having (x='11' or x is null) order by count(cint2), x limit 10;
  x  | count 
 ----+-------
     |  9877
  11 | 10105
-(2 rows)
 
 select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2), x limit 10;
  x  | min 
@@ -104,43 +97,36 @@ select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2
  6  |   3
  0  |   4
  4  |   4
-(10 rows)
 
 select x, count(*) from agggroup where cint2 is null group by x having (x='11') order by count(*), x limit 10;
  x  | count 
 ----+-------
  11 |    19
-(1 row)
 
 select x, count(cint2) from agggroup where cint2 is null group by x having (x is null) order by count(cint2), x limit 10;
  x | count 
 ---+-------
    |     0
-(1 row)
 
 select x, count(*) from agggroup where cint2 is null and x is null group by x order by count(*), x limit 10;
  x | count 
 ---+-------
    |    19
-(1 row)
 
 select x, count(cint2) from agggroup where cint2 is null and x is null group by x order by count(cint2), x limit 10;
  x | count 
 ---+-------
    |     0
-(1 row)
 
 select x, min(cint2) from agggroup where cint2 is null and x is null group by x order by min(cint2), x limit 10;
  x | min 
 ---+-----
    |    
-(1 row)
 
 select count(compress_chunk(x)) from show_chunks('agggroup') x;
  count 
 -------
      2
-(1 row)
 
 vacuum freeze analyze agggroup;
 -- Long strings
@@ -149,7 +135,6 @@ select create_hypertable('long', 't');
  create_hypertable 
 -------------------
  (3,public,long,t)
-(1 row)
 
 insert into long select n, x, x, x, x from (
     select n, repeat('1', 100 * 4 + n) x
@@ -161,7 +146,6 @@ select count(compress_chunk(x)) from show_chunks('long') x;
  count 
 -------
      2
-(1 row)
 
 set timescaledb.debug_require_vector_agg = 'require';
 ---- Uncomment to generate reference. Note that there are minor discrepancies
@@ -211,7 +195,6 @@ select x, count(*) from agggroup group by x order by count(*), x limit 10;
  9  | 20000
  11 | 20019
     | 20019
-(10 rows)
 
 select x, count(cint2) from agggroup group by x order by count(cint2), x limit 10;
  x  | count 
@@ -226,7 +209,6 @@ select x, count(cint2) from agggroup group by x order by count(cint2), x limit 1
  9  | 19981
  11 | 20000
     | 20000
-(10 rows)
 
 select x, min(cint2) from agggroup group by x order by min(cint2), x limit 10;
  x  |  min   
@@ -241,7 +223,6 @@ select x, min(cint2) from agggroup group by x order by min(cint2), x limit 10;
  3  | -16381
  11 | -16378
  9  | -16375
-(10 rows)
 
 select x, count(*) from agggroup where cint2 > 0 group by x order by count(*), x limit 10;
  x  | count 
@@ -256,7 +237,6 @@ select x, count(*) from agggroup where cint2 > 0 group by x order by count(*), x
  9  | 10018
  11 | 10105
  5  | 10110
-(10 rows)
 
 select x, count(cint2) from agggroup where cint2 > 0 group by x order by count(cint2), x limit 10;
  x  | count 
@@ -271,7 +251,6 @@ select x, count(cint2) from agggroup where cint2 > 0 group by x order by count(c
  9  | 10018
  11 | 10105
  5  | 10110
-(10 rows)
 
 select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2), x limit 10;
  x  | min 
@@ -286,7 +265,6 @@ select x, min(cint2) from agggroup where cint2 > 0 group by x order by min(cint2
  6  |   3
  0  |   4
  4  |   4
-(10 rows)
 
 select x, count(*) from agggroup where cint2 is null group by x order by count(*), x limit 10;
  x  | count 
@@ -301,7 +279,6 @@ select x, count(*) from agggroup where cint2 is null group by x order by count(*
  8  |    19
  9  |    19
     |    19
-(10 rows)
 
 select x, count(cint2) from agggroup where cint2 is null group by x order by count(cint2), x limit 10;
  x  | count 
@@ -316,7 +293,6 @@ select x, count(cint2) from agggroup where cint2 is null group by x order by cou
  8  |     0
  9  |     0
     |     0
-(10 rows)
 
 select x, min(cint2) from agggroup where cint2 is null group by x order by min(cint2), x limit 10;
  x  | min 
@@ -331,25 +307,21 @@ select x, min(cint2) from agggroup where cint2 is null group by x order by min(c
  8  |    
  9  |    
     |    
-(10 rows)
 
 select x, count(*) from agggroup where cint2 is null and x is null group by x order by count(*), x limit 10;
  x | count 
 ---+-------
    |    19
-(1 row)
 
 select x, count(cint2) from agggroup where cint2 is null and x is null group by x order by count(cint2), x limit 10;
  x | count 
 ---+-------
    |     0
-(1 row)
 
 select x, min(cint2) from agggroup where cint2 is null and x is null group by x order by min(cint2), x limit 10;
  x | min 
 ---+-----
    |    
-(1 row)
 
 -- Test grouping by long strings
 select count(*) from long group by a order by 1 limit 10;
@@ -360,6 +332,5 @@ select count(*) from long group by a order by 1 limit 10;
      1
      1
      1
-(5 rows)
 
 reset timescaledb.debug_require_vector_agg;

@@ -24,7 +24,6 @@ $$;
 select * from _timescaledb_internal.bgw_job_stat;
  job_id | last_start | last_finish | next_start | last_successful_finish | last_run_success | total_runs | total_duration | total_duration_failures | total_successes | total_failures | total_crashes | consecutive_failures | consecutive_crashes | flags 
 --------+------------+-------------+------------+------------------------+------------------+------------+----------------+-------------------------+-----------------+----------------+---------------+----------------------+---------------------+-------
-(0 rows)
 
 -- add job that has a runtime well under the schedule interval
 select now() as initial_start \gset
@@ -34,7 +33,6 @@ SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
 --------------------------
  t
-(1 row)
 
 select initial_start as initial_start_given from timescaledb_information.jobs where job_id = :short_job_fixed \gset
 -- wait for the job to run
@@ -42,13 +40,11 @@ SELECT test.wait_for_job_to_run(:short_job_fixed, 1);
  wait_for_job_to_run 
 ---------------------
  t
-(1 row)
 
 SELECT test.wait_for_job_to_run(:short_job_drifting, 1);
  wait_for_job_to_run 
 ---------------------
  t
-(1 row)
 
 -- select ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(15000);
 select next_start as next_start_short from timescaledb_information.job_stats where job_id = :short_job_fixed \gset
@@ -57,7 +53,6 @@ select :'next_start_short'::timestamptz - :'initial_start_given'::timestamptz as
  schedule_diff 
 ---------------
  @ 15 secs
-(1 row)
 
 -- test job that runs for longer than the schedule interval
 select add_job('job_20', schedule_interval => INTERVAL '15 seconds', initial_start => now()) as long_job_fixed \gset
@@ -65,7 +60,6 @@ select test.wait_for_job_to_run(:long_job_fixed, 1);
  wait_for_job_to_run 
 ---------------------
  t
-(1 row)
 
 select initial_start as initial_start_long from timescaledb_information.jobs where job_id = :long_job_fixed \gset
 select next_start as next_start_long from timescaledb_information.job_stats where job_id = :long_job_fixed \gset
@@ -73,7 +67,6 @@ select :'next_start_long'::timestamptz - :'initial_start_long'::timestamptz as s
  schedule_diff 
 ---------------
  @ 15 secs
-(1 row)
 
 -- test some possible schedule_interval, finish_time, initial_start combinations
 SET timezone = 'UTC';
@@ -82,34 +75,29 @@ select ts_test_next_scheduled_execution_slot('1 month', '2022-09-16 13:21:34+00'
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Sat Oct 15 19:00:00 2022 UTC
-(1 row)
 
 -- ..or the first of the month
 select ts_test_next_scheduled_execution_slot('1 month', '2022-09-01 19:21:34+00'::timestamptz, '2022-09-01 19:00:00+00'::timestamptz);
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Sat Oct 01 19:00:00 2022 UTC
-(1 row)
 
 -- want to execute on Sundays (2022-09-04 is a Sunday)
 select extract(dow from date '2022-09-04') = 0;
  ?column? 
 ----------
  t
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('1 week', '2022-09-22 13:21:34+00'::timestamptz, '2022-09-04 19:00:00+00'::timestamptz);
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Sun Sep 25 19:00:00 2022 UTC
-(1 row)
 
 -- want to execute at 6am every day
 select ts_test_next_scheduled_execution_slot('1d', '2022-09-21 13:21:34+00'::timestamptz, '2022-09-21 06:00:00+00'::timestamptz);
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Thu Sep 22 06:00:00 2022 UTC
-(1 row)
 
 -- test what happens across DST
 -- go from +1 to +2
@@ -122,7 +110,6 @@ select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Wed Mar 30 09:00:00 2022 CEST | Wed Mar 30 09:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz) as t2 \gset
 select ts_test_next_scheduled_execution_slot('1 week', :'t1_tz'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz, timezone => 'Europe/Berlin') as t2_tz \gset
@@ -130,7 +117,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Wed Apr 06 09:00:00 2022 CEST | Wed Apr 06 09:00:00 2022 CEST
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz) as t3 \gset
 select ts_test_next_scheduled_execution_slot('1 week', :'t2_tz'::timestamptz, '2022-03-23 09:00:00+01'::timestamptz, timezone => 'Europe/Berlin') as t3_tz \gset
@@ -138,7 +124,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone        |         with_timezone         
 -------------------------------+-------------------------------
  Wed Apr 06 10:00:00 2022 CEST | Wed Apr 13 09:00:00 2022 CEST
-(1 row)
 
 -- go from +2 to +1
 -- DST switch on October 30th 2022
@@ -149,7 +134,6 @@ select :'t1' as without_timezone, :'t1_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sat Nov 05 09:00:00 2022 CET | Sat Nov 05 09:00:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('1 week', :'t1'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t2 \gset
 select ts_test_next_scheduled_execution_slot('1 week', :'t1_tz'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz, 'Europe/Berlin') as t2_tz \gset
@@ -157,7 +141,6 @@ select :'t2' as without_timezone, :'t2_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sat Nov 12 08:00:00 2022 CET | Sat Nov 12 09:00:00 2022 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('1 week', :'t2'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz) as t3 \gset
 select ts_test_next_scheduled_execution_slot('1 week', :'t2_tz'::timestamptz, '2022-10-29 09:00:00+02'::timestamptz, 'Europe/Berlin') as t3_tz \gset
@@ -165,7 +148,6 @@ select :'t3' as without_timezone, :'t3_tz' as with_timezone;
        without_timezone       |        with_timezone         
 ------------------------------+------------------------------
  Sat Nov 19 08:00:00 2022 CET | Sat Nov 19 09:00:00 2022 CET
-(1 row)
 
 \set ON_ERROR_STOP 0
 -- test some unacceptable values for schedule interval
@@ -178,61 +160,51 @@ select ts_test_next_scheduled_execution_slot('1 year', :'finish_time'::timestamp
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Tue Jan 02 10:53:16.059771 2024 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('2 year', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Thu Jan 02 10:53:16.059771 2025 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('10 year', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Sun Jan 02 10:53:16.059771 2033 CET
-(1 row)
 
 -- weeks
 select ts_test_next_scheduled_execution_slot('1 week', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Mon Jan 09 10:53:16.059771 2023 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('2 week', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Mon Jan 16 10:53:16.059771 2023 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('2 week', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Mon Jan 16 10:53:16.059771 2023 CET
-(1 row)
 
 -- months
 select ts_test_next_scheduled_execution_slot('10 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Thu Nov 02 10:53:16.059771 2023 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('10 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec', 'Europe/Athens');
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Thu Nov 02 10:53:16.059771 2023 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('2 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec');
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Thu Mar 02 10:53:16.059771 2023 CET
-(1 row)
 
 select ts_test_next_scheduled_execution_slot('2 month', :'finish_time'::timestamptz, :'finish_time'::timestamptz - interval '3 sec', 'Europe/Athens');
  ts_test_next_scheduled_execution_slot 
 ---------------------------------------
  Thu Mar 02 10:53:16.059771 2023 CET
-(1 row)
 

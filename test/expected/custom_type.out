@@ -66,25 +66,20 @@ SELECT create_hypertable('customtype_test', 'time_custom', chunk_time_interval =
       create_hypertable       
 ------------------------------
  (1,public,customtype_test,t)
-(1 row)
 
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:03'::customtype, 10);
 EXPLAIN (buffers off, costs off) SELECT * FROM customtype_test;
-          QUERY PLAN          
-------------------------------
+--- QUERY PLAN ---
  Seq Scan on _hyper_1_1_chunk
-(1 row)
 
 INSERT INTO customtype_test VALUES ('2001-01-01 01:02:23'::customtype, 11);
 EXPLAIN (buffers off, costs off) SELECT * FROM customtype_test;
-             QUERY PLAN             
-------------------------------------
+--- QUERY PLAN ---
  Append
    ->  Seq Scan on _hyper_1_1_chunk
    ->  Seq Scan on _hyper_1_2_chunk
-(3 rows)
 
 SELECT * FROM customtype_test;
          time_custom          | val 
@@ -93,5 +88,4 @@ SELECT * FROM customtype_test;
  Mon Jan 01 01:02:03 2001 PST |  10
  Mon Jan 01 01:02:03 2001 PST |  10
  Mon Jan 01 01:02:23 2001 PST |  11
-(4 rows)
 

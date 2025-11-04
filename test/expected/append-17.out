@@ -69,7 +69,6 @@ SELECT create_hypertable('append_test', 'time', chunk_time_interval => 262800000
     create_hypertable     
 --------------------------
  (1,public,append_test,t)
-(1 row)
 
 -- create three chunks
 INSERT INTO append_test VALUES ('2017-03-22T09:18:22', 23.5, 1, '{"a": 1, "b": 2}'),
@@ -84,7 +83,6 @@ SELECT create_hypertable('join_test', 'time', chunk_time_interval => 26280000000
    create_hypertable    
 ------------------------
  (2,public,join_test,t)
-(1 row)
 
 INSERT INTO join_test VALUES ('2017-01-22T09:18:22', 15.2, 1),
                              ('2017-02-22T09:18:22', 24.5, 2),
@@ -102,7 +100,6 @@ SELECT create_hypertable('metrics_date','time');
      create_hypertable     
 ---------------------------
  (3,public,metrics_date,t)
-(1 row)
 
 INSERT INTO metrics_date SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval);
 VACUUM (ANALYZE) metrics_date;
@@ -113,7 +110,6 @@ psql:include/append_load.sql:91: WARNING:  column type "timestamp without time z
        create_hypertable        
 --------------------------------
  (4,public,metrics_timestamp,t)
-(1 row)
 
 INSERT INTO metrics_timestamp SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval);
 VACUUM (ANALYZE) metrics_timestamp;
@@ -124,7 +120,6 @@ SELECT create_hypertable('metrics_timestamptz','time');
         create_hypertable         
 ----------------------------------
  (5,public,metrics_timestamptz,t)
-(1 row)
 
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 1;
 INSERT INTO metrics_timestamptz SELECT generate_series('2000-01-01'::date, '2000-02-01'::date, '5m'::interval), 2;
@@ -136,7 +131,6 @@ SELECT create_hypertable('metrics_space','time','device_id',3);
      create_hypertable      
 ----------------------------
  (6,public,metrics_space,t)
-(1 row)
 
 INSERT INTO metrics_space
 SELECT time, device_id, device_id + 0.25, device_id + 0.75, device_id
@@ -156,7 +150,6 @@ psql:include/append_load.sql:123: WARNING:  column type "character varying" used
  create_hypertable  
 --------------------
  (7,public,i2661,t)
-(1 row)
 
 INSERT INTO i2661 SELECT 1, 'speed', generate_series('2019-12-31 00:00:00', '2020-01-10 00:00:00', '2m'::interval), 0;
 VACUUM (ANALYZE) i2661;
@@ -171,7 +164,6 @@ SELECT setting, current_setting(setting) AS value from (VALUES ('timescaledb.ena
 ----------------------------------+-------
  timescaledb.enable_optimizations | on
  timescaledb.enable_chunk_append  | on
-(2 rows)
 
 -- query should exclude all chunks with optimization on
 :PREFIX
@@ -184,14 +176,12 @@ psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:12: NOTICE:  Stable function now_s() called!
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=0.00 loops=1)
    Sort Key: append_test."time" DESC
    Sort Method: quicksort 
    ->  Custom Scan (ChunkAppend) on append_test (actual rows=0.00 loops=1)
          Chunks excluded during startup: 3
-(5 rows)
 
 --query should exclude all chunks and be a MergeAppend
 :PREFIX
@@ -204,13 +194,11 @@ psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:17: NOTICE:  Stable function now_s() called!
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=0.00 loops=1)
    ->  Custom Scan (ChunkAppend) on append_test (actual rows=0.00 loops=1)
          Order: append_test."time" DESC
          Chunks excluded during startup: 3
-(4 rows)
 
 -- when optimized, the plan should be a constraint-aware append and
 -- cover only one chunk. It should be a backward index scan due to
@@ -226,13 +214,11 @@ psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:24: NOTICE:  Stable function now_s() called!
-                            QUERY PLAN                            
-------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on append_test (actual rows=1.00 loops=1)
    Chunks excluded during startup: 2
    ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
          Filter: ("time" > (now_s() - '@ 2 mons'::interval))
-(4 rows)
 
 -- adding ORDER BY and LIMIT should turn the plan into an optimized
 -- ordered append plan
@@ -247,8 +233,7 @@ psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
-                                  QUERY PLAN                                  
-------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Sort (actual rows=1.00 loops=1)
          Sort Key: append_test."time"
@@ -257,7 +242,6 @@ psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
                Chunks excluded during startup: 2
                ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                      Filter: ("time" > (now_s() - '@ 2 mons'::interval))
-(8 rows)
 
 -- no optimized plan for queries with restrictions that can be
 -- constified at planning time. Regular planning-time constraint
@@ -266,8 +250,7 @@ psql:include/append_query.sql:30: NOTICE:  Stable function now_s() called!
 SELECT * FROM append_test WHERE time > now_i() - interval '2 months'
 ORDER BY time;
 psql:include/append_query.sql:37: NOTICE:  Immutable function now_i() called!
-                                                     QUERY PLAN                                                     
---------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=1.00 loops=1)
    Sort Key: append_test."time"
    Sort Method: quicksort 
@@ -275,7 +258,6 @@ psql:include/append_query.sql:37: NOTICE:  Immutable function now_i() called!
          Chunks excluded during startup: 2
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                Filter: ("time" > ('Tue Aug 22 10:00:00 2017 PDT'::timestamp with time zone - '@ 2 mons'::interval))
-(7 rows)
 
 -- currently, we cannot distinguish between stable and volatile
 -- functions as far as applying our modified plan. However, volatile
@@ -289,8 +271,7 @@ psql:include/append_query.sql:45: NOTICE:  Volatile function now_v() called!
 psql:include/append_query.sql:45: NOTICE:  Volatile function now_v() called!
 psql:include/append_query.sql:45: NOTICE:  Volatile function now_v() called!
 psql:include/append_query.sql:45: NOTICE:  Volatile function now_v() called!
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=1.00 loops=1)
    Sort Key: append_test."time"
    Sort Method: quicksort 
@@ -304,7 +285,6 @@ psql:include/append_query.sql:45: NOTICE:  Volatile function now_v() called!
                Rows Removed by Filter: 2
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                Filter: ("time" > (now_v() - '@ 2 mons'::interval))
-(13 rows)
 
 -- prepared statement output should be the same regardless of
 -- optimizations
@@ -320,8 +300,7 @@ psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=1.00 loops=1)
    Sort Key: append_test."time"
    Sort Method: quicksort 
@@ -329,7 +308,6 @@ psql:include/append_query.sql:53: NOTICE:  Stable function now_s() called!
          Chunks excluded during startup: 2
          ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                Filter: ("time" > (now_s() - '@ 2 mons'::interval))
-(7 rows)
 
 DEALLOCATE query_opt;
 -- aggregates should produce same output
@@ -348,8 +326,7 @@ psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
-                                     QUERY PLAN                                     
-------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate (actual rows=1.00 loops=1)
    Group Key: (date_trunc('year'::text, append_test."time"))
    ->  Sort (actual rows=3.00 loops=1)
@@ -362,7 +339,6 @@ psql:include/append_query.sql:62: NOTICE:  Stable function now_s() called!
                            Filter: ("time" > (now_s() - '@ 4 mons'::interval))
                      ->  Seq Scan on _hyper_1_2_chunk (actual rows=2.00 loops=1)
                            Filter: ("time" > (now_s() - '@ 4 mons'::interval))
-(12 rows)
 
 -- querying outside the time range should return nothing. This tests
 -- that ConstraintAwareAppend can handle the case when an Append node
@@ -374,8 +350,7 @@ WHERE time < '2016-03-22'
 AND date_part('dow', time) between 1 and 5
 GROUP BY t
 ORDER BY t DESC;
-                        QUERY PLAN                         
------------------------------------------------------------
+--- QUERY PLAN ---
  GroupAggregate (actual rows=0.00 loops=1)
    Group Key: (date_trunc('year'::text, "time"))
    ->  Sort (actual rows=0.00 loops=1)
@@ -383,7 +358,6 @@ ORDER BY t DESC;
          Sort Method: quicksort 
          ->  Result (actual rows=0.00 loops=1)
                One-Time Filter: false
-(7 rows)
 
 -- a parameterized query can safely constify params, so won't be
 -- optimized by constraint-aware append since regular constraint
@@ -393,14 +367,12 @@ SELECT * FROM append_test WHERE time > $1 ORDER BY time;
 :PREFIX
 EXECUTE query_param(now_s() - interval '2 months');
 psql:include/append_query.sql:82: NOTICE:  Stable function now_s() called!
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=1.00 loops=1)
    Sort Key: _hyper_1_3_chunk."time"
    Sort Method: quicksort 
    ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
          Filter: ("time" > 'Thu Jun 22 10:00:00 2017 PDT'::timestamp with time zone)
-(5 rows)
 
 DEALLOCATE query_param;
 --test with cte
@@ -433,8 +405,7 @@ psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=6.00 loops=1)
    Sort Key: (time_bucket('@ 30 days'::interval, "time"."time"))
    Sort Method: quicksort 
@@ -454,7 +425,6 @@ psql:include/append_query.sql:102: NOTICE:  Stable function now_s() called!
                                              Filter: ((colorid > 0) AND ("time" > (now_s() - '@ 400 days'::interval)))
                                        ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                                              Filter: ((colorid > 0) AND ("time" > (now_s() - '@ 400 days'::interval)))
-(21 rows)
 
 WITH data AS (
     SELECT time_bucket(INTERVAL '30 day', TIME) AS btime, AVG(temp) AS VALUE
@@ -492,7 +462,6 @@ psql:include/append_query.sql:119: NOTICE:  Stable function now_s() called!
  Thu Jun 01 17:00:00 2017 PDT |      
  Sat Jul 01 17:00:00 2017 PDT |      
  Mon Jul 31 17:00:00 2017 PDT |  34.1
-(6 rows)
 
 -- force nested loop join with no materialization. This tests that the
 -- inner ConstraintAwareScan supports resetting its scan for every
@@ -519,8 +488,7 @@ psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+--- QUERY PLAN ---
  Nested Loop (actual rows=1.00 loops=1)
    Join Filter: (a.colorid = j.colorid)
    ->  Custom Scan (ChunkAppend) on append_test a (actual rows=1.00 loops=1)
@@ -531,7 +499,6 @@ psql:include/append_query.sql:130: NOTICE:  Stable function now_s() called!
          Chunks excluded during startup: 2
          ->  Seq Scan on _hyper_2_6_chunk j_1 (actual rows=1.00 loops=1)
                Filter: ("time" > (now_s() - '@ 3 hours'::interval))
-(10 rows)
 
 reset enable_hashjoin;
 reset enable_mergejoin;
@@ -539,8 +506,7 @@ reset enable_material;
 -- test constraint_exclusion with date time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
 -- the queries should all have 3 chunks
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::date ORDER BY time;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=4609.00 loops=1)
    Order: metrics_date."time"
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
@@ -549,11 +515,9 @@ reset enable_material;
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
-(8 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamp ORDER BY time;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=4609.00 loops=1)
    Order: metrics_date."time"
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
@@ -562,11 +526,9 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(8 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamptz ORDER BY time;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=4609.00 loops=1)
    Order: metrics_date."time"
    Chunks excluded during startup: 2
@@ -576,13 +538,11 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(9 rows)
 
 -- test Const OP Var
 -- the queries should all have 3 chunks
 :PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::date < time ORDER BY time;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=4609.00 loops=1)
    Order: metrics_date."time"
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
@@ -591,11 +551,9 @@ reset enable_material;
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
-(8 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::timestamp < time ORDER BY time;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=4609.00 loops=1)
    Order: metrics_date."time"
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
@@ -604,11 +562,9 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(8 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE '2000-01-15'::timestamptz < time ORDER BY time;
-                                                       QUERY PLAN                                                        
--------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=4609.00 loops=1)
    Order: metrics_date."time"
    Chunks excluded during startup: 2
@@ -618,35 +574,29 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_3_11_chunk_metrics_date_time_idx on _hyper_3_11_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(9 rows)
 
 -- test 2 constraints
 -- the queries should all have 2 chunks
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=1440.00 loops=1)
    Order: metrics_date."time"
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
    ->  Index Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk (actual rows=288.00 loops=1)
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
-(6 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
-                                                                           QUERY PLAN                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=1440.00 loops=1)
    Order: metrics_date."time"
    ->  Index Scan Backward using _hyper_3_9_chunk_metrics_date_time_idx on _hyper_3_9_chunk (actual rows=1152.00 loops=1)
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
    ->  Index Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk (actual rows=288.00 loops=1)
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
-(6 rows)
 
 :PREFIX SELECT * FROM metrics_date WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
-                                                                            QUERY PLAN                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=1440.00 loops=1)
    Order: metrics_date."time"
    Chunks excluded during startup: 3
@@ -654,13 +604,11 @@ reset enable_material;
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
    ->  Index Scan Backward using _hyper_3_10_chunk_metrics_date_time_idx on _hyper_3_10_chunk (actual rows=288.00 loops=1)
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
-(7 rows)
 
 -- test constraint_exclusion with timestamp time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
 -- the queries should all have 3 chunks
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::date ORDER BY time;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=4896.00 loops=1)
    Order: metrics_timestamp."time"
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
@@ -669,11 +617,9 @@ reset enable_material;
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
-(8 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamp ORDER BY time;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=4896.00 loops=1)
    Order: metrics_timestamp."time"
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
@@ -682,11 +628,9 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(8 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamptz ORDER BY time;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=4896.00 loops=1)
    Order: metrics_timestamp."time"
    Chunks excluded during startup: 2
@@ -696,13 +640,11 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(9 rows)
 
 -- test Const OP Var
 -- the queries should all have 3 chunks
 :PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::date < time ORDER BY time;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=4896.00 loops=1)
    Order: metrics_timestamp."time"
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
@@ -711,11 +653,9 @@ reset enable_material;
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
-(8 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::timestamp < time ORDER BY time;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=4896.00 loops=1)
    Order: metrics_timestamp."time"
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
@@ -724,11 +664,9 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(8 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE '2000-01-15'::timestamptz < time ORDER BY time;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=4896.00 loops=1)
    Order: metrics_timestamp."time"
    Chunks excluded during startup: 2
@@ -738,35 +676,29 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_4_16_chunk_metrics_timestamp_time_idx on _hyper_4_16_chunk (actual rows=1441.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(9 rows)
 
 -- test 2 constraints
 -- the queries should all have 2 chunks
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=1727.00 loops=1)
    Order: metrics_timestamp."time"
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
    ->  Index Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk (actual rows=288.00 loops=1)
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
-(6 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
-                                                                           QUERY PLAN                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=1727.00 loops=1)
    Order: metrics_timestamp."time"
    ->  Index Scan Backward using _hyper_4_14_chunk_metrics_timestamp_time_idx on _hyper_4_14_chunk (actual rows=1439.00 loops=1)
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
    ->  Index Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk (actual rows=288.00 loops=1)
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
-(6 rows)
 
 :PREFIX SELECT * FROM metrics_timestamp WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
-                                                                            QUERY PLAN                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=1727.00 loops=1)
    Order: metrics_timestamp."time"
    Chunks excluded during startup: 3
@@ -774,13 +706,11 @@ reset enable_material;
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
    ->  Index Scan Backward using _hyper_4_15_chunk_metrics_timestamp_time_idx on _hyper_4_15_chunk (actual rows=288.00 loops=1)
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
-(7 rows)
 
 -- test constraint_exclusion with timestamptz time dimension and DATE/TIMESTAMP/TIMESTAMPTZ constraints
 -- the queries should all have 3 chunks
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::date ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=14688.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 2
@@ -790,11 +720,9 @@ reset enable_material;
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
-(9 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=14688.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 2
@@ -804,11 +732,9 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(9 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=14688.00 loops=1)
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk (actual rows=4029.00 loops=1)
@@ -817,13 +743,11 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(8 rows)
 
 -- test Const OP Var
 -- the queries should all have 3 chunks
 :PREFIX SELECT time FROM metrics_timestamptz WHERE '2000-01-15'::date < time ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=14688.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 2
@@ -833,11 +757,9 @@ reset enable_material;
          Index Cond: ("time" > '01-15-2000'::date)
    ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
          Index Cond: ("time" > '01-15-2000'::date)
-(9 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE '2000-01-15'::timestamp < time ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=14688.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 2
@@ -847,11 +769,9 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
    ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone)
-(9 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE '2000-01-15'::timestamptz < time ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=14688.00 loops=1)
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk (actual rows=4029.00 loops=1)
@@ -860,13 +780,11 @@ reset enable_material;
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
    ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
          Index Cond: ("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone)
-(8 rows)
 
 -- test 2 constraints
 -- the queries should all have 2 chunks
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::date AND time < '2000-01-21'::date ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=5181.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 3
@@ -874,11 +792,9 @@ reset enable_material;
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
    ->  Index Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk (actual rows=1152.00 loops=1)
          Index Cond: (("time" > '01-15-2000'::date) AND ("time" < '01-21-2000'::date))
-(7 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamp AND time < '2000-01-21'::timestamp ORDER BY time;
-                                                                           QUERY PLAN                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=5181.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 3
@@ -886,24 +802,20 @@ reset enable_material;
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
    ->  Index Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk (actual rows=1152.00 loops=1)
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000'::timestamp without time zone))
-(7 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > '2000-01-15'::timestamptz AND time < '2000-01-21'::timestamptz ORDER BY time;
-                                                                            QUERY PLAN                                                                             
--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=5181.00 loops=1)
    Order: metrics_timestamptz."time"
    ->  Index Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk (actual rows=4029.00 loops=1)
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
    ->  Index Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk (actual rows=1152.00 loops=1)
          Index Cond: (("time" > 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Fri Jan 21 00:00:00 2000 PST'::timestamp with time zone))
-(6 rows)
 
 -- test constraint_exclusion with space partitioning and DATE/TIMESTAMP/TIMESTAMPTZ constraints
 -- exclusion for constraints with non-matching datatypes not working for space partitioning atm
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::date ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
@@ -930,11 +842,9 @@ reset enable_material;
                Index Cond: ("time" > '01-10-2000'::date)
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=770.00 loops=1)
                Index Cond: ("time" > '01-10-2000'::date)
-(26 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamp ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
@@ -961,11 +871,9 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=770.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
-(26 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=7670.00 loops=1)
@@ -984,13 +892,11 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=770.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-(18 rows)
 
 -- test Const OP Var
 -- exclusion for constraints with non-matching datatypes not working for space partitioning atm
 :PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::date < time ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
@@ -1017,11 +923,9 @@ reset enable_material;
                Index Cond: ("time" > '01-10-2000'::date)
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=770.00 loops=1)
                Index Cond: ("time" > '01-10-2000'::date)
-(26 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::timestamp < time ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
@@ -1048,11 +952,9 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=770.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone)
-(26 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE '2000-01-10'::timestamptz < time ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=7670.00 loops=1)
@@ -1071,13 +973,11 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=770.00 loops=1)
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
-(18 rows)
 
 -- test 2 constraints
 -- exclusion for constraints with non-matching datatypes not working for space partitioning atm
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::date AND time < '2000-01-15'::date ORDER BY time;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
@@ -1104,11 +1004,9 @@ reset enable_material;
                Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=770.00 loops=1)
                Index Cond: (("time" > '01-10-2000'::date) AND ("time" < '01-15-2000'::date))
-(26 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamp AND time < '2000-01-15'::timestamp ORDER BY time;
-                                                                              QUERY PLAN                                                                               
------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
@@ -1135,11 +1033,9 @@ reset enable_material;
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=770.00 loops=1)
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000'::timestamp without time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000'::timestamp without time zone))
-(26 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND time < '2000-01-15'::timestamptz ORDER BY time;
-                                                                               QUERY PLAN                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=11520.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=7670.00 loops=1)
@@ -1158,23 +1054,19 @@ reset enable_material;
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=770.00 loops=1)
                Index Cond: (("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Sat Jan 15 00:00:00 2000 PST'::timestamp with time zone))
-(18 rows)
 
 -- test filtering on space partition
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id = 1 ORDER BY time;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=1152.00 loops=1)
    Order: metrics_space."time"
    ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=767.00 loops=1)
          Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
    ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=385.00 loops=1)
          Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-(6 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (1,2) ORDER BY time;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=2304.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=1534.00 loops=1)
@@ -1197,22 +1089,18 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Filter: (device_id = ANY ('{1,2}'::integer[]))
                Rows Removed by Filter: 1155
-(22 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND device_id IN (VALUES(1)) ORDER BY time;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=1152.00 loops=1)
    Order: metrics_space."time"
    ->  Index Scan Backward using _hyper_6_25_chunk_metrics_space_device_id_time_idx on _hyper_6_25_chunk (actual rows=767.00 loops=1)
          Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
    ->  Index Scan Backward using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=385.00 loops=1)
          Index Cond: ((device_id = 1) AND ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone))
-(6 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > '2000-01-10'::timestamptz AND v3 IN (VALUES('1')) ORDER BY time;
-                                                          QUERY PLAN                                                           
--------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=1152.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=767.00 loops=1)
@@ -1243,13 +1131,11 @@ reset enable_material;
                Index Cond: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Filter: (v3 = '1'::text)
                Rows Removed by Filter: 770
-(30 rows)
 
 :PREFIX SELECT * FROM metrics_space
 WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
   AND v3 NOT IN (VALUES ('1'));
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Chunks excluded during startup: 0
    Chunks excluded during runtime: 9
@@ -1284,37 +1170,29 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
    ->  Index Scan using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (never executed)
          Index Cond: ("time" = (InitPlan 1).col1)
          Filter: (NOT (ANY (v3 = (hashed SubPlan 2).col1)))
-(34 rows)
 
 -- test CURRENT_DATE
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_DATE ORDER BY time;
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=0.00 loops=1)
    Order: metrics_date."time"
    Chunks excluded during startup: 5
-(3 rows)
 
 :PREFIX SELECT time FROM metrics_timestamp WHERE time > CURRENT_DATE ORDER BY time;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=0.00 loops=1)
    Order: metrics_timestamp."time"
    Chunks excluded during startup: 5
-(3 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > CURRENT_DATE ORDER BY time;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=0.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 5
-(3 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > CURRENT_DATE ORDER BY time;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
@@ -1341,37 +1219,29 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
                Index Cond: ("time" > CURRENT_DATE)
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > CURRENT_DATE)
-(26 rows)
 
 -- test CURRENT_TIMESTAMP
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > CURRENT_TIMESTAMP ORDER BY time;
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=0.00 loops=1)
    Order: metrics_date."time"
    Chunks excluded during startup: 5
-(3 rows)
 
 :PREFIX SELECT time FROM metrics_timestamp WHERE time > CURRENT_TIMESTAMP ORDER BY time;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=0.00 loops=1)
    Order: metrics_timestamp."time"
    Chunks excluded during startup: 5
-(3 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > CURRENT_TIMESTAMP ORDER BY time;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=0.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 5
-(3 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > CURRENT_TIMESTAMP ORDER BY time;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
@@ -1398,37 +1268,29 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
                Index Cond: ("time" > CURRENT_TIMESTAMP)
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > CURRENT_TIMESTAMP)
-(26 rows)
 
 -- test now()
 -- should be 0 chunks
 :PREFIX SELECT time FROM metrics_date WHERE time > now() ORDER BY time;
-                            QUERY PLAN                             
--------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_date (actual rows=0.00 loops=1)
    Order: metrics_date."time"
    Chunks excluded during startup: 5
-(3 rows)
 
 :PREFIX SELECT time FROM metrics_timestamp WHERE time > now() ORDER BY time;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamp (actual rows=0.00 loops=1)
    Order: metrics_timestamp."time"
    Chunks excluded during startup: 5
-(3 rows)
 
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time > now() ORDER BY time;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=0.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 5
-(3 rows)
 
 :PREFIX SELECT time FROM metrics_space WHERE time > now() ORDER BY time;
-                                                         QUERY PLAN                                                          
------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_space (actual rows=0.00 loops=1)
    Order: metrics_space."time"
    ->  Merge Append (actual rows=0.00 loops=1)
@@ -1455,15 +1317,13 @@ WHERE time = (VALUES ('2019-12-24' at time zone 'UTC'))
                Index Cond: ("time" > now())
          ->  Index Scan Backward using _hyper_6_30_chunk_metrics_space_time_idx on _hyper_6_30_chunk (actual rows=0.00 loops=1)
                Index Cond: ("time" > now())
-(26 rows)
 
 -- query with tablesample and planner exclusion
 :PREFIX
 SELECT * FROM metrics_date TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
 WHERE time > '2000-01-15'
 ORDER BY time DESC;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=217.00 loops=1)
    Sort Key: metrics_date."time" DESC
    Sort Method: quicksort 
@@ -1478,15 +1338,13 @@ ORDER BY time DESC;
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > '01-15-2000'::date)
                Rows Removed by Filter: 43
-(14 rows)
 
 -- query with tablesample and startup exclusion
 :PREFIX
 SELECT * FROM metrics_date TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
 WHERE time > '2000-01-15'::text::date
 ORDER BY time DESC;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=217.00 loops=1)
    Sort Key: metrics_date."time" DESC
    Sort Method: quicksort 
@@ -1502,15 +1360,13 @@ ORDER BY time DESC;
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > ('2000-01-15'::cstring)::date)
                Rows Removed by Filter: 43
-(15 rows)
 
 -- query with tablesample, space partitioning and planner exclusion
 :PREFIX
 SELECT * FROM metrics_space TABLESAMPLE BERNOULLI(5) REPEATABLE(0)
 WHERE time > '2000-01-10'::timestamptz
 ORDER BY time DESC, device_id;
-                                        QUERY PLAN                                         
--------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=522.00 loops=1)
    Sort Key: metrics_space."time" DESC, metrics_space.device_id
    Sort Method: quicksort 
@@ -1536,13 +1392,11 @@ ORDER BY time DESC, device_id;
                Sampling: bernoulli ('5'::real) REPEATABLE ('0'::double precision)
                Filter: ("time" > 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                Rows Removed by Filter: 218
-(25 rows)
 
 -- test runtime exclusion
 -- test runtime exclusion with LATERAL and 2 hypertables
 :PREFIX SELECT m1.time, m2.time FROM metrics_timestamptz m1 LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m2 WHERE m1.time = m2.time LIMIT 1) m2 ON true ORDER BY m1.time;
-                                                                QUERY PLAN                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Nested Loop Left Join (actual rows=26787.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=26787.00 loops=1)
          Order: m1."time"
@@ -1564,12 +1418,10 @@ ORDER BY time DESC, device_id;
                      Index Cond: ("time" = m1."time")
                ->  Index Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5 (actual rows=1.00 loops=4611)
                      Index Cond: ("time" = m1."time")
-(21 rows)
 
 -- test runtime exclusion and startup exclusions
 :PREFIX SELECT m1.time, m2.time FROM metrics_timestamptz m1 LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m2 WHERE m1.time = m2.time AND m2.time < '2000-01-10'::text::timestamptz LIMIT 1) m2 ON true ORDER BY m1.time;
-                                                                QUERY PLAN                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Nested Loop Left Join (actual rows=26787.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=26787.00 loops=1)
          Order: m1."time"
@@ -1586,13 +1438,11 @@ ORDER BY time DESC, device_id;
                      Index Cond: (("time" < ('2000-01-10'::cstring)::timestamp with time zone) AND ("time" = m1."time"))
                ->  Index Scan using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk m2_2 (actual rows=1.00 loops=6048)
                      Index Cond: (("time" < ('2000-01-10'::cstring)::timestamp with time zone) AND ("time" = m1."time"))
-(16 rows)
 
 -- test runtime exclusion does not activate for constraints on non-partitioning columns
 -- should not use runtime exclusion
 :PREFIX SELECT * FROM append_test a LEFT JOIN LATERAL(SELECT * FROM join_test j WHERE a.colorid = j.colorid ORDER BY time DESC LIMIT 1) j ON true ORDER BY a.time LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Nested Loop Left Join (actual rows=1.00 loops=1)
          ->  Custom Scan (ChunkAppend) on append_test a (actual rows=1.00 loops=1)
@@ -1612,12 +1462,10 @@ ORDER BY time DESC, device_id;
                            Rows Removed by Filter: 1
                      ->  Index Scan using _hyper_2_4_chunk_join_test_time_idx on _hyper_2_4_chunk j_3 (actual rows=1.00 loops=1)
                            Filter: (a.colorid = colorid)
-(19 rows)
 
 -- test runtime exclusion with LATERAL and generate_series
 :PREFIX SELECT g.time FROM generate_series('2000-01-01'::timestamptz, '2000-02-01'::timestamptz, '1d'::interval) g(time) LEFT JOIN LATERAL(SELECT time FROM metrics_timestamptz m WHERE m.time=g.time LIMIT 1) m ON true;
-                                                                QUERY PLAN                                                                
-------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Nested Loop Left Join (actual rows=32.00 loops=1)
    ->  Function Scan on generate_series g (actual rows=32.00 loops=1)
    ->  Limit (actual rows=1.00 loops=32)
@@ -1634,11 +1482,9 @@ ORDER BY time DESC, device_id;
                            Index Cond: ("time" = g."time")
                      ->  Index Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m_5 (actual rows=1.00 loops=6)
                            Index Cond: ("time" = g."time")
-(16 rows)
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) AS g(time) INNER JOIN LATERAL (SELECT time FROM metrics_timestamptz m WHERE time=g.time) m ON true;
-                                   QUERY PLAN                                   
---------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Hash Join (actual rows=96.00 loops=1)
    Hash Cond: (g."time" = m."time")
    ->  Function Scan on generate_series g (actual rows=32.00 loops=1)
@@ -1649,11 +1495,9 @@ ORDER BY time DESC, device_id;
                ->  Seq Scan on _hyper_5_19_chunk m_3 (actual rows=6048.00 loops=1)
                ->  Seq Scan on _hyper_5_20_chunk m_4 (actual rows=6048.00 loops=1)
                ->  Seq Scan on _hyper_5_21_chunk m_5 (actual rows=4611.00 loops=1)
-(11 rows)
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) AS g(time) INNER JOIN LATERAL (SELECT time FROM metrics_timestamptz m WHERE time=g.time ORDER BY time) m ON true;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Nested Loop (actual rows=96.00 loops=1)
    ->  Function Scan on generate_series g (actual rows=32.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m (actual rows=3.00 loops=32)
@@ -1668,11 +1512,9 @@ ORDER BY time DESC, device_id;
                Index Cond: ("time" = g."time")
          ->  Index Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m_5 (actual rows=3.00 loops=6)
                Index Cond: ("time" = g."time")
-(14 rows)
 
 :PREFIX SELECT * FROM generate_series('2000-01-01'::timestamptz,'2000-02-01'::timestamptz,'1d'::interval) AS g(time) INNER JOIN LATERAL (SELECT time FROM metrics_timestamptz m WHERE time>g.time + '1 day' ORDER BY time LIMIT 1) m ON true;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Nested Loop (actual rows=30.00 loops=1)
    ->  Function Scan on generate_series g (actual rows=32.00 loops=1)
    ->  Limit (actual rows=1.00 loops=32)
@@ -1690,12 +1532,10 @@ ORDER BY time DESC, device_id;
                      Index Cond: ("time" > (g."time" + '@ 1 day'::interval))
                ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m_5 (actual rows=1.00 loops=7)
                      Index Cond: ("time" > (g."time" + '@ 1 day'::interval))
-(17 rows)
 
 -- test runtime exclusion with subquery
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 WHERE m1.time=(SELECT max(time) FROM metrics_timestamptz);
-                                                                QUERY PLAN                                                                
-------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=3.00 loops=1)
    Chunks excluded during runtime: 4
    InitPlan 2
@@ -1719,12 +1559,10 @@ ORDER BY time DESC, device_id;
          Index Cond: ("time" = (InitPlan 2).col1)
    ->  Index Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_5 (actual rows=3.00 loops=1)
          Index Cond: ("time" = (InitPlan 2).col1)
-(23 rows)
 
 -- test runtime exclusion with correlated subquery
 :PREFIX SELECT m1.time, (SELECT m2.time FROM metrics_timestamptz m2 WHERE m2.time < m1.time ORDER BY m2.time DESC LIMIT 1) FROM metrics_timestamptz m1 WHERE m1.time < '2000-01-10' ORDER BY m1.time;
-                                                                QUERY PLAN                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Result (actual rows=7776.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=7776.00 loops=1)
          Order: m1."time"
@@ -1747,12 +1585,10 @@ ORDER BY time DESC, device_id;
                        Index Cond: ("time" < m1."time")
                  ->  Index Scan using _hyper_5_17_chunk_metrics_timestamptz_time_idx on _hyper_5_17_chunk m2_5 (actual rows=1.00 loops=4035)
                        Index Cond: ("time" < m1."time")
-(22 rows)
 
 -- test EXISTS
 :PREFIX SELECT m1.time FROM metrics_timestamptz m1 WHERE EXISTS(SELECT 1 FROM metrics_timestamptz m2 WHERE m1.time < m2.time) ORDER BY m1.time DESC limit 1000;
-                                                               QUERY PLAN                                                               
-----------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1000.00 loops=1)
    ->  Nested Loop Semi Join (actual rows=1000.00 loops=1)
          ->  Custom Scan (ChunkAppend) on metrics_timestamptz m1 (actual rows=1003.00 loops=1)
@@ -1773,13 +1609,11 @@ ORDER BY time DESC, device_id;
                      Index Cond: ("time" > m1."time")
                ->  Index Scan using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m2_5 (actual rows=1.00 loops=1003)
                      Index Cond: ("time" > m1."time")
-(20 rows)
 
 -- test constraint exclusion for subqueries with append
 -- should include 2 chunks
 :PREFIX SELECT time FROM (SELECT time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY time) m;
-                                                           QUERY PLAN                                                           
---------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=7776.00 loops=1)
    Order: metrics_timestamptz."time"
    Chunks excluded during startup: 3
@@ -1787,13 +1621,11 @@ ORDER BY time DESC, device_id;
          Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
    ->  Index Scan Backward using _hyper_5_18_chunk_metrics_timestamptz_time_idx on _hyper_5_18_chunk (actual rows=3744.00 loops=1)
          Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(7 rows)
 
 -- test constraint exclusion for subqueries with mergeappend
 -- should include 2 chunks
 :PREFIX SELECT device_id, time FROM (SELECT device_id, time FROM metrics_timestamptz WHERE time < '2000-01-10'::text::timestamptz ORDER BY device_id, time) m;
-                                                              QUERY PLAN                                                               
----------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ConstraintAwareAppend) (actual rows=7776.00 loops=1)
    Hypertable: metrics_timestamptz
    Chunks excluded during startup: 3
@@ -1803,13 +1635,11 @@ ORDER BY time DESC, device_id;
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
          ->  Index Scan using _hyper_5_18_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_18_chunk (actual rows=3744.00 loops=1)
                Index Cond: ("time" < ('2000-01-10'::cstring)::timestamp with time zone)
-(9 rows)
 
 -- test LIMIT pushdown
 -- no aggregates/window functions/SRF should pushdown limit
 :PREFIX SELECT FROM metrics_timestamptz ORDER BY time LIMIT 1;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_timestamptz (actual rows=1.00 loops=1)
          Order: metrics_timestamptz."time"
@@ -1818,12 +1648,10 @@ ORDER BY time DESC, device_id;
          ->  Index Scan Backward using _hyper_5_19_chunk_metrics_timestamptz_time_idx on _hyper_5_19_chunk (never executed)
          ->  Index Scan Backward using _hyper_5_20_chunk_metrics_timestamptz_time_idx on _hyper_5_20_chunk (never executed)
          ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk (never executed)
-(8 rows)
 
 -- aggregates should prevent pushdown
 :PREFIX SELECT count(*) FROM metrics_timestamptz LIMIT 1;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Aggregate (actual rows=1.00 loops=1)
          ->  Append (actual rows=26787.00 loops=1)
@@ -1832,11 +1660,9 @@ ORDER BY time DESC, device_id;
                ->  Seq Scan on _hyper_5_19_chunk (actual rows=6048.00 loops=1)
                ->  Seq Scan on _hyper_5_20_chunk (actual rows=6048.00 loops=1)
                ->  Seq Scan on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
-(8 rows)
 
 :PREFIX SELECT count(*) FROM metrics_space LIMIT 1;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Aggregate (actual rows=1.00 loops=1)
          ->  Append (actual rows=37450.00 loops=1)
@@ -1849,12 +1675,10 @@ ORDER BY time DESC, device_id;
                ->  Seq Scan on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                ->  Seq Scan on _hyper_6_29_chunk (actual rows=1540.00 loops=1)
                ->  Seq Scan on _hyper_6_30_chunk (actual rows=770.00 loops=1)
-(12 rows)
 
 -- HAVING should prevent pushdown
 :PREFIX SELECT 1 FROM metrics_timestamptz HAVING count(*) > 1 LIMIT 1;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Aggregate (actual rows=1.00 loops=1)
          Filter: (count(*) > 1)
@@ -1864,11 +1688,9 @@ ORDER BY time DESC, device_id;
                ->  Seq Scan on _hyper_5_19_chunk (actual rows=6048.00 loops=1)
                ->  Seq Scan on _hyper_5_20_chunk (actual rows=6048.00 loops=1)
                ->  Seq Scan on _hyper_5_21_chunk (actual rows=4611.00 loops=1)
-(9 rows)
 
 :PREFIX SELECT 1 FROM metrics_space HAVING count(*) > 1 LIMIT 1;
-                                 QUERY PLAN                                 
-----------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Aggregate (actual rows=1.00 loops=1)
          Filter: (count(*) > 1)
@@ -1882,13 +1704,11 @@ ORDER BY time DESC, device_id;
                ->  Seq Scan on _hyper_6_28_chunk (actual rows=1540.00 loops=1)
                ->  Seq Scan on _hyper_6_29_chunk (actual rows=1540.00 loops=1)
                ->  Seq Scan on _hyper_6_30_chunk (actual rows=770.00 loops=1)
-(13 rows)
 
 -- DISTINCT should prevent pushdown
 SET enable_hashagg TO false;
 :PREFIX SELECT DISTINCT device_id FROM metrics_timestamptz ORDER BY device_id LIMIT 3;
-                                                                 QUERY PLAN                                                                  
----------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Unique (actual rows=3.00 loops=1)
          ->  Merge Append (actual rows=17859.00 loops=1)
@@ -1898,11 +1718,9 @@ SET enable_hashagg TO false;
                ->  Index Scan using _hyper_5_19_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_19_chunk (actual rows=4033.00 loops=1)
                ->  Index Scan using _hyper_5_20_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_20_chunk (actual rows=4033.00 loops=1)
                ->  Index Scan using _hyper_5_21_chunk_metrics_timestamptz_device_id_time_idx on _hyper_5_21_chunk (actual rows=3075.00 loops=1)
-(9 rows)
 
 :PREFIX SELECT DISTINCT device_id FROM metrics_space ORDER BY device_id LIMIT 3;
-                                                              QUERY PLAN                                                               
----------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Unique (actual rows=3.00 loops=1)
          ->  Merge Append (actual rows=7491.00 loops=1)
@@ -1916,7 +1734,6 @@ SET enable_hashagg TO false;
                ->  Index Scan using _hyper_6_28_chunk_metrics_space_device_id_time_idx on _hyper_6_28_chunk (actual rows=386.00 loops=1)
                ->  Index Scan using _hyper_6_29_chunk_metrics_space_device_id_time_idx on _hyper_6_29_chunk (actual rows=386.00 loops=1)
                ->  Index Scan using _hyper_6_30_chunk_metrics_space_device_id_time_idx on _hyper_6_30_chunk (actual rows=1.00 loops=1)
-(13 rows)
 
 RESET enable_hashagg;
 -- JOINs should prevent pushdown
@@ -1928,7 +1745,6 @@ SELECT table_name FROM create_hypertable('join_limit','time',create_default_inde
  table_name 
 ------------
  join_limit
-(1 row)
 
 CREATE INDEX ON join_limit(time,device_id);
 INSERT INTO join_limit
@@ -1945,8 +1761,7 @@ SELECT indexrelid::regclass AS "INDEX_NAME" FROM pg_index WHERE indrelid = :CHUN
 \gset
 DROP INDEX :INDEX_NAME;
 :PREFIX SELECT * FROM metrics_timestamptz m1 INNER JOIN join_limit m2 ON m1.time = m2.time AND m1.device_id=m2.device_id WHERE m1.time > '2000-01-07' ORDER BY m1.time, m1.device_id LIMIT 3;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=3.00 loops=1)
    ->  Merge Join (actual rows=3.00 loops=1)
          Merge Cond: (m2."time" = m1."time")
@@ -1975,7 +1790,6 @@ DROP INDEX :INDEX_NAME;
                            Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using _hyper_5_21_chunk_metrics_timestamptz_time_idx on _hyper_5_21_chunk m1_4 (never executed)
                            Index Cond: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(28 rows)
 
 DROP TABLE join_limit;
 -- test ChunkAppend projection #2661
@@ -1991,8 +1805,7 @@ LEFT JOIN i2661 ht ON
   (FLOOR(EXTRACT (EPOCH FROM ht."timestamp") / 300) * 300 = EXTRACT (EPOCH FROM ts.timestamp))
   AND ht.timestamp > '2019-12-30T00:00:00Z'::timestamp
 ORDER BY ts.timestamp, ht.timestamp;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Sort (actual rows=33.00 loops=1)
    Sort Key: ts."timestamp", ht."timestamp"
    Sort Method: quicksort 
@@ -2016,7 +1829,6 @@ ORDER BY ts.timestamp, ht.timestamp;
                                  Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
                            ->  Seq Scan on _hyper_7_33_chunk ht_3 (actual rows=961.00 loops=1)
                                  Filter: ("timestamp" > 'Mon Dec 30 00:00:00 2019'::timestamp without time zone)
-(23 rows)
 
 -- #3030 test chunkappend keeps pathkeys when subpath is append
 -- on PG11 this will not use ChunkAppend but MergeAppend
@@ -2026,21 +1838,18 @@ SELECT table_name FROM create_hypertable('i3030', 'time', create_default_indexes
  table_name 
 ------------
  i3030
-(1 row)
 
 CREATE INDEX ON i3030(a,time);
 INSERT INTO i3030 (time,a) SELECT time, a FROM generate_series('2000-01-01'::timestamptz,'2000-01-01 3:00:00'::timestamptz,'1min'::interval) time, generate_series(1,30) a;
 VACUUM (ANALYZE) i3030;
 :PREFIX SELECT * FROM i3030 where time BETWEEN '2000-01-01'::text::timestamptz AND '2000-01-03'::text::timestamptz ORDER BY a,time LIMIT 1;
-                                                                         QUERY PLAN                                                                          
--------------------------------------------------------------------------------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Limit (actual rows=1.00 loops=1)
    ->  Custom Scan (ChunkAppend) on i3030 (actual rows=1.00 loops=1)
          Order: i3030.a, i3030."time"
          Chunks excluded during startup: 0
          ->  Index Scan using _hyper_9_38_chunk_i3030_a_time_idx on _hyper_9_38_chunk (actual rows=1.00 loops=1)
                Index Cond: (("time" >= ('2000-01-01'::cstring)::timestamp with time zone) AND ("time" <= ('2000-01-03'::cstring)::timestamp with time zone))
-(6 rows)
 
 DROP TABLE i3030;
 RESET enable_seqscan;
@@ -2050,8 +1859,7 @@ RESET enable_seqscan;
 SELECT *
 FROM append_test a
 WHERE a.attr @> ANY((SELECT coalesce(array_agg(attr), array[]::jsonb[]) FROM join_test_plain WHERE temp > 100)::jsonb[]);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on append_test a (actual rows=0.00 loops=1)
    Hypertables excluded during runtime: 1
    InitPlan 1
@@ -2065,15 +1873,13 @@ WHERE a.attr @> ANY((SELECT coalesce(array_agg(attr), array[]::jsonb[]) FROM joi
          Filter: (attr @> ANY ((InitPlan 1).col1))
    ->  Seq Scan on _hyper_1_3_chunk a_3 (never executed)
          Filter: (attr @> ANY ((InitPlan 1).col1))
-(13 rows)
 
 --optimization does not work for ANY subquery (does not force an initplan)
 :PREFIX
 SELECT *
 FROM append_test a
 WHERE a.attr @> ANY((SELECT attr FROM join_test_plain WHERE temp > 100));
-                              QUERY PLAN                              
-----------------------------------------------------------------------
+--- QUERY PLAN ---
  Nested Loop Semi Join (actual rows=0.00 loops=1)
    Join Filter: (a.attr @> join_test_plain.attr)
    ->  Append (actual rows=5.00 loops=1)
@@ -2084,15 +1890,13 @@ WHERE a.attr @> ANY((SELECT attr FROM join_test_plain WHERE temp > 100));
          ->  Seq Scan on join_test_plain (actual rows=0.00 loops=1)
                Filter: (temp > '100'::double precision)
                Rows Removed by Filter: 3
-(10 rows)
 
 --works on any strict operator without ANY
 :PREFIX
 SELECT *
 FROM append_test a
 WHERE a.attr @> (SELECT attr FROM join_test_plain WHERE temp > 100 limit 1);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on append_test a (actual rows=0.00 loops=1)
    Hypertables excluded during runtime: 1
    InitPlan 1
@@ -2106,7 +1910,6 @@ WHERE a.attr @> (SELECT attr FROM join_test_plain WHERE temp > 100 limit 1);
          Filter: (attr @> (InitPlan 1).col1)
    ->  Seq Scan on _hyper_1_3_chunk a_3 (never executed)
          Filter: (attr @> (InitPlan 1).col1)
-(13 rows)
 
 --optimization works with function calls
 CREATE OR REPLACE FUNCTION select_tag(_min_temp int)
@@ -2122,8 +1925,7 @@ $function$;
 SELECT *
 FROM append_test a
 WHERE a.attr @> ANY((SELECT select_tag(100))::jsonb[]);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on append_test a (actual rows=0.00 loops=1)
    Hypertables excluded during runtime: 1
    InitPlan 1
@@ -2134,15 +1936,13 @@ WHERE a.attr @> ANY((SELECT select_tag(100))::jsonb[]);
          Filter: (attr @> ANY ((InitPlan 1).col1))
    ->  Seq Scan on _hyper_1_3_chunk a_3 (never executed)
          Filter: (attr @> ANY ((InitPlan 1).col1))
-(10 rows)
 
 --optimization does not work when result is null
 :PREFIX
 SELECT *
 FROM append_test a
 WHERE a.attr @> ANY((SELECT array_agg(attr) FROM join_test_plain WHERE temp > 100)::jsonb[]);
-                             QUERY PLAN                             
---------------------------------------------------------------------
+--- QUERY PLAN ---
  Custom Scan (ChunkAppend) on append_test a (actual rows=0.00 loops=1)
    Hypertables excluded during runtime: 0
    InitPlan 1
@@ -2159,7 +1959,6 @@ WHERE a.attr @> ANY((SELECT array_agg(attr) FROM join_test_plain WHERE temp > 10
    ->  Seq Scan on _hyper_1_3_chunk a_3 (actual rows=0.00 loops=1)
          Filter: (attr @> ANY ((InitPlan 1).col1))
          Rows Removed by Filter: 1
-(16 rows)
 
 -- Test that ConstraintAwareAppend properly locks relations in
 -- parallel query mode
@@ -2182,8 +1981,7 @@ psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
 psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
-                                      QUERY PLAN                                       
----------------------------------------------------------------------------------------
+--- QUERY PLAN ---
  Gather (actual rows=3.00 loops=1)
    Workers Planned: 1
    Workers Launched: 1
@@ -2198,7 +1996,6 @@ psql:include/append_query.sql:415: NOTICE:  Stable function now_s() called!
                            Filter: ("time" > (now_s() - '@ 3 mons 20 days'::interval))
                      ->  Seq Scan on _hyper_1_3_chunk (actual rows=1.00 loops=1)
                            Filter: ("time" > (now_s() - '@ 3 mons 20 days'::interval))
-(15 rows)
 
 reset timescaledb.enable_chunk_append;
 reset max_parallel_workers_per_gather;
@@ -2213,7 +2010,6 @@ call force_parallel(false);
 - timescaledb.enable_optimizations | off
 + timescaledb.enable_optimizations | on
   timescaledb.enable_chunk_append  | on
- (2 rows)
  
 --- Unoptimized results
 +++ Optimized results
@@ -2224,6 +2020,5 @@ call force_parallel(false);
 - timescaledb.enable_chunk_append  | on
 + timescaledb.enable_optimizations | on
 + timescaledb.enable_chunk_append  | off
- (2 rows)
  
   time | temp | colorid | attr 
