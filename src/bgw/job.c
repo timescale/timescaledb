@@ -1149,7 +1149,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
 	BgwParams params;
 	BgwJob *job;
-	JobResult res = JOB_FAILURE_IN_EXECUTION;
+	JobResult volatile res = JOB_FAILURE_IN_EXECUTION;
 	bool got_lock;
 	instr_time start;
 	instr_time duration;
