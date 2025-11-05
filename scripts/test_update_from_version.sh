@@ -109,6 +109,9 @@ run_sql_file test/sql/updates/post.${TEST_VERSION}.sql baseline > "${OUTPUT_DIR}
 run_sql_file test/sql/updates/post.${TEST_VERSION}.sql updated > "${OUTPUT_DIR}/post.updated.log"
 run_sql_file test/sql/updates/post.${TEST_VERSION}.sql restored > "${OUTPUT_DIR}/post.restored.log"
 
+sed -i -E -e 's!_ts_meta_v2_bl[0-9a-z]+_!_ts_meta_v2_bloomXXX_!g' \
+    "${OUTPUT_DIR}"/post.*.log
+
 if [ "${TEST_REPAIR}" = "true" ]; then
   echo "Creating repair database"
   {
