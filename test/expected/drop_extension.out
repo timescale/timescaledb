@@ -21,7 +21,7 @@ SELECT * FROM drop_test;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP EXTENSION timescaledb CASCADE;
-NOTICE:  drop cascades to 2 other objects
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_1_1_chunk
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- Querying the original table should not return any rows since all of
 -- them actually existed in chunks that are now gone

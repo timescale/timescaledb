@@ -105,14 +105,6 @@ SHOW timescaledb.restoring;
 
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
 
--- Inserting with restoring ON in current session causes tuples to be
--- inserted on main table, but this should be protected by the insert
--- blocking trigger.
-\set ON_ERROR_STOP 0
-INSERT INTO "test_schema"."two_Partitions"("timeCustom", device_id, series_0, series_1)
-VALUES (1357894000000000000, 'dev5', 1.5, 2);
-\set ON_ERROR_STOP 1
-
 -- Now run our post-restore function.
 SELECT timescaledb_post_restore();
 SHOW timescaledb.restoring;

@@ -594,7 +594,7 @@ ERROR:  segmentwise recompression cannot be applied for compression with no orde
 \set ON_ERROR_STOP 1
 -- Compress wrapper: do full recompress instead of by segment
 SELECT compress_chunk(:'chunk_to_compress');
-NOTICE:  segmentwise recompression is disabled due to no order by, performing full recompression on chunk "_timescaledb_internal._hyper_20_21_chunk"
+NOTICE:  in-memory recompression is disabled due to no order by, performing decompress/compress on chunk "_timescaledb_internal._hyper_20_21_chunk"
 INFO:  using tuplesort to scan rows from "_hyper_20_21_chunk" for converting to columnstore
               compress_chunk              
 ------------------------------------------
@@ -625,7 +625,7 @@ ERROR:  segmentwise recompression functionality disabled, enable it by first set
 \set ON_ERROR_STOP 1
 -- When GUC is OFF, entire chunk should be fully uncompressed and compressed instead
 SELECT compress_chunk(:'chunk_to_compress');
-NOTICE:  segmentwise recompression is disabled, performing full recompression on chunk "_timescaledb_internal._hyper_22_24_chunk"
+NOTICE:  segmentwise in-memory recompression functionality disabled, set timescaledb.enable_segmentwise_recompression to on
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_22_24_chunk

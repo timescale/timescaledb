@@ -74,7 +74,7 @@ jobs:
         docker pull ${BUILDER_IMAGE}
         docker buildx imagetools inspect ${BUILDER_IMAGE}
         docker run -i --rm -v $(pwd):/mnt -e EXTRA_PKGS="${EXTRA_PKGS}" ${BUILDER_IMAGE} bash <<"EOF"
-          apk add cmake gcc make build-base krb5-dev git ${EXTRA_PKGS}
+          apk add cmake gcc make build-base git ${EXTRA_PKGS}
           # We run the same extension on different docker images, old versions
           # have OpenSSL 1.1 and the new versions have OpenSSL 3, so we try to
           # pin the 1.1. Note that depending on PG version, both images might
@@ -98,7 +98,7 @@ jobs:
         docker pull ${TEST_IMAGE}
         docker buildx imagetools inspect ${TEST_IMAGE}
         docker run -i --rm -v $(pwd):/mnt -e EXTRA_PKGS="${EXTRA_PKGS}" ${TEST_IMAGE} bash <<"EOF"
-          apk add cmake gcc make build-base krb5-dev sudo coreutils ${EXTRA_PKGS}
+          apk add cmake gcc make build-base sudo coreutils ${EXTRA_PKGS}
           apk add openssl1.1-compat-dev || apk add openssl-dev
           cd /mnt
           cp build_abi/install_ext/* `pg_config --sharedir`/extension/

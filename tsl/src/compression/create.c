@@ -96,8 +96,6 @@ static void compression_settings_set_manually_for_create(Hypertable *ht,
 static void compression_settings_set_manually_for_alter(Hypertable *ht,
 														CompressionSettings *settings,
 														WithClauseResult *with_clause_options);
-static void compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
-											  WithClauseResult *with_clause_options);
 
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
@@ -1399,7 +1397,7 @@ compression_setting_sparse_index_get_default(Hypertable *ht, CompressionSettings
 	return has_object ? JsonbValueToJsonb(pushJsonbValue(&parse_state, WJB_END_ARRAY, NULL)) : NULL;
 }
 
-static void
+void
 compression_settings_set_defaults(Hypertable *ht, CompressionSettings *settings,
 								  WithClauseResult *with_clause_options)
 {

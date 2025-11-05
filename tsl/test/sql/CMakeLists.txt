@@ -64,6 +64,7 @@ set(TEST_FILES
     move.sql
     plan_skip_scan_notnull.sql
     policy_generalization.sql
+    recompression_integrity_tests.sql
     reorder.sql
     size_utils_tsl.sql
     skip_scan.sql

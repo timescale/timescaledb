@@ -1367,113 +1367,6 @@ hypertable_validate_constraints(Oid relid)
 	table_close(catalog, AccessShareLock);
 }
 
-/*
- * Functionality to block INSERTs on the hypertable's root table.
- *
- * The design considered implementing this either with RULES, constraints, or
- * triggers. A visible trigger was found to have the best trade-offs:
- *
- * - A RULE doesn't work since it rewrites the query and thus blocks INSERTs
- *   also on the hypertable.
- *
- * - A constraint is not transparent, i.e., viewing the hypertable with \d+
- *   <table> would list the constraint and that breaks the abstraction of
- *   "hypertables being like regular tables." Further, a constraint remains on
- *   the table after the extension is dropped, which prohibits running
- *   create_hypertable() on the same table once the extension is created again
- *   (you can work around this, but is messy). This issue, b.t.w., broke one
- *   of the tests.
- *
- * - An internal trigger is transparent (doesn't show up
- *	 on \d+ <table>) and is automatically removed when the extension is
- *	 dropped (since it is part of the extension). Internal triggers aren't
- *	 inherited by chunks either, so we need no special handling to _not_
- *	 inherit the blocking trigger. However, internal triggers are not exported
- *   via pg_dump. Because a critical use case for this trigger is to ensure
- *   no rows are inserted into hypertables by accident when a user forgets to
- *   turn restoring off, having this trigger exported in pg_dump is essential.
- *
- * - A visible trigger unfortunately shows up in \d+ <table>, but is
- *   included in a pg_dump. We also add logic to make sure this trigger is not
- *   propagated to chunks.
- */
-TS_FUNCTION_INFO_V1(ts_hypertable_insert_blocker);
-
-Datum
-ts_hypertable_insert_blocker(PG_FUNCTION_ARGS)
-{
-	if (!CALLED_AS_TRIGGER(fcinfo))
-		elog(ERROR, "insert_blocker: not called by trigger manager");
-
-	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	Ensure(trigdata != NULL, "trigdata has to be set");
-	Ensure(trigdata->tg_relation != NULL, "tg_relation has to be set");
-
-	const char *relname = get_rel_name(trigdata->tg_relation->rd_id);
-
-	if (ts_guc_restoring)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot INSERT into hypertable \"%s\" during restore", relname),
-				 errhint("Set 'timescaledb.restoring' to 'off' after the restore process has "
-						 "finished.")));
-	else
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("invalid INSERT on the root table of hypertable \"%s\"", relname),
-				 errhint("Make sure the TimescaleDB extension has been preloaded.")));
-
-	PG_RETURN_NULL();
-}
-
-/*
- * Add an INSERT blocking trigger to a table.
- *
- * The blocking trigger is used to block accidental INSERTs on a hypertable's
- * root table.
- */
-static Oid
-insert_blocker_trigger_add(Oid relid)
-{
-	ObjectAddress objaddr;
-	char *relname = get_rel_name(relid);
-	Oid schemaid = get_rel_namespace(relid);
-	char *schema = get_namespace_name(schemaid);
-	CreateTrigStmt stmt = {
-		.type = T_CreateTrigStmt,
-		.row = true,
-		.timing = TRIGGER_TYPE_BEFORE,
-		.trigname = INSERT_BLOCKER_NAME,
-		.relation = makeRangeVar(schema, relname, -1),
-		.funcname =
-			list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(OLD_INSERT_BLOCKER_NAME)),
-		.args = NIL,
-		.events = TRIGGER_TYPE_INSERT,
-	};
-
-	/*
-	 * We create a user-visible trigger, so that it will get pg_dump'd with
-	 * the hypertable. This call will error out if a trigger with the same
-	 * name already exists. (This is the desired behavior.)
-	 */
-	objaddr = CreateTrigger(&stmt,
-							NULL,
-							relid,
-							InvalidOid,
-							InvalidOid,
-							InvalidOid,
-							InvalidOid,
-							InvalidOid,
-							NULL,
-							false,
-							false);
-
-	if (!OidIsValid(objaddr.objectId))
-		elog(ERROR, "could not create insert blocker trigger");
-
-	return objaddr.objectId;
-}
-
 static Datum
 create_hypertable_datum(FunctionCallInfo fcinfo, const Hypertable *ht, bool created,
 						bool is_generic)
@@ -2048,8 +1941,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 		timescaledb_move_from_table_to_chunks(ht, RowExclusiveLock);
 	}
 
-	insert_blocker_trigger_add(table_relid);
-
 	ts_cache_release(&hcache);
 
 	return true;
@@ -2364,7 +2255,6 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 		ts_tablespace_attach_internal(&tspc_name, table_relid, false);
 	}
 
-	insert_blocker_trigger_add(table_relid);
 	return true;
 }
 

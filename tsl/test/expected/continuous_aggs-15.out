@@ -79,9 +79,8 @@ SET ROLE :ROLE_SUPERUSER;
 select tgname, tgtype, tgenabled , relname from pg_trigger, pg_class
 where tgrelid = pg_class.oid and pg_class.relname like 'foo'
 order by tgname;
-      tgname       | tgtype | tgenabled | relname 
--------------------+--------+-----------+---------
- ts_insert_blocker |      7 | O         | foo
+ tgname | tgtype | tgenabled | relname 
+--------+--------+-----------+---------
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- TEST2 ---

@@ -627,13 +627,99 @@ build_compressioninfo(PlannerInfo *root, const Hypertable *ht, const Chunk *chun
 }
 
 /*
+ * Estimate the average count of elements in the compressed batch based on the
+ * Postgres statistics for _ts_meta_count column.
+ * Returns TARGET_COMPRESSED_BATCH_SIZE when no pg_statistic entry exists.
+ */
+static double
+estimate_compressed_batch_size(PlannerInfo *root, const CompressionInfo *compression_info)
+{
+	AttrNumber attnum = get_attnum(compression_info->compressed_rte->relid, "_ts_meta_count");
+	if (attnum == InvalidAttrNumber)
+		return TARGET_COMPRESSED_BATCH_SIZE;
+
+	Var *var = makeVar(compression_info->compressed_rel->relid, attnum, INT4OID, -1, InvalidOid, 0);
+
+	/* fetch statistics */
+	VariableStatData vardata;
+	examine_variable(root, (Node *) var, 0, &vardata);
+
+	if (!HeapTupleIsValid(vardata.statsTuple))
+	{
+		ReleaseVariableStats(vardata);
+		return TARGET_COMPRESSED_BATCH_SIZE;
+	}
+
+	double mcv_sum = 0.0;
+	double mcv_freq = 0.0;
+
+	/* exact MCV contribution */
+	AttStatsSlot mcvslot;
+	if (get_attstatsslot(&mcvslot,
+						 vardata.statsTuple,
+						 STATISTIC_KIND_MCV,
+						 InvalidOid,
+						 ATTSTATSSLOT_VALUES | ATTSTATSSLOT_NUMBERS))
+	{
+		for (int i = 0; i < mcvslot.nvalues; i++)
+		{
+			double val = (double) DatumGetInt32(mcvslot.values[i]);
+			double freq = (double) mcvslot.numbers[i];
+			mcv_sum += val * freq;
+			mcv_freq += freq;
+		}
+		free_attstatsslot(&mcvslot);
+	}
+
+	double hist_sum = 0.0;
+
+	/* histogram contribution */
+	AttStatsSlot histslot;
+	if (get_attstatsslot(&histslot,
+						 vardata.statsTuple,
+						 STATISTIC_KIND_HISTOGRAM,
+						 InvalidOid,
+						 ATTSTATSSLOT_VALUES))
+	{
+		int buckets = histslot.nvalues - 1;
+
+		if (buckets > 0 && mcv_freq < 1.0)
+		{
+			for (int i = 0; i < buckets; i++)
+			{
+				double lo = (double) DatumGetInt32(histslot.values[i]);
+				double hi = (double) DatumGetInt32(histslot.values[i + 1]);
+				hist_sum += (lo + hi) / 2.0;
+			}
+			hist_sum *= (1.0 - mcv_freq) / buckets;
+		}
+		free_attstatsslot(&histslot);
+	}
+
+	ReleaseVariableStats(vardata);
+
+	const double final_result = mcv_sum + hist_sum;
+	if (final_result == 0)
+	{
+		/*
+		 * For tables with few rows, the statistics tuple will contain all zero
+		 * values. We shouldn't return zero in this case to avoid weird behavior.
+		 */
+		return TARGET_COMPRESSED_BATCH_SIZE;
+	}
+
+	return final_result;
+}
+
+/*
  * calculate cost for ColumnarScanPath
  *
  * since we have to read whole batch before producing tuple
  * we put cost of 1 tuple of compressed_scan as startup cost
  */
 static void
-cost_columnar_scan(PlannerInfo *root, Path *path, Path *compressed_path)
+cost_columnar_scan(PlannerInfo *root, const CompressionInfo *compression_info, Path *path,
+				   Path *compressed_path)
 {
 	/* startup_cost is cost before fetching first tuple */
 	const double compressed_rows = Max(1, compressed_path->rows);
@@ -642,7 +728,7 @@ cost_columnar_scan(PlannerInfo *root, Path *path, Path *compressed_path)
 		(compressed_path->total_cost - compressed_path->startup_cost) / compressed_rows;
 
 	/* total_cost is cost for fetching all tuples */
-	path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
+	path->rows = compressed_path->rows * compression_info->compressed_batch_size;
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 
 #if PG18_GE
@@ -806,7 +892,8 @@ cost_batch_sorted_merge(PlannerInfo *root, const CompressionInfo *compression_in
 	 * compressed chunk is never projected so we can't use it for that.
 	 */
 	const double work_mem_bytes = work_mem * 1024.0;
-	const double needed_memory_bytes = open_batches_clamped * TARGET_COMPRESSED_BATCH_SIZE *
+	const double needed_memory_bytes = open_batches_clamped *
+									   compression_info->compressed_batch_size *
 									   dcpath->custom_path.path.pathtarget->width;
 
 	/*
@@ -1031,6 +1118,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	RelOptInfo *compressed_rel = compression_info->compressed_rel;
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
+
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root,
 				   compression_info->settings,
@@ -1043,6 +1131,13 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	set_compressed_baserel_size_estimates(root, compressed_rel, compression_info);
 
 	/*
+	 * Estimate the size of the compressed batch from Postgres
+	 * statistics.
+	 */
+	compression_info->compressed_batch_size =
+		estimate_compressed_batch_size(root, compression_info);
+
+	/*
 	 * Estimate the size of decompressed chunk based on the compressed chunk.
 	 *
 	 * The tuple estimates derived from pg_class will be empty, so we have to
@@ -1051,8 +1146,9 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 	 * Append, and also different MergeAppend costs on Postgres before 17 due to
 	 * a bug there.
 	 */
-	const double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
-	const double new_tuples_estimate = compressed_rel->tuples * TARGET_COMPRESSED_BATCH_SIZE;
+	const double new_row_estimate = compressed_rel->rows * compression_info->compressed_batch_size;
+	const double new_tuples_estimate =
+		compressed_rel->tuples * compression_info->compressed_batch_size;
 	if (!compression_info->single_chunk)
 	{
 		/*
@@ -1062,8 +1158,13 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 		const Index ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
-		hypertable_rel->tuples += (new_tuples_estimate - chunk_rel->tuples);
+		const double delta = new_row_estimate - chunk_rel->rows;
+		hypertable_rel->rows += delta;
+		/*
+		 * For appendrel, set tuples to the same value as rows,
+		 * like set_append_rel_size() does.
+		 */
+		hypertable_rel->tuples += delta;
 	}
 	chunk_rel->rows = new_row_estimate;
 	chunk_rel->tuples = new_tuples_estimate;
@@ -1311,7 +1412,7 @@ build_on_single_compressed_path(PlannerInfo *root, const Chunk *chunk, RelOptInf
 					  work_mem,
 					  -1);
 
-			cost_columnar_scan(root, &path_copy->custom_path.path, &sort_path);
+			cost_columnar_scan(root, compression_info, &path_copy->custom_path.path, &sort_path);
 
 			decompressed_paths = lappend(decompressed_paths, path_copy);
 		}
@@ -2215,17 +2316,18 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 }
 
 static ColumnarScanPath *
-columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info, Path *compressed_path)
+columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *compression_info,
+						  Path *compressed_path)
 {
 	ColumnarScanPath *path;
 
 	path = (ColumnarScanPath *) newNode(sizeof(ColumnarScanPath), T_CustomPath);
 
-	path->info = info;
+	path->info = compression_info;
 
 	path->custom_path.path.pathtype = T_CustomScan;
-	path->custom_path.path.parent = info->chunk_rel;
-	path->custom_path.path.pathtarget = info->chunk_rel->reltarget;
+	path->custom_path.path.parent = compression_info->chunk_rel;
+	path->custom_path.path.pathtarget = compression_info->chunk_rel->reltarget;
 
 	if (compressed_path->param_info != NULL)
 	{
@@ -2237,7 +2339,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info, Path *
 		 */
 		path->custom_path.path.param_info =
 			get_baserel_parampathinfo(root,
-									  info->chunk_rel,
+									  compression_info->chunk_rel,
 									  compressed_path->param_info->ppi_req_outer);
 		Assert(path->custom_path.path.param_info != NULL);
 	}
@@ -2264,7 +2366,7 @@ columnar_scan_path_create(PlannerInfo *root, const CompressionInfo *info, Path *
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
 	path->required_compressed_pathkeys = NIL;
-	cost_columnar_scan(root, &path->custom_path.path, compressed_path);
+	cost_columnar_scan(root, compression_info, &path->custom_path.path, compressed_path);
 
 	return path;
 }

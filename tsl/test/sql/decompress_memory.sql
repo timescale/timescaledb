@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+\c :TEST_DBNAME :ROLE_SUPERUSER;
 
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float, tag text);
 ALTER TABLE ht_metrics_compressed SET (autovacuum_enabled = false);

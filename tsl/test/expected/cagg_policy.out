@@ -1317,3 +1317,11 @@ SELECT count(*) FROM issue_6902;
 -------
    362
 
+-- test untyped interval error handling
+CREATE TABLE m(time timestamptz) WITH (tsdb.hypertable);
+NOTICE:  using column "time" as partitioning column
+CREATE MATERIALIZED VIEW cagg_error WITH (tsdb.continuous)
+AS SELECT time_bucket('1 day', time) FROM m GROUP BY 1;
+NOTICE:  continuous aggregate "cagg_error" is already up-to-date
+SELECT timescaledb_experimental.add_policies('cagg_error', drop_after => '20 days');
+ERROR:  unsupported interval argument type: unknown

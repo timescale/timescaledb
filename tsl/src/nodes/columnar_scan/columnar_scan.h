@@ -44,6 +44,9 @@ typedef struct CompressionInfo
 	bool single_chunk;	  /* query on explicit chunk */
 	bool has_seq_num;	  /* legacy sequence number support */
 	Relids parent_relids; /* relids of the parent hypertable and UNION */
+
+	/* Compressed batch size estimated from statistics. */
+	double compressed_batch_size;
 } CompressionInfo;
 
 typedef struct ColumnarScanPath
