@@ -1117,7 +1117,9 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 
 	RelOptInfo *compressed_rel = compression_info->compressed_rel;
 
-	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
+	// why is consider parallel = true when there is no uncompressed_table_parallel_pathlist
+	// compressed_rel->consider_parallel = chunk_rel->consider_parallel;
+	compressed_rel->consider_parallel = false;
 
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root,
@@ -1220,7 +1222,7 @@ ts_columnar_scan_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, const 
 
 	/* create parallel paths */
 	List *uncompressed_paths_with_parallel =
-		list_concat(uncompressed_table_parallel_pathlist, uncompressed_table_pathlist);
+		list_concat(uncompressed_table_parallel_pathlist, uncompressed_table_pathlist); // why?
 	foreach (compressed_cell, compressed_rel->partial_pathlist)
 	{
 		Path *compressed_path = lfirst(compressed_cell);
@@ -2268,6 +2270,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 	 */
 	Assert(info->single_chunk || chunk_rel->top_parent_relids != NULL);
 	compressed_rel->top_parent_relids = bms_copy(chunk_rel->top_parent_relids);
+	//compressed_rel->lateral_relids = bms_copy(chunk_rel->lateral_relids); // might not be needed
 
 	root->simple_rel_array[compressed_index] = compressed_rel;
 	info->compressed_rel = compressed_rel;
@@ -2311,7 +2314,7 @@ columnar_scan_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, const Ch
 		 */
 		root->append_rel_array[compressed_rel->relid] = makeNode(AppendRelInfo);
 		root->append_rel_array[compressed_rel->relid]->parent_relid = info->ht_rel->relid;
-		compressed_rel->top_parent_relids = chunk_rel->top_parent_relids;
+		compressed_rel->top_parent_relids = chunk_rel->top_parent_relids; // why?
 	}
 }
 
@@ -2388,7 +2391,8 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 	root->total_table_pages += Max(compressed_rel->pages, 10);
 
 	/* create non parallel scan path */
-	compressed_path = create_seqscan_path(root, compressed_rel, NULL, 0);
+	compressed_path =
+		create_seqscan_path(root, compressed_rel, compression_info->chunk_rel->lateral_relids, 0);
 	add_path(compressed_rel, compressed_path);
 
 	/*
@@ -2409,7 +2413,10 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 		if (parallel_workers > 0)
 		{
 			add_partial_path(compressed_rel,
-							 create_seqscan_path(root, compressed_rel, NULL, parallel_workers));
+							 create_seqscan_path(root,
+												 compressed_rel,
+												 compression_info->chunk_rel->lateral_relids,
+												 parallel_workers));
 		}
 	}
 
