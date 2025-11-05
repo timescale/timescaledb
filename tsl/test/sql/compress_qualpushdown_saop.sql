@@ -77,6 +77,9 @@ explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where (with_bloom collate :"COLLATION") = any(array['1', '10']::varchar(255)[]);
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom in ('1', '10');
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = all(array['1', '10']);
 
 explain (analyze, buffers off, costs off, timing off, summary off)

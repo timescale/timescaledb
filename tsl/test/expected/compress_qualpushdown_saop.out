@@ -158,6 +158,23 @@ select * from saop where (with_bloom collate :"COLLATION") = any(array['1', '10'
          ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=69.00 loops=1)
 
 explain (analyze, buffers off, costs off, timing off, summary off)
+select * from saop where with_bloom in ('1', '10');
+--- QUERY PLAN ---
+ Append (actual rows=270.00 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=135.00 loops=1)
+         Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 47605
+         ->  Seq Scan on compress_hyper_2_3_chunk (actual rows=56.00 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, '{1,10}'::text[])
+               Rows Removed by Filter: 13
+   ->  Custom Scan (ColumnarScan) on _hyper_1_2_chunk (actual rows=135.00 loops=1)
+         Vectorized Filter: (with_bloom = ANY ('{1,10}'::text[]))
+         Rows Removed by Filter: 47604
+         ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=56.00 loops=1)
+               Filter: _timescaledb_functions.bloom1_contains_any(_ts_meta_v2_bloom1_with_bloom, '{1,10}'::text[])
+               Rows Removed by Filter: 13
+
+explain (analyze, buffers off, costs off, timing off, summary off)
 select * from saop where with_bloom = all(array['1', '10']);
 --- QUERY PLAN ---
  Result (actual rows=0.00 loops=1)
