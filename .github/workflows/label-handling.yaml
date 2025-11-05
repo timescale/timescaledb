@@ -8,9 +8,16 @@ on:
   pull_request:
     types:
       - labeled
+  issues:
+    types: 
+      - labeled
 
 jobs:
+  #
+  # Ping the Database team if the label was applied on a PR
+  #
   pr-upgrade-requires-restart:
+    name: "PR: Ping database team if 'upgrade-requires-restart' label is set"
     runs-on: ubuntu-latest
     steps:
       - name: "PR: upgrade-requires-restart"
@@ -22,5 +29,182 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.payload.pull_request.number,
-              body: "📣 the `upgrade-requires-restart` label was added, pinging @timescale/database-pings"
+              body: "📣 the `upgrade-requires-restart` label was added, pinging @timescale/database-eng"
             })
+
+  #
+  # If a bug issue is opened, try to parse the affected TimescaleDB
+  # and Postgres version used, the add the labels to the issue. If 
+  # the labels don't exist, created them. The format must be semver
+  # d.d.d+, any other format gets rejected and no label gets created.
+  # TimescaleDB labels are prefixed with a `v`, e.g. `v2.23.0``
+  # Postgres labels are prefixed with `postgres`, e.g. `postgres-17.4`
+  #
+  issue-add-version-labels-for-bugs:
+    name: "Issue: Add TimescaleDB and Postgres version labels"
+    runs-on: ubuntu-latest
+
+    # Only run if the issue has the "bug" label
+    if: contains(github.event.issue.labels.*.name, 'bug')
+    
+    permissions:
+      issues: write
+      
+    steps:
+      - name: Extract versions from issue body
+        id: extract-versions
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueBody = context.payload.issue.body || '';
+            const issueNumber = context.issue.number;
+            
+            const results = {
+              issueNumber: issueNumber,
+              timescaledb: { found: false },
+              postgres: { found: false }
+            };
+            
+            // Extract TimescaleDB version (with line break: "TimescaleDB version affected\nX.Y.Z")
+            const timescaleRegex = /TimescaleDB version affected\s*[\r\n]+\s*(\d+\.\d+\.\d+)/i;
+            const timescaleMatch = issueBody.match(timescaleRegex);
+            
+            if (timescaleMatch) {
+              const version = timescaleMatch[1];
+              const formatRegex = /^\d+\.\d+\.\d+$/;
+              
+              if (formatRegex.test(version)) {
+                console.log(`Found TimescaleDB version: ${version}`);
+                results.timescaledb = {
+                  found: true,
+                  version: version,
+                  label: `v${version}`
+                };
+              }
+            }
+            
+            // Extract PostgreSQL version (X.Y or X.Y.Z format, create X.Y label)
+            const postgresRegex = /PostgreSQL version:\s*(\d+\.\d+(?:\.\d+)?)/i;
+            const postgresMatch = issueBody.match(postgresRegex);
+            
+            if (postgresMatch) {
+              const fullVersion = postgresMatch[1];
+              // Extract just X.Y from X.Y or X.Y.Z
+              const majorMinor = fullVersion.match(/^(\d+\.\d+)/);
+              
+              if (majorMinor) {
+                const version = majorMinor[1];
+                console.log(`Found PostgreSQL version: ${fullVersion}, using ${version} for label`);
+                results.postgres = {
+                  found: true,
+                  version: version,
+                  fullVersion: fullVersion,
+                  label: `postgres-${version}`
+                };
+              }
+            }
+            
+            if (!results.timescaledb.found) {
+              console.log('No valid TimescaleDB version found in issue body');
+            }
+            
+            if (!results.postgres.found) {
+              console.log('No valid PostgreSQL version found in issue body');
+            }
+            
+            return results;
+          result-encoding: json
+          
+      - name: Create and add TimescaleDB version label
+        if: fromJson(steps.extract-versions.outputs.result).timescaledb.found == true
+        uses: actions/github-script@v7
+        env:
+          RESULTS: ${{ steps.extract-versions.outputs.result }}
+        with:
+          script: |
+            const results = JSON.parse(process.env.RESULTS);
+            const labelName = results.timescaledb.label;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = results.issueNumber;
+            
+            // Check if label exists, create if it doesn't
+            try {
+              await github.rest.issues.getLabel({
+                owner,
+                repo,
+                name: labelName
+              });
+              console.log(`Label ${labelName} already exists`);
+            } catch (error) {
+              if (error.status === 404) {
+                console.log(`Label ${labelName} does not exist, creating it`);
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: labelName,
+                  color: '0366d6', // Blue color
+                  description: `TimescaleDB version ${results.timescaledb.version}`
+                });
+                console.log(`Created label ${labelName}`);
+              } else {
+                throw error;
+              }
+            }
+            
+            // Add label to issue
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              labels: [labelName]
+            });
+            
+            console.log(`Added label ${labelName} to issue #${issueNumber}`);
+            
+      - name: Create and add PostgreSQL version label
+        if: fromJson(steps.extract-versions.outputs.result).postgres.found == true
+        uses: actions/github-script@v7
+        env:
+          RESULTS: ${{ steps.extract-versions.outputs.result }}
+        with:
+          script: |
+            const results = JSON.parse(process.env.RESULTS);
+            const labelName = results.postgres.label;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = results.issueNumber;
+            
+            // Check if label exists, create if it doesn't
+            try {
+              await github.rest.issues.getLabel({
+                owner,
+                repo,
+                name: labelName
+              });
+              console.log(`Label ${labelName} already exists`);
+            } catch (error) {
+              if (error.status === 404) {
+                console.log(`Label ${labelName} does not exist, creating it`);
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name: labelName,
+                  color: '336791', // PostgreSQL blue color
+                  description: `PostgreSQL version ${results.postgres.version}`
+                });
+                console.log(`Created label ${labelName}`);
+              } else {
+                throw error;
+              }
+            }
+            
+            // Add label to issue
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              labels: [labelName]
+            });
+            
+            console.log(`Added label ${labelName} to issue #${issueNumber}`);
