@@ -84,7 +84,7 @@ jobs:
             }
             
             // Extract PostgreSQL version (X.Y or X.Y.Z format, create X.Y label)
-            const postgresRegex = /PostgreSQL version:\s*(\d+\.\d+(?:\.\d+)?)/i;
+            const postgresRegex = /PostgreSQL version used:\s*(\d+\.\d+(?:\.\d+)?)/i;
             const postgresMatch = issueBody.match(postgresRegex);
             
             if (postgresMatch) {
