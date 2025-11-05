@@ -624,7 +624,7 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
            ->  Custom Scan (ColumnarScan) on _hyper_5_5_chunk (actual rows=1.00 loops=9)
                  Filter: (b = v_badint.b)
                  Rows Removed by Filter: 3229
-                 ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=4.00 loops=9)
+                 ->  Seq Scan on compress_hyper_6_7_chunk (actual rows=4.22 loops=9)
                        Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloomXXX_b, v_badint.b)
                        Rows Removed by Filter: 23
 
@@ -688,7 +688,7 @@ select exists (select * from badtable where b = v_badint.b) from v_badint;
            ->  Custom Scan (ColumnarScan) on _hyper_5_5_chunk (actual rows=1.00 loops=9)
                  Filter: (b = v_badint.b)
                  Rows Removed by Filter: 25784
-                 ->  Seq Scan on compress_hyper_6_8_chunk (actual rows=27.00 loops=9)
+                 ->  Seq Scan on compress_hyper_6_8_chunk (actual rows=26.78 loops=9)
                        Filter: _timescaledb_functions.bloom1_contains(_ts_meta_v2_bloomXXX_b, v_badint.b)
 
 ;
