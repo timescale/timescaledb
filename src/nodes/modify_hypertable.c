@@ -64,14 +64,6 @@ should_use_direct_compress(ModifyHypertableState *state)
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 		return false;
 
-	if (ts_hypertable_has_continuous_aggregates(ht->fd.id))
-	{
-		ereport(WARNING,
-				(errmsg("disabling direct compress because the destination table has continuous "
-						"aggregates")));
-		return false;
-	}
-
 	if (resultRelInfo->ri_TrigDesc)
 	{
 		ereport(WARNING,

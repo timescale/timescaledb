@@ -225,6 +225,13 @@ typedef struct PerColumn
 	int16 segmentby_column_index;
 } PerColumn;
 
+typedef struct InvalidationSettings
+{
+	int32 hypertable_id;
+	Oid chunk_relid;
+	AttrNumber invalidation_column_offset;
+} InvalidationSettings;
+
 typedef struct RowCompressor
 {
 	/* memory context reset per-row is stored */
@@ -250,6 +257,9 @@ typedef struct RowCompressor
 	 */
 	int16 *uncompressed_col_to_compressed_col;
 	int16 count_metadata_column_offset;
+
+	/* for continuous aggregate invalidation */
+	InvalidationSettings *invalidation;
 
 	/* the number of uncompressed rows compressed into the current compressed row */
 	uint32 rows_compressed_into_current_value;
@@ -372,9 +382,10 @@ extern void row_compressor_init(RowCompressor *row_compressor, const Compression
 								const TupleDesc noncompressed_tupdesc,
 								const TupleDesc compressed_tupdesc);
 
-RowCompressor *row_compressor_alloc(void);
 extern RowCompressor *tsl_compressor_init(Relation in_rel, BulkWriter **bulk_writer, bool sort,
 										  int tuple_sort_limit);
+extern void tsl_compressor_set_invalidation(RowCompressor *compressor, Hypertable *ht,
+											Oid chunk_relid);
 extern void tsl_compressor_add_slot(RowCompressor *compressor, BulkWriter *bulk_writer,
 									TupleTableSlot *slot);
 extern void tsl_compressor_flush(RowCompressor *compressor, BulkWriter *bulk_writer);
