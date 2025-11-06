@@ -137,6 +137,32 @@ update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval)
 		cache_entry->greatest_modified_value = timeval;
 }
 
+/*
+ * Used by direct compress invalidation
+ */
+void
+continuous_agg_invalidate_range(int32 hypertable_id, Oid chunk_relid, int64 start, int64 end)
+{
+	ContinuousAggsCacheInvalEntry *cache_entry;
+	bool found;
+
+	if (!continuous_aggs_cache_inval_htab)
+		cache_inval_init();
+
+	cache_entry = (ContinuousAggsCacheInvalEntry *)
+		hash_search(continuous_aggs_cache_inval_htab, &hypertable_id, HASH_ENTER, &found);
+
+	if (!found)
+		cache_inval_entry_init(cache_entry, hypertable_id, chunk_relid);
+
+	cache_entry->value_is_set = true;
+	Assert(start <= end);
+	if (start < cache_entry->lowest_modified_value)
+		cache_entry->lowest_modified_value = start;
+	if (end > cache_entry->greatest_modified_value)
+		cache_entry->greatest_modified_value = end;
+}
+
 void
 continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
 							  HeapTuple chunk_newtuple, bool update)
