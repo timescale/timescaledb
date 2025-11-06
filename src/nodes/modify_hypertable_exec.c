@@ -2211,7 +2211,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	HeapTuple oldtuple;
 	List *relinfos = NIL;
 	ListCell *lc;
-  ChunkTupleRouting *ctr = ht_state->ctr;
+	ChunkTupleRouting *ctr = ht_state->ctr;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -2419,6 +2419,12 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 					bool sort = ts_guc_enable_direct_compress_insert_sort_batches && !ts_guc_enable_direct_compress_insert_client_sorted;
 					ht_state->compressor = ts_cm_functions->compressor_init(ctr->cis->rel, &ht_state->bulk_writer, sort);
 					ht_state->compressor_relid = RelationGetRelid(ctr->cis->rel);
+
+					if (ht_state->has_continuous_aggregate)
+					{
+						ts_cm_functions->compressor_set_invalidation(ht_state->compressor, ctr->hypertable, RelationGetRelid(ctr->cis->rel));
+					}
+
 					/* if client does not commit to global ordering, set chunk to unordered */
 					if (!ts_guc_enable_direct_compress_insert_client_sorted)
 					{
