@@ -100,6 +100,7 @@ WHERE
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 CREATE MATERIALIZED VIEW conditions_by_day_manual_refresh
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
@@ -145,6 +146,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '1 hour')::bigint * 
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 SELECT count(*) FROM conditions_by_day;
 SELECT count(*) FROM conditions_by_day_manual_refresh;
@@ -162,6 +164,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '2 hour')::bigint * 
 
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Should have no differences
 SELECT
@@ -199,6 +202,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '3 hour')::bigint * 
 -- Should process all four batches in the past
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 SELECT count(*) FROM conditions_by_day;
 SELECT count(*) FROM conditions_by_day_manual_refresh;
@@ -245,6 +249,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '4 hour')::bigint * 
 -- Should fallback to single batch processing because there's no data to be refreshed on the original hypertable
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Should return zero rows
 SELECT count(*) FROM conditions_by_day;
@@ -268,6 +273,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '5 hour')::bigint * 
 -- Should fallback to single batch processing because the refresh size is too small
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Should return 10 rows because the bucket width is `1 day` and buckets per batch is `10`
 SELECT count(*) FROM conditions_by_day;
@@ -284,6 +290,7 @@ SELECT ts_bgw_params_reset_time(extract(epoch from interval '6 hour')::bigint * 
 -- Should fallback to single batch processing because the refresh size is too small
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Should return 1 row
 SELECT count(*) FROM conditions_by_day;
@@ -324,6 +331,7 @@ FROM
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
@@ -363,6 +371,7 @@ TRUNCATE bgw_log, conditions_by_day;
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 -- Both continuous aggregates should have the same data
 SELECT count(*) FROM conditions_by_day;
@@ -428,6 +437,7 @@ TRUNCATE bgw_log, conditions_by_day;
 SELECT ts_bgw_params_reset_time(0, true);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
 SELECT * FROM sorted_bgw_log;
+SELECT * FROM _timescaledb_catalog.continuous_aggs_materialization_ranges;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 REASSIGN OWNED BY test_cagg_refresh_policy_user TO :ROLE_SUPERUSER;
