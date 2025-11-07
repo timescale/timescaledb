@@ -20,6 +20,7 @@ set(TEST_FILES
     cagg_refresh_using_trigger.sql
     cagg_refresh_using_wal.sql
     cagg_refresh_using_merge.sql
+    cagg_rewrites.sql
     cagg_utils.sql
     cagg_watermark.sql
     chunk_column_stats.sql
