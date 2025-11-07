@@ -223,6 +223,10 @@ step "R1_refresh"
 {
     CALL refresh_continuous_aggregate('cond_10', 25, 70);
 }
+step "R1_refresh2"
+{
+    CALL refresh_continuous_aggregate('cond_10', 30, 120);
+}
 
 session "R12"
 setup
@@ -236,11 +240,37 @@ step "R12_refresh"
 }
 
 session "R13"
-step "R13_refresh"
+step "R13_refresh1"
 {
+    -- the window start 65 is far from the pending range start 30
+    -- so in this case the left behind pending range will NOT be processed
     CALL refresh_continuous_aggregate('cond_10', 65, 100);
 }
-
+step "R13_refresh2"
+{
+    -- the window start 40 is one bucket before the pending range start 30
+    -- so in this case the left behind pending range will be processed
+    CALL refresh_continuous_aggregate('cond_10', 40, 100);
+}
+step "R13_refresh3"
+{
+    -- the window end 100 is far from the pending range end 120
+    -- so in this case the left behind pending range will NOT be processed
+    CALL refresh_continuous_aggregate('cond_10', 40, 100);
+}
+step "R13_refresh4"
+{
+    -- the window end 110 is one bucket after the pending range end 120
+    -- so in this case the left behind pending range will be processed
+    CALL refresh_continuous_aggregate('cond_10', 40, 110);
+}
+step "R13_refresh5"
+{
+    -- the window start and end are far in more than one bucket from
+    -- pending range, so in this case the left behind pending range
+    -- will NOT be processed
+    CALL refresh_continuous_aggregate('cond_10', 50, 100);
+}
 
 # Refresh that overlaps with R1
 session "R2"
@@ -444,7 +474,10 @@ permutation "WP_after_enable" "R1_refresh"("WP_after_enable") "R6_pending_materi
 
 # CAgg materialization phase (third trasaction of the refresh procedure) terminated by another session and then
 # refreshing again and make sure the pending ranges will be processed
-permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_after_enable") "R3_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_after_release" "R13_refresh"("K1_cancelpid") "R6_pending_materialization_ranges"
+permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh"("WP_after_enable") "R3_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh") "R6_pending_materialization_ranges" "WP_after_release" "R13_refresh1"("K1_cancelpid") "R6_pending_materialization_ranges" "R13_refresh2" "R6_pending_materialization_ranges"
+
+permutation "WP_after_enable" "R6_pending_materialization_ranges" "R1_refresh2"("WP_after_enable") "R3_refresh"("WP_after_enable") "K1_cancelpid"("R1_refresh2") "R6_pending_materialization_ranges" "WP_after_release" "R13_refresh3"("K1_cancelpid") "R6_pending_materialization_ranges" "R13_refresh5" "R6_pending_materialization_ranges" "R13_refresh4" "R6_pending_materialization_ranges"
+
 
 # R3 should wait for R1 to finish because there are cagg invalidation rows locked
 permutation "WP_before_enable" "R1_refresh"("WP_before_enable") "R3_refresh" "WP_before_release"
