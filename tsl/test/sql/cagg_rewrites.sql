@@ -1,0 +1,363 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+
+SET timezone TO PST8PDT;
+
+CREATE TABLE conditions(
+  day TIMESTAMPTZ NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL,
+  device_id int NOT NULL
+);
+SELECT table_name FROM create_hypertable('conditions', 'day', chunk_time_interval => INTERVAL '1 day');
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2021-06-14', 'Moscow', 26,1),
+  ('2021-06-15', 'Berlin', 22,2),
+  ('2021-06-16', 'Stockholm', 24,3),
+  ('2021-06-17', 'London', 24,4),
+  ('2021-06-18', 'London', 27,4),
+  ('2021-06-19', 'Moscow', 28,4),
+  ('2021-06-20', 'Moscow', 30,1),
+  ('2021-06-21', 'Berlin', 31,1),
+  ('2021-06-22', 'Stockholm', 34,1),
+  ('2021-06-23', 'Stockholm', 34,2),
+  ('2021-06-24', 'Moscow', 34,2),
+  ('2021-06-25', 'London', 32,3),
+  ('2021-06-26', 'Moscow', 32,3),
+  ('2021-06-27', 'Moscow', 31,3);
+
+CREATE TABLE conditions_dup AS SELECT * FROM conditions;
+SELECT table_name FROM create_hypertable('conditions_dup', 'day', chunk_time_interval => INTERVAL '1 day', migrate_data => true);
+
+CREATE TABLE devices ( device_id int not null, name text, location text);
+INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
+
+CREATE TABLE location (location_id INTEGER, name TEXT);
+INSERT INTO location VALUES (1, 'Moscow'), (2, 'Berlin'), (3, 'London'), (4, 'Stockholm');
+
+CREATE VIEW devices_view AS SELECT * FROM devices;
+
+-- 1-table Caggs
+CREATE MATERIALIZED VIEW cagg1
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY bucket;
+
+CREATE MATERIALIZED VIEW cagg2
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '2 days', day) AS bucket,
+   AVG(temperature),
+   count(device_id)
+FROM conditions
+GROUP BY bucket;
+
+CREATE MATERIALIZED VIEW cagg3
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature) AS avg,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+HAVING count(device_id) > 1;
+
+-- Caggs with joins
+CREATE MATERIALIZED VIEW cagg_join
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket
+ORDER BY bucket;
+
+-- Create CAgg with more joins and additional WHERE conditions
+CREATE MATERIALIZED VIEW cagg_more_conds
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   COUNT(location_id),
+   devices.name
+FROM conditions LEFT JOIN devices ON conditions.device_id = devices.device_id
+JOIN location ON conditions.city = location.name
+WHERE location_id > 1 AND
+      conditions.temperature > 28
+GROUP BY devices.name, bucket;
+
+-- Hierarchical CAgg with join
+CREATE MATERIALIZED VIEW cagg_on_cagg1
+WITH (timescaledb.continuous, timescaledb.materialized_only=FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
+       SUM(avg) AS temperature
+FROM cagg1, devices
+WHERE devices.device_id = cagg1.device_id
+GROUP BY 1;
+
+-- Joining a hypertable and view
+CREATE MATERIALIZED VIEW cagg_view
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   devices_view.device_id,
+   name
+FROM conditions, devices_view
+WHERE conditions.device_id = devices_view.device_id
+GROUP BY name, bucket, devices_view.device_id;
+
+set timescaledb.cagg_rewrites_debug_info=1;
+
+-- Queries not eligible for rewrite
+-- No group by
+SELECT
+   AVG(temperature),
+   count(device_id)
+FROM conditions;
+
+-- no hypertable
+SELECT location, count(device_id)
+FROM devices
+GROUP BY location
+ORDER BY 1;
+
+-- two hypertables
+SELECT time_bucket(INTERVAL '3 days', conditions.day) AS bucket,
+   AVG(conditions.temperature),
+   count(conditions_dup.device_id)
+FROM conditions_dup, conditions
+WHERE conditions_dup.device_id = conditions.device_id
+GROUP BY bucket
+ORDER BY 1 LIMIT 1;
+
+-- no time bucket
+SELECT day,
+   AVG(temperature),
+   count(device_id)
+FROM conditions
+GROUP BY day
+ORDER BY 1;
+
+-- ineligible time bucket
+SELECT time_bucket(1, temperature) AS bucket,
+   AVG(temperature),
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+ORDER BY 1 LIMIT 1;
+
+-- no Caggs
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature),
+   count(device_id)
+FROM conditions_dup
+GROUP BY bucket
+ORDER BY 1;
+
+-- no matching Caggs
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions
+GROUP BY bucket
+ORDER BY 1;
+
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature) AS avg,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+HAVING count(device_id) > 0
+ORDER BY 1;
+
+-- Test queries eligibility for rewrites (cagg1)
+set timescaledb.enable_cagg_rewrites=0;
+
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1;
+
+-- Test query rewrite (cagg1)
+set timescaledb.enable_cagg_rewrites=1;
+
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1;
+
+-- Test queries eligibility for rewrites (cagg2)
+set timescaledb.enable_cagg_rewrites=0;
+
+SELECT time_bucket(INTERVAL '2 day', day) AS bucket,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+ORDER BY 1
+LIMIT 3;
+
+-- Test query rewrite (cagg2)
+set timescaledb.enable_cagg_rewrites=1;
+
+SELECT time_bucket(INTERVAL '2 day', day) AS bucket,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+ORDER BY 1
+LIMIT 3;
+
+-- Make sure Cagg was used
+explain SELECT time_bucket(INTERVAL '2 day', day) AS bucket,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+ORDER BY 1
+LIMIT 3;
+
+-- Test queries eligibility for rewrites (cagg3)
+set timescaledb.enable_cagg_rewrites=0;
+
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions
+GROUP BY bucket
+HAVING count(device_id) > 1
+ORDER BY 1;
+
+-- Test query rewrite (cagg3)
+set timescaledb.enable_cagg_rewrites=1;
+
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions
+GROUP BY bucket
+HAVING count(device_id) > 1
+ORDER BY 1;
+
+-- Test queries eligibility for rewrites (cagg_join), flip join order
+set timescaledb.enable_cagg_rewrites=0;
+
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   name
+FROM devices, conditions
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket
+ORDER BY 1;
+
+-- Test query rewrite (cagg_join)
+set timescaledb.enable_cagg_rewrites=1;
+
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   name
+FROM devices, conditions
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket
+ORDER BY 1;
+
+-- Test queries eligibility for rewrites (cagg_more_conds)
+set timescaledb.enable_cagg_rewrites=0;
+
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   COUNT(location_id),
+   devices.name
+FROM conditions LEFT JOIN devices ON conditions.device_id = devices.device_id
+JOIN location ON conditions.city = location.name
+WHERE location_id > 1 AND
+      conditions.temperature > 28
+GROUP BY devices.name, bucket
+ORDER BY bucket
+LIMIT 2;
+
+-- Test query rewrite (cagg_more_conds)
+set timescaledb.enable_cagg_rewrites=1;
+
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   COUNT(location_id),
+   devices.name
+FROM conditions LEFT JOIN devices ON conditions.device_id = devices.device_id
+JOIN location ON conditions.city = location.name
+WHERE location_id > 1 AND
+      conditions.temperature > 28
+GROUP BY devices.name, bucket
+ORDER BY bucket
+LIMIT 2;
+
+-- Hierarchical Caggs and Caggs on views
+
+-- Test queries eligibility for rewrites (cagg_on_cagg1)
+set timescaledb.enable_cagg_rewrites=0;
+
+SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
+       SUM(avg) AS temperature
+FROM cagg1, devices
+WHERE devices.device_id = cagg1.device_id
+GROUP BY 1 ORDER BY 1;
+
+-- Test query rewrite (cagg_on_cagg1)
+set timescaledb.enable_cagg_rewrites=1;
+
+SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
+       SUM(avg) AS temperature
+FROM cagg1, devices
+WHERE devices.device_id = cagg1.device_id
+GROUP BY 1 ORDER BY 1;
+
+-- Report on a query ineligible for hierarchical Cagg
+SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
+       SUM(avg) AS temperature
+FROM cagg1, devices
+WHERE devices.device_id = cagg1.device_id AND devices.device_id > 1
+GROUP BY 1 ORDER BY 1;
+
+-- Test queries eligibility for rewrites (cagg_view)
+ALTER MATERIALIZED VIEW cagg_view SET (timescaledb.materialized_only=false);
+
+set timescaledb.enable_cagg_rewrites=0;
+
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   devices_view.device_id,
+   name
+FROM conditions, devices_view
+WHERE conditions.device_id = devices_view.device_id
+GROUP BY name, bucket, devices_view.device_id
+ORDER BY 1, 2;
+
+-- Test query rewrite (cagg_view)
+set timescaledb.enable_cagg_rewrites=1;
+
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   devices_view.device_id,
+   name
+FROM conditions, devices_view
+WHERE conditions.device_id = devices_view.device_id
+GROUP BY name, bucket, devices_view.device_id
+ORDER BY 1, 2;
+
+reset timescaledb.enable_cagg_rewrites;
+reset timescaledb.cagg_rewrites_debug_info;
+
+DROP MATERIALIZED VIEW cagg_on_cagg1 CASCADE;
+DROP MATERIALIZED VIEW cagg1 CASCADE;
+DROP MATERIALIZED VIEW cagg2 CASCADE;
+DROP MATERIALIZED VIEW cagg3 CASCADE;
+DROP MATERIALIZED VIEW cagg_join CASCADE;
+DROP MATERIALIZED VIEW cagg_more_conds CASCADE;
+DROP MATERIALIZED VIEW cagg_view CASCADE;
+
+DROP TABLE conditions CASCADE;
+DROP TABLE conditions_dup CASCADE;
+DROP VIEW devices_view CASCADE;
+DROP TABLE devices CASCADE;
+DROP TABLE location CASCADE;
