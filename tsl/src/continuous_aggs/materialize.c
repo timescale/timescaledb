@@ -568,6 +568,8 @@ create_materialization_ranges_select_statement(MaterializationContext *context)
 					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
 					 "WHERE materialization_id = $1 "
 					 "AND greatest_modified_value >= lowest_modified_value "
+					 "AND lowest_modified_value >= $2 "
+					 "AND greatest_modified_value <= $3 "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
 					 "ORDER BY lowest_modified_value ASC "
@@ -602,6 +604,8 @@ create_materialization_ranges_pending_statement(MaterializationContext *context)
 					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
 					 "WHERE materialization_id = $1 "
 					 "AND greatest_modified_value >= lowest_modified_value "
+					 "AND lowest_modified_value >= $2 "
+					 "AND greatest_modified_value <= $3 "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
 					 "LIMIT 1 ");
@@ -673,9 +677,26 @@ create_materialization_plan_args(MaterializationContext *context, Materializatio
 		case PLAN_TYPE_RANGES_SELECT: /* 3 arguments */
 		case PLAN_TYPE_RANGES_PENDING:
 		{
+			/* read the maximum of one bucket before the window start and after the window end to
+			 * prevent pickup large pending ranges */
+			const int64 bucket_width =
+				ts_continuous_agg_bucket_width(context->cagg->bucket_function);
+			const int64 start_adjusted =
+				context->internal_materialization_range.start_isnull ?
+					context->internal_materialization_range.start :
+					ts_time_saturating_sub(context->internal_materialization_range.start,
+										   bucket_width,
+										   context->cagg->partition_type);
+			const int64 end_adjusted =
+				context->internal_materialization_range.end_isnull ?
+					context->internal_materialization_range.end :
+					ts_time_saturating_add(context->internal_materialization_range.end,
+										   bucket_width,
+										   context->cagg->partition_type);
+
 			(*values)[0] = Int32GetDatum(context->cagg->data.mat_hypertable_id);
-			(*values)[1] = Int64GetDatum(context->internal_materialization_range.start);
-			(*values)[2] = Int64GetDatum(context->internal_materialization_range.end);
+			(*values)[1] = Int64GetDatum(start_adjusted);
+			(*values)[2] = Int64GetDatum(end_adjusted);
 			(*nulls)[0] = false;
 			(*nulls)[1] = false;
 			(*nulls)[2] = false;
