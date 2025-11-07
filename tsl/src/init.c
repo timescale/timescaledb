@@ -33,6 +33,7 @@
 #include "continuous_aggs/invalidation.h"
 #include "continuous_aggs/options.h"
 #include "continuous_aggs/refresh.h"
+#include "continuous_aggs/rewrite_with_caggs.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "export.h"
@@ -134,6 +135,9 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate,
 	.continuous_agg_update_options = continuous_agg_update_options,
+#if PG16_GE
+	.continuous_agg_apply_rewrites_tsl = continuous_agg_apply_rewrites,
+#endif
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.continuous_agg_get_bucket_function_info = continuous_agg_get_bucket_function_info,
