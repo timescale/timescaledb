@@ -217,7 +217,7 @@ is_vector_expr(const VectorQualInfo *vqinfo, Expr *expr)
 			const bool is_vector = vqinfo->vector_attrs && vqinfo->vector_attrs[var->varattno];
 
 			/*
-			 * The segmentby colums are considered vectorizable, but their type might not actually
+			 * The segmentby columns are considered vectorizable, but their type might not actually
 			 * have a columnar representation. Theoretically this can work because they are always
 			 * represented as DT_Scalar, but in practice this is poorly tested and of limited
 			 * utility, so we consider such columns not to be vectorizable at the moment.
