@@ -32,6 +32,7 @@
 #include "errors.h"
 #include "func_cache.h"
 #include "hypertable_cache.h"
+#include "planner/continuous_aggs_common.h"
 #include "timezones.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
@@ -59,21 +60,6 @@ typedef struct MaterializationHypertableColumnInfo
 	int matpartcolno;			 /*index of partitioning column in matcollist */
 	char *matpartcolname;		 /*name of the partition column */
 } MaterializationHypertableColumnInfo;
-
-typedef struct ContinuousAggTimeBucketInfo
-{
-	int32 htid;						/* hypertable id */
-	int32 parent_mat_hypertable_id; /* parent materialization hypertable id */
-	Oid htoid;						/* hypertable oid */
-	Oid htoidparent;				/* parent hypertable oid in case of hierarchical */
-	AttrNumber htpartcolno;			/* primary partitioning column of raw hypertable */
-									/* This should also be the column used by time_bucket */
-	Oid htpartcoltype;				/* The collation type */
-	int64 htpartcol_interval_len;	/* interval length setting for primary partitioning column */
-
-	/* General bucket information */
-	ContinuousAggBucketFunction *bf;
-} ContinuousAggTimeBucketInfo;
 
 typedef enum ContinuousAggRefreshCallContext
 {
@@ -117,7 +103,6 @@ extern Query *build_union_query(ContinuousAggTimeBucketInfo *tbinfo, int matpart
 								Query *q2, int materialize_htid);
 extern void mattablecolumninfo_init(MaterializationHypertableColumnInfo *matcolinfo,
 									List *grouplist);
-extern bool function_allowed_in_cagg_definition(Oid funcid);
 extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
 
@@ -148,5 +133,3 @@ cagg_get_time_min(const ContinuousAgg *cagg)
 	/* For fixed-sized buckets return min (start of time) */
 	return ts_time_get_min(cagg->partition_type);
 }
-
-ContinuousAggBucketFunction *ts_cagg_get_bucket_function_info(Oid view_oid);
