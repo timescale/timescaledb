@@ -38,6 +38,7 @@
 #include "refresh.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 
 /*
  * Invalidation processing for continuous aggregates.
@@ -1212,4 +1213,78 @@ invalidation_store_free(InvalidationStore *store)
 	FreeTupleDesc(store->tupdesc);
 	tuplestore_end(store->tupstore);
 	pfree(store);
+}
+
+bool
+invalidation_hypertable_has_invalidations(int32 hyper_id)
+{
+	bool found = false;
+	ScanIterator iterator = ts_scan_iterator_create(CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
+													AccessShareLock,
+													CurrentMemoryContext);
+
+	iterator.ctx.limit = 1; /* we only need to know if there is at least one */
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(),
+										   CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
+										   CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_IDX);
+	ts_scan_iterator_scan_key_init(
+		&iterator,
+		Anum_continuous_aggs_hypertable_invalidation_log_idx_hypertable_id,
+		BTEqualStrategyNumber,
+		F_INT4EQ,
+		Int32GetDatum(hyper_id));
+
+	ts_scan_iterator_start_scan(&iterator);
+	if (ts_scan_iterator_next(&iterator))
+		found = true;
+	ts_scan_iterator_close(&iterator);
+
+	return found;
+}
+
+bool
+invalidation_cagg_has_invalidations(ContinuousAgg *cagg)
+{
+	bool found = false;
+	int32 cagg_hyper_id = cagg->data.mat_hypertable_id;
+
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+								AccessShareLock,
+								CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(),
+										   CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
+										   CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_IDX);
+	ts_scan_iterator_scan_key_init(
+		&iterator,
+		Anum_continuous_aggs_materialization_invalidation_log_idx_materialization_id,
+		BTEqualStrategyNumber,
+		F_INT4EQ,
+		Int32GetDatum(cagg_hyper_id));
+
+	int64 watermark = ts_cagg_watermark_get(cagg_hyper_id);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti;
+		Invalidation logentry;
+
+		ti = ts_scan_iterator_tuple_info(&iterator);
+
+		invalidation_entry_set_from_cagg_invalidation(&logentry,
+													  ti,
+													  cagg->partition_type,
+													  cagg->bucket_function);
+
+		if (logentry.greatest_modified_value == INVAL_NEG_INFINITY ||
+			logentry.lowest_modified_value >= watermark)
+			continue;
+		else
+		{
+			found = true;
+			break;
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+
+	return found;
 }

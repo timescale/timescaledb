@@ -147,7 +147,10 @@ TSDLLEXPORT bool ts_guc_enable_delete_after_compression = false;
 TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 
 bool ts_guc_enable_partitioned_hypertables = false;
-
+#if PG16_GE
+TSDLLEXPORT bool ts_guc_enable_cagg_rewrites = false;
+TSDLLEXPORT bool ts_guc_cagg_rewrites_debug_info = false;
+#endif
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
  * GUC mechanism starts up */
@@ -846,7 +849,29 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+#if PG16_GE
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_rewrites"),
+							 "Enable rewriting queries with Caggs",
+							 "Enable rewriting queries with eligible continuous aggregates",
+							 &ts_guc_enable_cagg_rewrites,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("cagg_rewrites_debug_info"),
+							 "Print debug info about whether queries can be rewritten with Caggs",
+							 "Print debug info about whether queries can be rewritten with Caggs",
+							 &ts_guc_cagg_rewrites_debug_info,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+#endif
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
 							 "Enable WAL markers for compression ops",
 							 "Enable the generation of markers in the WAL stream which mark the "

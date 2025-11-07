@@ -285,28 +285,6 @@ static CustomPathMethods skip_scan_path_methods = {
 	.PlanCustomPath = skip_scan_plan_create,
 };
 
-#if PG16_GE
-typedef struct FindAggrefsContext
-{
-	List *aggrefs; /* all non-nested Aggrefs found in a node */
-} FindAggrefsContext;
-
-static bool
-find_aggrefs_walker(Node *node, FindAggrefsContext *context)
-{
-	if (node == NULL)
-		return false;
-	if (IsA(node, Aggref))
-	{
-		context->aggrefs = lappend(context->aggrefs, node);
-		/* don't recurse inside Aggrefs */
-		return false;
-	}
-
-	return expression_tree_walker(node, find_aggrefs_walker, context);
-}
-#endif
-
 static Expr *
 get_distint_clause_expr(PlannerInfo *root, SortGroupClause *distinct_clause)
 {
@@ -410,11 +388,9 @@ get_upper_distinct_expr(PlannerInfo *root, UpperRelationKind stage)
 #if PG16_GE
 	else if (stage == UPPERREL_GROUP_AGG)
 	{
-		/* Find all non-nested Aggrefs in the query target list */
-		FindAggrefsContext agg_ctx = { .aggrefs = NULL };
-		find_aggrefs_walker((Node *) root->parse->targetList, &agg_ctx);
-
-		foreach (lc, agg_ctx.aggrefs)
+		/* Find all non-nested Aggref in the query target list */
+		List *aggrefs = ts_find_aggrefs((Node *) root->parse->targetList);
+		foreach (lc, aggrefs)
 		{
 			Aggref *agg = lfirst_node(Aggref, lc);
 			/* Only distinct aggs with 1 sorted argument are eligible*/

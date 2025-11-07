@@ -340,6 +340,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_dml_invalidate = continuous_agg_dml_invalidate_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
+	.continuous_agg_apply_rewrites_tsl = NULL,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
