@@ -1,0 +1,389 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+SET timezone TO PST8PDT;
+CREATE TABLE conditions(
+  day TIMESTAMPTZ NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL,
+  device_id int NOT NULL
+);
+SELECT table_name FROM create_hypertable('conditions', 'day', chunk_time_interval => INTERVAL '1 day');
+ table_name 
+------------
+ conditions
+
+INSERT INTO conditions (day, city, temperature, device_id) VALUES
+  ('2021-06-14', 'Moscow', 26,1),
+  ('2021-06-15', 'Berlin', 22,2),
+  ('2021-06-16', 'Stockholm', 24,3),
+  ('2021-06-17', 'London', 24,4),
+  ('2021-06-18', 'London', 27,4),
+  ('2021-06-19', 'Moscow', 28,4),
+  ('2021-06-20', 'Moscow', 30,1),
+  ('2021-06-21', 'Berlin', 31,1),
+  ('2021-06-22', 'Stockholm', 34,1),
+  ('2021-06-23', 'Stockholm', 34,2),
+  ('2021-06-24', 'Moscow', 34,2),
+  ('2021-06-25', 'London', 32,3),
+  ('2021-06-26', 'Moscow', 32,3),
+  ('2021-06-27', 'Moscow', 31,3);
+CREATE TABLE conditions_dup AS SELECT * FROM conditions;
+SELECT table_name FROM create_hypertable('conditions_dup', 'day', chunk_time_interval => INTERVAL '1 day', migrate_data => true);
+NOTICE:  migrating data to chunks
+   table_name   
+----------------
+ conditions_dup
+
+CREATE TABLE devices ( device_id int not null, name text, location text);
+INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
+CREATE TABLE location (location_id INTEGER, name TEXT);
+INSERT INTO location VALUES (1, 'Moscow'), (2, 'Berlin'), (3, 'London'), (4, 'Stockholm');
+CREATE TABLE devices_dup AS SELECT * FROM devices;
+CREATE VIEW devices_view AS SELECT * FROM devices;
+-- 1-table Caggs
+CREATE MATERIALIZED VIEW cagg1
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY bucket;
+NOTICE:  refreshing continuous aggregate "cagg1"
+CREATE MATERIALIZED VIEW cagg2
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '2 days', day) AS bucket,
+   AVG(temperature),
+   count(device_id)
+FROM conditions
+GROUP BY bucket;
+NOTICE:  refreshing continuous aggregate "cagg2"
+CREATE MATERIALIZED VIEW cagg3
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature) AS avg,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+HAVING count(device_id) > 1;
+NOTICE:  refreshing continuous aggregate "cagg3"
+-- Caggs with joins
+CREATE MATERIALIZED VIEW cagg_join
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   name
+FROM conditions, devices
+WHERE conditions.device_id = devices.device_id
+GROUP BY name, bucket
+ORDER BY bucket;
+NOTICE:  refreshing continuous aggregate "cagg_join"
+-- Create CAgg with join and additional WHERE conditions
+CREATE MATERIALIZED VIEW cagg_more_conds
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   name
+FROM conditions JOIN devices ON conditions.device_id = devices.device_id
+WHERE conditions.city = devices.location AND
+      conditions.temperature > 28
+GROUP BY name, bucket;
+NOTICE:  refreshing continuous aggregate "cagg_more_conds"
+-- Hierarchical CAgg with join
+CREATE MATERIALIZED VIEW cagg_on_cagg1
+WITH (timescaledb.continuous, timescaledb.materialized_only=FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
+       SUM(avg) AS temperature
+FROM cagg1, devices
+WHERE devices.device_id = cagg1.device_id
+GROUP BY 1;
+NOTICE:  refreshing continuous aggregate "cagg_on_cagg1"
+-- Joining a hypertable and view
+CREATE MATERIALIZED VIEW cagg_view
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   devices_view.device_id,
+   name
+FROM conditions, devices_view
+WHERE conditions.device_id = devices_view.device_id
+GROUP BY name, bucket, devices_view.device_id;
+NOTICE:  refreshing continuous aggregate "cagg_view"
+-- Queries not eligible for rewrite
+set timescaledb.cagg_rewrites_debug_info=1;
+-- No group by
+SELECT
+   AVG(temperature),
+   count(device_id)
+FROM conditions;
+INFO:  Query cannot be rewritten with CAggs: no GROUP BY clause in the query
+         avg         | count 
+---------------------+-------
+ 29.2142857142857143 |    14
+
+-- no hypertable
+SELECT location, count(device_id)
+FROM devices
+GROUP BY location
+ORDER BY 1;
+INFO:  Query cannot be rewritten with CAggs: at least one hypertable should be used in the query
+ location  | count 
+-----------+-------
+ Berlin    |     1
+ London    |     1
+ Moscow    |     1
+ Stockholm |     1
+
+-- no time bucket
+SELECT day,
+   AVG(temperature),
+   count(device_id)
+FROM conditions
+GROUP BY day
+ORDER BY 1;
+INFO:  Query cannot be rewritten with CAggs: should be a valid time bucket function in the query
+             day              |         avg         | count 
+------------------------------+---------------------+-------
+ Mon Jun 14 00:00:00 2021 PDT | 26.0000000000000000 |     1
+ Tue Jun 15 00:00:00 2021 PDT | 22.0000000000000000 |     1
+ Wed Jun 16 00:00:00 2021 PDT | 24.0000000000000000 |     1
+ Thu Jun 17 00:00:00 2021 PDT | 24.0000000000000000 |     1
+ Fri Jun 18 00:00:00 2021 PDT | 27.0000000000000000 |     1
+ Sat Jun 19 00:00:00 2021 PDT | 28.0000000000000000 |     1
+ Sun Jun 20 00:00:00 2021 PDT | 30.0000000000000000 |     1
+ Mon Jun 21 00:00:00 2021 PDT | 31.0000000000000000 |     1
+ Tue Jun 22 00:00:00 2021 PDT | 34.0000000000000000 |     1
+ Wed Jun 23 00:00:00 2021 PDT | 34.0000000000000000 |     1
+ Thu Jun 24 00:00:00 2021 PDT | 34.0000000000000000 |     1
+ Fri Jun 25 00:00:00 2021 PDT | 32.0000000000000000 |     1
+ Sat Jun 26 00:00:00 2021 PDT | 32.0000000000000000 |     1
+ Sun Jun 27 00:00:00 2021 PDT | 31.0000000000000000 |     1
+
+-- no Caggs
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature),
+   count(device_id)
+FROM conditions_dup
+GROUP BY bucket
+ORDER BY 1;
+INFO:  Query cannot be rewritten with CAggs: no continuous aggregates defined on "public.conditions_dup"
+            bucket            |         avg         | count 
+------------------------------+---------------------+-------
+ Sun Jun 13 17:00:00 2021 PDT | 24.0000000000000000 |     3
+ Wed Jun 16 17:00:00 2021 PDT | 26.3333333333333333 |     3
+ Sat Jun 19 17:00:00 2021 PDT | 31.6666666666666667 |     3
+ Tue Jun 22 17:00:00 2021 PDT | 33.3333333333333333 |     3
+ Fri Jun 25 17:00:00 2021 PDT | 31.5000000000000000 |     2
+
+-- no matching Caggs
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions
+GROUP BY bucket
+ORDER BY 1;
+INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+Caggs are not real-time: "public.cagg_view"
+Buckets do not match: "public.cagg2" "public.cagg3"
+Joins do not match: "public.cagg_join" "public.cagg_more_conds"
+Grouping clauses do not match: "public.cagg1"
+
+            bucket            |         avg         
+------------------------------+---------------------
+ Sun Jun 13 17:00:00 2021 PDT | 26.0000000000000000
+ Mon Jun 14 17:00:00 2021 PDT | 22.0000000000000000
+ Tue Jun 15 17:00:00 2021 PDT | 24.0000000000000000
+ Wed Jun 16 17:00:00 2021 PDT | 24.0000000000000000
+ Thu Jun 17 17:00:00 2021 PDT | 27.0000000000000000
+ Fri Jun 18 17:00:00 2021 PDT | 28.0000000000000000
+ Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000
+ Sun Jun 20 17:00:00 2021 PDT | 31.0000000000000000
+ Mon Jun 21 17:00:00 2021 PDT | 34.0000000000000000
+ Tue Jun 22 17:00:00 2021 PDT | 34.0000000000000000
+ Wed Jun 23 17:00:00 2021 PDT | 34.0000000000000000
+ Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000
+ Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000
+ Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000
+
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature) AS avg,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+HAVING count(device_id) > 0
+ORDER BY 1;
+INFO:  Query cannot be rewritten with CAggs: none of continuous aggregates defined on "public.conditions" are matching the query:
+Buckets do not match: "public.cagg1" "public.cagg2" "public.cagg_join" "public.cagg_more_conds" "public.cagg_view"
+HAVING quals do not match: "public.cagg3"
+
+            bucket            |         avg         | count 
+------------------------------+---------------------+-------
+ Sun Jun 13 17:00:00 2021 PDT | 24.0000000000000000 |     3
+ Wed Jun 16 17:00:00 2021 PDT | 26.3333333333333333 |     3
+ Sat Jun 19 17:00:00 2021 PDT | 31.6666666666666667 |     3
+ Tue Jun 22 17:00:00 2021 PDT | 33.3333333333333333 |     3
+ Fri Jun 25 17:00:00 2021 PDT | 31.5000000000000000 |     2
+
+-- Test queries eligibility for rewrites (cagg1)
+set timescaledb.enable_cagg_rewrites=0;
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1;
+INFO:  Query can be rewritten with Cagg public.cagg1
+            bucket            |         avg         | device_id 
+------------------------------+---------------------+-----------
+ Sun Jun 13 17:00:00 2021 PDT | 26.0000000000000000 |         1
+ Mon Jun 14 17:00:00 2021 PDT | 22.0000000000000000 |         2
+ Tue Jun 15 17:00:00 2021 PDT | 24.0000000000000000 |         3
+ Wed Jun 16 17:00:00 2021 PDT | 24.0000000000000000 |         4
+ Thu Jun 17 17:00:00 2021 PDT | 27.0000000000000000 |         4
+ Fri Jun 18 17:00:00 2021 PDT | 28.0000000000000000 |         4
+ Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 |         1
+ Sun Jun 20 17:00:00 2021 PDT | 31.0000000000000000 |         1
+ Mon Jun 21 17:00:00 2021 PDT | 34.0000000000000000 |         1
+ Tue Jun 22 17:00:00 2021 PDT | 34.0000000000000000 |         2
+ Wed Jun 23 17:00:00 2021 PDT | 34.0000000000000000 |         2
+ Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 |         3
+ Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 |         3
+ Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 |         3
+
+-- Test query rewrite (cagg1)
+set timescaledb.enable_cagg_rewrites=1;
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature) AS avg,
+   device_id
+FROM conditions
+GROUP BY device_id, bucket
+ORDER BY 1;
+INFO:  Query was rewritten with Cagg public.cagg1
+            bucket            |         avg         | device_id 
+------------------------------+---------------------+-----------
+ Sun Jun 13 17:00:00 2021 PDT | 26.0000000000000000 |         1
+ Mon Jun 14 17:00:00 2021 PDT | 22.0000000000000000 |         2
+ Tue Jun 15 17:00:00 2021 PDT | 24.0000000000000000 |         3
+ Wed Jun 16 17:00:00 2021 PDT | 24.0000000000000000 |         4
+ Thu Jun 17 17:00:00 2021 PDT | 27.0000000000000000 |         4
+ Fri Jun 18 17:00:00 2021 PDT | 28.0000000000000000 |         4
+ Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 |         1
+ Sun Jun 20 17:00:00 2021 PDT | 31.0000000000000000 |         1
+ Mon Jun 21 17:00:00 2021 PDT | 34.0000000000000000 |         1
+ Tue Jun 22 17:00:00 2021 PDT | 34.0000000000000000 |         2
+ Wed Jun 23 17:00:00 2021 PDT | 34.0000000000000000 |         2
+ Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 |         3
+ Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 |         3
+ Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 |         3
+
+-- Test queries eligibility for rewrites (cagg2)
+set timescaledb.enable_cagg_rewrites=0;
+SELECT time_bucket(INTERVAL '2 day', day) AS bucket,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+ORDER BY 1
+LIMIT 3;
+INFO:  Query can be rewritten with Cagg public.cagg2
+            bucket            | count 
+------------------------------+-------
+ Sat Jun 12 17:00:00 2021 PDT |     1
+ Mon Jun 14 17:00:00 2021 PDT |     2
+ Wed Jun 16 17:00:00 2021 PDT |     2
+
+-- Test query rewrite (cagg2)
+set timescaledb.enable_cagg_rewrites=1;
+SELECT time_bucket(INTERVAL '2 day', day) AS bucket,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+ORDER BY 1
+LIMIT 3;
+INFO:  Query was rewritten with Cagg public.cagg2
+            bucket            | count 
+------------------------------+-------
+ Sat Jun 12 17:00:00 2021 PDT |     1
+ Mon Jun 14 17:00:00 2021 PDT |     2
+ Wed Jun 16 17:00:00 2021 PDT |     2
+
+-- Make sure Cagg was used
+explain SELECT time_bucket(INTERVAL '2 day', day) AS bucket,
+   count(device_id)
+FROM conditions
+GROUP BY bucket
+ORDER BY 1
+LIMIT 3;
+INFO:  Query was rewritten with Cagg public.cagg2
+--- QUERY PLAN ---
+ Limit  (cost=0.15..0.37 rows=3 width=16)
+   ->  Append  (cost=0.15..52.69 rows=715 width=16)
+         ->  Subquery Scan on "*SELECT* 1"  (cost=0.15..49.08 rows=714 width=16)
+               ->  Result  (cost=0.15..41.94 rows=714 width=48)
+                     ->  Custom Scan (ChunkAppend) on _materialized_hypertable_4  (cost=0.15..34.80 rows=714 width=16)
+                           Order: _materialized_hypertable_4.bucket
+                           ->  Index Scan Backward using _hyper_4_31_chunk__materialized_hypertable_4_bucket_idx on _hyper_4_31_chunk  (cost=0.15..17.40 rows=357 width=16)
+                                 Index Cond: (bucket < 'Mon Jun 28 17:00:00 2021 PDT'::timestamp with time zone)
+                           ->  Index Scan Backward using _hyper_4_32_chunk__materialized_hypertable_4_bucket_idx on _hyper_4_32_chunk  (cost=0.15..17.40 rows=357 width=16)
+                                 Index Cond: (bucket < 'Mon Jun 28 17:00:00 2021 PDT'::timestamp with time zone)
+         ->  Subquery Scan on "*SELECT* 2"  (cost=0.01..0.04 rows=1 width=16)
+               ->  GroupAggregate  (cost=0.01..0.03 rows=1 width=48)
+                     Group Key: (time_bucket('@ 2 days'::interval, day))
+                     ->  Sort  (cost=0.01..0.02 rows=0 width=12)
+                           Sort Key: (time_bucket('@ 2 days'::interval, day))
+                           ->  Result  (cost=0.00..0.00 rows=0 width=12)
+                                 One-Time Filter: false
+
+-- Test queries eligibility for rewrites (cagg3)
+set timescaledb.enable_cagg_rewrites=0;
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions
+GROUP BY bucket
+HAVING count(device_id) > 1
+ORDER BY 1;
+INFO:  Query can be rewritten with Cagg public.cagg3
+            bucket            |         avg         
+------------------------------+---------------------
+ Sun Jun 13 17:00:00 2021 PDT | 24.0000000000000000
+ Wed Jun 16 17:00:00 2021 PDT | 26.3333333333333333
+ Sat Jun 19 17:00:00 2021 PDT | 31.6666666666666667
+ Tue Jun 22 17:00:00 2021 PDT | 33.3333333333333333
+ Fri Jun 25 17:00:00 2021 PDT | 31.5000000000000000
+
+-- Test query rewrite (cagg3)
+set timescaledb.enable_cagg_rewrites=1;
+SELECT time_bucket(INTERVAL '3 days', day) AS bucket,
+   AVG(temperature) AS avg
+FROM conditions
+GROUP BY bucket
+HAVING count(device_id) > 1
+ORDER BY 1;
+INFO:  Query was rewritten with Cagg public.cagg3
+            bucket            |         avg         
+------------------------------+---------------------
+ Sun Jun 13 17:00:00 2021 PDT | 24.0000000000000000
+ Wed Jun 16 17:00:00 2021 PDT | 26.3333333333333333
+ Sat Jun 19 17:00:00 2021 PDT | 31.6666666666666667
+ Tue Jun 22 17:00:00 2021 PDT | 33.3333333333333333
+ Fri Jun 25 17:00:00 2021 PDT | 31.5000000000000000
+
+DROP MATERIALIZED VIEW cagg_on_cagg1 CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DROP MATERIALIZED VIEW cagg1 CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DROP MATERIALIZED VIEW cagg2 CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DROP MATERIALIZED VIEW cagg3 CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DROP MATERIALIZED VIEW cagg_join CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DROP MATERIALIZED VIEW cagg_more_conds CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DROP MATERIALIZED VIEW cagg_view CASCADE;
+NOTICE:  drop cascades to 2 other objects
+DROP TABLE conditions CASCADE;
+DROP TABLE conditions_dup CASCADE;
+DROP VIEW devices_view CASCADE;
+DROP TABLE devices CASCADE;
+DROP TABLE devices_dup CASCADE;
+DROP TABLE location CASCADE;
