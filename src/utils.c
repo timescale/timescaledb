@@ -23,6 +23,7 @@
 #include <fmgr.h>
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <parser/scansup.h>
@@ -2048,4 +2049,32 @@ ts_list_to_string(List *list, append_cell_func append)
 		}
 	}
 	return info.data;
+}
+
+typedef struct FindAggrefsContext
+{
+	List *aggrefs; /* all non-nested Aggrefs found in a node */
+} FindAggrefsContext;
+
+static bool
+find_aggrefs_walker(Node *node, FindAggrefsContext *context)
+{
+	if (node == NULL)
+		return false;
+	if (IsA(node, Aggref))
+	{
+		context->aggrefs = lappend(context->aggrefs, node);
+		/* don't recurse inside Aggrefs */
+		return false;
+	}
+
+	return expression_tree_walker(node, find_aggrefs_walker, context);
+}
+
+List *
+ts_find_aggrefs(Node *node)
+{
+	FindAggrefsContext agg_ctx = { .aggrefs = NULL };
+	find_aggrefs_walker(node, &agg_ctx);
+	return agg_ctx.aggrefs;
 }

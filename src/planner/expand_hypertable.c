@@ -74,7 +74,7 @@ typedef struct CollectQualCtx
 
 static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx);
 
-static bool
+bool
 is_time_bucket_function(Expr *node)
 {
 	if (IsA(node, FuncExpr) &&

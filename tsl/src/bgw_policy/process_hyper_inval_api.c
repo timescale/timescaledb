@@ -136,8 +136,7 @@ policy_process_hyper_inval_add(PG_FUNCTION_ARGS)
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(ht_oid, CACHE_FLAG_NONE, &hcache);
 
 	/* Check that we have a continuous aggregate attached */
-	List *caggs = ts_continuous_aggs_find_by_raw_table_id(ht->fd.id);
-	if (list_length(caggs) == 0)
+	if (!ts_hypertable_has_continuous_aggregates(ht->fd.id))
 		ereport(ERROR,
 				errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				errmsg("\"%s\" does not have an associated continuous aggregate",
