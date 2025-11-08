@@ -71,8 +71,6 @@ typedef struct MaterializationContext
 } MaterializationContext;
 
 typedef char *(*MaterializationCreateStatement)(MaterializationContext *context);
-typedef void (*MaterializationEmitError)(MaterializationContext *context);
-typedef void (*MaterializationEmitProgress)(MaterializationContext *context, uint64 rows_processed);
 
 typedef struct MaterializationPlan
 {
@@ -81,8 +79,8 @@ typedef struct MaterializationPlan
 	bool catalog_security_context;
 	int nargs;
 	MaterializationCreateStatement create_statement;
-	MaterializationEmitError emit_error;
-	MaterializationEmitProgress emit_progress;
+	const char *error_message;
+	const char *progress_message;
 } MaterializationPlan;
 
 static char *create_materialization_insert_statement(MaterializationContext *context);
@@ -94,57 +92,54 @@ static char *create_materialization_ranges_select_statement(MaterializationConte
 static char *create_materialization_ranges_delete_statement(MaterializationContext *context);
 static char *create_materialization_ranges_pending_statement(MaterializationContext *context);
 
-static void emit_materialization_insert_error(MaterializationContext *context);
-static void emit_materialization_delete_error(MaterializationContext *context);
-static void emit_materialization_exists_error(MaterializationContext *context);
-static void emit_materialization_merge_error(MaterializationContext *context);
-static void emit_materialization_ranges_select_error(MaterializationContext *context);
-static void emit_materialization_ranges_delete_error(MaterializationContext *context);
-static void emit_materialization_ranges_pending_error(MaterializationContext *context);
-
-static void emit_materialization_insert_progress(MaterializationContext *context,
-												 uint64 rows_processed);
-static void emit_materialization_delete_progress(MaterializationContext *context,
-												 uint64 rows_processed);
-static void emit_materialization_merge_progress(MaterializationContext *context,
-												uint64 rows_processed);
-
 static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES + 1] = {
 	[PLAN_TYPE_INSERT] = { .nargs = 2,
 						   .create_statement = create_materialization_insert_statement,
-						   .emit_error = emit_materialization_insert_error,
-						   .emit_progress = emit_materialization_insert_progress },
+						   .error_message =
+							   "could not insert old values into materialization table \"%s.%s\"",
+						   .progress_message = "inserted " UINT64_FORMAT
+											   " row(s) into materialization table \"%s.%s\"" },
 	[PLAN_TYPE_DELETE] = { .nargs = 2,
 						   .create_statement = create_materialization_delete_statement,
-						   .emit_error = emit_materialization_delete_error,
-						   .emit_progress = emit_materialization_delete_progress },
+						   .error_message =
+							   "could not delete old values from materialization table \"%s.%s\"",
+						   .progress_message = "deleted " UINT64_FORMAT
+											   " row(s) from materialization table \"%s.%s\"" },
 	[PLAN_TYPE_EXISTS] = { .read_only = true,
 						   .nargs = 2,
 						   .create_statement = create_materialization_exists_statement,
-						   .emit_error = emit_materialization_exists_error },
+						   .error_message = "could not check the materialization table \"%s.%s\"" },
 	[PLAN_TYPE_MERGE] = { .nargs = 2,
 						  .create_statement = create_materialization_merge_statement,
-						  .emit_error = emit_materialization_merge_error,
-						  .emit_progress = emit_materialization_merge_progress },
+						  .error_message =
+							  "could not merge old values into materialization table \"%s.%s\"",
+						  .progress_message = "merged " UINT64_FORMAT
+											  " row(s) into materialization table \"%s.%s\"" },
 	[PLAN_TYPE_MERGE_DELETE] = { .nargs = 2,
 								 .create_statement = create_materialization_merge_delete_statement,
-								 .emit_error = emit_materialization_delete_error,
-								 .emit_progress = emit_materialization_delete_progress },
+								 .error_message = "could not delete old values from "
+												  "materialization table \"%s.%s\"",
+								 .progress_message =
+									 "deleted " UINT64_FORMAT
+									 " row(s) from materialization table \"%s.%s\"" },
 	[PLAN_TYPE_RANGES_SELECT] = { .catalog_security_context = true,
 								  .nargs = 3,
 								  .create_statement =
 									  create_materialization_ranges_select_statement,
-								  .emit_error = emit_materialization_ranges_select_error },
+								  .error_message = "could not select invalidation entries for "
+												   "materialization table \"%s.%s\"" },
 	[PLAN_TYPE_RANGES_DELETE] = { .catalog_security_context = true,
 								  .nargs = 1,
 								  .create_statement =
 									  create_materialization_ranges_delete_statement,
-								  .emit_error = emit_materialization_ranges_delete_error },
+								  .error_message = "could not delete invalidation entries for "
+												   "materialization table \"%s.%s\"" },
 	[PLAN_TYPE_RANGES_PENDING] = { .read_only = true,
 								   .nargs = 3,
 								   .create_statement =
 									   create_materialization_ranges_pending_statement,
-								   .emit_error = emit_materialization_ranges_pending_error },
+								   .error_message = "could not select pending materialization "
+													"ranges \"%s.%s\"" },
 };
 
 static Oid *create_materialization_plan_argtypes(MaterializationContext *context,
@@ -611,99 +606,6 @@ create_materialization_ranges_pending_statement(MaterializationContext *context)
 	return query.data;
 }
 
-static void
-emit_materialization_insert_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not insert old values into materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_delete_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not delete old values from materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_exists_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not check the materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_merge_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not merge old values into materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_ranges_select_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not select invalidation entries for materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_ranges_delete_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not delete invalidation entries for materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_ranges_pending_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not select pending materialization ranges \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_insert_progress(MaterializationContext *context, uint64 rows_processed)
-{
-	elog(LOG,
-		 "inserted " UINT64_FORMAT " row(s) into materialization table \"%s.%s\"",
-		 rows_processed,
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_delete_progress(MaterializationContext *context, uint64 rows_processed)
-{
-	elog(LOG,
-		 "deleted " UINT64_FORMAT " row(s) from materialization table \"%s.%s\"",
-		 rows_processed,
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_merge_progress(MaterializationContext *context, uint64 rows_processed)
-{
-	elog(LOG,
-		 "merged " UINT64_FORMAT " row(s) into materialization table \"%s.%s\"",
-		 rows_processed,
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
 static Oid *
 create_materialization_plan_argtypes(MaterializationContext *context,
 									 MaterializationPlanType plan_type, int nargs)
@@ -816,12 +718,22 @@ execute_materialization_plan(MaterializationContext *context, MaterializationPla
 
 	if (res < 0)
 	{
-		if (materialization->emit_error)
-			materialization->emit_error(context);
+		Ensure(materialization->error_message,
+			   "materialization plan error message not set for plan type %d",
+			   plan_type);
+		elog(ERROR,
+			 materialization->error_message,
+			 NameStr(*context->materialization_table.schema),
+			 NameStr(*context->materialization_table.name));
 	}
-
-	if (materialization->emit_progress)
-		materialization->emit_progress(context, SPI_processed);
+	else if (materialization->progress_message)
+	{
+		elog(LOG,
+			 materialization->progress_message,
+			 SPI_processed,
+			 NameStr(*context->materialization_table.schema),
+			 NameStr(*context->materialization_table.name));
+	}
 
 	if (SPI_processed > 0 && plan_type == PLAN_TYPE_RANGES_SELECT)
 	{
