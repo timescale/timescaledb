@@ -41,6 +41,7 @@ from ci_settings import (
 # github event type which is either push, pull_request or schedule
 event_type = sys.argv[1]
 pull_request = event_type == "pull_request"
+scheduled = event_type == "scheduled"
 
 m = {
     "include": [],
@@ -208,7 +209,14 @@ m["include"].append(
 )
 
 # test timescaledb with release config on latest postgres release in MacOS
-m["include"].append(build_release_config(macos_config({"pg": PG18_LATEST})))
+# we only run tests on scheduled runs, rest only do compilation tests
+m["include"].append(
+    build_release_config(
+        macos_config(
+            {"pg": PG18_LATEST, "installcheck": scheduled, "pginstallcheck": scheduled}
+        )
+    )
+)
 
 # Test latest postgres release without telemetry. Also run clang-tidy on it
 # because it's the fastest one.
