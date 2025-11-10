@@ -40,6 +40,7 @@ echo "Building CHANGELOG"
     echo "**Highlighted features in TimescaleDB v${RELEASE_NEXT}**"
     echo "* "
     echo ""
+    echo_changelog '**Backward-Incompatible Changes**' '^Backward-Incompatible Change:'
     echo_changelog '**Features**' '^Implements:'
     echo_changelog '**Bugfixes**' '^Fixes:'
     echo_gucs $RELEASE_PREVIOUS $RELEASE_BRANCH
