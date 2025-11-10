@@ -24,7 +24,7 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
+      pg_latest: ${{ steps.setter.outputs.PG_LATEST_ONLY }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
