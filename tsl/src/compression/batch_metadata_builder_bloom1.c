@@ -404,6 +404,77 @@ bloom1_update_val(void *builder_, Datum needle)
 }
 
 /*
+ * We cache some information across function calls in this context.
+ */
+typedef struct Bloom1ContainsContext
+{
+	PGFunction hash_function_pointer;
+	FmgrInfo *hash_function_finfo;
+
+	Oid element_type;
+	int16 element_typlen;
+	bool element_typbyval;
+	char element_typalign;
+
+	/* This is per-row, here for convenience. */
+	struct varlena *current_row_bloom;
+} Bloom1ContainsContext;
+
+static Bloom1ContainsContext *
+bloom1_contains_context_prepare(FunctionCallInfo fcinfo, bool use_element_type)
+{
+	Bloom1ContainsContext *context = (Bloom1ContainsContext *) fcinfo->flinfo->fn_extra;
+	if (context == NULL)
+	{
+		Ensure(PG_NARGS() == 2, "bloom1_contains called with wrong number of arguments");
+
+		context = MemoryContextAllocZero(fcinfo->flinfo->fn_mcxt, sizeof(*context));
+
+		context->element_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+		if (use_element_type)
+		{
+			context->element_type = get_element_type(context->element_type);
+			Ensure(OidIsValid(context->element_type),
+				   "cannot determine array element type for bloom1_contains_any");
+		}
+
+		context->hash_function_pointer =
+			bloom1_get_hash_function(context->element_type, &context->hash_function_finfo);
+
+		/*
+		 * Technically this function is callable by user with arbitrary argument
+		 * that might not have an extended hash function, so report this error
+		 * gracefully.
+		 */
+		if (context->hash_function_pointer == NULL)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_DATA_EXCEPTION),
+					 errmsg("the argument type %s lacks an extended hash function",
+							format_type_be(context->element_type))));
+		}
+
+		get_typlenbyvalalign(context->element_type,
+							 &context->element_typlen,
+							 &context->element_typbyval,
+							 &context->element_typalign);
+
+		fcinfo->flinfo->fn_extra = context;
+	}
+
+	if (PG_ARGISNULL(0))
+	{
+		context->current_row_bloom = NULL;
+	}
+	else
+	{
+		context->current_row_bloom = PG_GETARG_VARLENA_P(0);
+	}
+
+	return context;
+}
+
+/*
  * Checks whether the given element can be present in the given bloom filter.
  * This is what we use in predicate pushdown. The SQL signature is:
  * _timescaledb_functions.bloom1_contains(bloom1, anyelement)
@@ -411,11 +482,15 @@ bloom1_update_val(void *builder_, Datum needle)
 Datum
 bloom1_contains(PG_FUNCTION_ARGS)
 {
+	Bloom1ContainsContext *context =
+		bloom1_contains_context_prepare(fcinfo, /* use_element_type = */ false);
+
 	/*
 	 * This function is not strict, because if we don't have a bloom filter, this
 	 * means the condition can potentially be true.
 	 */
-	if (PG_ARGISNULL(0))
+	struct varlena *bloom = context->current_row_bloom;
+	if (bloom == NULL)
 	{
 		PG_RETURN_BOOL(true);
 	}
@@ -429,23 +504,9 @@ bloom1_contains(PG_FUNCTION_ARGS)
 		PG_RETURN_BOOL(false);
 	}
 
-	Oid type_oid = get_fn_expr_argtype(fcinfo->flinfo, 1);
-	FmgrInfo *finfo = NULL;
-	PGFunction fn = bloom1_get_hash_function(type_oid, &finfo);
 	/*
-	 * Technically this function is callable by user with arbitrary argument
-	 * that might not have an extended hash function, so report this error
-	 * gracefully.
+	 * Compute the bloom filter parameters.
 	 */
-	if (fn == NULL)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_DATA_EXCEPTION),
-				 errmsg("the argument type %s lacks an extended hash function",
-						format_type_be(type_oid))));
-	}
-
-	struct varlena *bloom = PG_GETARG_VARLENA_P(0);
 	const char *words_buf = bloom1_words_buf(bloom);
 	const uint32 num_bits = bloom1_num_bits(bloom);
 
@@ -464,7 +525,8 @@ bloom1_contains(PG_FUNCTION_ARGS)
 	Assert((word_mask >> num_word_bits) == 0);
 
 	Datum needle = PG_GETARG_DATUM(1);
-	const uint64 datum_hash_1 = calculate_hash(fn, finfo, needle);
+	const uint64 datum_hash_1 =
+		calculate_hash(context->hash_function_pointer, context->hash_function_finfo, needle);
 	const uint32 absolute_mask = num_bits - 1;
 	for (int i = 0; i < BLOOM1_HASHES; i++)
 	{
@@ -477,6 +539,150 @@ bloom1_contains(PG_FUNCTION_ARGS)
 		}
 	}
 	PG_RETURN_BOOL(true);
+}
+
+#define ST_SORT sort_hashes
+#define ST_ELEMENT_TYPE uint64
+#define ST_COMPARE(a, b) ((*(a) > *(b)) - (*(a) < *(b)))
+#define ST_SCOPE static
+#define ST_DEFINE
+#include <lib/sort_template.h>
+
+/*
+ * Checks whether any element of the given array can be present in the given
+ * bloom filter. This is used for predicate pushdown for x = any(array[...]).
+ * The SQL signature is:
+ * _timescaledb_functions.bloom1_contains_any(bloom1, anyarray)
+ */
+Datum
+bloom1_contains_any(PG_FUNCTION_ARGS)
+{
+	Bloom1ContainsContext *context =
+		bloom1_contains_context_prepare(fcinfo, /* use_element_type = */ true);
+
+	/*
+	 * This function is not strict, because if we don't have a bloom filter, this
+	 * means the condition can potentially be true.
+	 */
+	struct varlena *bloom = context->current_row_bloom;
+	if (bloom == NULL)
+	{
+		PG_RETURN_BOOL(true);
+	}
+
+	/*
+	 * A null value cannot match the equality condition, although this probably
+	 * should be optimized away by the planner.
+	 */
+	if (PG_ARGISNULL(1))
+	{
+		PG_RETURN_BOOL(false);
+	}
+
+	int num_items;
+	Datum *items;
+	bool *nulls;
+	deconstruct_array(PG_GETARG_ARRAYTYPE_P(1),
+					  context->element_type,
+					  context->element_typlen,
+					  context->element_typbyval,
+					  context->element_typalign,
+					  &items,
+					  &nulls,
+					  &num_items);
+
+	if (num_items == 0)
+	{
+		PG_RETURN_BOOL(false);
+	}
+
+	/*
+	 * Calculate the per-item base hashes that will be used for computing the
+	 * individual bloom filter bit offsets. We can reuse the "items" space to
+	 * avoid more allocations, but have to allocate as a fallback on 32-bit
+	 * systems.
+	 */
+#if FLOAT8PASSBYVAL
+	uint64 *item_base_hashes = items;
+#else
+	uint64 *item_base_hashes = palloc(sizeof(uint64) * num_items);
+#endif
+
+	FmgrInfo *finfo = context->hash_function_finfo;
+	PGFunction hash_fn = context->hash_function_pointer;
+
+	int valid = 0;
+	for (int i = 0; i < num_items; i++)
+	{
+		if (nulls[i])
+		{
+			/*
+			 * A null value cannot match the equality condition.
+			 */
+			continue;
+		}
+
+		item_base_hashes[valid++] = calculate_hash(hash_fn, finfo, items[i]);
+	}
+
+	if (valid == 0)
+	{
+		/*
+		 * No non-null elements.
+		 */
+		PG_RETURN_BOOL(false);
+	}
+
+	/*
+	 * Sort the hashes for cache-friendly probing.
+	 */
+	sort_hashes(item_base_hashes, valid);
+
+	/*
+	 * Get the bloom filter parameters.
+	 */
+	const char *words_buf = bloom1_words_buf(bloom);
+	const uint32 num_bits = bloom1_num_bits(bloom);
+
+	/* Must be a power of two. */
+	CheckCompressedData(num_bits == (1ULL << pg_leftmost_one_pos32(num_bits)));
+
+	/* Must be >= 64 bits. */
+	CheckCompressedData(num_bits >= 64);
+
+	const uint32 num_word_bits = sizeof(*words_buf) * 8;
+	Assert(num_bits % num_word_bits == 0);
+	const uint32 log2_word_bits = pg_leftmost_one_pos32(num_word_bits);
+	Assert(num_word_bits == (1ULL << log2_word_bits));
+
+	const uint32 word_mask = num_word_bits - 1;
+	Assert((word_mask >> num_word_bits) == 0);
+
+	const uint32 absolute_mask = num_bits - 1;
+
+	/* Probe the bloom filter. */
+	for (int item_index = 0; item_index < valid; item_index++)
+	{
+		const uint64 base_hash = item_base_hashes[item_index];
+		bool match = true;
+		for (int i = 0; i < BLOOM1_HASHES; i++)
+		{
+			const uint32 absolute_bit_index = bloom1_get_one_offset(base_hash, i) & absolute_mask;
+			const uint32 word_index = absolute_bit_index >> log2_word_bits;
+			const uint32 word_bit_index = absolute_bit_index & word_mask;
+			if ((words_buf[word_index] & (1ULL << word_bit_index)) == 0)
+			{
+				match = false;
+				break;
+			}
+		}
+		if (match)
+		{
+			PG_RETURN_BOOL(true);
+		}
+	}
+
+	PG_RETURN_BOOL(false);
 }
 
 static int
