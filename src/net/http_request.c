@@ -139,13 +139,14 @@ void
 ts_http_request_set_body_jsonb(HttpRequest *req, const Jsonb *json)
 {
 	MemoryContext old = MemoryContextSwitchTo(req->context);
-	StringInfo jtext = makeStringInfo();
+	StringInfoData jtext;
+	initStringInfo(&jtext);
 	char content_length[10];
 
-	JsonbToCString(jtext, (JsonbContainer *) &json->root, VARSIZE(json));
-	req->body = jtext->data;
-	req->body_len = jtext->len;
-	snprintf(content_length, sizeof(content_length), "%d", jtext->len);
+	JsonbToCString(&jtext, (JsonbContainer *) &json->root, VARSIZE(json));
+	req->body = jtext.data;
+	req->body_len = jtext.len;
+	snprintf(content_length, sizeof(content_length), "%d", jtext.len);
 	set_header(req, HTTP_CONTENT_TYPE, "application/json");
 	set_header(req, HTTP_CONTENT_LENGTH, content_length);
 	MemoryContextSwitchTo(old);
