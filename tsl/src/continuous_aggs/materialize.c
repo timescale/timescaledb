@@ -324,7 +324,8 @@ cagg_find_aggref_and_var_cols(ContinuousAgg *cagg, Hypertable *mat_ht)
 static char *
 build_merge_insert_columns(List *strings, const char *separator, const char *prefix)
 {
-	StringInfo ret = makeStringInfo();
+	StringInfoData ret;
+	initStringInfo(&ret);
 
 	Assert(strings != NIL);
 
@@ -332,22 +333,23 @@ build_merge_insert_columns(List *strings, const char *separator, const char *pre
 	foreach (lc, strings)
 	{
 		char *grpcol = (char *) lfirst(lc);
-		if (ret->len > 0)
-			appendStringInfoString(ret, separator);
+		if (ret.len > 0)
+			appendStringInfoString(&ret, separator);
 
 		if (prefix)
-			appendStringInfoString(ret, prefix);
-		appendStringInfoString(ret, quote_identifier(grpcol));
+			appendStringInfoString(&ret, prefix);
+		appendStringInfoString(&ret, quote_identifier(grpcol));
 	}
 
-	elog(DEBUG2, "%s: %s", __func__, ret->data);
-	return ret->data;
+	elog(DEBUG2, "%s: %s", __func__, ret.data);
+	return ret.data;
 }
 
 static char *
 build_merge_join_clause(List *column_names)
 {
-	StringInfo ret = makeStringInfo();
+	StringInfoData ret;
+	initStringInfo(&ret);
 
 	Assert(column_names != NIL);
 
@@ -356,23 +358,24 @@ build_merge_join_clause(List *column_names)
 	{
 		char *column = (char *) lfirst(lc);
 
-		if (ret->len > 0)
-			appendStringInfoString(ret, " AND ");
+		if (ret.len > 0)
+			appendStringInfoString(&ret, " AND ");
 
-		appendStringInfoString(ret, "P.");
-		appendStringInfoString(ret, quote_identifier(column));
-		appendStringInfoString(ret, " IS NOT DISTINCT FROM M.");
-		appendStringInfoString(ret, quote_identifier(column));
+		appendStringInfoString(&ret, "P.");
+		appendStringInfoString(&ret, quote_identifier(column));
+		appendStringInfoString(&ret, " IS NOT DISTINCT FROM M.");
+		appendStringInfoString(&ret, quote_identifier(column));
 	}
 
-	elog(DEBUG2, "%s: %s", __func__, ret->data);
-	return ret->data;
+	elog(DEBUG2, "%s: %s", __func__, ret.data);
+	return ret.data;
 }
 
 static char *
 build_merge_update_clause(List *column_names)
 {
-	StringInfo ret = makeStringInfo();
+	StringInfoData ret;
+	initStringInfo(&ret);
 
 	Assert(column_names != NIL);
 
@@ -381,16 +384,16 @@ build_merge_update_clause(List *column_names)
 	{
 		char *column = (char *) lfirst(lc);
 
-		if (ret->len > 0)
-			appendStringInfoString(ret, ", ");
+		if (ret.len > 0)
+			appendStringInfoString(&ret, ", ");
 
-		appendStringInfoString(ret, quote_identifier(column));
-		appendStringInfoString(ret, " = P.");
-		appendStringInfoString(ret, quote_identifier(column));
+		appendStringInfoString(&ret, quote_identifier(column));
+		appendStringInfoString(&ret, " = P.");
+		appendStringInfoString(&ret, quote_identifier(column));
 	}
 
-	elog(DEBUG2, "%s: %s", __func__, ret->data);
-	return ret->data;
+	elog(DEBUG2, "%s: %s", __func__, ret.data);
+	return ret.data;
 }
 
 /* Create INSERT statement */
@@ -792,12 +795,13 @@ static void
 update_watermark(MaterializationContext *context)
 {
 	int res;
-	StringInfo command = makeStringInfo();
+	StringInfoData command;
 	Oid types[] = { context->materialization_range.type };
 	Datum values[] = { context->materialization_range.start };
 	char nulls[] = { false };
 
-	appendStringInfo(command,
+	initStringInfo(&command);
+	appendStringInfo(&command,
 					 "SELECT %s FROM %s.%s AS I "
 					 "WHERE I.%s >= $1 %s "
 					 "ORDER BY 1 DESC LIMIT 1;",
@@ -807,8 +811,8 @@ update_watermark(MaterializationContext *context)
 					 quote_identifier(NameStr(*context->time_column_name)),
 					 context->chunk_condition);
 
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
+	elog(DEBUG2, "%s: %s", __func__, command.data);
+	res = SPI_execute_with_args(command.data,
 								1,
 								types,
 								values,

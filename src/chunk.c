@@ -2568,20 +2568,21 @@ chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mct
 			if (fail_if_not_found)
 			{
 				int i = 0;
-				StringInfo info = makeStringInfo();
+				StringInfoData info;
+				initStringInfo(&info);
 				while (i < nkeys)
 				{
-					appendStringInfo(info,
+					appendStringInfo(&info,
 									 "%s: %s",
 									 displaykey[i].name,
 									 displaykey[i].as_string(scankey[i].sk_argument));
 					if (++i < nkeys)
-						appendStringInfoString(info, ", ");
+						appendStringInfoString(&info, ", ");
 				}
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_OBJECT),
 						 errmsg("chunk not found"),
-						 errdetail("%s", info->data)));
+						 errdetail("%s", info.data)));
 			}
 			break;
 		case 1:
@@ -2790,17 +2791,21 @@ chunk_simple_scan(ScanIterator *iterator, FormData_chunk *form, bool missing_ok,
 	if (count == 0 && !missing_ok)
 	{
 		int i = 0;
-		StringInfo info = makeStringInfo();
+		StringInfoData info;
+		initStringInfo(&info);
 		while (i < iterator->ctx.nkeys)
 		{
-			appendStringInfo(info,
+			appendStringInfo(&info,
 							 "%s: %s",
 							 displaykey[i].name,
 							 displaykey[i].as_string(iterator->ctx.scankey[i].sk_argument));
 			if (++i < iterator->ctx.nkeys)
-				appendStringInfoString(info, ", ");
+				appendStringInfoString(&info, ", ");
 		}
-		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("chunk not found")));
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("chunk not found"),
+				 errdetail("%s", info.data)));
 	}
 
 	return count == 1;
