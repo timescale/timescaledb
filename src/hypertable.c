@@ -24,6 +24,7 @@
 #include <commands/trigger.h>
 #include <executor/spi.h>
 #include <funcapi.h>
+#include <lib/stringinfo.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <nodes/memnodes.h>
@@ -53,6 +54,7 @@
 #include "dimension_vector.h"
 #include "error_utils.h"
 #include "errors.h"
+#include "extension.h"
 #include "guc.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
@@ -2267,6 +2269,29 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 }
 
 /*
+ * Construct an expression for a dimensional column which is compatible with the max() function.
+ * Normally, this is just the column name, but in the case of UUIDv7 there is no max() function
+ * defined for the type so in that case the expression extracts the timestamp from the UUID.
+ */
+static const char *
+get_expr_for_dim_max(const char *colname, Oid timetype)
+{
+	if (timetype == UUIDOID)
+	{
+		StringInfoData expr;
+
+		initStringInfo(&expr);
+		appendStringInfo(&expr,
+						 "%s.uuid_timestamp(%s)",
+						 ts_extension_schema_name(),
+						 quote_identifier(colname));
+		return expr.data;
+	}
+
+	return quote_identifier(colname);
+}
+
+/*
  * Get the max value of an open dimension.
  */
 int64
@@ -2296,7 +2321,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT pg_catalog.max(%s) FROM %s.%s",
-					 quote_identifier(NameStr(dim->fd.column_name)),
+					 get_expr_for_dim_max(NameStr(dim->fd.column_name), timetype),
 					 quote_identifier(NameStr(ht->fd.schema_name)),
 					 quote_identifier(NameStr(ht->fd.table_name)));
 
@@ -2311,7 +2336,11 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 				 (errmsg("could not find the maximum time value for hypertable \"%s\"",
 						 get_rel_name(ht->main_table_relid)))));
 
-	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype,
+	/* In most cases the result type is the same as the time type. However, with UUIDs we first
+	 * extract the timestamptz so the result type is timestamptz instead. */
+	Oid result_type = timetype == UUIDOID ? TIMESTAMPTZOID : timetype;
+
+	Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == result_type,
 		   "partition types for result (%d) and dimension (%d) do not match",
 		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
 		   ts_dimension_get_partition_type(dim));
@@ -2321,7 +2350,7 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 		*isnull = max_isnull;
 
 	int64 max_value =
-		max_isnull ? ts_time_get_min(timetype) : ts_time_value_to_internal(maxdat, timetype);
+		max_isnull ? ts_time_get_min(result_type) : ts_time_value_to_internal(maxdat, result_type);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
