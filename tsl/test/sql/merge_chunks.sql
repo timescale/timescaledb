@@ -387,7 +387,7 @@ select
     chunk_relid,
     n as new_chunk_id,
     (select count(indexrelid::regclass) from pg_index where indrelid=new_relid) as num_new_indexes
-from (select *, dense_rank() over (order by new_relid) as n from _timescaledb_catalog.chunk_rewrite) cr;
+from (select *, dense_rank() over (order by new_relid) as n from _timescaledb_catalog.chunk_rewrite) cr ORDER BY chunk_relid::text COLLATE "C";
 grant select on chunks_being_merged to public;
 
 
