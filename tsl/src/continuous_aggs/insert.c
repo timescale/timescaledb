@@ -85,7 +85,7 @@ static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, Tuple
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
 										  int32 hypertable_id);
 static inline void cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry,
-											   Oid chunk_reloid, Relation chunk_relation);
+											   Oid chunk_reloid);
 static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
 static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
 static void cache_inval_cleanup(void);
@@ -178,8 +178,7 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 }
 
 static inline void
-cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_reloid,
-							Relation chunk_relation)
+cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_reloid)
 {
 	Chunk *modified_tuple_chunk = ts_chunk_get_by_relid(chunk_reloid, false);
 	if (modified_tuple_chunk == NULL)
@@ -192,8 +191,7 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 
 	cache_entry->previous_chunk_relid = modified_tuple_chunk->table_id;
 	cache_entry->previous_chunk_open_dimension =
-		get_attnum(chunk_relation->rd_id,
-				   NameStr(cache_entry->hypertable_open_dimension.fd.column_name));
+		get_attnum(chunk_reloid, NameStr(cache_entry->hypertable_open_dimension.fd.column_name));
 
 	if (cache_entry->previous_chunk_open_dimension == InvalidAttrNumber)
 	{
@@ -201,7 +199,7 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 				(errcode(ERRCODE_INTERNAL_ERROR),
 				 errmsg("open dimension '%s' not found in chunk %s",
 						NameStr(cache_entry->hypertable_open_dimension.fd.column_name),
-						get_rel_name(chunk_relation->rd_id))));
+						get_rel_name(chunk_reloid))));
 	}
 }
 
@@ -220,23 +218,11 @@ continuous_agg_dml_invalidate(int32 hypertable_id, Relation chunk_rel, HeapTuple
 							  HeapTuple chunk_newtuple, bool update)
 {
 	Assert(!ts_guc_enable_cagg_wal_based_invalidation);
-	execute_cagg_trigger(hypertable_id, chunk_rel, chunk_tuple, chunk_newtuple, update);
-}
-
-/*
- * chunk_tuple is the tuple from trigdata->tg_trigtuple
- * i.e. the one being/inserts/deleted/updated.
- * (for updates: this is the row before modification)
- * chunk_newtuple is the tuple from trigdata->tg_newtuple.
- */
-void
-execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
-					 HeapTuple chunk_newtuple, bool update)
-{
 	ContinuousAggsCacheInvalEntry *cache_entry;
 	bool found;
 	int64 timeval;
 	Oid chunk_relid = chunk_rel->rd_id;
+
 	/* On first call, init the mctx and hash table */
 	if (!continuous_aggs_cache_inval_htab)
 		cache_inval_init();
@@ -249,7 +235,7 @@ execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tu
 
 	/* handle the case where we need to repopulate the cached chunk data */
 	if (cache_entry->previous_chunk_relid != chunk_relid)
-		cache_entry_switch_to_chunk(cache_entry, chunk_relid, chunk_rel);
+		cache_entry_switch_to_chunk(cache_entry, chunk_relid);
 
 	timeval = tuple_get_time(&cache_entry->hypertable_open_dimension,
 							 chunk_tuple,

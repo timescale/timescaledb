@@ -266,5 +266,7 @@ ts_debug_point_raise_error_if_enabled(const char *name)
 			break;
 	}
 
-	ereport(ERROR, (errmsg("error injected at debug point '%s'", point.name)));
+	ereport(ERROR,
+			(errcode(ERRCODE_TRIGGERED_ACTION_EXCEPTION),
+			 errmsg("error injected at debug point '%s'", point.name)));
 }

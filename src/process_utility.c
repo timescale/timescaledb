@@ -81,6 +81,7 @@
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_column_stats.h"
+#include "ts_catalog/chunk_rewrite.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
@@ -257,6 +258,16 @@ check_continuous_agg_alter_table_allowed(Hypertable *ht, AlterTableStmt *stmt)
 	}
 }
 
+/* check if hypertable has compressed chunks */
+static bool
+ts_hypertable_has_compressed_chunks(const Hypertable *ht)
+{
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		return false;
+
+	return ts_chunk_exists_with_compression(ht->fd.id);
+}
+
 static void
 check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt *stmt)
 {
@@ -308,6 +319,14 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 				 * List things that we want to explicitly block for documentation purposes
 				 * But also block everything else as well.
 				 */
+			case AT_AlterColumnType:
+				/* Allow AT_AlterColumnType when no compressed chunks exist */
+				if (!ts_hypertable_has_compressed_chunks(ht))
+					continue;
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("operation not supported on hypertables with compressed chunks")));
+				break;
 			case AT_EnableRowSecurity:
 			case AT_DisableRowSecurity:
 			case AT_ForceRowSecurity:
@@ -1436,6 +1455,7 @@ process_drop_table_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	};
 
 	ts_compression_settings_delete(chunk_relid);
+	ts_chunk_rewrite_delete(chunk_relid, false);
 	performDeletion(&objaddr, stmt->behavior, 0);
 }
 
@@ -5402,15 +5422,16 @@ process_drop_table(EventTriggerDropObject *obj)
 										 false);
 	ts_hypertable_delete_by_name(table->schema, table->name);
 	/*
-	 * Normally, compression settings are cleaned up when deleting the
-	 * hypertable or chunk. However, in some cases, e.g., when a hypertable
-	 * delete cascades to chunks, the chunk relids cannot be resolved from the
-	 * schema and name because the chunk relations are already dropped by
-	 * PostgreSQL when the "drop eventtrigger" is called. Therefore, also try
-	 * to delete compression settings here since the eventtrigger gives us the
-	 * relid of dropped objects.
+	 * Normally, dependent catalogs (like compression settings) are cleaned up
+	 * when deleting the hypertable or chunk. However, in some cases, e.g.,
+	 * when a hypertable delete cascades to chunks, the chunk relids cannot be
+	 * resolved from the schema and name because the chunk relations are
+	 * already dropped by PostgreSQL when the "drop eventtrigger" is
+	 * called. Therefore, also try to delete dependent catalog entries here
+	 * since the eventtrigger gives us the relid of dropped objects.
 	 */
 	ts_compression_settings_delete_any(table->relid);
+	ts_chunk_rewrite_delete(table->relid, false);
 }
 
 static void

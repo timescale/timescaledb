@@ -336,13 +336,19 @@ typedef enum InvalidationResult
 	INVAL_CUT,
 } InvalidationResult;
 
-#define IS_VALID_INVALIDATION(entry) ((entry)->hyper_id > 0)
+static inline bool
+IsValidInvalidation(const Invalidation *invalidation)
+{
+	Assert(invalidation->lowest_modified_value <= invalidation->greatest_modified_value);
+	return invalidation->hyper_id != INVALID_HYPERTABLE_ID &&
+		   invalidation->lowest_modified_value <= invalidation->greatest_modified_value;
+}
 
 static bool
 save_invalidation_for_refresh(const ContinuousAggInvalidationState *state,
 							  const Invalidation *invalidation)
 {
-	if (!IS_VALID_INVALIDATION(invalidation))
+	if (!IsValidInvalidation(invalidation))
 		return false;
 
 	int32 cagg_hyper_id = state->cagg->data.mat_hypertable_id;
@@ -713,7 +719,7 @@ invalidations_can_be_merged(const Invalidation *a, const Invalidation *b)
 static bool
 invalidation_entry_try_merge(Invalidation *entry, const Invalidation *newentry)
 {
-	if (!IS_VALID_INVALIDATION(newentry))
+	if (!IsValidInvalidation(newentry))
 		return false;
 
 	/* Quick exit if no overlap */
@@ -809,7 +815,7 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 														   state->dimtype,
 														   bucket_function);
 
-			if (!IS_VALID_INVALIDATION(&mergedentry))
+			if (!IsValidInvalidation(&mergedentry))
 			{
 				mergedentry = logentry;
 				mergedentry.hyper_id = cagg_hyper_id;
@@ -839,7 +845,7 @@ move_invalidations_from_hyper_to_cagg_log(const HypertableInvalidationState *sta
 		ts_scan_iterator_close(&iterator);
 
 		/* Handle the last merged invalidation */
-		if (IS_VALID_INVALIDATION(&mergedentry))
+		if (IsValidInvalidation(&mergedentry))
 			insert_new_cagg_invalidation(state, &mergedentry, cagg_hyper_id);
 	}
 }
@@ -919,7 +925,7 @@ cut_cagg_invalidation_and_compute_remainder(const ContinuousAggInvalidationState
 	 * need to cut the prev invalidation against the refresh window */
 	new_remainder = cut_cagg_invalidation(state, refresh_window, mergedentry);
 
-	if (!IS_VALID_INVALIDATION(&remainder))
+	if (!IsValidInvalidation(&remainder))
 		remainder = new_remainder;
 	else if (!invalidation_entry_try_merge(&remainder, &new_remainder))
 	{
@@ -999,7 +1005,7 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 													  state->cagg->partition_type,
 													  state->cagg->bucket_function);
 
-		if (!IS_VALID_INVALIDATION(&mergedentry))
+		if (!IsValidInvalidation(&mergedentry))
 			mergedentry = logentry;
 		else if (invalidation_entry_try_merge(&mergedentry, &logentry))
 		{
@@ -1026,7 +1032,7 @@ clear_cagg_invalidations_for_refresh(const ContinuousAggInvalidationState *state
 
 process_remainder:
 	/* Handle the last (merged) invalidation */
-	if (IS_VALID_INVALIDATION(&mergedentry))
+	if (IsValidInvalidation(&mergedentry))
 		remainder = cut_cagg_invalidation_and_compute_remainder(state,
 																refresh_window,
 																&mergedentry,

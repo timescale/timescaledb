@@ -1108,7 +1108,8 @@ ts_bgw_job_function_call_string(BgwJob *job)
 	Oid funcid = ts_bgw_job_get_funcid(job);
 	/* If do not found the function or procedure then fallback to PROKIND_FUNCTION */
 	char prokind = OidIsValid(funcid) ? get_func_prokind(funcid) : PROKIND_FUNCTION;
-	StringInfo stmt = makeStringInfo();
+	StringInfoData stmt;
+	initStringInfo(&stmt);
 	char *jsonb_str = "NULL";
 
 	if (job->fd.config)
@@ -1118,7 +1119,7 @@ ts_bgw_job_function_call_string(BgwJob *job)
 	switch (prokind)
 	{
 		case PROKIND_FUNCTION:
-			appendStringInfo(stmt,
+			appendStringInfo(&stmt,
 							 "SELECT %s.%s('%d', %s)",
 							 quote_identifier(NameStr(job->fd.proc_schema)),
 							 quote_identifier(NameStr(job->fd.proc_name)),
@@ -1126,7 +1127,7 @@ ts_bgw_job_function_call_string(BgwJob *job)
 							 jsonb_str);
 			break;
 		case PROKIND_PROCEDURE:
-			appendStringInfo(stmt,
+			appendStringInfo(&stmt,
 							 "CALL %s.%s('%d', %s)",
 							 quote_identifier(NameStr(job->fd.proc_schema)),
 							 quote_identifier(NameStr(job->fd.proc_name)),
@@ -1140,7 +1141,7 @@ ts_bgw_job_function_call_string(BgwJob *job)
 			break;
 	}
 
-	return stmt->data;
+	return stmt.data;
 }
 
 extern Datum
@@ -1149,7 +1150,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	Oid db_oid = DatumGetObjectId(MyBgworkerEntry->bgw_main_arg);
 	BgwParams params;
 	BgwJob *job;
-	JobResult res = JOB_FAILURE_IN_EXECUTION;
+	JobResult volatile res = JOB_FAILURE_IN_EXECUTION;
 	bool got_lock;
 	instr_time start;
 	instr_time duration;

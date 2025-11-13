@@ -71,8 +71,6 @@ typedef struct MaterializationContext
 } MaterializationContext;
 
 typedef char *(*MaterializationCreateStatement)(MaterializationContext *context);
-typedef void (*MaterializationEmitError)(MaterializationContext *context);
-typedef void (*MaterializationEmitProgress)(MaterializationContext *context, uint64 rows_processed);
 
 typedef struct MaterializationPlan
 {
@@ -81,8 +79,8 @@ typedef struct MaterializationPlan
 	bool catalog_security_context;
 	int nargs;
 	MaterializationCreateStatement create_statement;
-	MaterializationEmitError emit_error;
-	MaterializationEmitProgress emit_progress;
+	const char *error_message;
+	const char *progress_message;
 } MaterializationPlan;
 
 static char *create_materialization_insert_statement(MaterializationContext *context);
@@ -94,57 +92,54 @@ static char *create_materialization_ranges_select_statement(MaterializationConte
 static char *create_materialization_ranges_delete_statement(MaterializationContext *context);
 static char *create_materialization_ranges_pending_statement(MaterializationContext *context);
 
-static void emit_materialization_insert_error(MaterializationContext *context);
-static void emit_materialization_delete_error(MaterializationContext *context);
-static void emit_materialization_exists_error(MaterializationContext *context);
-static void emit_materialization_merge_error(MaterializationContext *context);
-static void emit_materialization_ranges_select_error(MaterializationContext *context);
-static void emit_materialization_ranges_delete_error(MaterializationContext *context);
-static void emit_materialization_ranges_pending_error(MaterializationContext *context);
-
-static void emit_materialization_insert_progress(MaterializationContext *context,
-												 uint64 rows_processed);
-static void emit_materialization_delete_progress(MaterializationContext *context,
-												 uint64 rows_processed);
-static void emit_materialization_merge_progress(MaterializationContext *context,
-												uint64 rows_processed);
-
 static MaterializationPlan materialization_plans[_MAX_MATERIALIZATION_PLAN_TYPES + 1] = {
 	[PLAN_TYPE_INSERT] = { .nargs = 2,
 						   .create_statement = create_materialization_insert_statement,
-						   .emit_error = emit_materialization_insert_error,
-						   .emit_progress = emit_materialization_insert_progress },
+						   .error_message =
+							   "could not insert old values into materialization table \"%s.%s\"",
+						   .progress_message = "inserted " UINT64_FORMAT
+											   " row(s) into materialization table \"%s.%s\"" },
 	[PLAN_TYPE_DELETE] = { .nargs = 2,
 						   .create_statement = create_materialization_delete_statement,
-						   .emit_error = emit_materialization_delete_error,
-						   .emit_progress = emit_materialization_delete_progress },
+						   .error_message =
+							   "could not delete old values from materialization table \"%s.%s\"",
+						   .progress_message = "deleted " UINT64_FORMAT
+											   " row(s) from materialization table \"%s.%s\"" },
 	[PLAN_TYPE_EXISTS] = { .read_only = true,
 						   .nargs = 2,
 						   .create_statement = create_materialization_exists_statement,
-						   .emit_error = emit_materialization_exists_error },
+						   .error_message = "could not check the materialization table \"%s.%s\"" },
 	[PLAN_TYPE_MERGE] = { .nargs = 2,
 						  .create_statement = create_materialization_merge_statement,
-						  .emit_error = emit_materialization_merge_error,
-						  .emit_progress = emit_materialization_merge_progress },
+						  .error_message =
+							  "could not merge old values into materialization table \"%s.%s\"",
+						  .progress_message = "merged " UINT64_FORMAT
+											  " row(s) into materialization table \"%s.%s\"" },
 	[PLAN_TYPE_MERGE_DELETE] = { .nargs = 2,
 								 .create_statement = create_materialization_merge_delete_statement,
-								 .emit_error = emit_materialization_delete_error,
-								 .emit_progress = emit_materialization_delete_progress },
+								 .error_message = "could not delete old values from "
+												  "materialization table \"%s.%s\"",
+								 .progress_message =
+									 "deleted " UINT64_FORMAT
+									 " row(s) from materialization table \"%s.%s\"" },
 	[PLAN_TYPE_RANGES_SELECT] = { .catalog_security_context = true,
 								  .nargs = 3,
 								  .create_statement =
 									  create_materialization_ranges_select_statement,
-								  .emit_error = emit_materialization_ranges_select_error },
+								  .error_message = "could not select invalidation entries for "
+												   "materialization table \"%s.%s\"" },
 	[PLAN_TYPE_RANGES_DELETE] = { .catalog_security_context = true,
 								  .nargs = 1,
 								  .create_statement =
 									  create_materialization_ranges_delete_statement,
-								  .emit_error = emit_materialization_ranges_delete_error },
+								  .error_message = "could not delete invalidation entries for "
+												   "materialization table \"%s.%s\"" },
 	[PLAN_TYPE_RANGES_PENDING] = { .read_only = true,
 								   .nargs = 3,
 								   .create_statement =
 									   create_materialization_ranges_pending_statement,
-								   .emit_error = emit_materialization_ranges_pending_error },
+								   .error_message = "could not select pending materialization "
+													"ranges \"%s.%s\"" },
 };
 
 static Oid *create_materialization_plan_argtypes(MaterializationContext *context,
@@ -329,7 +324,8 @@ cagg_find_aggref_and_var_cols(ContinuousAgg *cagg, Hypertable *mat_ht)
 static char *
 build_merge_insert_columns(List *strings, const char *separator, const char *prefix)
 {
-	StringInfo ret = makeStringInfo();
+	StringInfoData ret;
+	initStringInfo(&ret);
 
 	Assert(strings != NIL);
 
@@ -337,22 +333,23 @@ build_merge_insert_columns(List *strings, const char *separator, const char *pre
 	foreach (lc, strings)
 	{
 		char *grpcol = (char *) lfirst(lc);
-		if (ret->len > 0)
-			appendStringInfoString(ret, separator);
+		if (ret.len > 0)
+			appendStringInfoString(&ret, separator);
 
 		if (prefix)
-			appendStringInfoString(ret, prefix);
-		appendStringInfoString(ret, quote_identifier(grpcol));
+			appendStringInfoString(&ret, prefix);
+		appendStringInfoString(&ret, quote_identifier(grpcol));
 	}
 
-	elog(DEBUG2, "%s: %s", __func__, ret->data);
-	return ret->data;
+	elog(DEBUG2, "%s: %s", __func__, ret.data);
+	return ret.data;
 }
 
 static char *
 build_merge_join_clause(List *column_names)
 {
-	StringInfo ret = makeStringInfo();
+	StringInfoData ret;
+	initStringInfo(&ret);
 
 	Assert(column_names != NIL);
 
@@ -361,23 +358,24 @@ build_merge_join_clause(List *column_names)
 	{
 		char *column = (char *) lfirst(lc);
 
-		if (ret->len > 0)
-			appendStringInfoString(ret, " AND ");
+		if (ret.len > 0)
+			appendStringInfoString(&ret, " AND ");
 
-		appendStringInfoString(ret, "P.");
-		appendStringInfoString(ret, quote_identifier(column));
-		appendStringInfoString(ret, " IS NOT DISTINCT FROM M.");
-		appendStringInfoString(ret, quote_identifier(column));
+		appendStringInfoString(&ret, "P.");
+		appendStringInfoString(&ret, quote_identifier(column));
+		appendStringInfoString(&ret, " IS NOT DISTINCT FROM M.");
+		appendStringInfoString(&ret, quote_identifier(column));
 	}
 
-	elog(DEBUG2, "%s: %s", __func__, ret->data);
-	return ret->data;
+	elog(DEBUG2, "%s: %s", __func__, ret.data);
+	return ret.data;
 }
 
 static char *
 build_merge_update_clause(List *column_names)
 {
-	StringInfo ret = makeStringInfo();
+	StringInfoData ret;
+	initStringInfo(&ret);
 
 	Assert(column_names != NIL);
 
@@ -386,16 +384,16 @@ build_merge_update_clause(List *column_names)
 	{
 		char *column = (char *) lfirst(lc);
 
-		if (ret->len > 0)
-			appendStringInfoString(ret, ", ");
+		if (ret.len > 0)
+			appendStringInfoString(&ret, ", ");
 
-		appendStringInfoString(ret, quote_identifier(column));
-		appendStringInfoString(ret, " = P.");
-		appendStringInfoString(ret, quote_identifier(column));
+		appendStringInfoString(&ret, quote_identifier(column));
+		appendStringInfoString(&ret, " = P.");
+		appendStringInfoString(&ret, quote_identifier(column));
 	}
 
-	elog(DEBUG2, "%s: %s", __func__, ret->data);
-	return ret->data;
+	elog(DEBUG2, "%s: %s", __func__, ret.data);
+	return ret.data;
 }
 
 /* Create INSERT statement */
@@ -569,6 +567,7 @@ create_materialization_ranges_select_statement(MaterializationContext *context)
 					 "SELECT ctid, lowest_modified_value, greatest_modified_value "
 					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
 					 "WHERE materialization_id = $1 "
+					 "AND greatest_modified_value >= lowest_modified_value "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
 					 "ORDER BY lowest_modified_value ASC "
@@ -602,104 +601,12 @@ create_materialization_ranges_pending_statement(MaterializationContext *context)
 					 "SELECT * "
 					 "FROM _timescaledb_catalog.continuous_aggs_materialization_ranges "
 					 "WHERE materialization_id = $1 "
+					 "AND greatest_modified_value >= lowest_modified_value "
 					 "AND pg_catalog.int8range(lowest_modified_value, greatest_modified_value) && "
 					 "pg_catalog.int8range($2, $3) "
 					 "LIMIT 1 ");
 
 	return query.data;
-}
-
-static void
-emit_materialization_insert_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not insert old values into materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_delete_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not delete old values from materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_exists_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not check the materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_merge_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not merge old values into materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_ranges_select_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not select invalidation entries for materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_ranges_delete_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not delete invalidation entries for materialization table \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_ranges_pending_error(MaterializationContext *context)
-{
-	elog(ERROR,
-		 "could not select pending materialization ranges \"%s.%s\"",
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_insert_progress(MaterializationContext *context, uint64 rows_processed)
-{
-	elog(LOG,
-		 "inserted " UINT64_FORMAT " row(s) into materialization table \"%s.%s\"",
-		 rows_processed,
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_delete_progress(MaterializationContext *context, uint64 rows_processed)
-{
-	elog(LOG,
-		 "deleted " UINT64_FORMAT " row(s) from materialization table \"%s.%s\"",
-		 rows_processed,
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
-}
-
-static void
-emit_materialization_merge_progress(MaterializationContext *context, uint64 rows_processed)
-{
-	elog(LOG,
-		 "merged " UINT64_FORMAT " row(s) into materialization table \"%s.%s\"",
-		 rows_processed,
-		 NameStr(*context->materialization_table.schema),
-		 NameStr(*context->materialization_table.name));
 }
 
 static Oid *
@@ -814,12 +721,22 @@ execute_materialization_plan(MaterializationContext *context, MaterializationPla
 
 	if (res < 0)
 	{
-		if (materialization->emit_error)
-			materialization->emit_error(context);
+		Ensure(materialization->error_message,
+			   "materialization plan error message not set for plan type %d",
+			   plan_type);
+		elog(ERROR,
+			 materialization->error_message,
+			 NameStr(*context->materialization_table.schema),
+			 NameStr(*context->materialization_table.name));
 	}
-
-	if (materialization->emit_progress)
-		materialization->emit_progress(context, SPI_processed);
+	else if (materialization->progress_message)
+	{
+		elog(LOG,
+			 materialization->progress_message,
+			 SPI_processed,
+			 NameStr(*context->materialization_table.schema),
+			 NameStr(*context->materialization_table.name));
+	}
 
 	if (SPI_processed > 0 && plan_type == PLAN_TYPE_RANGES_SELECT)
 	{
@@ -878,12 +795,13 @@ static void
 update_watermark(MaterializationContext *context)
 {
 	int res;
-	StringInfo command = makeStringInfo();
+	StringInfoData command;
 	Oid types[] = { context->materialization_range.type };
 	Datum values[] = { context->materialization_range.start };
 	char nulls[] = { false };
 
-	appendStringInfo(command,
+	initStringInfo(&command);
+	appendStringInfo(&command,
 					 "SELECT %s FROM %s.%s AS I "
 					 "WHERE I.%s >= $1 %s "
 					 "ORDER BY 1 DESC LIMIT 1;",
@@ -893,8 +811,8 @@ update_watermark(MaterializationContext *context)
 					 quote_identifier(NameStr(*context->time_column_name)),
 					 context->chunk_condition);
 
-	elog(DEBUG2, "%s: %s", __func__, command->data);
-	res = SPI_execute_with_args(command->data,
+	elog(DEBUG2, "%s: %s", __func__, command.data);
+	res = SPI_execute_with_args(command.data,
 								1,
 								types,
 								values,

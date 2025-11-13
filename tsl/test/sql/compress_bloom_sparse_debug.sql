@@ -106,3 +106,51 @@ select ts_bloom1_debug_hash(1::float8);
 select ts_bloom1_debug_hash('2025-05-05'::date);
 select ts_bloom1_debug_hash('2025-05-05'::timestamp);
 select ts_bloom1_debug_hash('2025-05-05'::timestamptz);
+
+
+-- The "contains" functions should error out when called with wrong arguments.
+\set ON_ERROR_STOP 0
+
+select _timescaledb_functions.bloom1_contains('\xffffffffffffffff'::_timescaledb_internal.bloom1, 1::bit) ;
+
+select _timescaledb_functions.bloom1_contains_any('\xffffffffffffffff'::_timescaledb_internal.bloom1, array[1::bit]) ;
+
+\set ON_ERROR_STOP 1
+
+
+-- Test that the "contains" function cope with different source chunks.
+create table detoaster(ts int, tag text) with (tsdb.hypertable,
+    tsdb.partition_column = 'ts', tsdb.compress, tsdb.compress_orderby = 'ts')
+;
+
+insert into detoaster select ts, ts::text from generate_series(1, 1000) ts;
+insert into detoaster select ts, ts::text from generate_series(1000001, 1001000) ts;
+
+create index on detoaster(tag);
+
+select count(compress_chunk(x)) from show_chunks('detoaster') x;
+
+with chunks as (
+  select
+    row_number() over (order by table_name) index,
+    schema_name || '.' || table_name chunk
+  from _timescaledb_catalog.chunk
+    where id in (select compressed_chunk_id from _timescaledb_catalog.chunk
+      where hypertable_id = (select id from _timescaledb_catalog.hypertable
+        where table_name = 'detoaster'))
+)
+select max(chunk) filter (where index = 1) chunk1,
+    max(chunk) filter (where index = 2) chunk2
+from chunks
+\gset
+
+create view v(f) as (select _ts_meta_v2_bloom1_tag from :chunk1
+    union all select _ts_meta_v2_bloom1_tag from :chunk2);
+
+select
+    _timescaledb_functions.bloom1_contains(f, '1'::text),
+    _timescaledb_functions.bloom1_contains(f, '1000001'::text)
+from v
+;
+
+select (ts_bloom1_debug_info(f)).* from v;

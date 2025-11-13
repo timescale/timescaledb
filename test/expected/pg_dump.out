@@ -437,6 +437,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  _timescaledb_cache.cache_inval_bgw_job
  _timescaledb_cache.cache_inval_extension
  _timescaledb_cache.cache_inval_hypertable
+ _timescaledb_catalog.chunk_rewrite
  _timescaledb_catalog.compression_algorithm
  _timescaledb_catalog.tablespace_id_seq
  _timescaledb_catalog.telemetry_event

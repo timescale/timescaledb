@@ -173,7 +173,7 @@ ts_uuid_v7_extract_unixtime(const pg_uuid_t *uuid, uint64 *unixtime_ms, uint16 *
 	if (extra_us)
 	{
 		/* Optionally, get the sub ms part as microseconds, reversing the scaling */
-		*extra_us = (((uuid->data[6] & 0xF) << 8) | uuid->data[7]) * 1000 / (1 << 12);
+		*extra_us = ((((uuid->data[6] & 0xF) << 8) | uuid->data[7]) + 1) * 1000 / (1 << 12);
 	}
 
 	return is_uuidv7;

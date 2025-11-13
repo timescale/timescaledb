@@ -255,7 +255,7 @@ execute p('2345');
 deallocate p;
 reset plan_cache_mode;
 reset timescaledb.enable_chunk_append;
--- Scalar array operations are not yet supported
+-- Only some scalar array operations are supported.
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
 select count(*) from bloom where x < any(array[1000, 2000]::int[]);
 --- QUERY PLAN ---
@@ -276,11 +276,12 @@ select count(*) from bloom where value = any(array[md5('1000'), md5('2000')]);
    Output: count(*)
    ->  Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_1_1_chunk (actual rows=2.00 loops=1)
          Vectorized Filter: (_hyper_1_1_chunk.value = ANY ('{a9b7ba70783b617e9998dc4dd82eb3c5,08f90c1a417155361a5c4b8d297e0d78}'::text[]))
-         Rows Removed by Filter: 9998
-         Batches Removed by Filter: 8
+         Rows Removed by Filter: 1998
          Bulk Decompression: true
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=10.00 loops=1)
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=2.00 loops=1)
                Output: compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk.x, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, compress_hyper_2_2_chunk.value, compress_hyper_2_2_chunk._ts_meta_v2_bloom1_u, compress_hyper_2_2_chunk.u, compress_hyper_2_2_chunk._ts_meta_v2_min_ts, compress_hyper_2_2_chunk._ts_meta_v2_max_ts, compress_hyper_2_2_chunk.ts
+               Filter: _timescaledb_functions.bloom1_contains_any(compress_hyper_2_2_chunk._ts_meta_v2_bloom1_value, '{a9b7ba70783b617e9998dc4dd82eb3c5,08f90c1a417155361a5c4b8d297e0d78}'::text[])
+               Rows Removed by Filter: 8
 
 -- UUID uses bloom
 explain (analyze, verbose, buffers off, costs off, timing off, summary off)
@@ -445,6 +446,22 @@ select * from corner where c > s;
  Custom Scan (ColumnarScan) on _hyper_3_3_chunk
    Filter: (c > s)
    ->  Seq Scan on compress_hyper_4_4_chunk
+
+-- Scalar array operation
+explain (analyze, verbose, buffers off, costs off, timing off, summary off)
+select * from corner where c = any(array['short', 'nonexistent'])
+;
+--- QUERY PLAN ---
+ Custom Scan (ColumnarScan) on _timescaledb_internal._hyper_3_3_chunk (actual rows=1.00 loops=1)
+   Output: _hyper_3_3_chunk.ts, _hyper_3_3_chunk.s, _hyper_3_3_chunk.c
+   Vectorized Filter: (_hyper_3_3_chunk.c = ANY ('{short,nonexistent}'::text[]))
+   Rows Removed by Filter: 1
+   Batches Removed by Filter: 1
+   Bulk Decompression: true
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_4_4_chunk (actual rows=2.00 loops=1)
+         Output: compress_hyper_4_4_chunk._ts_meta_count, compress_hyper_4_4_chunk.s, compress_hyper_4_4_chunk._ts_meta_min_1, compress_hyper_4_4_chunk._ts_meta_max_1, compress_hyper_4_4_chunk.ts, compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, compress_hyper_4_4_chunk.c
+         Filter: _timescaledb_functions.bloom1_contains_any(compress_hyper_4_4_chunk._ts_meta_v2_bloom1_c, '{short,nonexistent}'::text[])
+         Rows Removed by Filter: 2
 
 -- Test a bad hash function.
 create type badint;
