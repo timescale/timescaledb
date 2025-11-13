@@ -1,0 +1,1 @@
+Fixes: #8933 Potential crash or seemingly random errors when querying the compressed chunks created on releases before 2.15 and using the minmax sparse indexes.
