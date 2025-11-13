@@ -9,6 +9,8 @@
 #include <fmgr.h>
 #include <utils/uuid.h>
 
+#define UNIX_EPOCH_AS_TIMESTAMP (0 - ((POSTGRES_EPOCH_JDATE - UNIX_EPOCH_JDATE) * USECS_PER_DAY))
+
 extern pg_uuid_t *ts_uuid_create(void);
 extern pg_uuid_t *ts_create_uuid_v7_from_unixtime_us(int64 unixtime_us, bool boundary,
 													 bool set_version);

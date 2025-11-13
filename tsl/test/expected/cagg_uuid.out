@@ -175,6 +175,7 @@ select count(*) from ts_events;
   4331
 
 CALL refresh_continuous_aggregate('daily_uuid_events', NULL, NULL);
+WARNING:  disabling direct compress because of too small batch size
 CALL refresh_continuous_aggregate('daily_ts_events', NULL, NULL);
 SELECT * FROM daily_uuid_events ORDER BY day;
              day              |  temp  
@@ -235,6 +236,8 @@ VALUES
 -- Test refresh via policy
 SELECT add_continuous_aggregate_policy('daily_uuid_events', start_offset => NULL, end_offset => NULL, schedule_interval => '1 minute') AS job_id \gset
 CALL run_job(:job_id);
+WARNING:  disabling direct compress because of too small batch size
+WARNING:  disabling direct compress because of too small batch size
 CALL refresh_continuous_aggregate('weekly_uuid_events', NULL, NULL);
 CALL refresh_continuous_aggregate('daily_ts_events', NULL, NULL);
 CALL refresh_continuous_aggregate('weekly_ts_events', NULL, NULL);
