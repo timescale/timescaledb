@@ -170,6 +170,47 @@ SELECT time_bucket('1 day', id, 'Europe/Stockholm'::text, '2000-01-01 00:00'::ti
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 GROUP BY id ORDER BY id DESC;
 
+-- Test UUID time_bucket in WHERE clause. Note that there is currently no chunk
+-- exclusion when using time_bucket() in the WHERE clause qual. This requires
+-- special handling of the time_bucket() transform optimizatios for different
+-- operators.
+EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) >= :'chunk_range_end'
+GROUP BY id ORDER BY id DESC;
+
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) >= :'chunk_range_end'
+GROUP BY id ORDER BY id DESC;
+
+EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) > :'chunk_range_start'
+GROUP BY id ORDER BY id DESC;
+
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) > :'chunk_range_start'
+GROUP BY id ORDER BY id DESC;
+
+EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) < :'chunk_range_end'
+GROUP BY id ORDER BY id DESC;
+
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) < :'chunk_range_end'
+GROUP BY id ORDER BY id DESC;
+
+EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) <= :'chunk_range_start'
+GROUP BY id ORDER BY id DESC;
+
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) <= :'chunk_range_start'
+GROUP BY id ORDER BY id DESC;
+
+-- Test time_bucket on non-v7 UUID
+\set ON_ERROR_STOP 0
+SELECT time_bucket('1 day', 'ffff0000-0000-4000-8000-000000000000'::uuid);
+\set ON_ERROR_STOP 1
+
 CREATE VIEW chunk_ranges AS
 SELECT
   chunk_name,

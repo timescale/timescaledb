@@ -310,6 +310,115 @@ GROUP BY id ORDER BY id DESC;
  Wed Jan 01 00:00:00 2025 PST |   2
  Wed Jan 01 00:00:00 2025 PST |   1
 
+-- Test UUID time_bucket in WHERE clause. Note that there is currently no chunk
+-- exclusion when using time_bucket() in the WHERE clause qual. This requires
+-- special handling of the time_bucket() transform optimizatios for different
+-- operators.
+EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) >= :'chunk_range_end'
+GROUP BY id ORDER BY id DESC;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: uuid_events.id DESC
+   ->  HashAggregate
+         Group Key: uuid_events.id
+         ->  Append
+               ->  Seq Scan on _hyper_1_8_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) >= 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) >= 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_1_6_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) >= 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
+
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) >= :'chunk_range_end'
+GROUP BY id ORDER BY id DESC;
+             day              | avg 
+------------------------------+-----
+ Thu Jan 02 16:00:00 2025 PST |   6
+ Thu Jan 02 16:00:00 2025 PST |   5
+
+EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) > :'chunk_range_start'
+GROUP BY id ORDER BY id DESC;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: uuid_events.id DESC
+   ->  HashAggregate
+         Group Key: uuid_events.id
+         ->  Append
+               ->  Seq Scan on _hyper_1_8_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) > 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) > 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_1_6_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) > 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
+
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) > :'chunk_range_start'
+GROUP BY id ORDER BY id DESC;
+             day              | avg 
+------------------------------+-----
+ Thu Jan 02 16:00:00 2025 PST |   6
+ Thu Jan 02 16:00:00 2025 PST |   5
+
+EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) < :'chunk_range_end'
+GROUP BY id ORDER BY id DESC;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: uuid_events.id DESC
+   ->  HashAggregate
+         Group Key: uuid_events.id
+         ->  Append
+               ->  Seq Scan on _hyper_1_8_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) < 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) < 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_1_6_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) < 'Thu Jan 02 16:00:00 2025 PST'::timestamp with time zone)
+
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) < :'chunk_range_end'
+GROUP BY id ORDER BY id DESC;
+             day              | avg 
+------------------------------+-----
+ Wed Jan 01 16:00:00 2025 PST |   4
+ Wed Jan 01 16:00:00 2025 PST |   3
+ Tue Dec 31 16:00:00 2024 PST |   2
+ Tue Dec 31 16:00:00 2024 PST |   1
+
+EXPLAIN (COSTS OFF) SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) <= :'chunk_range_start'
+GROUP BY id ORDER BY id DESC;
+--- QUERY PLAN ---
+ Sort
+   Sort Key: uuid_events.id DESC
+   ->  HashAggregate
+         Group Key: uuid_events.id
+         ->  Append
+               ->  Seq Scan on _hyper_1_8_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_1_7_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
+               ->  Seq Scan on _hyper_1_6_chunk
+                     Filter: (time_bucket('@ 1 day'::interval, id) <= 'Wed Jan 01 16:00:00 2025 PST'::timestamp with time zone)
+
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) <= :'chunk_range_start'
+GROUP BY id ORDER BY id DESC;
+             day              | avg 
+------------------------------+-----
+ Wed Jan 01 16:00:00 2025 PST |   4
+ Wed Jan 01 16:00:00 2025 PST |   3
+ Tue Dec 31 16:00:00 2024 PST |   2
+ Tue Dec 31 16:00:00 2024 PST |   1
+
+-- Test time_bucket on non-v7 UUID
+\set ON_ERROR_STOP 0
+SELECT time_bucket('1 day', 'ffff0000-0000-4000-8000-000000000000'::uuid);
+ERROR:  not a version 7 UUID: ffff0000-0000-4000-8000-000000000000
+\set ON_ERROR_STOP 1
 CREATE VIEW chunk_ranges AS
 SELECT
   chunk_name,
