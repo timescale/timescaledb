@@ -423,9 +423,21 @@ ts_transform_time_bucket_comparison(Expr *node)
 	}
 
 	Const *width = linitial(time_bucket->args);
+	/* Get the time/partitioning column argument */
+	Node *timearg = lsecond(time_bucket->args);
 
 	if (!IsA(width, Const) || width->constisnull)
 		return NULL;
+
+	if (exprType(timearg) == UUIDOID)
+	{
+		/*
+		 * For time_bucket() on UUID, the input and output types do not match, so it is not
+		 * possible to transform a time_bucket() to an expression on the UUID input type since it
+		 * will compare a UUID to a timestamptz.
+		 */
+		return NULL;
+	}
 
 	/* 3 or more args should have Const 3rd arg */
 	if (list_length(time_bucket->args) > 2 && !IsA(lthird(time_bucket->args), Const))
@@ -453,7 +465,7 @@ ts_transform_time_bucket_comparison(Expr *node)
 		 * column > value
 		 */
 		op = copyObject(op);
-		op->args = list_make2(lsecond(time_bucket->args), value);
+		op->args = list_make2(timearg, value);
 
 		/*
 		 * if we switched operator we need to adjust OpExpr as well
