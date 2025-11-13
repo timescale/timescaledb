@@ -170,6 +170,12 @@ SELECT time_bucket('1 day', id, 'Europe/Stockholm'::text, '2000-01-01 00:00'::ti
 FROM uuid_events WHERE id < to_uuidv7_boundary(:'chunk_range_end')
 GROUP BY id ORDER BY id DESC;
 
+-- Test UUID time_bucket in WHERE clause
+
+SELECT time_bucket('1 day', id) AS day, avg(temp)
+FROM uuid_events WHERE time_bucket('1 day', id) >= :'chunk_range_end'
+GROUP BY id ORDER BY id DESC;
+
 CREATE VIEW chunk_ranges AS
 SELECT
   chunk_name,
