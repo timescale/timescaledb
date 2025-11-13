@@ -449,8 +449,8 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 	 * First, build the correspondence of min metadata attno -> max metadata
 	 * attno for all minmax metadata.
 	 */
-	AttrNumber *storage =
-		palloc0(2 * sizeof(AttrNumber) * compression_info->compressed_rel->max_attr);
+	const int storage_elements = 2 * (compression_info->compressed_rel->max_attr + 1);
+	AttrNumber *storage = palloc0(storage_elements * sizeof(*storage));
 	SelectivityEstimationContext context = {
 		.min_to_max = &storage[0],
 		.max_to_min = &storage[compression_info->compressed_rel->max_attr],
@@ -501,6 +501,9 @@ set_compressed_baserel_size_estimates(PlannerInfo *root, RelOptInfo *rel,
 		{
 			continue;
 		}
+
+		Assert(&context.min_to_max[min_attno] < &storage[storage_elements]);
+		Assert(&context.max_to_min[max_attno] < &storage[storage_elements]);
 
 		context.min_to_max[min_attno] = max_attno;
 		context.max_to_min[max_attno] = min_attno;
