@@ -157,3 +157,32 @@ select * from highcard where ts < 500000;
 
 explain (buffers off, analyze, timing off, summary off)
 select * from highcard where ts > 500000;
+
+
+-- Test for an OOB write we used to have where the max metadata column is the
+-- last column in the compressed chunk table, as can happen on old versions.
+create table lastmax(ts int) with (tsdb.hypertable, tsdb.partition_column = 'ts',
+    tsdb.compress_orderby = 'ts');
+
+insert into lastmax select generate_series(1, 1000);
+
+select count(compress_chunk(x)) from show_chunks('lastmax') x;
+
+vacuum freeze analyze lastmax;
+
+select schema_name || '.' || table_name chunk, 'c' column from _timescaledb_catalog.chunk
+    where id = (select compressed_chunk_id from _timescaledb_catalog.chunk
+        where hypertable_id = (select id from _timescaledb_catalog.hypertable
+            where table_name = 'lastmax') limit 1)
+\gset
+
+set timescaledb.restoring to true;
+
+alter table :chunk drop column _ts_meta_max_1;
+
+alter table :chunk add column _ts_meta_max_1 int default 1000;
+
+reset timescaledb.restoring;
+
+explain (costs off)
+select * from lastmax where ts = 500;
