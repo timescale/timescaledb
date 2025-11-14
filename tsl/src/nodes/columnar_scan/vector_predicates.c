@@ -303,31 +303,3 @@ vector_booleantest(const ArrowArray *arrow, int test_type, uint64 *restrict resu
 			break;
 	}
 }
-
-static void
-vector_int8pl(const ArrowArray **args, int nargs, ArrowArray *result)
-{
-	Ensure(nargs == 2, "wrong number of arguments %d given to function %s", nargs, __FUNCTION__);
-
-	const int n = args[0]->length;
-	Ensure(args[1]->length == n, "argument length mismatch");
-	Ensure(result->length == n, "result length mismatch");
-
-	int64 *restrict values = (int64 *) result->buffers[1];
-	for (int i = 0; i < n; i++)
-	{
-		values[i] =
-			((const int64 *) args[0]->buffers[1])[i] + ((const int64 *) args[1]->buffers[1])[i];
-	}
-}
-
-VectorFunction *
-get_vector_function(Oid pg_function)
-{
-	switch (pg_function)
-	{
-		case F_INT8PL:
-			return vector_int8pl;
-	}
-	return NULL;
-}
