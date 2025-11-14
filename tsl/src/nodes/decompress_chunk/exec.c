@@ -58,9 +58,9 @@ static CustomExecMethods decompress_chunk_state_methods = {
 Node *
 decompress_chunk_state_create(CustomScan *cscan)
 {
-	DecompressChunkState *chunk_state;
+	ColumnarScanState *chunk_state;
 
-	chunk_state = (DecompressChunkState *) newNode(sizeof(DecompressChunkState), T_CustomScanState);
+	chunk_state = (ColumnarScanState *) newNode(sizeof(ColumnarScanState), T_CustomScanState);
 
 	chunk_state->exec_methods = decompress_chunk_state_methods;
 	chunk_state->csstate.methods = &chunk_state->exec_methods;
@@ -157,12 +157,12 @@ constify_tableoid(List *node, Index chunk_index, Oid chunk_relid)
 }
 
 pg_attribute_always_inline static TupleTableSlot *
-decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFunctions *funcs);
+decompress_chunk_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunctions *funcs);
 
 static TupleTableSlot *
 decompress_chunk_exec_fifo(CustomScanState *node)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	Assert(!chunk_state->decompress_context.batch_sorted_merge);
 	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsFifo);
 }
@@ -170,7 +170,7 @@ decompress_chunk_exec_fifo(CustomScanState *node)
 static TupleTableSlot *
 decompress_chunk_exec_heap(CustomScanState *node)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	Assert(chunk_state->decompress_context.batch_sorted_merge);
 	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
 }
@@ -184,7 +184,7 @@ decompress_chunk_exec_heap(CustomScanState *node)
 static void
 decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	DecompressContext *dcontext = &chunk_state->decompress_context;
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
 	Plan *compressed_scan = linitial(cscan->custom_plans);
@@ -425,7 +425,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
  * relatively hot loop.
  */
 pg_attribute_always_inline static TupleTableSlot *
-decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFunctions *bqfuncs)
+decompress_chunk_exec_impl(ColumnarScanState *chunk_state, const BatchQueueFunctions *bqfuncs)
 {
 	DecompressContext *dcontext = &chunk_state->decompress_context;
 	BatchQueue *bq = chunk_state->batch_queue;
@@ -472,7 +472,7 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 static void
 decompress_chunk_rescan(CustomScanState *node)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	BatchQueue *bq = chunk_state->batch_queue;
 
 	bq->funcs->reset(bq);
@@ -487,7 +487,7 @@ decompress_chunk_rescan(CustomScanState *node)
 static void
 decompress_chunk_end(CustomScanState *node)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	BatchQueue *bq = chunk_state->batch_queue;
 
 	bq->funcs->free(bq);
@@ -502,7 +502,7 @@ decompress_chunk_end(CustomScanState *node)
 static void
 decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	ColumnarScanState *chunk_state = (ColumnarScanState *) node;
 	DecompressContext *dcontext = &chunk_state->decompress_context;
 
 	ts_show_scan_qual(chunk_state->vectorized_quals_original,

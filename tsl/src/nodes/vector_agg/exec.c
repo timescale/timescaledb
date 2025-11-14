@@ -665,7 +665,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 				def->argument = castNode(TargetEntry, linitial(aggref->args))->expr;
 				//				Var *var = castNode(Var, ;
 				//				def->input_offset =
-				//					get_input_offset((const DecompressChunkState *) childstate,
+				//					get_input_offset((const ColumnarScanState *) childstate,
 				// var);
 			}
 			else
@@ -760,8 +760,8 @@ vector_agg_rescan(CustomScanState *node)
 static TupleTableSlot *
 compressed_batch_get_next_slot(VectorAggState *vector_agg_state)
 {
-	DecompressChunkState *decompress_state =
-		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+	ColumnarScanState *decompress_state =
+		(ColumnarScanState *) linitial(vector_agg_state->custom.custom_ps);
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 	BatchQueue *batch_queue = decompress_state->batch_queue;
 	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
@@ -843,8 +843,8 @@ static VectorQualState *
 compressed_batch_init_vector_quals(VectorAggState *agg_state, VectorAggDef *agg_def,
 								   TupleTableSlot *slot)
 {
-	DecompressChunkState *decompress_state =
-		(DecompressChunkState *) linitial(agg_state->custom.custom_ps);
+	ColumnarScanState *decompress_state =
+		(ColumnarScanState *) linitial(agg_state->custom.custom_ps);
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 	DecompressBatchState *batch_state = (DecompressBatchState *) slot;
 
@@ -868,8 +868,8 @@ vector_agg_exec(CustomScanState *node)
 {
 	VectorAggState *vector_agg_state = (VectorAggState *) node;
 
-	DecompressChunkState *decompress_state =
-		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+	ColumnarScanState *decompress_state =
+		(ColumnarScanState *) linitial(vector_agg_state->custom.custom_ps);
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 
 	ExprContext *econtext = node->ss.ps.ps_ExprContext;

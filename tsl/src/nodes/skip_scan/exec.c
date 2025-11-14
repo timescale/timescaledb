@@ -279,7 +279,7 @@ skip_scan_rescan_index(SkipScanState *state)
 		ScanState *child = linitial(state->cscan_state.custom_ps);
 		if (ts_is_decompress_chunk_plan(state->child_plan))
 		{
-			DecompressChunkState *ds = (DecompressChunkState *) child;
+			ColumnarScanState *ds = (ColumnarScanState *) child;
 			TupleTableSlot *slot = ds->batch_queue->funcs->top_tuple(ds->batch_queue);
 			if (slot)
 			{
